@@ -23,6 +23,7 @@ import {
 } from "../api/queries.ts";
 import { AsyncPanel, EmptyState } from "../components/DataState.tsx";
 import { LinkButton } from "../components/Button.tsx";
+import { HoldingFigure, HoldingMark } from "../components/HoldingValue.tsx";
 import {
   AsOf,
   Disclosure,
@@ -35,9 +36,11 @@ import {
   Table,
 } from "../components/Layout.tsx";
 import { Qty, Usd } from "../components/Money.tsx";
+import { balanceIsValued } from "../lib/holdings.ts";
 import {
   PENDING_SETTLEMENT_NOTE,
   THREE_POTS_NOTE,
+  UNVALUED_HOLDINGS_NOTE,
   USDC_DISCLOSURE,
   USD_VALUATION_NOTE,
 } from "../lib/honesty.ts";
@@ -132,9 +135,21 @@ export function Home(): ReactNode {
                     <Qty value={balance.quantity} decimals={balance.decimals} symbol={balance.symbol} />
                   </td>
                   <td>
-                    <Usd value={balance.usd_value} />
+                    {balanceIsValued(balance.status) ? (
+                      <Usd value={balance.usd_value} />
+                    ) : (
+                      <span className="absent" data-valuation="UNVALUED">
+                        not valued ({balance.status})
+                      </span>
+                    )}
                   </td>
-                  <td className="mono-small">{balance.price_ref}</td>
+                  <td>
+                    {balance.price_ref === "" ? (
+                      <span className="absent">no price used</span>
+                    ) : (
+                      <span className="mono-small">{balance.price_ref}</span>
+                    )}
+                  </td>
                   <td>
                     <Pill tone={balance.status === "NORMAL" ? "good" : "warn"}>{balance.status}</Pill>
                   </td>
@@ -146,6 +161,7 @@ export function Home(): ReactNode {
         <Disclosure title="What you are actually holding">
           <p>{USDC_DISCLOSURE}</p>
           <p>{USD_VALUATION_NOTE}</p>
+          <p>{UNVALUED_HOLDINGS_NOTE}</p>
         </Disclosure>
       </Panel>
 
@@ -172,16 +188,16 @@ export function Home(): ReactNode {
                   <tr key={holding.asset}>
                     <th scope="row">{holding.symbol}</th>
                     <td>
-                      <Usd value={holding.usd_mark} />
+                      <HoldingMark holding={holding} />
                     </td>
                     <td>
-                      <Usd value={holding.cost_basis_usd} />
+                      <HoldingFigure holding={holding} figure="basis" />
                     </td>
                     <td>
-                      <Usd value={holding.unrealized_pnl_usd} signed />
+                      <HoldingFigure holding={holding} figure="unrealized" />
                     </td>
                     <td>
-                      <Usd value={holding.realized_pnl_usd} absent="not reported for this holding" />
+                      <HoldingFigure holding={holding} figure="realized" />
                     </td>
                   </tr>
                 ))}

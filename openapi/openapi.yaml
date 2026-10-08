@@ -124,6 +124,10 @@ paths:
     get:
       tags: [accounts]
       summary: Holdings with units, USD mark, basis and unrealized P&L
+      description: >-
+        Every asset the account's wallet holds, with its exact units. A holding the platform values in USD is
+        VALUED and carries its mark, price reference and unrealized P&L; one it does not -- a SIMULATED asset, or
+        one without a fresh price or an asset policy -- is UNVALUED with the reason, and carries none of them.
       parameters: [{ $ref: "#/components/parameters/AccountId" }]
       responses:
         "200":
@@ -6149,9 +6153,19 @@ components:
               symbol: { type: string }
               decimals: { type: integer }
               quantity: { $ref: "#/components/schemas/Quantity" }
-              usd_value: { $ref: "#/components/schemas/USD" }
-              price_ref: { type: string }
-              status: { type: string }
+              usd_value:
+                $ref: "#/components/schemas/USD"
+                description: >-
+                  The units valued in USD at price_ref. When status is HALTED, STALE_PRICE or POLICY_MISSING the
+                  asset is not valued: this is 0.00 only as a placeholder, price_ref is empty, and the asset adds
+                  nothing to portfolio_value (GET /accounts/{accountId}/holdings says UNVALUED, with the reason)
+              price_ref: { type: string, description: "face:USD, <source>@<observed_at>, or empty when the asset is not valued" }
+              status:
+                type: string
+                description: >-
+                  NORMAL or DEGRADED (a stablecoin's status), ACTIVE, CLOSE_ONLY or DELISTING (the asset's status),
+                  or PORTFOLIO_ONLY, for a valued asset; HALTED, STALE_PRICE or POLICY_MISSING for one that is not
+                  valued
         haircuts:
           type: array
           items:
@@ -6180,24 +6194,54 @@ components:
       required: [holdings, as_of]
       properties:
         as_of: { $ref: "#/components/schemas/Timestamp" }
-        holdings:
-          type: array
-          items:
-            type: object
-            required: [asset, symbol, decimals, quantity, usd_mark, cost_basis_usd, unrealized_pnl_usd, location]
-            properties:
-              asset: { $ref: "#/components/schemas/UUID" }
-              symbol: { type: string }
-              chain: { type: string }
-              mint_address: { type: string }
-              decimals: { type: integer }
-              quantity: { $ref: "#/components/schemas/Quantity" }
-              usd_mark: { $ref: "#/components/schemas/USD" }
-              price_ref: { type: string }
-              cost_basis_usd: { $ref: "#/components/schemas/USD" }
-              unrealized_pnl_usd: { $ref: "#/components/schemas/USD" }
-              realized_pnl_usd: { $ref: "#/components/schemas/USD" }
-              location: { type: string, description: "custody location, e.g. embedded wallet address" }
+        holdings: { type: array, items: { $ref: "#/components/schemas/Holding" } }
+    HoldingValuationStatus:
+      type: string
+      enum: [VALUED, UNVALUED]
+      x-enum-varnames: [HoldingValued, HoldingUnvalued]
+      description: >-
+        VALUED: usd_mark is the backend's valuation of the units in USD at price_ref, and unrealized_pnl_usd is
+        that mark less cost_basis_usd. UNVALUED: the platform does not value the holding in USD; unvalued_reason
+        says why, and usd_mark, price_ref and unrealized_pnl_usd are absent. As in the advanced portfolio, an
+        unvalued holding is never given a value, and in particular never a zero.
+    HoldingUnvaluedReason:
+      type: string
+      enum: [SIMULATED_VALUE, NO_FRESH_MARK, NO_ASSET_POLICY, ASSET_EXCLUDED]
+      x-enum-varnames: [HoldingUnvaluedSimulatedValue, HoldingUnvaluedNoFreshMark, HoldingUnvaluedNoAssetPolicy,
+                        HoldingUnvaluedAssetExcluded]
+      description: >-
+        SIMULATED_VALUE: the asset is of value domain SIMULATED (the sandbox dollar, a sandbox asset): it has no
+        economic substance and the platform states no USD figure for it -- not a mark, not a cost basis; the
+        advanced portfolio values it in the sandbox dollar instead. NO_FRESH_MARK: no price of the asset is
+        within its policy's maximum age. NO_ASSET_POLICY: no asset policy is in force for the asset, so it is not
+        valued. ASSET_EXCLUDED: the asset's policy excludes it from valuation (the asset or its stablecoin is
+        halted, or its status is unknown).
+    Holding:
+      type: object
+      description: >-
+        One asset the account holds: the exact units the ledger records and, separately, what the backend can
+        say about their value in USD. valuation_status says which of the USD figures are given; a figure the
+        backend cannot compute is absent, never zero.
+      required: [asset, symbol, decimals, quantity, valuation_status, location]
+      properties:
+        asset: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        chain: { type: string }
+        mint_address: { type: string }
+        decimals: { type: integer }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        valuation_status: { $ref: "#/components/schemas/HoldingValuationStatus" }
+        unvalued_reason: { $ref: "#/components/schemas/HoldingUnvaluedReason", description: Present exactly when UNVALUED }
+        usd_mark: { $ref: "#/components/schemas/USD", description: The units valued in USD at price_ref; present exactly when VALUED }
+        price_ref: { type: string, description: "The price the mark used (face:USD, or <source>@<observed_at>); present exactly when VALUED" }
+        cost_basis_usd:
+          $ref: "#/components/schemas/USD"
+          description: >-
+            The remaining USD cost basis of the open lots the positions engine recorded for the asset (0.00 when it
+            recorded none); absent when unvalued_reason is SIMULATED_VALUE
+        unrealized_pnl_usd: { $ref: "#/components/schemas/USD", description: usd_mark less cost_basis_usd; present exactly when VALUED }
+        realized_pnl_usd: { $ref: "#/components/schemas/USD", description: Realized profit and loss the positions engine recorded for the asset, when it recorded any }
+        location: { type: string, description: "custody location, e.g. embedded wallet address" }
     JournalTransaction:
       type: object
       required: [id, kind, reference, effective_at, posted_at, entries, content_hash]

@@ -265,6 +265,13 @@ type holdingsAdapter struct {
 // internal/positions and the USD mark internal/capital/buyingpower already
 // computed from internal/valuation. The only arithmetic here is the exact
 // subtraction mark − basis; no price, factor or status is recomputed.
+//
+// A holding is VALUED only when buying power marked it: one it left unvalued
+// (no fresh price, no policy, excluded) is UNVALUED with that reason, and so
+// is every SIMULATED asset, whatever buying power did with it -- simulated
+// value is never stated in USD. An unvalued holding carries no mark, price
+// reference or unrealized figure; buying power's placeholder zero is never
+// passed on as a value.
 func (h holdingsAdapter) Holdings(ctx context.Context, accountID accounts.AccountID) (HoldingsView, error) {
 	bp, err := h.buyingPower.ComputeFor(ctx, h.q, accountID, buyingpower.PurposeDisplay)
 	if err != nil {
@@ -310,29 +317,61 @@ func (h holdingsAdapter) Holdings(ctx context.Context, accountID accounts.Accoun
 			Symbol:         u.Symbol,
 			Decimals:       u.Decimals,
 			Quantity:       u.Quantity,
-			USDMark:        u.USDValue,
-			PriceRef:       u.PriceRef,
 			CustodyAddress: custody,
 		}
-		if r, ok := refs[u.AssetID]; ok {
-			hv.Chain = r.Chain
-			hv.MintAddress = r.Mint
+		ref, known := refs[u.AssetID]
+		if known {
+			hv.Chain = ref.Chain
+			hv.MintAddress = ref.Mint
 		}
-		if l, ok := basis[u.AssetID]; ok {
-			hv.CostBasisUSD = l.CostBasis
+		simulated := known && ref.Simulated()
+		if !simulated {
+			cost := money.USD{}
+			if l, ok := basis[u.AssetID]; ok {
+				cost = l.CostBasis
+			}
+			hv.CostBasisUSD = &cost
+			if r, ok := realizedByAsset[u.AssetID]; ok {
+				v := r
+				hv.RealizedUSD = &v
+			}
 		}
-		unrealized, serr := u.USDValue.Sub(hv.CostBasisUSD)
-		if serr != nil {
-			return HoldingsView{}, errs.Wrap(serr, errs.CodeOverflow, "unrealized profit and loss overflowed")
-		}
-		hv.UnrealizedUSD = unrealized
-		if r, ok := realizedByAsset[u.AssetID]; ok {
-			v := r
-			hv.RealizedUSD = &v
+		hv.Valuation, hv.UnvaluedReason = holdingValuation(simulated, u.Status)
+		if hv.Valuation == HoldingValued {
+			if u.PriceRef == "" {
+				// A valuation is only ever shown with the price it came from.
+				return HoldingsView{}, errs.New(errs.CodeInternal, "buying power valued a holding without a price reference").
+					WithField("asset_id", u.AssetID.String())
+			}
+			mark := u.USDValue
+			unrealized, serr := mark.Sub(*hv.CostBasisUSD)
+			if serr != nil {
+				return HoldingsView{}, errs.Wrap(serr, errs.CodeOverflow, "unrealized profit and loss overflowed")
+			}
+			hv.USDMark, hv.PriceRef, hv.UnrealizedUSD = &mark, u.PriceRef, &unrealized
 		}
 		out.Holdings = append(out.Holdings, hv)
 	}
 	return out, nil
+}
+
+// holdingValuation decides whether a holding is valued in USD, from what the
+// asset is and what buying power already decided about it. SIMULATED value is
+// never valued in USD; any other asset is valued exactly when buying power
+// marked it, and otherwise carries buying power's own reason.
+func holdingValuation(simulated bool, status string) (HoldingValuation, HoldingUnvaluedReason) {
+	if simulated {
+		return HoldingUnvalued, HoldingSimulatedValue
+	}
+	switch status {
+	case buyingpower.StatusStalePrice:
+		return HoldingUnvalued, HoldingNoFreshMark
+	case buyingpower.StatusPolicyMissing:
+		return HoldingUnvalued, HoldingNoAssetPolicy
+	case buyingpower.StatusHalted:
+		return HoldingUnvalued, HoldingAssetExcluded
+	}
+	return HoldingValued, ""
 }
 
 // --- ledger -----------------------------------------------------------------

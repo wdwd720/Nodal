@@ -81,18 +81,59 @@ type HoldingsView struct {
 	Holdings []HoldingView
 }
 
+// HoldingValuation says whether the platform values a holding in USD.
+type HoldingValuation string
+
+// Holding valuations.
+const (
+	// HoldingValued carries the mark, its price reference and the unrealized
+	// profit and loss at that mark.
+	HoldingValued HoldingValuation = "VALUED"
+	// HoldingUnvalued carries none of them, and the reason instead: a figure
+	// the platform cannot state is absent, never a zero.
+	HoldingUnvalued HoldingValuation = "UNVALUED"
+)
+
+// HoldingUnvaluedReason says why a holding is not valued in USD.
+type HoldingUnvaluedReason string
+
+// Why a holding is not valued in USD.
+const (
+	// HoldingSimulatedValue: the asset is SIMULATED value. It has no economic
+	// substance, so no USD figure is ever stated for it -- not a mark, not a
+	// cost basis -- whatever a policy or a price says. The advanced portfolio
+	// values it in the sandbox dollar instead.
+	HoldingSimulatedValue HoldingUnvaluedReason = "SIMULATED_VALUE"
+	// HoldingNoFreshMark: no price within the asset policy's maximum age
+	// (buying power's STALE_PRICE).
+	HoldingNoFreshMark HoldingUnvaluedReason = "NO_FRESH_MARK"
+	// HoldingNoAssetPolicy: no asset policy is in force (buying power's
+	// POLICY_MISSING).
+	HoldingNoAssetPolicy HoldingUnvaluedReason = "NO_ASSET_POLICY"
+	// HoldingAssetExcluded: the policy excludes the asset from valuation
+	// (buying power's HALTED).
+	HoldingAssetExcluded HoldingUnvaluedReason = "ASSET_EXCLUDED"
+)
+
 // HoldingView is one asset the account holds.
 type HoldingView struct {
-	AssetID        assets.AssetID
-	Symbol         string
-	Chain          string
-	MintAddress    string
-	Decimals       uint8
-	Quantity       money.Quantity
-	USDMark        money.USD
+	AssetID     assets.AssetID
+	Symbol      string
+	Chain       string
+	MintAddress string
+	Decimals    uint8
+	Quantity    money.Quantity
+	// Valuation says which of the USD figures below are stated: USDMark,
+	// PriceRef and UnrealizedUSD exactly when VALUED, UnvaluedReason exactly
+	// when UNVALUED.
+	Valuation      HoldingValuation
+	UnvaluedReason HoldingUnvaluedReason
+	USDMark        *money.USD
 	PriceRef       string
-	CostBasisUSD   money.USD
-	UnrealizedUSD  money.USD
+	// CostBasisUSD is the remaining basis of the open lots (zero when there
+	// are none); nil for SIMULATED value, as is RealizedUSD.
+	CostBasisUSD   *money.USD
+	UnrealizedUSD  *money.USD
 	RealizedUSD    *money.USD
 	CustodyAddress string
 }

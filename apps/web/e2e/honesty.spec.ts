@@ -8,8 +8,11 @@
  *
  * It additionally checks the positive obligations — that the settlement asset
  * is disclosed where a balance appears, that simulated results are labelled,
- * and that a model score never appears without its denial.
+ * that a model score never appears without its denial, and that a holding the
+ * backend does not value is shown with its reason rather than as a zero.
  */
+import { randomUUID } from "node:crypto";
+
 import { expect, test, type Page } from "@playwright/test";
 
 import { goto } from "./pace.ts";
@@ -126,4 +129,55 @@ test("no capability that is off is shown as a zero", async ({ page }) => {
   const text = await panel.innerText();
   expect(text).not.toMatch(/\$\s?0\.00/);
   expect(text).not.toMatch(/(^|\s)—(\s|$)/);
+});
+
+interface HoldingRow {
+  readonly asset: string;
+  readonly symbol: string;
+  readonly quantity: string;
+  readonly valuation_status: string;
+  readonly unvalued_reason?: string;
+}
+
+test("a holding the backend does not value is shown with its reason, never as a zero", async ({ page }) => {
+  const accounts = await page.request.get("/v1/accounts");
+  expect(accounts.ok()).toBeTruthy();
+  const id = ((await accounts.json()) as Array<{ id: string }>)[0]?.id ?? "";
+  expect(id, "the signed-in principal owns an account").not.toBe("");
+
+  // The faucet grants the sandbox dollar: simulated value, with no value in US
+  // dollars. A grant over the faucet's rolling cap is RATE_LIMITED, which
+  // means earlier grants already left the account holding it.
+  const grant = await page.request.post("/v1/advanced/transfers/faucet/grants", {
+    headers: { "Content-Type": "application/json", "Idempotency-Key": randomUUID(), "Sec-Fetch-Site": "same-origin" },
+    data: JSON.stringify({ account_id: id, amount: "1" }),
+  });
+  expect([201, 429], `the faucet runs in this deployment: ${await grant.text()}`).toContain(grant.status());
+
+  const response = await page.request.get(`/v1/accounts/${id}/holdings`);
+  expect(response.ok()).toBeTruthy();
+  const wire = (await response.json()) as { holdings: Array<HoldingRow & Record<string, unknown>> };
+  const sandbox = wire.holdings.find((h) => h.symbol === "SBX-USD");
+  expect(sandbox, "the account holds the sandbox dollar").toBeDefined();
+  const sbx = sandbox as HoldingRow & Record<string, unknown>;
+  expect(sbx.valuation_status).toBe("UNVALUED");
+  expect(sbx.unvalued_reason).toBe("SIMULATED_VALUE");
+  for (const figure of ["usd_mark", "price_ref", "cost_basis_usd", "unrealized_pnl_usd", "realized_pnl_usd"]) {
+    expect(figure in sbx, `the backend states no ${figure} for simulated value`).toBe(false);
+  }
+  // Every holding is one or the other, and carries a mark exactly when valued.
+  for (const h of wire.holdings) {
+    expect(["VALUED", "UNVALUED"]).toContain(h.valuation_status);
+    expect("usd_mark" in h, `${h.symbol}: a mark exactly when VALUED`).toBe(h.valuation_status === "VALUED");
+  }
+
+  await goto(page, "/portfolio");
+  await expect(page.getByRole("heading", { level: 1, name: "Portfolio" })).toBeVisible();
+  const row = page.locator(`tr[data-asset="${sbx.asset}"]`);
+  await expect(row.locator('[data-valuation="UNVALUED"]')).toHaveAttribute("data-reason", "SIMULATED_VALUE");
+  await expect(row).toContainText("Unvalued");
+  await expect(row).toContainText("reason SIMULATED_VALUE");
+  await expect(row).toContainText(`${sbx.quantity} base units`);
+  expect(await row.innerText(), "no dollar figure stands in for the missing valuation").not.toMatch(/\$\s?-?[0-9]/);
+  expect(await visibleText(page)).toContain("is marked Unvalued, with the reason");
 });

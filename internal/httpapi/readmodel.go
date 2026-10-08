@@ -20,6 +20,7 @@ import (
 	"github.com/nodal/controlplane/internal/id"
 	"github.com/nodal/controlplane/internal/killswitch"
 	"github.com/nodal/controlplane/internal/money"
+	"github.com/nodal/controlplane/internal/valuedomain"
 )
 
 // The read model is the API's own projection over tables the domain packages
@@ -622,6 +623,15 @@ type AssetRef struct {
 	Mint        string
 	Decimals    uint8
 	AssetStatus assets.Status
+	// Kind and ValueDomain say what kind of value the asset is.
+	Kind        assets.Kind
+	ValueDomain valuedomain.Domain
+}
+
+// Simulated reports whether the asset is SIMULATED value, which is never
+// valued in USD.
+func (r AssetRef) Simulated() bool {
+	return r.ValueDomain == valuedomain.Simulated || r.Kind == assets.KindSimulated
 }
 
 // AssetRefs loads display metadata for a set of assets in one query.
@@ -631,7 +641,7 @@ func (m *ReadModel) AssetRefs(ctx context.Context, ids []assets.AssetID) (map[as
 		return out, nil
 	}
 	rows, err := m.q.Query(ctx,
-		`SELECT id, symbol, chain, mint_address, decimals, status FROM assets WHERE id = ANY($1)`, ids)
+		`SELECT id, symbol, chain, mint_address, decimals, status, kind, coalesce(value_domain, '') FROM assets WHERE id = ANY($1)`, ids)
 	if err != nil {
 		return nil, errs.Wrap(err, errs.CodeInternal, "internal error")
 	}
@@ -642,12 +652,15 @@ func (m *ReadModel) AssetRefs(ctx context.Context, ids []assets.AssetID) (map[as
 			ref      AssetRef
 			decimals int16
 			status   string
+			kind     string
+			domain   string
 		)
-		if err := rows.Scan(&aid, &ref.Symbol, &ref.Chain, &ref.Mint, &decimals, &status); err != nil {
+		if err := rows.Scan(&aid, &ref.Symbol, &ref.Chain, &ref.Mint, &decimals, &status, &kind, &domain); err != nil {
 			return nil, errs.Wrap(err, errs.CodeInternal, "internal error")
 		}
 		ref.Decimals = uint8(decimals) // #nosec G115 -- assets.decimals is smallint CHECK (decimals BETWEEN 0 AND 18) in migrations/00100_assets.sql, so it always fits uint8
 		ref.AssetStatus = assets.Status(status)
+		ref.Kind, ref.ValueDomain = assets.Kind(kind), valuedomain.Domain(domain)
 		out[aid] = ref
 	}
 	if err := rows.Err(); err != nil {

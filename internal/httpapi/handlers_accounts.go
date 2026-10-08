@@ -124,7 +124,11 @@ func (s *Server) GetAccountsAccountIdHoldings(ctx context.Context, request api.G
 	if err != nil {
 		return nil, err
 	}
-	return api.GetAccountsAccountIdHoldings200JSONResponse(toAPIHoldings(h)), nil
+	out, err := toAPIHoldings(h)
+	if err != nil {
+		return nil, err
+	}
+	return api.GetAccountsAccountIdHoldings200JSONResponse(out), nil
 }
 
 // GetAccountsAccountIdLedgerTransactions pages the account's append-only

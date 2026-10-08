@@ -31,9 +31,10 @@ import {
   Pill,
   Table,
 } from "../components/Layout.tsx";
+import { HoldingFigure, HoldingMark, HoldingPriceRef } from "../components/HoldingValue.tsx";
 import { AssetLine } from "../components/MintIdentity.tsx";
 import { BaseUnits, Qty, Usd } from "../components/Money.tsx";
-import { USDC_DISCLOSURE, USD_VALUATION_NOTE } from "../lib/honesty.ts";
+import { UNVALUED_HOLDINGS_NOTE, USDC_DISCLOSURE, USD_VALUATION_NOTE } from "../lib/honesty.ts";
 import { formatInstant } from "../lib/time.ts";
 import { useActiveAccountId } from "../session.tsx";
 import { API_BASE } from "../api/client.ts";
@@ -98,7 +99,7 @@ export function Portfolio(): ReactNode {
                 {data.holdings.map((holding) => {
                   const asset = assetById.get(holding.asset);
                   return (
-                    <tr key={holding.asset}>
+                    <tr key={holding.asset} data-asset={holding.asset}>
                       <th scope="row">
                         <AssetLine asset={asset} fallbackId={holding.asset} />
                       </th>
@@ -113,22 +114,20 @@ export function Portfolio(): ReactNode {
                         </div>
                       </td>
                       <td>
-                        <Usd value={holding.usd_mark} />
+                        <HoldingMark holding={holding} />
                       </td>
                       <td>
-                        <Usd value={holding.cost_basis_usd} />
+                        <HoldingFigure holding={holding} figure="basis" />
                       </td>
                       <td>
-                        <Usd value={holding.unrealized_pnl_usd} signed />
+                        <HoldingFigure holding={holding} figure="unrealized" />
                       </td>
                       <td>
-                        <Usd
-                          value={holding.realized_pnl_usd}
-                          signed
-                          absent="not reported for this holding"
-                        />
+                        <HoldingFigure holding={holding} figure="realized" />
                       </td>
-                      <td className="mono-small">{holding.price_ref ?? "not reported"}</td>
+                      <td>
+                        <HoldingPriceRef holding={holding} />
+                      </td>
                     </tr>
                   );
                 })}
@@ -169,6 +168,7 @@ export function Portfolio(): ReactNode {
         <Disclosure title="What these valuations are">
           <p>{USDC_DISCLOSURE}</p>
           <p>{USD_VALUATION_NOTE}</p>
+          <p>{UNVALUED_HOLDINGS_NOTE}</p>
         </Disclosure>
       </Panel>
 

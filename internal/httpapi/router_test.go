@@ -85,12 +85,26 @@ func TestReadEndpoints_HappyPath(t *testing.T) {
 				raw := res.raw()
 				list, ok := raw["holdings"].([]any)
 				require.True(t, ok)
+				require.Len(t, list, 2)
 				h, ok := list[0].(map[string]any)
 				require.True(t, ok)
+				assert.Equal(t, "VALUED", h["valuation_status"])
+				assert.NotContains(t, h, "unvalued_reason")
 				assert.Equal(t, "1000.00", h["usd_mark"])
+				assert.Equal(t, "face:USD", h["price_ref"])
 				assert.Equal(t, "950.00", h["cost_basis_usd"])
 				assert.Equal(t, "50.00", h["unrealized_pnl_usd"])
 				assert.Equal(t, "1000000000", h["quantity"])
+
+				// The sandbox dollar is SIMULATED: the reason, and not one USD figure.
+				sim, ok := list[1].(map[string]any)
+				require.True(t, ok)
+				assert.Equal(t, "UNVALUED", sim["valuation_status"])
+				assert.Equal(t, "SIMULATED_VALUE", sim["unvalued_reason"])
+				assert.Equal(t, "25000000", sim["quantity"])
+				for _, figure := range []string{"usd_mark", "price_ref", "cost_basis_usd", "unrealized_pnl_usd", "realized_pnl_usd"} {
+					assert.NotContains(t, sim, figure, "an unvalued simulated holding states no %s", figure)
+				}
 			},
 		},
 		{

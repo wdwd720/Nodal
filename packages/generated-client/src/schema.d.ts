@@ -212,7 +212,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Holdings with units, USD mark, basis and unrealized P&L */
+        /**
+         * Holdings with units, USD mark, basis and unrealized P&L
+         * @description Every asset the account's wallet holds, with its exact units. A holding the platform values in USD is VALUED and carries its mark, price reference and unrealized P&L; one it does not -- a SIMULATED asset, or one without a fresh price or an asset policy -- is UNVALUED with the reason, and carries none of them.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -15849,10 +15852,13 @@ export interface components {
             underlying_balances: {
                 asset: components["schemas"]["UUID"];
                 decimals: number;
+                /** @description face:USD, <source>@<observed_at>, or empty when the asset is not valued */
                 price_ref: string;
                 quantity: components["schemas"]["Quantity"];
+                /** @description NORMAL or DEGRADED (a stablecoin's status), ACTIVE, CLOSE_ONLY or DELISTING (the asset's status), or PORTFOLIO_ONLY, for a valued asset; HALTED, STALE_PRICE or POLICY_MISSING for one that is not valued */
                 status: string;
                 symbol: string;
+                /** @description The units valued in USD at price_ref. When status is HALTED, STALE_PRICE or POLICY_MISSING the asset is not valued: this is 0.00 only as a placeholder, price_ref is empty, and the asset adds nothing to portfolio_value (GET /accounts/{accountId}/holdings says UNVALUED, with the reason) */
                 usd_value: components["schemas"]["USD"];
             }[];
             withdrawable: components["schemas"]["USD"];
@@ -17738,24 +17744,44 @@ export interface components {
             risk_approval_ref?: string;
             security_approval_ref?: string;
         };
+        /** @description One asset the account holds: the exact units the ledger records and, separately, what the backend can say about their value in USD. valuation_status says which of the USD figures are given; a figure the backend cannot compute is absent, never zero. */
+        Holding: {
+            asset: components["schemas"]["UUID"];
+            chain?: string;
+            /** @description The remaining USD cost basis of the open lots the positions engine recorded for the asset (0.00 when it recorded none); absent when unvalued_reason is SIMULATED_VALUE */
+            cost_basis_usd?: components["schemas"]["USD"];
+            decimals: number;
+            /** @description custody location, e.g. embedded wallet address */
+            location: string;
+            mint_address?: string;
+            /** @description The price the mark used (face:USD, or <source>@<observed_at>); present exactly when VALUED */
+            price_ref?: string;
+            quantity: components["schemas"]["Quantity"];
+            /** @description Realized profit and loss the positions engine recorded for the asset */
+            realized_pnl_usd?: components["schemas"]["USD"];
+            symbol: string;
+            /** @description usd_mark less cost_basis_usd; present exactly when VALUED */
+            unrealized_pnl_usd?: components["schemas"]["USD"];
+            /** @description Present exactly when UNVALUED */
+            unvalued_reason?: components["schemas"]["HoldingUnvaluedReason"];
+            /** @description The units valued in USD at price_ref; present exactly when VALUED */
+            usd_mark?: components["schemas"]["USD"];
+            valuation_status: components["schemas"]["HoldingValuationStatus"];
+        };
         HoldingsResponse: {
             as_of: components["schemas"]["Timestamp"];
-            holdings: {
-                asset: components["schemas"]["UUID"];
-                chain?: string;
-                cost_basis_usd: components["schemas"]["USD"];
-                decimals: number;
-                /** @description custody location, e.g. embedded wallet address */
-                location: string;
-                mint_address?: string;
-                price_ref?: string;
-                quantity: components["schemas"]["Quantity"];
-                realized_pnl_usd?: components["schemas"]["USD"];
-                symbol: string;
-                unrealized_pnl_usd: components["schemas"]["USD"];
-                usd_mark: components["schemas"]["USD"];
-            }[];
+            holdings: components["schemas"]["Holding"][];
         };
+        /**
+         * @description SIMULATED_VALUE: the asset is of value domain SIMULATED (the sandbox dollar, a sandbox asset): it has no economic substance and the platform states no USD figure for it -- not a mark, not a cost basis; the advanced portfolio values it in the sandbox dollar instead. NO_FRESH_MARK: no price of the asset is within its policy's maximum age. NO_ASSET_POLICY: no asset policy is in force for the asset, so it is not valued. ASSET_EXCLUDED: the asset's policy excludes it from valuation (the asset or its stablecoin is halted, or its status is unknown).
+         * @enum {string}
+         */
+        HoldingUnvaluedReason: "SIMULATED_VALUE" | "NO_FRESH_MARK" | "NO_ASSET_POLICY" | "ASSET_EXCLUDED";
+        /**
+         * @description VALUED: usd_mark is the backend's valuation of the units in USD at price_ref, and unrealized_pnl_usd is that mark less cost_basis_usd. UNVALUED: the platform does not value the holding in USD; unvalued_reason says why, and usd_mark, price_ref and unrealized_pnl_usd are absent. As in the advanced portfolio, an unvalued holding is never given a value, and in particular never a zero.
+         * @enum {string}
+         */
+        HoldingValuationStatus: "VALUED" | "UNVALUED";
         Instrument: {
             active_from: components["schemas"]["Timestamp"];
             active_until?: components["schemas"]["Timestamp"];

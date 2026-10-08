@@ -11,6 +11,9 @@
  * Validation is deliberately shallow-but-strict: it covers the fields the
  * interface renders, and it never repairs anything.
  */
+import type { Schemas } from "@controlplane/generated-client";
+
+import { HOLDING_UNVALUED_REASONS, HOLDING_VALUATION_STATUSES } from "../lib/holdings.ts";
 import { DECIMAL_PATTERN, QUANTITY_PATTERN, USD_PATTERN } from "../lib/money.ts";
 
 export class ContractViolation extends Error {
@@ -274,32 +277,76 @@ export const buyingPowerSpec: Spec = {
   },
 };
 
-export const holdingsSpec: Spec = {
-  required: { as_of: "timestamp" },
-  arrays: {
-    holdings: {
-      required: true,
-      spec: {
-        required: {
-          asset: "uuid",
-          symbol: "string",
-          decimals: "integer",
-          quantity: "quantity",
-          usd_mark: "usd",
-          cost_basis_usd: "usd",
-          unrealized_pnl_usd: "usd",
-        },
-        optional: {
-          chain: "string",
-          mint_address: "string",
-          price_ref: "string",
-          realized_pnl_usd: "usd",
-          location: "string",
-        },
-      },
-    },
+export const holdingSpec: Spec = {
+  required: {
+    asset: "uuid",
+    symbol: "string",
+    decimals: "integer",
+    quantity: "quantity",
+    valuation_status: oneOf(HOLDING_VALUATION_STATUSES),
+  },
+  optional: {
+    unvalued_reason: oneOf(HOLDING_UNVALUED_REASONS),
+    usd_mark: "usd",
+    price_ref: "string",
+    cost_basis_usd: "usd",
+    unrealized_pnl_usd: "usd",
+    chain: "string",
+    mint_address: "string",
+    realized_pnl_usd: "usd",
+    location: "string",
   },
 };
+
+export const holdingsSpec: Spec = {
+  required: { as_of: "timestamp" },
+  arrays: { holdings: { required: true, spec: holdingSpec } },
+};
+
+type Holding = Schemas["Holding"];
+type HoldingsResponse = Schemas["HoldingsResponse"];
+
+/**
+ * A holding carries a USD figure exactly when it says it is VALUED: its mark,
+ * the price reference the mark came from, its cost basis and its unrealized
+ * result. An UNVALUED one carries its reason and none of the valuation's
+ * figures -- not even a zero, which would be a value -- and, for simulated
+ * value, no USD figure of any kind. Anything else is refused, never repaired.
+ */
+export function checkHoldingShape(h: Holding, path: string): void {
+  const present = (field: keyof Holding): boolean => h[field] !== undefined && h[field] !== "";
+  if (h.valuation_status === "VALUED") {
+    for (const field of ["usd_mark", "price_ref", "cost_basis_usd", "unrealized_pnl_usd"] as const) {
+      if (!present(field)) throw new ContractViolation(`${path}.${field}`, "a VALUED holding carries it");
+    }
+    if (present("unvalued_reason")) {
+      throw new ContractViolation(`${path}.unvalued_reason`, "a VALUED holding has no reason to be unvalued");
+    }
+    return;
+  }
+  if (!present("unvalued_reason")) {
+    throw new ContractViolation(`${path}.unvalued_reason`, "an UNVALUED holding says why");
+  }
+  for (const field of ["usd_mark", "price_ref", "unrealized_pnl_usd"] as const) {
+    if (present(field)) throw new ContractViolation(`${path}.${field}`, "an UNVALUED holding carries no valuation");
+  }
+  if (h.unvalued_reason === "SIMULATED_VALUE") {
+    for (const field of ["cost_basis_usd", "realized_pnl_usd"] as const) {
+      if (present(field)) throw new ContractViolation(`${path}.${field}`, "simulated value has no US dollar figure");
+    }
+  } else if (!present("cost_basis_usd")) {
+    throw new ContractViolation(`${path}.cost_basis_usd`, "a real asset's cost basis is stated, valued or not");
+  }
+}
+
+/** The holdings answer, checked field by field and then holding by holding. */
+export function checkHoldings(value: unknown, path: string): HoldingsResponse {
+  const out = validated<HoldingsResponse>(value, holdingsSpec, path);
+  out.holdings.forEach((h, index) => {
+    checkHoldingShape(h, `${path}.holdings[${String(index)}]`);
+  });
+  return out;
+}
 
 export const assetSpec: Spec = {
   required: {

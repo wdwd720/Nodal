@@ -17,6 +17,7 @@ import (
 	"github.com/nodal/controlplane/internal/capital/buyingpower"
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/config"
+	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/execution"
 	"github.com/nodal/controlplane/internal/funding"
@@ -346,11 +347,24 @@ func sampleDisclosure() quote.Disclosure {
 	}
 }
 
+// sampleHoldings is a valued USDC holding and the sandbox dollar, which is
+// SIMULATED value and so never valued in USD.
 func sampleHoldings() HoldingsView {
 	return HoldingsView{AsOf: testNow, Holdings: []HoldingView{{
 		AssetID: testAssetID, Symbol: "USDC", Chain: "solana", MintAddress: "Es9vMFrzaCER",
-		Decimals: 6, Quantity: qty("1000000000"), USDMark: usd("1000.00"), PriceRef: "face:USD",
-		CostBasisUSD: usd("950.00"), UnrealizedUSD: usd("50.00"),
+		Decimals: 6, Quantity: qty("1000000000"), Valuation: HoldingValued, USDMark: usdRef("1000.00"), PriceRef: "face:USD",
+		CostBasisUSD: usdRef("950.00"), UnrealizedUSD: usdRef("50.00"),
+		CustodyAddress: "SoL1111111111111111111111111111111111111111",
+	}, {
+		AssetID: econ.SandboxDollarID(), Symbol: econ.SandboxDollarSymbol, Chain: "nodal-sandbox",
+		MintAddress: econ.SandboxDollarID().String(), Decimals: 6, Quantity: qty("25000000"),
+		Valuation: HoldingUnvalued, UnvaluedReason: HoldingSimulatedValue,
 		CustodyAddress: "SoL1111111111111111111111111111111111111111",
 	}}}
+}
+
+// usdRef is usd for a figure that may be absent.
+func usdRef(s string) *money.USD {
+	v := usd(s)
+	return &v
 }

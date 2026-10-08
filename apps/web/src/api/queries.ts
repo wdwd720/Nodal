@@ -28,8 +28,8 @@ import {
   activityItemSpec,
   assetSpec,
   buyingPowerSpec,
+  checkHoldings,
   depositSpec,
-  holdingsSpec,
   instrumentDetailSpec,
   instrumentSpec,
   intentSpec,
@@ -56,7 +56,7 @@ export type Principal = Schemas["Principal"];
 export type Account = Schemas["Account"];
 export type BuyingPower = Schemas["BuyingPower"];
 export type HoldingsResponse = Schemas["HoldingsResponse"];
-export type Holding = HoldingsResponse["holdings"][number];
+export type Holding = Schemas["Holding"];
 export type Asset = Schemas["Asset"];
 export type Instrument = Schemas["Instrument"];
 export type InstrumentDetail = Schemas["InstrumentDetail"];
@@ -150,7 +150,7 @@ export function useHoldings(accountId: string | undefined): UseQueryResult<Holdi
       const { data } = await api.GET("/accounts/{accountId}/holdings", {
         params: { path: { accountId: accountId ?? "" } },
       });
-      return validated<HoldingsResponse>(data, holdingsSpec, "/accounts/{id}/holdings");
+      return checkHoldings(data, "/accounts/{id}/holdings");
     },
   });
 }

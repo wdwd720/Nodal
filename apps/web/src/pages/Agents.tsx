@@ -38,10 +38,11 @@ import {
   Table,
   type Tone,
 } from "../components/Layout.tsx";
-import { Usd } from "../components/Money.tsx";
+import { HoldingFigure, HoldingMark } from "../components/HoldingValue.tsx";
 import {
   CONFIDENCE_DISCLAIMER,
   MODE_DESCRIPTIONS,
+  UNVALUED_HOLDINGS_NOTE,
   USD_VALUATION_NOTE,
   modeBadge,
   modeUsesRealCapital,
@@ -209,13 +210,13 @@ export function Agents(): ReactNode {
                   <tr key={holding.asset}>
                     <th scope="row">{holding.symbol}</th>
                     <td>
-                      <Usd value={holding.usd_mark} />
+                      <HoldingMark holding={holding} />
                     </td>
                     <td>
-                      <Usd value={holding.unrealized_pnl_usd} signed />
+                      <HoldingFigure holding={holding} figure="unrealized" />
                     </td>
                     <td>
-                      <Usd value={holding.realized_pnl_usd} signed absent="not reported" />
+                      <HoldingFigure holding={holding} figure="realized" />
                     </td>
                   </tr>
                 ))}
@@ -231,6 +232,7 @@ export function Agents(): ReactNode {
         </AsyncPanel>
         <Disclosure title="About these valuations">
           <p>{USD_VALUATION_NOTE}</p>
+          <p>{UNVALUED_HOLDINGS_NOTE}</p>
         </Disclosure>
       </Panel>
 

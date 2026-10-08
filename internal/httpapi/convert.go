@@ -11,6 +11,7 @@ import (
 	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/auth"
 	"github.com/nodal/controlplane/internal/capital/buyingpower"
+	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/execution"
 	"github.com/nodal/controlplane/internal/funding"
 	"github.com/nodal/controlplane/internal/gen/api"
@@ -279,54 +280,41 @@ func toAPIBuyingPower(b buyingpower.BuyingPower) api.BuyingPower {
 
 // --- holdings ---------------------------------------------------------------
 
-func toAPIHoldings(v HoldingsView) api.HoldingsResponse {
-	out := api.HoldingsResponse{AsOf: v.AsOf.UTC()}
+// toAPIHoldings carries each holding's valuation as the adapter decided it. A
+// view that says VALUED without its figures, or UNVALUED without a known
+// reason or with a figure, is a fault, never an answer: the contract promises
+// the client that the figures are there exactly when the status says so.
+func toAPIHoldings(v HoldingsView) (api.HoldingsResponse, error) {
+	out := api.HoldingsResponse{AsOf: v.AsOf.UTC(), Holdings: make([]api.Holding, 0, len(v.Holdings))}
 	for _, h := range v.Holdings {
-		out.Holdings = append(out.Holdings, struct {
-			Asset            api.UUID     `json:"asset"`
-			Chain            *string      `json:"chain,omitempty"`
-			CostBasisUsd     api.USD      `json:"cost_basis_usd"`
-			Decimals         int          `json:"decimals"`
-			Location         string       `json:"location"`
-			MintAddress      *string      `json:"mint_address,omitempty"`
-			PriceRef         *string      `json:"price_ref,omitempty"`
-			Quantity         api.Quantity `json:"quantity"`
-			RealizedPnlUsd   *api.USD     `json:"realized_pnl_usd,omitempty"`
-			Symbol           string       `json:"symbol"`
-			UnrealizedPnlUsd api.USD      `json:"unrealized_pnl_usd"`
-			UsdMark          api.USD      `json:"usd_mark"`
-		}{
-			Asset:            toUUID(h.AssetID),
-			Chain:            strPtr(h.Chain),
-			CostBasisUsd:     h.CostBasisUSD.String(),
-			Decimals:         int(h.Decimals),
-			Location:         h.CustodyAddress,
-			MintAddress:      strPtr(h.MintAddress),
-			PriceRef:         strPtr(h.PriceRef),
-			Quantity:         h.Quantity.String(),
-			RealizedPnlUsd:   usdPtr(h.RealizedUSD),
-			Symbol:           h.Symbol,
-			UnrealizedPnlUsd: h.UnrealizedUSD.String(),
-			UsdMark:          h.USDMark.String(),
-		})
+		row := api.Holding{
+			Asset:          toUUID(h.AssetID),
+			Chain:          strPtr(h.Chain),
+			CostBasisUsd:   usdPtr(h.CostBasisUSD),
+			Decimals:       int(h.Decimals),
+			Location:       h.CustodyAddress,
+			MintAddress:    strPtr(h.MintAddress),
+			Quantity:       h.Quantity.String(),
+			RealizedPnlUsd: usdPtr(h.RealizedUSD),
+			Symbol:         h.Symbol,
+		}
+		valued := h.USDMark != nil && h.PriceRef != "" && h.UnrealizedUSD != nil && h.CostBasisUSD != nil
+		figure := h.USDMark != nil || h.PriceRef != "" || h.UnrealizedUSD != nil
+		switch {
+		case h.Valuation == HoldingValued && valued && h.UnvaluedReason == "":
+			row.ValuationStatus = api.HoldingValued
+			row.UsdMark, row.PriceRef, row.UnrealizedPnlUsd = usdPtr(h.USDMark), strPtr(h.PriceRef), usdPtr(h.UnrealizedUSD)
+		case h.Valuation == HoldingUnvalued && !figure && api.HoldingUnvaluedReason(h.UnvaluedReason).Valid() &&
+			(h.UnvaluedReason != HoldingSimulatedValue || (h.CostBasisUSD == nil && h.RealizedUSD == nil)):
+			reason := api.HoldingUnvaluedReason(h.UnvaluedReason)
+			row.ValuationStatus, row.UnvaluedReason = api.HoldingUnvalued, &reason
+		default:
+			return api.HoldingsResponse{}, errs.New(errs.CodeInternal, "a holding's valuation does not match what it carries").
+				WithField("asset_id", h.AssetID.String()).WithField("valuation", string(h.Valuation))
+		}
+		out.Holdings = append(out.Holdings, row)
 	}
-	if out.Holdings == nil {
-		out.Holdings = []struct {
-			Asset            api.UUID     `json:"asset"`
-			Chain            *string      `json:"chain,omitempty"`
-			CostBasisUsd     api.USD      `json:"cost_basis_usd"`
-			Decimals         int          `json:"decimals"`
-			Location         string       `json:"location"`
-			MintAddress      *string      `json:"mint_address,omitempty"`
-			PriceRef         *string      `json:"price_ref,omitempty"`
-			Quantity         api.Quantity `json:"quantity"`
-			RealizedPnlUsd   *api.USD     `json:"realized_pnl_usd,omitempty"`
-			Symbol           string       `json:"symbol"`
-			UnrealizedPnlUsd api.USD      `json:"unrealized_pnl_usd"`
-			UsdMark          api.USD      `json:"usd_mark"`
-		}{}
-	}
-	return out
+	return out, nil
 }
 
 // --- ledger -----------------------------------------------------------------

@@ -37,6 +37,16 @@ export const USD_VALUATION_NOTE =
   "USD figures are a valuation computed by the backend from the price reference shown. They are " +
   "an estimate of what the position is worth, not an amount held in dollars.";
 
+/**
+ * Shown wherever holdings are valued. A holding the backend does not value is
+ * marked as such, with the reason; a zero in its place would be a valuation
+ * nobody made.
+ */
+export const UNVALUED_HOLDINGS_NOTE =
+  "A holding the backend does not value in US dollars is marked Unvalued, with the reason: simulated value " +
+  "from the sandbox, which has no economic value, or an asset without a current price or a valuation policy. " +
+  "No figure is shown in its place, and its units are still stated exactly.";
+
 /** Shown wherever settlement has not finished. Pending settlement is never hidden. */
 export const PENDING_SETTLEMENT_NOTE =
   "Amounts still settling are shown separately and are not spendable until the backend marks them " +
