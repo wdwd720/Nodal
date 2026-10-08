@@ -10,6 +10,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nodal/controlplane/internal/sandboxrt"
 )
 
 var checkLiteral = regexp.MustCompile(`'([^']*)'::text`)
@@ -37,7 +39,8 @@ func sortedStrings[T ~string](in []T) []string {
 }
 
 // TestIntegration_EveryCheckListHasItsGoTwin pairs each CHECK (col IN (...))
-// of migration 00750 with the Go function that lists the same values.
+// of migrations 00750 and 00757 with the Go function that lists the same
+// values.
 func TestIntegration_EveryCheckListHasItsGoTwin(t *testing.T) {
 	if testDB == nil {
 		t.Skip("set CP_TEST_DATABASE_URL and CP_TEST_MIGRATE_DATABASE_URL")
@@ -66,6 +69,8 @@ func TestIntegration_EveryCheckListHasItsGoTwin(t *testing.T) {
 		"marketplace_follow_intents_outcome_check":                      sortedStrings(AllFollowOutcomes()),
 		"marketplace_evaluations_kind_check":                            sortedStrings(AllEvaluationKinds()),
 		"marketplace_evaluations_actor_type_check":                      movers,
+		"marketplace_paper_fills_side_check":                            sortedStrings(sandboxrt.AllSides()),
+		"marketplace_validation_claims_claimed_by_actor_type_check":     movers,
 	}
 	for constraint, goList := range pairs {
 		assert.Equal(t, goList, checkValues(t, constraint), constraint)

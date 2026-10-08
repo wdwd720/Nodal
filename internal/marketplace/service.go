@@ -3,11 +3,13 @@ package marketplace
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/audit"
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/db"
@@ -15,8 +17,10 @@ import (
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/legalrouter"
+	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/risk"
 	"github.com/nodal/controlplane/internal/sandboxrt"
+	nodalsdk "github.com/nodal/controlplane/internal/sandboxrt/sdk"
 	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/valuedomain"
 )
@@ -71,9 +75,11 @@ type IntentExecutor interface {
 	ExecutePaper(ctx context.Context, tx pgx.Tx, ex PaperExecution) (ExecutionReceipt, error)
 }
 
-// SnapshotSource builds the input document of a scheduled follow run.
-type SnapshotSource interface {
-	Snapshot(ctx context.Context, q db.Querier, install Install, v Version, asOf time.Time) (sandboxrt.Input, error)
+// Transactor opens the transactions a validation runs in: the claim and the
+// outcome are recorded in two of them, and the build runs between them, in
+// none. *db.DB is the production one.
+type Transactor interface {
+	InTx(ctx context.Context, opts db.TxOptions, fn func(ctx context.Context, tx pgx.Tx) error) error
 }
 
 // Config wires a Service.
@@ -89,9 +95,7 @@ type Config struct {
 	Builder    ArtifactBuilder
 	Sections   RiskSections
 	Executor   IntentExecutor
-	// Snapshots is needed only for scheduled follow runs.
-	Snapshots SnapshotSource
-	Audit     audit.Writer
+	Audit      audit.Writer
 	// Limits bounds every sandbox run (sandboxrt.DefaultLimits when zero).
 	Limits sandboxrt.Limits
 	// ServiceID is the SERVICE actor id on the intents the marketplace
@@ -100,9 +104,25 @@ type Config struct {
 	// RuntimeVersion names the sandbox runtime recorded with a validation
 	// (default "wazero/v1.12.0").
 	RuntimeVersion string
-	// MaxSnapshotAge bounds how old a follow run's input may be (default
-	// five minutes).
+	// MaxSnapshotAge bounds how far before now a follow run's as-of time may
+	// be (default five minutes): a scheduler that fell behind does not follow
+	// the past.
 	MaxSnapshotAge time.Duration
+	// MaxPriceAge bounds how old a reference price may be at a run's as-of
+	// time (default five minutes). The service reads reference prices from
+	// the price store itself; an instrument without one is not in the run.
+	MaxPriceAge time.Duration
+	// MaxCloses bounds the price history a run's input carries per
+	// instrument (default 64, at most nodalsdk.MaxClosesPerSeries).
+	MaxCloses int
+	// PaperCapital is what every new install's paper book starts with, in
+	// simulated dollars (default 10 000.00). It is recorded on the install
+	// and never changes.
+	PaperCapital money.USD
+	// ValidationLease bounds how long a claimed build keeps others from
+	// building the same version (default 15 minutes; it should exceed the
+	// builder's own timeout). A claim whose builder vanished lapses with it.
+	ValidationLease time.Duration
 }
 
 // Service is the marketplace. It holds no state beyond its dependencies;
@@ -111,9 +131,9 @@ type Service struct {
 	cfg Config
 }
 
-// NewService validates the wiring. Every dependency except Snapshots is
-// required: a marketplace that could not see the risk kernel, the router or
-// the kill switches would follow strategies past them.
+// NewService validates the wiring. Every dependency is required: a
+// marketplace that could not see the risk kernel, the router or the kill
+// switches would follow strategies past them.
 func NewService(cfg Config) (*Service, error) {
 	switch {
 	case cfg.Clock == nil, cfg.Intents == nil, cfg.Effects == nil, cfg.Auth == nil, cfg.Risk == nil, cfg.Router == nil,
@@ -137,6 +157,26 @@ func NewService(cfg Config) (*Service, error) {
 	if cfg.MaxSnapshotAge <= 0 {
 		cfg.MaxSnapshotAge = 5 * time.Minute
 	}
+	if cfg.MaxPriceAge <= 0 {
+		cfg.MaxPriceAge = 5 * time.Minute
+	}
+	if cfg.MaxCloses <= 0 {
+		cfg.MaxCloses = 64
+	}
+	if cfg.PaperCapital.IsZero() {
+		cfg.PaperCapital = money.USDFromMinor(1_000_000)
+	}
+	if cfg.ValidationLease <= 0 {
+		cfg.ValidationLease = 15 * time.Minute
+	}
+	switch {
+	case cfg.MaxCloses > nodalsdk.MaxClosesPerSeries:
+		return nil, errs.Newf(errs.CodeInternal, "marketplace: at most %d closes per instrument", nodalsdk.MaxClosesPerSeries)
+	case !cfg.PaperCapital.IsPositive():
+		return nil, errs.New(errs.CodeInternal, "marketplace: the paper capital must be positive")
+	case cfg.MaxPriceAge > 24*time.Hour || cfg.MaxPriceAge%time.Millisecond != 0:
+		return nil, errs.New(errs.CodeInternal, "marketplace: a reference price is at most a day old, in whole milliseconds")
+	}
 	return &Service{cfg: cfg}, nil
 }
 
@@ -155,6 +195,28 @@ func requireActor(a econ.Actor, allowed []security.ActorType, what string) error
 	}
 	if !actorIn(a.Type, allowed) {
 		return errs.Newf(errs.CodeForbidden, "marketplace: a %s cannot %s", a.Type, what)
+	}
+	return nil
+}
+
+// requireOwner refuses an actor who does not own the account: a person acts
+// for the accounts they own and no other (the database holds the same rule,
+// MK012). A SERVICE or SYSTEM id is never an owner.
+func requireOwner(ctx context.Context, q db.Querier, a econ.Actor, account accounts.AccountID, what string) error {
+	if account.IsZero() {
+		return errs.New(errs.CodeValidationFailed, "marketplace: an account is required")
+	}
+	var owner string
+	err := q.QueryRow(ctx, `SELECT owner_user_id::text FROM accounts WHERE id = $1`, account).Scan(&owner)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return errs.New(errs.CodeNotFound, "marketplace: account not found").WithField("account_id", account.String())
+	}
+	if err != nil {
+		return dbErr("load account owner", err)
+	}
+	if a.ID != owner {
+		return errs.Newf(errs.CodeForbidden, "marketplace: only the account's owner can %s for it", what).
+			WithField("account_id", account.String())
 	}
 	return nil
 }

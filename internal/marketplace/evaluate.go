@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/audit"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
@@ -17,12 +18,18 @@ import (
 	"github.com/nodal/controlplane/internal/sandboxrt"
 )
 
-// MaxSimulationSnapshots bounds one evaluation.
-const MaxSimulationSnapshots = 1000
+// MaxSimulationSnapshots is the most snapshots any one evaluation may have.
+// The sandbox budget bounds a call more tightly still (sandboxrt.Budget's
+// runs and CPU per call, 20 runs by default): a simulation is never a
+// thousand runs in one transaction (review-2 F13).
+const MaxSimulationSnapshots = 100
 
 // SimulationRequest runs a version against a fixed historical snapshot set.
 type SimulationRequest struct {
 	VersionID VersionID
+	// AccountID is the account the simulation is run for and charged to:
+	// the listing creator's account, by its owner.
+	AccountID accounts.AccountID
 	// DatasetVersion names the snapshot set, so the evaluation can be
 	// reproduced from the same data.
 	DatasetVersion string
@@ -46,8 +53,11 @@ type EvaluationRun struct {
 // Evaluation is a recorded simulation. Simulations propose nothing: their
 // proposals are counted and kept in the run log, never submitted.
 type Evaluation struct {
-	ID              EvaluationID
-	VersionID       VersionID
+	ID        EvaluationID
+	VersionID VersionID
+	// AccountID is the account the simulation was run for and charged to
+	// (zero for an evaluation recorded before review-2 F13).
+	AccountID       accounts.AccountID
 	Kind            EvaluationKind
 	DatasetVersion  string
 	SnapshotsDigest []byte
@@ -66,6 +76,12 @@ type Evaluation struct {
 // the snapshots digest (sha256 of the input digests in order) and the
 // results digest (sha256 of the run digests in order) make it reproducible
 // from the dataset.
+//
+// A simulation is the listing creator's, run by the owner of the creator's
+// account and charged to it. It is admitted whole or not at all: a call with
+// more runs or more granted CPU than one call may have, or than the
+// account's sandbox window has left, is refused before the first run starts
+// (RATE_LIMITED with the budget's stable reason).
 func (s *Service) Simulate(ctx context.Context, tx pgx.Tx, req SimulationRequest) (Evaluation, error) {
 	if err := requireActor(req.Actor, TransitionActorTypes(), "simulate a strategy"); err != nil {
 		return Evaluation{}, err
@@ -78,6 +94,17 @@ func (s *Service) Simulate(ctx context.Context, tx pgx.Tx, req SimulationRequest
 	}
 	v, err := s.Version(ctx, tx, req.VersionID)
 	if err != nil {
+		return Evaluation{}, err
+	}
+	l, err := s.Listing(ctx, tx, v.ListingID)
+	if err != nil {
+		return Evaluation{}, err
+	}
+	if req.AccountID != l.CreatorAccountID {
+		return Evaluation{}, errs.New(errs.CodeForbidden, "marketplace: a simulation is run for the listing creator's account").
+			WithField("version_id", v.ID.String())
+	}
+	if err := requireOwner(ctx, tx, req.Actor, req.AccountID, "simulate a strategy"); err != nil {
 		return Evaluation{}, err
 	}
 	switch v.Status {
@@ -95,7 +122,11 @@ func (s *Service) Simulate(ctx context.Context, tx pgx.Tx, req SimulationRequest
 	if !ok || val.Outcome != ValidationPassed {
 		return Evaluation{}, errs.New(errs.CodeInternal, "marketplace: a built version has no passed validation")
 	}
-	ev := Evaluation{ID: id.New[evaluationKind](), VersionID: v.ID, Kind: EvaluationSimulation, DatasetVersion: req.DatasetVersion}
+	if err := s.cfg.Sandbox.Admit(ctx, tx, req.AccountID, len(req.Snapshots), s.cfg.Limits); err != nil {
+		return Evaluation{}, err
+	}
+	ev := Evaluation{ID: id.New[evaluationKind](), VersionID: v.ID, AccountID: req.AccountID, Kind: EvaluationSimulation,
+		DatasetVersion: req.DatasetVersion}
 	snapHash, runHash := sha256.New(), sha256.New()
 	for i, snap := range req.Snapshots {
 		in := snap
@@ -104,7 +135,7 @@ func (s *Service) Simulate(ctx context.Context, tx pgx.Tx, req SimulationRequest
 			in.Config[k] = val
 		}
 		exec, err := s.cfg.Sandbox.Execute(ctx, tx, sandboxrt.ExecuteRequest{ArtifactDigest: val.ArtifactDigest, Input: in, Limits: s.cfg.Limits,
-			Manifest: v.Manifest, StrategyRef: v.StrategyRef(), Actor: req.Actor})
+			Manifest: v.Manifest, StrategyRef: v.StrategyRef(), Actor: req.Actor, AccountID: req.AccountID, Purpose: sandboxrt.PurposeSimulation})
 		if err != nil {
 			return Evaluation{}, err
 		}
@@ -132,10 +163,11 @@ func (s *Service) Simulate(ctx context.Context, tx pgx.Tx, req SimulationRequest
 	}
 	ev.EvidenceRef, ev.EvidenceSHA256 = ref.URI, ref.SHA256
 	if _, err := tx.Exec(ctx, `INSERT INTO marketplace_evaluations (id, version_id, kind, dataset_version, snapshots_count, snapshots_digest,
-		results_digest, runs_ok, proposals_count, accepted_count, violations_count, evidence_ref, evidence_sha256, actor_type, actor_id)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+		results_digest, runs_ok, proposals_count, accepted_count, violations_count, evidence_ref, evidence_sha256, actor_type, actor_id,
+		account_id)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
 		ev.ID, v.ID, ev.Kind, ev.DatasetVersion, len(req.Snapshots), ev.SnapshotsDigest, ev.ResultsDigest, ev.RunsOK, ev.ProposalsCount,
-		ev.AcceptedCount, ev.ViolationsCount, ev.EvidenceRef, ev.EvidenceSHA256, req.Actor.Type, req.Actor.ID); err != nil {
+		ev.AcceptedCount, ev.ViolationsCount, ev.EvidenceRef, ev.EvidenceSHA256, req.Actor.Type, req.Actor.ID, req.AccountID); err != nil {
 		return Evaluation{}, dbErr("record evaluation", err)
 	}
 	for _, r := range ev.Runs {
