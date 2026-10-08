@@ -568,6 +568,39 @@ var operationPolicies = map[string]operationPolicy{
 	"GetAdvancedStrategiesRuns":                          {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
 
 	// >>> advanced:delegation operations
+	//
+	// Delegated agent authority (internal/delegation), simulated value only.
+	// Reads of one account are tenant-scoped per request (the owner, or an
+	// operator holding account:read_any); a capability, swap or withdrawal read
+	// by its own id is scoped by its own account and answers NOT_FOUND
+	// otherwise. The owner's commands need sandbox:delegate and ownership, and
+	// every grant, revocation, destination change, policy version and decision a
+	// recent step-up; cancelling a withdrawal only reduces risk and needs none.
+	// Operators read across accounts under sandbox:operate; registering a venue
+	// and running the executions move value, hence step-up. No delegation route
+	// admits an agent: agents are admitted in-process, never over HTTP.
+	"GetAdvancedDelegationAgents":                           {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedDelegationCapabilities":                     {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedDelegationCapabilitiesCapabilityId":         {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedDelegationDestinations":                     {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedDelegationWithdrawalPolicy":                 {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedDelegationSwaps":                            {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedDelegationSwapsSwapId":                      {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedDelegationWithdrawals":                      {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedDelegationWithdrawalsWithdrawalId":          {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedDelegationVenues":                           {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"PostAdvancedDelegationCapabilities":                    {AnyOf: perms(security.PermSandboxDelegate), StepUp: true, Mutating: true},
+	"PostAdvancedDelegationCapabilitiesCapabilityIdRevoke":  {AnyOf: perms(security.PermSandboxDelegate), StepUp: true, Mutating: true},
+	"PostAdvancedDelegationDestinations":                    {AnyOf: perms(security.PermSandboxDelegate), StepUp: true, Mutating: true},
+	"PostAdvancedDelegationDestinationsDestinationIdRemove": {AnyOf: perms(security.PermSandboxDelegate), StepUp: true, Mutating: true},
+	"PostAdvancedDelegationWithdrawalPolicy":                {AnyOf: perms(security.PermSandboxDelegate), StepUp: true, Mutating: true},
+	"PostAdvancedDelegationSwapsSwapIdDecision":             {AnyOf: perms(security.PermSandboxDelegate), StepUp: true, Mutating: true},
+	"PostAdvancedDelegationWithdrawalsWithdrawalIdDecision": {AnyOf: perms(security.PermSandboxDelegate), StepUp: true, Mutating: true},
+	"PostAdvancedDelegationWithdrawalsWithdrawalIdCancel":   {AnyOf: perms(security.PermSandboxDelegate), Mutating: true},
+	"GetAdvancedDelegationOpsCapabilities":                  {AnyOf: perms(security.PermSandboxOperate)},
+	"GetAdvancedDelegationOpsPending":                       {AnyOf: perms(security.PermSandboxOperate)},
+	"PostAdvancedDelegationOpsVenues":                       {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedDelegationOpsExecutePending":               {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
 
 	// >>> advanced:operator operations
 	//

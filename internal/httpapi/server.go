@@ -124,6 +124,10 @@ type Ports struct {
 	Marketplace MarketplacePort
 
 	// >>> advanced:delegation port
+	// Delegation serves delegated agent authority (internal/delegation) to an
+	// account's owner and to operators; no agent reaches it. A nil port
+	// answers UNSUPPORTED.
+	Delegation DelegationPort
 
 	// >>> advanced:operator port
 	// Operator serves the operator console: the overview, sandbox reference
