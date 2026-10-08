@@ -11,10 +11,13 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  ADVANCED_MODE_DESCRIPTIONS,
   CONFIDENCE_DISCLAIMER,
   CREDITS_DISCLOSURE,
   NATIVE_ASSET_RISK,
   NATIVE_PRICE_NOTE,
+  SANDBOX_NOTICE,
+  SANDBOX_NOTICE_TITLE,
   SIMULATED_RESULTS_NOTICE,
   THREE_POTS_NOTE,
   USDC_DISCLOSURE,
@@ -103,12 +106,49 @@ test("the settlement asset is disclosed on every page that shows a balance", () 
     (file) =>
       !file.text.includes("USDC_DISCLOSURE") &&
       !file.text.includes("USD_VALUATION_NOTE") &&
-      !file.text.includes("SIMULATED_RESULTS_NOTICE"),
+      !file.text.includes("SIMULATED_RESULTS_NOTICE") &&
+      // The advanced area states every figure in the sandbox dollar, which is
+      // not USDC and not money; the disclosure it owes is SANDBOX_NOTICE, which
+      // <SimulatedNotice /> renders. Accepted there and only there.
+      !(file.path.startsWith("src/pages/advanced/") && file.text.includes("<SimulatedNotice")),
   );
   assert.deepEqual(
     offenders.map((f) => f.path),
     [],
     "a page showing a USD figure must disclose what the underlying asset actually is",
+  );
+});
+
+/* --------------------------------------------------------------------------
+ * The advanced (sandbox) area (ADR-0020)
+ * ------------------------------------------------------------------------ */
+
+test("the sandbox notice says what it must say", () => {
+  assert.match(SANDBOX_NOTICE, /simulated value with no economic substance/i);
+  for (const mode of ["PAPER", "SANDBOX", "DEVNET"]) {
+    assert.match(SANDBOX_NOTICE, new RegExp(`\\b${mode}\\b`));
+  }
+  assert.match(SANDBOX_NOTICE, /nothing here moves real money/i);
+  assert.match(SANDBOX_NOTICE, /LIVE is not implemented in this build/);
+  assert.match(SANDBOX_NOTICE_TITLE, /simulated/i);
+  assert.match(ADVANCED_MODE_DESCRIPTIONS["LIVE"] ?? "", /not implemented in this build/i);
+  for (const [pattern] of FORBIDDEN) {
+    for (const text of [SANDBOX_NOTICE, SANDBOX_NOTICE_TITLE, ...Object.values(ADVANCED_MODE_DESCRIPTIONS)]) {
+      assert.equal(pattern.test(text), false, `advanced disclosure text trips ${String(pattern)}`);
+    }
+  }
+});
+
+test("every page of the advanced area shows the sandbox notice", () => {
+  // A subsystem section added by a later lane is held to this as well: any
+  // file under src/pages/advanced/ that renders a <Page> renders the notice.
+  const pages = uiFiles().filter((file) => file.path.startsWith("src/pages/advanced/") && /<Page\b/.test(file.text));
+  assert.ok(pages.length >= 4, "expected the core pages of the advanced area");
+  const offenders = pages.filter((file) => !file.text.includes("<SimulatedNotice"));
+  assert.deepEqual(
+    offenders.map((f) => f.path),
+    [],
+    "a page of the advanced area must render <SimulatedNotice /> before any figure",
   );
 });
 

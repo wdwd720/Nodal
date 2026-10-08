@@ -27,6 +27,12 @@ const ROUTES = [
   "/lab",
   "/activity",
   "/settings",
+  // The advanced (sandbox) area's core pages, which also render strings the
+  // API sends: capability names, reason codes, explanation lines.
+  "/advanced/overview",
+  "/advanced/buying-power",
+  "/advanced/activity",
+  "/advanced/instruments",
 ] as const;
 
 /** The vocabulary this product may not use, and why. */
