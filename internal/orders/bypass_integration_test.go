@@ -120,7 +120,7 @@ func TestIntegration_TheDatabaseRefusesABrokenJournal(t *testing.T) {
 // can never hold more fills than its quantity, never leave a terminal state,
 // never take an edge the status machine lacks, never change status without a
 // transition row naming the change, never shrink its fills and never change
-// identity.
+// identity; and a market order can never be written as resting.
 func TestIntegration_TheDatabaseRefusesOverfillAndIllegalOrderStates(t *testing.T) {
 	f := newFixture(t)
 	tm := f.tradedMarket()
@@ -156,6 +156,21 @@ func TestIntegration_TheDatabaseRefusesOverfillAndIllegalOrderStates(t *testing.
 	_, err = f.owner().Exec(f.ctx, `UPDATE book_orders SET side = 'SELL' WHERE id = $1`, tm.open.ID)
 	assert.Equal(t, "OB004", db.SQLState(err), "%v", err)
 	assert.Equal(t, StatusOpen, f.orderView(tm.open.ID).Status)
+
+	// A market order never rests: a MARKET GTC row, written around the
+	// service as a copy of a house order, is refused.
+	h := f.houseBook("market-tif")
+	f.fundHouse(h, tm.m.base.ID, units(5))
+	house, err := f.pipe.SubmitHouse(f.ctx, f.houseOrder(tm.m, h, SideSell, "150.00", units(1)))
+	require.NoError(t, err)
+	err = f.rawTx(`INSERT INTO book_orders (id, book_id, instrument_id, owner_type, owner_id, house_account_id,
+		idempotency_key, request_hash, side, order_type, time_in_force, stp_mode, liquidity_intent, post_only,
+		reduce_only, mode, price_ticks, qty_lots, remaining_lots, status)
+		SELECT $1, book_id, instrument_id, owner_type, owner_id, house_account_id, 'market-gtc', request_hash, side,
+		'MARKET', 'GTC', stp_mode, liquidity_intent, post_only, reduce_only, mode, price_ticks, qty_lots, qty_lots,
+		'PENDING' FROM book_orders WHERE id = $2`, uuid.New(), house.Order.ID)
+	assert.Equal(t, "23514", db.SQLState(err), "a resting market order: %v", err)
+	assert.Equal(t, "book_orders_market_tif", db.ConstraintName(err))
 }
 
 // TestIntegration_TheDatabaseRefusesSelfTradesUnruledCrossingAndDuplicateClientIDs:
@@ -352,5 +367,42 @@ func TestIntegration_EnumChecksMatchTheirGoLists(t *testing.T) {
 		sort.Strings(got)
 		sort.Strings(want)
 		assert.Equal(t, want, got, "%s.%s: %s", p.table, p.constraint, def)
+	}
+
+	// The inventory test/integration/enums keeps for the whole schema, for
+	// this migration's tables: every CHECK holding a list of values is paired
+	// above or is one of these rules -- conditions, not lists -- each driven
+	// by TestIntegration_TheDatabaseRefusesOverfillAndIllegalOrderStates.
+	rules := []string{"book_orders.book_orders_market_tif", "book_orders.book_orders_quantity_conserved"}
+	tables := []string{"book_states", "book_state_transitions", "book_orders", "book_order_transitions", "book_commands",
+		"book_events", "book_trades", "book_snapshots", "book_crossing_rules", "book_crossing_decisions",
+		"book_house_reservations", "book_house_reservation_transitions", "paper_fills"}
+	known := map[string]bool{}
+	for _, p := range pairs {
+		known[p.table+"."+p.constraint] = true
+	}
+	for _, r := range rules {
+		known[r] = true
+	}
+	rows, err := testDB.Query(context.Background(), `SELECT r.relname || '.' || c.conname FROM pg_constraint c
+		JOIN pg_class r ON r.oid = c.conrelid
+		WHERE c.contype = 'c' AND c.connamespace = 'public'::regnamespace AND r.relname = ANY($1)
+		  AND pg_get_constraintdef(c.oid) LIKE '%= ANY (ARRAY[%' ORDER BY 1`, tables)
+	require.NoError(t, err)
+	found := map[string]bool{}
+	var unaccounted []string
+	for rows.Next() {
+		var s string
+		require.NoError(t, rows.Scan(&s))
+		found[s] = true
+		if !known[s] {
+			unaccounted = append(unaccounted, s)
+		}
+	}
+	rows.Close()
+	require.NoError(t, rows.Err())
+	assert.Empty(t, unaccounted, "an enumerated CHECK of migration 00742 is neither paired with a Go list nor a known rule")
+	for _, r := range rules {
+		assert.True(t, found[r], "%s no longer holds a list of values; drop it from the rules", r)
 	}
 }
