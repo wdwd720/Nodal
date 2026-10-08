@@ -21,6 +21,7 @@ import { randomUUID } from "node:crypto";
 
 import { expect, test, type Browser, type BrowserContext, type Page, type Request, type Response } from "@playwright/test";
 
+import { goto } from "./pace.ts";
 import { signIn } from "./sign-in.ts";
 
 const NOTICE = "Simulated value — sandbox only";
@@ -118,7 +119,7 @@ async function visit(page: Page, path: string): Promise<Map<string, unknown>> {
     );
   };
   page.on("response", listener);
-  await page.goto(path);
+  await goto(page, path);
   await settle(page);
   page.off("response", listener);
   return new Map(await Promise.all(pending));
@@ -143,7 +144,7 @@ function keyOf(request: Request): string {
 test.describe("the margin section", () => {
   for (const { path, heading } of MARGIN_PAGES) {
     test(`${heading} renders under the simulated-value notice`, async ({ page }) => {
-      await page.goto(path);
+      await goto(page, path);
       await expect(page.getByRole("heading", { level: 1, name: heading, exact: true })).toBeVisible();
       const notice = page.getByRole("note", { name: NOTICE, exact: true });
       await expect(notice).toBeVisible();
@@ -155,7 +156,7 @@ test.describe("the margin section", () => {
   }
 
   test("the section is reachable from the advanced area's navigation", async ({ page }) => {
-    await page.goto("/advanced/overview");
+    await goto(page, "/advanced/overview");
     await expect(page.locator("h1")).toHaveCount(1);
     await page
       .getByRole("navigation", { name: "Advanced area", exact: true })
@@ -173,7 +174,7 @@ test("the margin account is the engine's evaluation figure for figure, its absen
   const response = await page.request.get(`/v1/advanced/margin/account?account_id=${id}`);
   const body: unknown = await response.json();
 
-  await page.goto("/advanced/margin");
+  await goto(page, "/advanced/margin");
   await settle(page);
 
   if (response.ok()) {
@@ -209,7 +210,7 @@ test("opening a margin account: the key is created at confirmation and a retry r
   // exists here rather than relying on another spec's faucet grant.
   await ensureSandboxDollar(page);
   const before = await page.request.get(`/v1/advanced/margin/account?account_id=${id}`);
-  await page.goto("/advanced/margin");
+  await goto(page, "/advanced/margin");
   await settle(page);
 
   if (before.status() !== 404) {
@@ -294,7 +295,7 @@ test("a borrow the backend refuses is shown with its code, and retried with the 
     }
   }
   const read = await page.request.get(`/v1/advanced/margin/account?account_id=${id}`);
-  await page.goto("/advanced/margin");
+  await goto(page, "/advanced/margin");
   await settle(page);
   if (!read.ok()) {
     // No margin account to borrow against: the page offers no borrow form.
@@ -355,7 +356,7 @@ test("the operator's pages are refused to a customer, with the code on screen", 
   const queueProblem = (await queue.json()) as Problem;
   const callsProblem = (await calls.json()) as Problem;
 
-  await page.goto("/advanced/margin/operator");
+  await goto(page, "/advanced/margin/operator");
   await settle(page);
   await expect(
     page.getByRole("region", { name: "Liquidation queue", exact: true }).locator(".explain-meta"),
@@ -395,7 +396,7 @@ test("an unknown liquidation case is answered NOT_FOUND", async ({ page }) => {
   const unknown = `${v4.slice(0, 14)}7${v4.slice(15)}`;
   const response = await page.request.get(`/v1/advanced/margin/cases/${unknown}`);
   expect(response.status()).toBe(404);
-  await page.goto(`/advanced/margin/cases/${unknown}`);
+  await goto(page, `/advanced/margin/cases/${unknown}`);
   await expect(page.getByRole("heading", { level: 1, name: "Liquidation case", exact: true })).toBeVisible();
   await settle(page);
   await expect(page.getByRole("note", { name: NOTICE, exact: true })).toBeVisible();
@@ -417,7 +418,7 @@ for (const { path } of MARGIN_PAGES) {
 
 test("no dead controls in the margin section", async ({ page }) => {
   for (const { path } of MARGIN_PAGES) {
-    await page.goto(path);
+    await goto(page, path);
     await settle(page);
     const buttons = page.locator("main button");
     const count = await buttons.count();
@@ -442,7 +443,7 @@ test("no dead controls in the margin section", async ({ page }) => {
 test("the margin pages reflow at 390px without sideways scrolling", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   for (const { path } of MARGIN_PAGES) {
-    await page.goto(path);
+    await goto(page, path);
     await settle(page);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow, `${path} does not scroll horizontally at 390px`).toBeLessThanOrEqual(1);
@@ -500,7 +501,7 @@ test("the covered deficit is the backend's answer, and a repayment it cannot tak
     expect([404, 409]).toContain(refused.status);
     return;
   }
-  await page.goto("/advanced/margin");
+  await goto(page, "/advanced/margin");
   await settle(page);
   const panel = page.getByRole("region", { name: "Covered deficit", exact: true });
   await expect(panel).toBeVisible();
@@ -538,7 +539,7 @@ test("a customer is refused the review queue and every resolution command, with 
     reason: "a customer may not decide",
   });
   expect(decide.status).toBe(403);
-  await page.goto("/advanced/margin/operator");
+  await goto(page, "/advanced/margin/operator");
   await settle(page);
   await expect(
     page.getByRole("region", { name: "Manual review queue", exact: true }).locator(".explain-meta"),

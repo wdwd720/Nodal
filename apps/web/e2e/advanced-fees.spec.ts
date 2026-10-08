@@ -23,6 +23,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
 
+import { goto } from "./pace.ts";
 import { signIn } from "./sign-in.ts";
 
 const NOTICE = "Simulated value — sandbox only";
@@ -190,7 +191,7 @@ test.describe("the fees section", () => {
     const body = (await response.json()) as { value_domain: string; items: Array<{ key: string }> };
     expect(body.value_domain).toBe("SIMULATED");
 
-    await page.goto("/advanced/overview");
+    await goto(page, "/advanced/overview");
     await expect(page.locator("h1")).toHaveCount(1);
     await page.getByRole("navigation", { name: "Advanced area", exact: true }).getByRole("link", { name: "Fees", exact: true }).click();
     await expect(page).toHaveURL(/\/advanced\/fees$/);
@@ -237,12 +238,12 @@ test.describe("the fees section", () => {
     }
 
     for (const path of ["/advanced/fees/quotes", "/advanced/fees/bookings", "/advanced/fees/periods"]) {
-      await page.goto(path);
+      await goto(page, path);
       await settle(page);
       await expect(page.getByRole("note", { name: NOTICE, exact: true })).toBeVisible();
       await expect(page.locator(".malformed")).toHaveCount(0);
     }
-    await page.goto(`${SECTION}/bookings/${unknownId()}`);
+    await goto(page, `${SECTION}/bookings/${unknownId()}`);
     await settle(page);
     await expect(page.locator(".explain-meta").first()).toContainText("code NOT_FOUND");
   });
@@ -307,7 +308,7 @@ test.describe("an operator's fee schedule and performance period", () => {
     expect(preview.recorded).toBe(false);
     expect(preview.disclosure.spread.bps).toBe(25);
 
-    await page.goto(`${SECTION}/schedule?key=${encodeURIComponent(key)}`);
+    await goto(page, `${SECTION}/schedule?key=${encodeURIComponent(key)}`);
     await expect(page.getByRole("heading", { level: 1, name: "Fee schedule", exact: true })).toBeVisible();
     await settle(page);
     await expect(page.getByRole("note", { name: NOTICE, exact: true })).toBeVisible();
@@ -368,7 +369,7 @@ test.describe("an operator's fee schedule and performance period", () => {
     const read = (await (await page.request.get(`/v1/advanced/fees/periods/${period.id}`)).json()) as Period;
     expect(read.lines.map((line) => line.kind)).toEqual([belowLine.kind, "ACCRUAL"]);
 
-    await page.goto(`${SECTION}/periods/${period.id}`);
+    await goto(page, `${SECTION}/periods/${period.id}`);
     await settle(page);
     await expect(page.getByRole("note", { name: NOTICE, exact: true })).toBeVisible();
     await expect(page.locator('[data-field="period_status"]')).toContainText("OPEN");

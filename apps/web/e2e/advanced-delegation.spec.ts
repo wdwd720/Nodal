@@ -27,6 +27,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 
 import { expect, test, type Browser, type BrowserContext, type Locator, type Page, type Response } from "@playwright/test";
 
+import { goto } from "./pace.ts";
 import { signIn } from "./sign-in.ts";
 
 const NOTICE = "Simulated value — sandbox only";
@@ -162,7 +163,7 @@ async function fillGrant(page: Page, agentId: string, destination: string): Prom
 test.describe("the agent authority section", () => {
   for (const { path, heading } of PAGES) {
     test(`${heading} renders under the simulated-value notice`, async ({ page }) => {
-      await page.goto(path);
+      await goto(page, path);
       await expect(page.getByRole("heading", { level: 1, name: heading, exact: true })).toBeVisible();
       const notice = page.getByRole("note", { name: NOTICE, exact: true });
       await expect(notice).toBeVisible();
@@ -174,7 +175,7 @@ test.describe("the agent authority section", () => {
   }
 
   test("the section is reachable from the advanced area's navigation", async ({ page }) => {
-    await page.goto("/advanced/overview");
+    await goto(page, "/advanced/overview");
     await expect(page.locator("h1")).toHaveCount(1);
     await page
       .getByRole("navigation", { name: "Advanced area", exact: true })
@@ -191,7 +192,7 @@ test.describe("the agent authority section", () => {
 
 test("an unwired deployment says UNSUPPORTED instead of drawing empty tables", async ({ page }) => {
   test.skip(await delegationRuns(page), "this deployment runs delegated authority; the wired case is covered below");
-  await page.goto(SECTION);
+  await goto(page, SECTION);
   await settle(page);
   await expectCode(page.getByRole("region", { name: "Capabilities", exact: true }), "UNSUPPORTED");
   await expectCode(page.getByRole("region", { name: "Signing requests", exact: true }), "UNSUPPORTED");
@@ -201,7 +202,7 @@ test("an unwired deployment says UNSUPPORTED instead of drawing empty tables", a
 test("the lists show exactly the rows the API returned", async ({ page }) => {
   test.skip(!(await delegationRuns(page)), "this deployment does not run delegated authority");
   const id = await ownAccount(page);
-  await page.goto(SECTION);
+  await goto(page, SECTION);
   await settle(page);
   for (const { path, panel, empty, attribute } of [
     { path: "capabilities", panel: "Capabilities", empty: "No capabilities", attribute: "data-capability-id" },
@@ -229,7 +230,7 @@ test("the lists show exactly the rows the API returned", async ({ page }) => {
 
 test("a grant without a recent strong sign-in is refused, and a retry sends the same key", async ({ page }) => {
   test.skip(!(await delegationRuns(page)), "this deployment does not run delegated authority");
-  await page.goto(SECTION);
+  await goto(page, SECTION);
   await settle(page);
   const review = await fillGrant(page, unknownId(), (await aVenueAddress(page)) ?? freshAddress());
   const first = await answerTo(page, "/v1/advanced/delegation/capabilities", () =>
@@ -325,7 +326,7 @@ test("the owner keeps the allow-list and writes a policy version, each with a st
 
 test("a destination without a recent strong sign-in is refused with STEP_UP_REQUIRED", async ({ page }) => {
   test.skip(!(await delegationRuns(page)), "this deployment does not run delegated authority");
-  await page.goto(`${SECTION}/destinations`);
+  await goto(page, `${SECTION}/destinations`);
   await settle(page);
   const add = page.getByRole("form", { name: "Add a destination" });
   await add.getByLabel("Address", { exact: true }).fill(freshAddress());
@@ -343,7 +344,7 @@ test("the operator's view is refused to a customer, with the code on screen", as
   const capabilities = await page.request.get("/v1/advanced/delegation/ops/capabilities");
   expect(pending.status(), "a customer holds no sandbox:operate").toBe(403);
   expect(capabilities.status()).toBe(403);
-  await page.goto(`${SECTION}/operator`);
+  await goto(page, `${SECTION}/operator`);
   await settle(page);
   await expectCode(page.getByRole("region", { name: "Not yet at an end", exact: true }), ((await pending.json()) as Problem).code);
   await expectCode(
@@ -411,7 +412,7 @@ test("an unknown capability, signing request or withdrawal is answered NOT_FOUND
     const id = unknownId();
     const response = await page.request.get(`/v1/advanced/delegation/${kind}/${id}`);
     expect(response.status()).toBe(404);
-    await page.goto(`${SECTION}/${kind}/${id}`);
+    await goto(page, `${SECTION}/${kind}/${id}`);
     await expect(page.getByRole("heading", { level: 1, name: heading, exact: true })).toBeVisible();
     await settle(page);
     await expect(page.getByRole("note", { name: NOTICE, exact: true })).toBeVisible();
@@ -421,7 +422,7 @@ test("an unknown capability, signing request or withdrawal is answered NOT_FOUND
 
 test("no dead controls in the agent authority section", async ({ page }) => {
   for (const { path } of PAGES) {
-    await page.goto(path);
+    await goto(page, path);
     await settle(page);
     const buttons = page.locator("main button");
     const count = await buttons.count();
@@ -440,7 +441,7 @@ test("no dead controls in the agent authority section", async ({ page }) => {
 test("the agent authority pages reflow at 390px without sideways scrolling", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   for (const { path } of PAGES) {
-    await page.goto(path);
+    await goto(page, path);
     await settle(page);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow, `${path} does not scroll horizontally at 390px`).toBeLessThanOrEqual(1);

@@ -20,6 +20,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 
 import { expect, test, type Browser, type BrowserContext, type Locator, type Page } from "@playwright/test";
 
+import { goto } from "./pace.ts";
 import { signIn } from "./sign-in.ts";
 
 const NOTICE = "Simulated value — sandbox only";
@@ -176,7 +177,7 @@ async function simulatedAssetToMark(customer: Page, operator: Page): Promise<str
 
 test.describe("the operator console", () => {
   test("renders under the simulated-value notice and is reachable from the area's navigation", async ({ page }) => {
-    await page.goto("/advanced/overview");
+    await goto(page, "/advanced/overview");
     await page
       .getByRole("navigation", { name: "Advanced area", exact: true })
       .getByRole("link", { name: "Operator console", exact: true })
@@ -200,7 +201,7 @@ test.describe("the operator console", () => {
     expect(posted.status, "a customer may not record a reference mark").toBe(403);
     expect((posted.body as Problem).code).toBe("FORBIDDEN");
 
-    await page.goto(CONSOLE);
+    await goto(page, CONSOLE);
     await settle(page);
     await expectCode(page.getByRole("region", { name: "Awaiting an operator", exact: true }), problem.code);
     await expectCode(page.getByRole("region", { name: "Circuit breakers", exact: true }), problem.code);

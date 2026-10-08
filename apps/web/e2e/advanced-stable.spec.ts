@@ -30,6 +30,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 
 import { expect, test, type BrowserContext, type Locator, type Page } from "@playwright/test";
 
+import { goto } from "./pace.ts";
 import { signIn } from "./sign-in.ts";
 
 const NOTICE = "Simulated value — sandbox only";
@@ -163,7 +164,7 @@ test.beforeAll(async ({ browser }) => {
 
 test.describe("stable assets (sandbox)", () => {
   test("the section renders under the simulated-value notice and is reachable from the area", async ({ page }) => {
-    await page.goto("/advanced/overview");
+    await goto(page, "/advanced/overview");
     await expect(page.locator("h1")).toHaveCount(1);
     await page
       .getByRole("navigation", { name: "Advanced area", exact: true })
@@ -181,7 +182,7 @@ test.describe("stable assets (sandbox)", () => {
 
   test("the asset list and the holdings are the backend's answer, or its UNSUPPORTED refusal", async ({ page }) => {
     const { wired, assets } = await served(page);
-    await page.goto(BASE);
+    await goto(page, BASE);
     await settle(page);
     const list = page.getByRole("region", { name: "Registered stable assets", exact: true });
     const holdings = page.getByRole("region", { name: "Holdings", exact: true });
@@ -247,7 +248,7 @@ test.describe("stable assets (sandbox)", () => {
     expect(resolve.status, "settling unknown submissions is an operator action").toBe(403);
 
     // The operator page offers the command and shows the backend's refusal.
-    await page.goto(`${BASE}/operator`);
+    await goto(page, `${BASE}/operator`);
     await settle(page);
     await expect(page.getByRole("note", { name: NOTICE, exact: true })).toBeVisible();
     const panel = page.getByRole("region", { name: "Settle unknown submissions", exact: true });
@@ -271,7 +272,7 @@ test.describe("stable assets (sandbox)", () => {
       const missing = await page.request.get(`/v1/advanced/stable-assets/${kind}/${unknownId()}`);
       expect(missing.status(), `an ${kind} id nobody recorded`).toBe(wired ? 404 : 422);
     }
-    await page.goto(`${BASE}/issuances/${unknownId()}`);
+    await goto(page, `${BASE}/issuances/${unknownId()}`);
     await expect(page.getByRole("heading", { level: 1, name: "Issuance request", exact: true })).toBeVisible();
     await settle(page);
     await expect(page.getByRole("note", { name: NOTICE, exact: true })).toBeVisible();
@@ -310,7 +311,7 @@ test.describe("stable assets (sandbox)", () => {
   test("the reserve page draws the ledger and the snapshot chain's verification from the backend", async ({ page }) => {
     const { wired, assets } = await served(page);
     if (!wired) {
-      await page.goto(`${BASE}/${unknownId()}/reserve`);
+      await goto(page, `${BASE}/${unknownId()}/reserve`);
       await settle(page);
       await expectRefusal(page.getByRole("region", { name: "Reserve ledger", exact: true }), "UNSUPPORTED");
       await expectRefusal(page.getByRole("region", { name: "Snapshot chain", exact: true }), "UNSUPPORTED");
@@ -318,7 +319,7 @@ test.describe("stable assets (sandbox)", () => {
     }
     const asset = pick(assets);
     if (asset === undefined) {
-      await page.goto(`${BASE}/${unknownId()}/reserve`);
+      await goto(page, `${BASE}/${unknownId()}/reserve`);
       await settle(page);
       await expectRefusal(page.getByRole("region", { name: "Reserve ledger", exact: true }), "NOT_FOUND");
       return;
@@ -330,7 +331,7 @@ test.describe("stable assets (sandbox)", () => {
     expect(reserve.value_domain).toBe("SIMULATED");
     const chain = (await (await page.request.get(`/v1/advanced/stable-assets/${asset.id}/snapshots?limit=50`)).json()) as SnapshotChain;
 
-    await page.goto(`${BASE}/${asset.id}/reserve`);
+    await goto(page, `${BASE}/${asset.id}/reserve`);
     await settle(page);
     await expect(page.getByRole("note", { name: NOTICE, exact: true })).toBeVisible();
     const ledger = page.getByRole("region", { name: "Reserve ledger", exact: true });
@@ -356,7 +357,7 @@ test.describe("stable assets (sandbox)", () => {
     const first = pick(assets);
     if (first !== undefined) paths.push(`${BASE}/${first.id}`, `${BASE}/${first.id}/reserve`);
     for (const path of paths) {
-      await page.goto(path);
+      await goto(page, path);
       await settle(page);
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       expect(overflow, `${path} does not scroll horizontally at 390px`).toBeLessThanOrEqual(1);
@@ -369,7 +370,7 @@ test.describe("stable assets (sandbox)", () => {
     const first = pick(assets);
     if (first !== undefined) paths.push(`${BASE}/${first.id}`);
     for (const path of paths) {
-      await page.goto(path);
+      await goto(page, path);
       await settle(page);
       const buttons = page.locator("main button");
       const count = await buttons.count();

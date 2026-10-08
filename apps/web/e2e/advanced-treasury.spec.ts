@@ -25,6 +25,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 
 import { expect, test, type Browser, type BrowserContext, type Locator, type Page } from "@playwright/test";
 
+import { goto } from "./pace.ts";
 import { signIn } from "./sign-in.ts";
 
 const NOTICE = "Simulated value — sandbox only";
@@ -131,7 +132,7 @@ async function ensureSandboxDollar(page: Page): Promise<void> {
 
 test.describe("the treasury section", () => {
   test("renders under the simulated-value notice, is reachable from the area, and shows a customer the backend's refusal", async ({ page }) => {
-    await page.goto("/advanced/overview");
+    await goto(page, "/advanced/overview");
     await expect(page.locator("h1")).toHaveCount(1);
     await page
       .getByRole("navigation", { name: "Advanced area", exact: true })
@@ -203,7 +204,7 @@ test.describe("the treasury section", () => {
     expect(foreign.status()).toBe(403);
     expect(((await foreign.json()) as Problem).code).toBe("FORBIDDEN");
 
-    await page.goto("/advanced/fees/house-trades");
+    await goto(page, "/advanced/fees/house-trades");
     await settle(page);
     await expect(page.getByRole("note", { name: NOTICE, exact: true })).toBeVisible();
     const panel = page.getByRole("region", { name: "House trades against this account — simulated", exact: true });

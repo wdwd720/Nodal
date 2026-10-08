@@ -28,6 +28,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 
 import { expect, test, type Browser, type BrowserContext, type Page, type Response } from "@playwright/test";
 
+import { goto } from "./pace.ts";
 import { signIn } from "./sign-in.ts";
 
 const NOTICE = "Simulated value — sandbox only";
@@ -215,7 +216,7 @@ async function listAnEquity(page: Page, browser: Browser): Promise<string> {
 test.describe("the equities section", () => {
   for (const { path, heading } of PAGES) {
     test(`${heading} renders under the simulated-value notice`, async ({ page }) => {
-      await page.goto(path);
+      await goto(page, path);
       await expect(page.getByRole("heading", { level: 1, name: heading, exact: true })).toBeVisible();
       const notice = page.getByRole("note", { name: NOTICE, exact: true });
       await expect(notice).toBeVisible();
@@ -228,7 +229,7 @@ test.describe("the equities section", () => {
   }
 
   test("is a section of the advanced area", async ({ page }) => {
-    await page.goto("/advanced/overview");
+    await goto(page, "/advanced/overview");
     await page
       .getByRole("navigation", { name: "Advanced area", exact: true })
       .getByRole("link", { name: "Equities", exact: true })
@@ -242,7 +243,7 @@ test("listings and the session are simulated and drawn as the backend sent them"
   // lists an equity first and the rows are checked as well.
   if ((await listings(page))?.items.length === 0) await listAnEquity(page, browser);
   const list = await listings(page);
-  await page.goto("/advanced/equities");
+  await goto(page, "/advanced/equities");
   await settle(page);
   if (list === undefined) {
     // The deployment runs no paper venue: the page says so with the code, and shows no listing.
@@ -278,7 +279,7 @@ test("listings and the session are simulated and drawn as the backend sent them"
   expect(calendar.status()).toBe(200);
   const c = (await calendar.json()) as { settlement_cycle_days: number; holidays: Array<{ date: string; name: string }> };
   expect(c.settlement_cycle_days).toBe(1);
-  await page.goto("/advanced/equities/calendar");
+  await goto(page, "/advanced/equities/calendar");
   await settle(page);
   await expect(page.getByRole("region", { name: "Now", exact: true })).toContainText("T+1");
   if (c.holidays.length > 0) {
@@ -310,7 +311,7 @@ test("an account's equity records are its own; another account's are refused and
   const absent = await page.request.get(`/v1/advanced/equities/orders/${ABSENT}`);
   expect(absent.status()).toBe(404);
   expect(((await absent.json()) as Problem).code).toBe("NOT_FOUND");
-  await page.goto(`/advanced/equities/orders/${ABSENT}`);
+  await goto(page, `/advanced/equities/orders/${ABSENT}`);
   await settle(page);
   await expect(page.locator(".explain-meta").first()).toContainText("code NOT_FOUND");
 
@@ -321,7 +322,7 @@ test("an account's equity records are its own; another account's are refused and
     expect(s.state).toBe("PENDING");
     expect(s.due_date > s.trade_date, "T+1: due after the trade date").toBe(true);
   }
-  await page.goto("/advanced/equities/settlements");
+  await goto(page, "/advanced/equities/settlements");
   await settle(page);
   if (pending.items.length === 0) {
     await expect(page.getByText("Nothing pending", { exact: true })).toBeVisible();
@@ -335,7 +336,7 @@ test("an account's equity records are its own; another account's are refused and
 test("commands are refused with their stable codes, the operator's worker runs included", async ({ page }) => {
   test.skip((await listings(page)) === undefined, "this deployment runs no paper venue");
   const own = await accountId(page);
-  await page.goto("/advanced/equities");
+  await goto(page, "/advanced/equities");
   await settle(page);
 
   const order = { account_id: own, instrument_id: ABSENT, side: "BUY", order_type: "MARKET", quantity: "1", mode: "PAPER" };
@@ -366,7 +367,7 @@ test("an order is confirmed once, and the page shows exactly what the backend an
   expect(listing, "the equity the operator listed is listed").toBeTruthy();
   const l = listing as Listing;
 
-  await page.goto(`/advanced/equities/listings/${l.instrument_id}`);
+  await goto(page, `/advanced/equities/listings/${l.instrument_id}`);
   await settle(page);
   await expect(page.getByRole("heading", { level: 1, name: l.symbol, exact: true })).toBeVisible();
   const panel = page.getByRole("region", { name: "Place an order", exact: true });

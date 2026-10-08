@@ -18,6 +18,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 
 import { expect, test, type Browser, type BrowserContext, type Locator, type Page, type Response } from "@playwright/test";
 
+import { goto } from "./pace.ts";
 import { signIn } from "./sign-in.ts";
 
 /** The accessible name of the notice every page of the area opens with. */
@@ -134,7 +135,7 @@ async function expectCode(scope: Locator, code: string): Promise<void> {
 
 /** Requests sandbox dollars through the page, so the sandbox dollar exists and the sender holds some. */
 async function fundThroughTheFaucet(page: Page, amount: string): Promise<void> {
-  await page.goto(SECTION);
+  await goto(page, SECTION);
   await settle(page);
   const faucet = page.getByRole("region", { name: "Sandbox faucet", exact: true });
   const form = faucet.getByRole("form", { name: "Request sandbox dollars" });
@@ -201,7 +202,7 @@ function transferIdOf(body: unknown): string | undefined {
 
 test.describe("the transfers section", () => {
   test("renders under the simulated-value notice and is reachable from the area's navigation", async ({ page }) => {
-    await page.goto("/advanced/overview");
+    await goto(page, "/advanced/overview");
     await page
       .getByRole("navigation", { name: "Advanced area", exact: true })
       .getByRole("link", { name: "Transfers", exact: true })
@@ -218,7 +219,7 @@ test.describe("the transfers section", () => {
   test("the faucet grants sandbox dollars, and the allowance falls by exactly the grant", async ({ page }) => {
     const id = await ownAccount(page);
     const before = await page.request.get(`/v1/advanced/transfers/faucet/allowance?account_id=${id}`);
-    await page.goto(SECTION);
+    await goto(page, SECTION);
     await settle(page);
     const faucet = page.getByRole("region", { name: "Sandbox faucet", exact: true });
 
@@ -374,7 +375,7 @@ test.describe("the transfers section", () => {
     }
 
     // The sender's history shows it with the status the backend gave it.
-    await page.goto(SECTION);
+    await goto(page, SECTION);
     await settle(page);
     const row = page.locator(`tr[data-transfer-id="${transfer.id}"]`);
     await expect(row).toContainText(transfer.status);
@@ -605,7 +606,7 @@ test.describe("the transfers section", () => {
       }
     };
     page.on("response", listener);
-    await page.goto(SECTION);
+    await goto(page, SECTION);
     await settle(page);
     page.off("response", listener);
 

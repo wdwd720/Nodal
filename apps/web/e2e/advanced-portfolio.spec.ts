@@ -24,6 +24,7 @@ import { randomUUID } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Browser, type BrowserContext, type Locator, type Page, type Response } from "@playwright/test";
 
+import { goto } from "./pace.ts";
 import { signIn } from "./sign-in.ts";
 
 const NOTICE = "Simulated value — sandbox only";
@@ -213,7 +214,7 @@ test.describe("the portfolio", () => {
   test("/advanced opens on the portfolio, under the simulated-value notice, and the overview is one link away", async ({
     page,
   }) => {
-    await page.goto("/advanced");
+    await goto(page, "/advanced");
     await expect(page).toHaveURL(/\/advanced\/portfolio$/);
     await expect(page.getByRole("heading", { level: 1, name: "Portfolio", exact: true })).toBeVisible();
     const notice = page.getByRole("note", { name: NOTICE, exact: true });
@@ -242,7 +243,7 @@ test.describe("the portfolio", () => {
       expect(p.balances.some((b) => b.symbol === p.quote_symbol), "the faucet's sandbox dollars are a balance").toBe(true);
     }
 
-    await page.goto(PAGE);
+    await goto(page, PAGE);
     await settle(page);
     await expect(page.locator(".malformed")).toHaveCount(0);
     await expect(page.getByText("This response could not be trusted")).toHaveCount(0);
@@ -320,7 +321,7 @@ test.describe("the portfolio", () => {
       pending.push(response.json().catch(() => undefined));
     };
     page.on("response", listener);
-    await page.goto(PAGE);
+    await goto(page, PAGE);
     await settle(page);
     page.off("response", listener);
     const wire = new Set<string>();
@@ -334,7 +335,7 @@ test.describe("the portfolio", () => {
   });
 
   test("each section links to the page it summarises", async ({ page }) => {
-    await page.goto(PAGE);
+    await goto(page, PAGE);
     await settle(page);
     for (const href of SUMMARISED_PAGES) {
       await expect(page.locator(`main a[href="${href}"]`).first(), `a link to ${href}`).toBeVisible();
@@ -378,7 +379,7 @@ test.describe("the portfolio", () => {
   });
 
   test("the portfolio has no automatically detectable WCAG A/AA violation", async ({ page }) => {
-    await page.goto(PAGE);
+    await goto(page, PAGE);
     await settle(page);
     const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
     const summary = results.violations.map(

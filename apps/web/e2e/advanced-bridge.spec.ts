@@ -28,6 +28,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 
 import { expect, test, type BrowserContext, type Locator, type Page } from "@playwright/test";
 
+import { goto } from "./pace.ts";
 import { signIn } from "./sign-in.ts";
 
 const NOTICE = "Simulated value — sandbox only";
@@ -137,7 +138,7 @@ test.beforeAll(async ({ browser }) => {
 
 test.describe("bridge (sandbox)", () => {
   test("the section renders under the simulated-value notice and is reachable from the area", async ({ page }) => {
-    await page.goto("/advanced/overview");
+    await goto(page, "/advanced/overview");
     await expect(page.locator("h1")).toHaveCount(1);
     await page
       .getByRole("navigation", { name: "Advanced area", exact: true })
@@ -157,7 +158,7 @@ test.describe("bridge (sandbox)", () => {
     const wired = await served(page);
     const own = await accountId(page);
     const response = await page.request.get(`/v1/advanced/bridge/holdings?account_id=${own}`);
-    await page.goto(BASE);
+    await goto(page, BASE);
     await settle(page);
     if (!wired) {
       expect(response.status()).toBe(422);
@@ -194,7 +195,7 @@ test.describe("bridge (sandbox)", () => {
 
   test("the chains page states each chain's tip and finality, and whether faults may be injected", async ({ page }) => {
     const wired = await served(page);
-    await page.goto(`${BASE}/chains`);
+    await goto(page, `${BASE}/chains`);
     await settle(page);
     const panel = page.getByRole("region", { name: "Chains", exact: true });
     if (!wired) {
@@ -242,7 +243,7 @@ test.describe("bridge (sandbox)", () => {
     expect(fault.status, "injecting a fault is an operator action").toBe(403);
     expect(isProblem(fault.body) && fault.body.code).toBe("FORBIDDEN");
 
-    await page.goto(`${BASE}/chains`);
+    await goto(page, `${BASE}/chains`);
     await settle(page);
     const produce = page.getByRole("region", { name: "Produce blocks", exact: true });
     await produce.getByLabel("Blocks").fill("1");
@@ -269,7 +270,7 @@ test.describe("bridge (sandbox)", () => {
     const missing = await page.request.get(`/v1/advanced/bridge/legs/${unknownId()}`);
     expect(missing.status(), "a leg id nobody recorded").toBe(wired ? 404 : 422);
 
-    await page.goto(`${BASE}/legs/${unknownId()}`);
+    await goto(page, `${BASE}/legs/${unknownId()}`);
     await expect(page.getByRole("heading", { level: 1, name: "Bridge leg", exact: true })).toBeVisible();
     await settle(page);
     await expect(page.getByRole("note", { name: NOTICE, exact: true })).toBeVisible();
@@ -307,7 +308,7 @@ test.describe("bridge (sandbox)", () => {
 
   test("the routes page lists exactly the backend's routes", async ({ page }) => {
     const wired = await served(page);
-    await page.goto(`${BASE}/routes`);
+    await goto(page, `${BASE}/routes`);
     await settle(page);
     const panel = page.getByRole("region", { name: "Routes", exact: true });
     if (!wired) {
@@ -333,7 +334,7 @@ test.describe("bridge (sandbox)", () => {
   test("the section's pages reflow at 390px without sideways scrolling", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     for (const path of [BASE, `${BASE}/routes`, `${BASE}/legs`, `${BASE}/chains`, `${BASE}/operator`]) {
-      await page.goto(path);
+      await goto(page, path);
       await settle(page);
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       expect(overflow, `${path} does not scroll horizontally at 390px`).toBeLessThanOrEqual(1);
@@ -342,7 +343,7 @@ test.describe("bridge (sandbox)", () => {
 
   test("no dead controls in the section", async ({ page }) => {
     for (const path of [BASE, `${BASE}/routes`, `${BASE}/chains`, `${BASE}/operator`]) {
-      await page.goto(path);
+      await goto(page, path);
       await settle(page);
       const buttons = page.locator("main button");
       const count = await buttons.count();

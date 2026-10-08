@@ -10,6 +10,8 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
+import { goto } from "./pace.ts";
+
 const ROUTES = [
   "/",
   "/add-funds",
@@ -34,7 +36,7 @@ const ROUTES = [
 
 for (const route of ROUTES) {
   test(`${route} has no automatically detectable WCAG A/AA violation`, async ({ page }) => {
-    await page.goto(route);
+    await goto(page, route);
     await expect(page.locator("h1")).toHaveCount(1);
 
     const results = await new AxeBuilder({ page })
@@ -52,7 +54,7 @@ for (const route of ROUTES) {
 }
 
 test("focus is always visible as it moves through a page", async ({ page }) => {
-  await page.goto("/trade");
+  await goto(page, "/trade");
   for (let i = 0; i < 25; i = i + 1) {
     await page.keyboard.press("Tab");
     const outline = await page.evaluate(() => {
@@ -72,7 +74,7 @@ test("the interface renders under a reduced-motion preference", async ({ browser
     storageState: ".playwright/state.json",
   });
   const page = await context.newPage();
-  await page.goto("/");
+  await goto(page, "/");
   await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
   const duration = await page.evaluate(() => {
     const button = document.querySelector("a.btn, button.btn");
@@ -95,7 +97,7 @@ test("the interface renders in a dark colour scheme", async ({ browser }) => {
     storageState: ".playwright/state.json",
   });
   const page = await context.newPage();
-  await page.goto("/portfolio");
+  await goto(page, "/portfolio");
   await expect(page.getByRole("heading", { level: 1, name: "Portfolio" })).toBeVisible();
   const background = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
   expect(background, "the page paints its own background in dark mode").not.toBe("rgba(0, 0, 0, 0)");

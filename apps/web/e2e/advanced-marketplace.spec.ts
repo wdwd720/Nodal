@@ -23,6 +23,8 @@ import { randomUUID } from "node:crypto";
 
 import { expect, test, type Page, type Request, type Response } from "@playwright/test";
 
+import { goto } from "./pace.ts";
+
 const NOTICE = "Simulated value — sandbox only";
 
 const STRATEGY_PAGES: ReadonlyArray<{ readonly path: string; readonly heading: string }> = [
@@ -119,7 +121,7 @@ async function visit(page: Page, path: string): Promise<Map<string, unknown>> {
     );
   };
   page.on("response", listener);
-  await page.goto(path);
+  await goto(page, path);
   await settle(page);
   page.off("response", listener);
   return new Map(await Promise.all(pending));
@@ -167,7 +169,7 @@ func main() {
 test.describe("the strategies section", () => {
   for (const { path, heading } of STRATEGY_PAGES) {
     test(`${heading} renders under the simulated-value notice`, async ({ page }) => {
-      await page.goto(path);
+      await goto(page, path);
       await expect(page.getByRole("heading", { level: 1, name: heading, exact: true })).toBeVisible();
       const notice = page.getByRole("note", { name: NOTICE, exact: true });
       await expect(notice).toBeVisible();
@@ -179,7 +181,7 @@ test.describe("the strategies section", () => {
   }
 
   test("the section is reachable from the advanced area's navigation", async ({ page }) => {
-    await page.goto("/advanced/overview");
+    await goto(page, "/advanced/overview");
     await expect(page.locator("h1")).toHaveCount(1);
     await page
       .getByRole("navigation", { name: "Advanced area", exact: true })
@@ -218,7 +220,7 @@ test("a strategy published through the form is a DRAFT its creator submits with 
   const title = `e2e momentum ${randomUUID().slice(0, 8)}`;
   const instrument = unknownId();
 
-  await page.goto("/advanced/strategies/new");
+  await goto(page, "/advanced/strategies/new");
   await settle(page);
   await page.getByLabel("Title", { exact: true }).fill(title);
   await page.getByLabel("What the strategy does", { exact: true }).fill("Buys when the short average is above the long one.");
@@ -324,7 +326,7 @@ test("a customer is refused the review queue, and the page shows the refusal wit
   expect(response.status(), "only operators read the review queue").toBe(403);
   const problem = (await response.json()) as Problem;
 
-  await page.goto("/advanced/strategies/review");
+  await goto(page, "/advanced/strategies/review");
   await settle(page);
   await expect(page.locator(".explain-meta")).toContainText(`code ${problem.code}`);
   await expect(page.getByRole("button", { name: "Decide", exact: true })).toHaveCount(0);
@@ -341,7 +343,7 @@ test("a paper follow carries the account and nothing else: the backend builds th
   expect((follow.body as Problem).code).toBe("NOT_FOUND");
 
   // The installs page offers a follow without asking for any figure.
-  await page.goto("/advanced/strategies/installs");
+  await goto(page, "/advanced/strategies/installs");
   await settle(page);
   await expect(page.getByLabel("Market and portfolio snapshot (JSON)", { exact: true })).toHaveCount(0);
   const follows = page.getByRole("button", { name: "Paper-follow", exact: true });
@@ -353,7 +355,7 @@ test("a paper follow carries the account and nothing else: the backend builds th
 });
 
 test("an unknown listing is answered NOT_FOUND", async ({ page }) => {
-  await page.goto(`/advanced/strategies/listings/${unknownId()}`);
+  await goto(page, `/advanced/strategies/listings/${unknownId()}`);
   await expect(page.getByRole("heading", { level: 1, name: "Strategy listing", exact: true })).toBeVisible();
   await settle(page);
   await expect(page.getByRole("note", { name: NOTICE, exact: true })).toBeVisible();
@@ -403,7 +405,7 @@ for (const { path } of STRATEGY_PAGES) {
 
 test("no dead controls in the strategies section", async ({ page }) => {
   for (const { path } of STRATEGY_PAGES) {
-    await page.goto(path);
+    await goto(page, path);
     await settle(page);
     const buttons = page.locator("main button");
     const count = await buttons.count();
@@ -428,7 +430,7 @@ test("no dead controls in the strategies section", async ({ page }) => {
 test("the strategies pages reflow at 390px without sideways scrolling", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   for (const { path } of STRATEGY_PAGES) {
-    await page.goto(path);
+    await goto(page, path);
     await settle(page);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow, `${path} does not scroll horizontally at 390px`).toBeLessThanOrEqual(1);

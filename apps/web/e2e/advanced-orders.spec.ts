@@ -28,6 +28,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 
 import { expect, test, type Browser, type BrowserContext, type Page, type Response } from "@playwright/test";
 
+import { goto } from "./pace.ts";
 import { signIn } from "./sign-in.ts";
 
 const NOTICE = "Simulated value — sandbox only";
@@ -238,7 +239,7 @@ async function openABook(page: Page, browser: Browser): Promise<BookRow> {
 test.describe("the order-book section", () => {
   for (const { path, heading } of PAGES) {
     test(`${heading} renders under the simulated-value notice`, async ({ page }) => {
-      await page.goto(path);
+      await goto(page, path);
       await expect(page.getByRole("heading", { level: 1, name: heading, exact: true })).toBeVisible();
       const notice = page.getByRole("note", { name: NOTICE, exact: true });
       await expect(notice).toBeVisible();
@@ -251,7 +252,7 @@ test.describe("the order-book section", () => {
   }
 
   test("is a section of the advanced area", async ({ page }) => {
-    await page.goto("/advanced/overview");
+    await goto(page, "/advanced/overview");
     await page
       .getByRole("navigation", { name: "Advanced area", exact: true })
       .getByRole("link", { name: "Order books", exact: true })
@@ -281,7 +282,7 @@ test("books are simulated internal books that disclose their fees and crossing r
     }
   }
 
-  await page.goto("/advanced/order-books");
+  await goto(page, "/advanced/order-books");
   await settle(page);
   if (books.length === 0) {
     await expect(page.getByText("No order books", { exact: true })).toBeVisible();
@@ -324,15 +325,15 @@ test("an account's orders and trades are its own; another account's are refused 
   const proof = await page.request.get(`/v1/advanced/books/${ABSENT}/trades/1/proof`);
   expect(proof.status()).toBe(404);
 
-  await page.goto(`/advanced/order-books/orders/${ABSENT}`);
+  await goto(page, `/advanced/order-books/orders/${ABSENT}`);
   await settle(page);
   await expect(page.locator(".explain-meta").first()).toContainText("code NOT_FOUND");
-  await page.goto(`/advanced/order-books/books/${ABSENT}/trades/1`);
+  await goto(page, `/advanced/order-books/books/${ABSENT}/trades/1`);
   await settle(page);
   await expect(page.locator(".explain-meta").first()).toContainText("code NOT_FOUND");
 
   const orders = (await (await page.request.get(`/v1/advanced/books/orders?account_id=${own}`)).json()) as { items: unknown[] };
-  await page.goto("/advanced/order-books/orders");
+  await goto(page, "/advanced/order-books/orders");
   await settle(page);
   if (orders.items.length === 0) {
     await expect(page.getByText("No working orders", { exact: true })).toBeVisible();
@@ -343,7 +344,7 @@ test("an account's orders and trades are its own; another account's are refused 
 
 test("commands are refused with their stable codes, and none changes the crossing rule or places a house order", async ({ page }) => {
   const own = await accountId(page);
-  await page.goto("/advanced/order-books");
+  await goto(page, "/advanced/order-books");
   await settle(page);
 
   const order = { account_id: own, side: "BUY", order_type: "LIMIT", time_in_force: "GTC", price: "1", quantity: "1" };
@@ -385,7 +386,7 @@ test("an order is confirmed once, and the page shows exactly what the backend an
   // and was not left behind by another spec.
   const book = await openABook(page, browser);
 
-  await page.goto(`/advanced/order-books/books/${book.instrument_id}`);
+  await goto(page, `/advanced/order-books/books/${book.instrument_id}`);
   await settle(page);
   const panel = page.getByRole("region", { name: "Place an order", exact: true });
   const confirm = panel.getByRole("button", { name: /^Confirm: buy on the book/ });
