@@ -2,6 +2,7 @@ package predmarket
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"time"
 
@@ -117,6 +118,19 @@ func (s *Service) run(ctx context.Context, tx pgx.Tx, a action, mode gates.Mode)
 	return done, nil
 }
 
+// routeRefusalReasons are why a route may not execute now, sorted: the
+// compiler's refusals, and for a route it permits only after a person's
+// confirmation or an operator's review, that step (REQUIRES_USER_CONFIRMATION,
+// REQUIRES_MANUAL_REVIEW).
+func routeRefusalReasons(route settlement.Route) []string {
+	reasons := append([]string{}, route.Reasons...)
+	if route.Permitted && route.RequiredConfirmation != settlement.ConfirmNone {
+		reasons = append(reasons, "REQUIRES_"+string(route.RequiredConfirmation))
+	}
+	sort.Strings(reasons)
+	return reasons
+}
+
 // decide is phase 1. It returns the route and the risk decision, or the
 // refusal it has already recorded on the intent.
 func (s *Service) decide(ctx context.Context, tx pgx.Tx, res *ActionResult, a action, mode gates.Mode, now time.Time) (settlement.Route, risk.AdvancedDecision, error) {
@@ -129,11 +143,18 @@ func (s *Service) decide(ctx context.Context, tx pgx.Tx, res *ActionResult, a ac
 		*res, err = s.refuse(ctx, tx, *res, a.mover, err, "the settlement compiler could not route the intent")
 		return settlement.Route{}, risk.AdvancedDecision{}, err
 	}
-	if !route.Permitted {
+	// The market executes what it routes, so it needs a route that may
+	// execute now: one the legal router permits only once a person has
+	// confirmed it (or an operator reviewed it) is permission to ask, and
+	// nobody here is asked. It is refused with the step it would have
+	// skipped among its reasons (review 3, F5).
+	if !route.MayExecuteNow() {
+		reasons := routeRefusalReasons(route)
 		*res, err = s.refuse(ctx, tx, *res, a.mover,
-			errs.New(errs.CodeForbidden, "predmarket: the settlement compiler refused the intent").
-				WithField("reasons", route.Reasons).WithField("refusal_stage", "route"),
-			"route refused: "+strings.Join(route.Reasons, ", "))
+			errs.New(errs.CodeForbidden, "predmarket: the settlement compiler did not route the intent for execution now").
+				WithField("reasons", reasons).WithField("required_confirmation", string(route.RequiredConfirmation)).
+				WithField("refusal_stage", "route"),
+			"route refused: "+strings.Join(reasons, ", "))
 		return settlement.Route{}, risk.AdvancedDecision{}, err
 	}
 	if res.Intent, err = s.intents.Transition(ctx, tx, it.ID, econ.StatusRouted, a.mover, "routed: "+route.Product, ""); err != nil {

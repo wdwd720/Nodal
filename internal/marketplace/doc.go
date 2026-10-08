@@ -29,10 +29,12 @@
 //     scheduler's (Go and MK012).
 //   - VALIDATION builds between transactions (RunValidation): the version is
 //     claimed in one transaction under a lease, built in none -- under the
-//     builder's bounds on time, module size and memory -- and the outcome is
+//     builder's bounds on time, module size, disk and memory, in a directory
+//     of its own that the build does not outlive -- and the outcome is
 //     recorded in another, with the bounded compiler output kept for the
 //     author. A build past a bound is a recorded rejection; a build that could
-//     not run releases its claim (MK015). The transactional Validate refuses.
+//     not run (no toolchain, the caller went away, every build slot stayed
+//     busy) releases its claim (MK015). The transactional Validate refuses.
 //   - INSTALL is per account and PAPER only, with a PAPER BOOK that starts at
 //     the configured paper capital; the database refuses any other mode
 //     (CHECK marketplace_installs_mode_check). The marketplace never allocates
@@ -63,6 +65,10 @@
 //     intent that faces routing and Risk V2, and only an ALLOW decision
 //     reaches the executor (the database refuses a dispatched follow intent
 //     without one, MK009).
+//   - Dispatch an intent whose route may not execute now: a route the legal
+//     router permits only once a person confirms it or an operator reviews
+//     it is refused (ROUTE_REFUSED, REQUIRES_USER_CONFIRMATION or
+//     REQUIRES_MANUAL_REVIEW), because a follow has nobody to ask.
 //   - Grant a strategy more than its manifest: proposals beyond it are
 //     dropped and counted, and the manifest of a version can never change.
 //   - Take a follow's input, a mark, an equity or a performance figure from a

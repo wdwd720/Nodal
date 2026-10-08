@@ -420,6 +420,19 @@ func intentsOrEmpty(v []FollowIntent) []FollowIntent {
 	return out
 }
 
+// routeRefusalReasons are why a route may not execute now, sorted: the
+// compiler's refusals, and for a route it permits only after a person's
+// confirmation or an operator's review, that step (REQUIRES_USER_CONFIRMATION,
+// REQUIRES_MANUAL_REVIEW).
+func routeRefusalReasons(route settlement.Route) []string {
+	reasons := append([]string{}, route.Reasons...)
+	if route.Permitted && route.RequiredConfirmation != settlement.ConfirmNone {
+		reasons = append(reasons, "REQUIRES_"+string(route.RequiredConfirmation))
+	}
+	sort.Strings(reasons)
+	return reasons
+}
+
 // followIntent takes one accepted proposal through intent -> route -> risk ->
 // dispatch, and reports what became of it. A dispatch the executor applied is
 // a fill of the paper book, returned and applied to book.
@@ -466,9 +479,13 @@ func (s *Service) followIntentOnce(ctx context.Context, tx pgx.Tx, install Insta
 	if err != nil {
 		return FollowIntent{}, nil, err
 	}
-	if !route.Permitted {
-		reasons := append([]string(nil), route.Reasons...)
-		sort.Strings(reasons)
+	// A follow dispatches what it routes, so it needs a route that may
+	// execute now: one the legal router permits only once a person has
+	// confirmed it (or an operator reviewed it) is permission to ask, and a
+	// follow has nobody to ask. It is refused like any other refusal, naming
+	// the step it would have skipped (review 3, F5).
+	if !route.MayExecuteNow() {
+		reasons := routeRefusalReasons(route)
 		fi.Outcome, fi.ReasonCodes = OutcomeRouteRefused, reasons
 		_, err := s.cfg.Intents.Transition(ctx, tx, intent.ID, econ.StatusRejected, actor, "route refused: "+strings.Join(reasons, ","), "ROUTE_REFUSED")
 		return fi, nil, err

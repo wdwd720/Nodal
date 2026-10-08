@@ -25,12 +25,23 @@
 //     environment that contains nothing from the parent process: a secret in
 //     the parent's environment is absent from the build. Builds are
 //     reproducible; the artifact digest is the sha256 of the wasm bytes. A
-//     build is bounded in wall time, in the size of the module it writes and
-//     in the resident memory of its process group (BuilderConfig, with safe
-//     defaults and hard ceilings); a build past a bound is stopped and is a
-//     typed refusal (BUILD_TIMEOUT, BUILD_OUTPUT_LIMIT, BUILD_MEMORY_LIMIT),
-//     never an artifact. The compiler's output is kept bounded, with the build
-//     directory replaced, so an author can read why a build failed.
+//     build is bounded in wall time, in the size of the module it writes, in
+//     the disk its directory takes and in the resident memory of its process
+//     group (BuilderConfig, with safe defaults and hard ceilings); a build
+//     past a bound is stopped and is a typed refusal (BUILD_TIMEOUT,
+//     BUILD_OUTPUT_LIMIT, BUILD_MEMORY_LIMIT), never an artifact. The
+//     compiler's output is kept bounded, with the build directory replaced,
+//     so an author can read why a build failed.
+//   - Every build lives in one directory of the builder's work area -- its
+//     sources, its own build cache, the toolchain's temporary files, its
+//     module -- removed when the build ends, whatever the outcome; at most
+//     MaxConcurrentBuilds such directories exist at once (a build waits for
+//     a slot, and a directory that cannot be removed keeps its slot), and
+//     one a dead process left is removed by the next builder. The shared
+//     cache directory holds only the builder's seed -- the standard library
+//     and the SDK, compiled once from the package's own warm-up program and
+//     published whole -- which a build copies and never writes (review 3,
+//     F4).
 //   - Runner instantiates an artifact with wazero and WASI preview1 and
 //     nothing else: no filesystem, no environment, no arguments beyond the
 //     program name, no sockets, stdin = the input document, bounded stdout
@@ -72,6 +83,10 @@
 //   - Build source that has not passed Scan. The only unscanned build path is
 //     in a _test.go file and exists so the runtime's isolation can be proved
 //     independently of the scanner.
+//   - Let a build write outside its own directory, or leave anything behind
+//     it: not in the shared cache (which a build only copies), not in the
+//     system's temporary directory, not through a process that outlives the
+//     build (the toolchain's telemetry is off in a build's HOME).
 //   - Value a proposal at a price the strategy chose, or run code for an
 //     account beyond its budget.
 //   - Hold mutable package-level state, read the wall clock implicitly, or
