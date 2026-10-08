@@ -26,6 +26,11 @@ type EvalInput struct {
 	IR           *ir.IR
 	Observations map[string]Observation
 	Envelope     EnvelopeSnapshot
+	// Delegated is the run's delegated toolset: the delegated actions it may
+	// take, each under a capability the account's owner granted this agent,
+	// or the reason it has none. A delegated decision for a tool not listed
+	// here is refused.
+	Delegated DelegatedToolset
 }
 
 // Decision is one action the evaluator resolved to. Kinds mirror ir.Action.
@@ -38,6 +43,10 @@ type Decision struct {
 	Prediction *prediction.Prediction
 	// Intent is set for CREATE_TRADE_INTENT.
 	Intent *EmitRequest
+	// DelegatedSwap is set for REQUEST_DELEGATED_SWAP.
+	DelegatedSwap *DelegatedSwapRequest
+	// DelegatedWithdrawal is set for PROPOSE_DELEGATED_WITHDRAWAL.
+	DelegatedWithdrawal *DelegatedWithdrawalRequest
 }
 
 // EvalOutput is the evaluator's verdict.
@@ -76,6 +85,9 @@ type RunResult struct {
 	PredictionID string
 	IntentID     string
 	SkipReason   SkipReason
+	// Delegated is every delegated request of the run, in decision order:
+	// the subject delegation admitted and its status, or the refusal.
+	Delegated []DelegatedRecord
 }
 
 // RunnerDeps are the runner's collaborators.
@@ -92,6 +104,11 @@ type RunnerDeps struct {
 	BrokerFor func(a Authority, runID RunID) (ToolBroker, error)
 	// EmitterFor builds the intent emitter for one run.
 	EmitterFor func(a Authority) (IntentEmitter, error)
+	// DelegatedFor builds the delegated emitter for one run. Nil means no
+	// delegated authority is wired in this runtime: every run is told it
+	// holds no delegated tool, and a decision asking for one is refused and
+	// recorded.
+	DelegatedFor func(a Authority) (DelegatedProposer, error)
 	// IRFor loads the compiled IR of a strategy version.
 	IRFor func(ctx context.Context, q db.Querier, strategyVersionID string) (*ir.IR, error)
 	// ModelCaller performs a model call through the broker. Nil means the
@@ -142,7 +159,8 @@ func (r *Runner) Run(ctx context.Context, runID RunID) (RunResult, error) {
 		return RunResult{}, err
 	}
 	if run.Status.Terminal() {
-		return RunResult{Run: run, PredictionID: run.PredictionID, IntentID: run.IntentID, SkipReason: run.SkipReason}, nil
+		return RunResult{Run: run, PredictionID: run.PredictionID, IntentID: run.IntentID, SkipReason: run.SkipReason,
+			Delegated: delegatedRecordsOf(run.Evidence)}, nil
 	}
 
 	// A pause is effective immediately, including for a run already in
@@ -169,6 +187,10 @@ func (r *Runner) Run(ctx context.Context, runID RunID) (RunResult, error) {
 	// bound account. Nothing downstream can widen it.
 	ctx = WithAgentPrincipal(ctx, auth)
 
+	// The delegated requests an earlier attempt of this run recorded are
+	// carried forward, and none of them is ever made again.
+	ev := runEvidence{calls: delegatedRecordsOf(run.Evidence)}
+
 	doc, err := r.deps.IRFor(ctx, r.deps.DB, auth.StrategyVersionID())
 	if err != nil {
 		return r.fail(ctx, run, err)
@@ -178,7 +200,8 @@ func (r *Runner) Run(ctx context.Context, runID RunID) (RunResult, error) {
 	if err != nil {
 		return r.fail(ctx, run, err)
 	}
-	run.Evidence = mustJSON(checks)
+	ev.checks = checks
+	run.Evidence = ev.render()
 	run.ToolCalls = len(checks)
 	run.DataCostUSD = totalCost(obs)
 	if skip != "" {
@@ -188,9 +211,20 @@ func (r *Runner) Run(ctx context.Context, runID RunID) (RunResult, error) {
 		return RunResult{}, err
 	}
 
+	// The delegated tools this run holds, read under its own principal and
+	// recorded before the evaluator sees them.
+	proposer, delegated, err := r.delegatedTools(ctx, auth)
+	if err != nil {
+		return r.fail(ctx, run, err)
+	}
+	if proposer != nil {
+		ev.tools = toolsRecord(delegated, r.deps.Clock.Now().UTC())
+		run.Evidence = ev.render()
+	}
+
 	out, err := r.deps.Evaluator.Evaluate(ctx, EvalInput{
 		RunID: run.ID, Authority: auth, Now: decisionAt, IR: doc,
-		Observations: obs, Envelope: r.envelopeOrZero(ctx, auth),
+		Observations: obs, Envelope: r.envelopeOrZero(ctx, auth), Delegated: delegated,
 	})
 	if err != nil {
 		if reason := SkipReasonFor(err); reason != "" {
@@ -240,6 +274,12 @@ func (r *Runner) Run(ctx context.Context, runID RunID) (RunResult, error) {
 				return r.fail(ctx, run, err)
 			}
 			result.IntentID = id
+		case ActionRequestDelegatedSwap, ActionProposeDelegatedWithdrawal:
+			rec, err := r.delegate(ctx, &run, d, proposer, delegated, &ev)
+			result.Delegated = append(result.Delegated, rec)
+			if err != nil {
+				return r.endDelegated(ctx, run, result.Delegated, err)
+			}
 		default:
 			return r.fail(ctx, run, errs.Newf(errs.CodeUnsupported, "agent: unknown action kind %s", d.Kind))
 		}
@@ -616,6 +656,24 @@ func (r *Runner) skip(ctx context.Context, run Run, reason SkipReason, detail st
 		return RunResult{}, err
 	}
 	return RunResult{Run: run, SkipReason: reason}, nil
+}
+
+// endDelegated ends a run whose delegated request was refused, with the
+// refusal already recorded in its evidence: SKIPPED for a bound the runtime
+// names, FAILED with the refusal otherwise. The run is terminal, so the
+// refused request is never made again.
+func (r *Runner) endDelegated(ctx context.Context, run Run, records []DelegatedRecord, cause error) (RunResult, error) {
+	var (
+		res RunResult
+		err error
+	)
+	if reason := delegatedSkipReason(cause); reason != "" {
+		res, err = r.skip(ctx, run, reason, cause.Error())
+	} else {
+		res, err = r.fail(ctx, run, cause)
+	}
+	res.Delegated = records
+	return res, err
 }
 
 // fail records an unrecoverable run error and returns it.

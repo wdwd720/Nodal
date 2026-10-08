@@ -62,7 +62,7 @@ Agents never hold API secrets or URLs. Every read and every model call goes thro
 | capital | `capital_envelopes` | reservation row locks | `INSUFFICIENT_BUYING_POWER` / `RISK_ENVELOPE_EXHAUSTED`; run records skip |
 | data | `min(IR.DataBudget, envelope.max_data_spend_usd_minor)` per run/day | `SUM(tool_invocations.cost_usd_minor)` for the UTC day, inside the broker's transaction | tool call refused `BUDGET_EXHAUSTED{DATA}`; dependency treated as missing |
 | model | `min(IR.ModelBudget, envelope.max_model_spend_usd_minor)`; calls/run, calls/day, tokens/call | `model_calls` sums + counts | call refused `BUDGET_EXHAUSTED{MODEL}`; required ⇒ run SKIPPED; agent auto-PAUSED after the configured number of consecutive refusals |
-| order count | `min(IR.Envelope.MaxIntentsPerHour, envelope.max_order_rate_per_hour)`; also risk kernel `RISK_ORDER_RATE` | `trade_intents` count in the window | intent refused `RATE_LIMITED`; run SKIPPED |
+| order count | `min(IR.Envelope.MaxIntentsPerHour, envelope.max_order_rate_per_hour)`; also risk kernel `RISK_ORDER_RATE` | every proposal of the agent in the window: its `trade_intents`, and the `delegated_swaps` and `delegated_withdrawals` it proposed (one shared allowance; a refused delegated request admits nothing and consumes nothing) | intent or delegated request refused `RATE_LIMITED`; run SKIPPED |
 
 Each is checked independently; none relies on another to fail first. A looping model or a burst of events cannot create unbounded provider charges because the day limits are persisted counters and the broker refuses before dialing.
 

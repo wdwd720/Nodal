@@ -396,6 +396,23 @@ func (c Capability) Check(u Use) AuthorityCheck {
 	return AuthorityCheck{Present: present, Expired: expired, Revoked: revoked, WithinLimits: within, InScope: inScope, Codes: codes}
 }
 
+// UsableAt reports whether the capability may be used at all at now: ACTIVE,
+// granted no later than now, not yet expired, and its content hash intact.
+// It is the status-and-lifetime half of Check, for a reader deciding whether
+// a capability is worth offering; it says nothing about any particular use,
+// which only Check measures and every admission measures again.
+func (c Capability) UsableAt(now time.Time) bool {
+	if c.Status != CapabilityActive {
+		return false
+	}
+	now = now.UTC()
+	if now.Before(c.GrantedAt) || !now.Before(c.Terms.Normalize().ExpiresAt) {
+		return false
+	}
+	h, err := c.ComputeContentHash()
+	return err == nil && h == c.ContentHash
+}
+
 // ClassifyAsset returns the instrument class of a SIMULATED asset: a
 // USD-pegged stable unit is STABLE_VALUE, a SPECULATIVE asset is
 // SPECULATIVE_TOKEN, any other supported asset is SPOT_TOKEN. Anything that

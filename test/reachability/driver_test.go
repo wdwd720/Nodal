@@ -53,6 +53,29 @@ var reachedThroughDriver = map[string]string{
 	// A refund is recorded, submitted once between transactions, and settled
 	// when it is final on the source chain.
 	"internal/bridge.SettleRefund": "Service.Refund",
+
+	// Delegated authority signs, gates, submits and settles a swap or a
+	// withdrawal in a transaction each, with the one submission between
+	// them: ExecuteSwap and ExecuteWithdrawal are what the owner's decision
+	// route and the operator's execute-pending route call (internal/httpapi),
+	// and the delegated signer signs only inside them. The agent's admission
+	// registers the delegated wallet's key: the agent runtime calls
+	// AgentAdmission.RequestSwap (internal/agent).
+	"internal/delegation.SignSwap":                   "Service.ExecuteSwap",
+	"internal/delegation.GateSwapSubmission":         "Service.ExecuteSwap",
+	"internal/delegation.RecordSwapSubmission":       "Service.ExecuteSwap",
+	"internal/delegation.SettleSwap":                 "Service.ExecuteSwap",
+	"internal/delegation.Sign":                       "Service.ExecuteSwap",
+	"internal/delegation.SignWithdrawal":             "Service.ExecuteWithdrawal",
+	"internal/delegation.GateWithdrawalSubmission":   "Service.ExecuteWithdrawal",
+	"internal/delegation.RecordWithdrawalSubmission": "Service.ExecuteWithdrawal",
+	"internal/delegation.SettleWithdrawal":           "Service.ExecuteWithdrawal",
+	"internal/delegation.EnsureKey":                  "AgentAdmission.RequestSwap",
+	// The delegation upkeep expires each stale swap and withdrawal in its own
+	// transaction (00760): ExpireStale is what the advanced worker's
+	// delegation.upkeep job calls (internal/advancedjobs).
+	"internal/delegation.ExpireStaleSwap":       "Service.ExpireStale",
+	"internal/delegation.ExpireStaleWithdrawal": "Service.ExpireStale",
 }
 
 func TestReachability_EveryDriverClaimIsTrue(t *testing.T) {

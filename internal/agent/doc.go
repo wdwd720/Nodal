@@ -16,11 +16,25 @@
 //     import internal/{signing,wallet,admin,gates,withdrawal,killswitch,
 //     capital,risk/policy,execution,funding}; the boundary is enforced by
 //     depguard and by test/security/authority_boundary_test.go.
-//   - The only money-adjacent write reachable from agent code is proposing a
-//     typed trade intent through IntentEmitter. Eligibility, risk, capital
+//   - The only money-adjacent writes reachable from agent code are proposals:
+//     a typed trade intent through IntentEmitter, and -- when the account's
+//     owner delegated authority to the agent -- a delegated swap request or
+//     withdrawal proposal through DelegatedEmitter. Eligibility, risk, capital
 //     reservation, planning, quoting, inspection, signing and submission are
 //     performed afterwards by code the agent cannot influence, and treat an
 //     agent intent exactly like a manual one.
+//   - It reaches internal/delegation only through DelegatedAuthority, which
+//     *delegation.AgentAdmission satisfies: admit a swap request, record a
+//     withdrawal proposal, read the agent's own capabilities. It never holds
+//     a delegation.Service, so it can never sign, execute, approve or decide
+//     a delegated action, grant or revoke a capability, or read a key. A
+//     delegated request carries this run's AGENT principal, a nonce derived
+//     from the run and the action (never chosen by the evaluator), and passes
+//     every bound an intent passes: pause, the order-rate budget, the
+//     strategy's effect set and the run's mode (PAPER only, never a run bound
+//     to an envelope). It gives a swap's ACQUIRE/REDUCE label no meaning of
+//     its own; delegation's admission alone judges it. A refusal, whoever
+//     refused, is recorded on the run and ends it; it is never retried.
 //   - Content read through a tool is DATA (PART 67). It can never grant an
 //     effect, add a tool, raise a budget, move a lifecycle stage or approve
 //     anything. Untrusted content reaches a model only inside an UNTRUSTED
