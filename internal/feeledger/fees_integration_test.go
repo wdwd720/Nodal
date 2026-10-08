@@ -147,7 +147,7 @@ func TestIntegration_ChargesAreBookedComponentByComponentExactlyOnce(t *testing.
 		go func() {
 			defer wg.Done()
 			b, err := do(f, func(ctx context.Context, tx pgx.Tx) (Booking, error) {
-				return f.svc.Book(ctx, tx, BookRequest{DisclosureID: stored.ID, AccountID: payer, Kind: ledger.KindSimTrade,
+				return f.svc.book(ctx, tx, bookRequest{DisclosureID: stored.ID, AccountID: payer, Kind: ledger.KindSimTrade,
 					Mode: gates.ModePaper, Actor: service})
 			})
 			if assert.NoError(t, err) {
@@ -196,25 +196,25 @@ func TestIntegration_ChargesAreBookedComponentByComponentExactlyOnce(t *testing.
 	stranger := f.customer(quote.ID, units(1_000))
 	other := f.quote(key, quote.ID, &payer, fees.SideBuy, units(1), "100.00")
 	_, err = do(f, func(ctx context.Context, tx pgx.Tx) (Booking, error) {
-		return f.svc.Book(ctx, tx, BookRequest{DisclosureID: other.ID, AccountID: stranger, Kind: ledger.KindSimTrade, Mode: gates.ModePaper, Actor: service})
+		return f.svc.book(ctx, tx, bookRequest{DisclosureID: other.ID, AccountID: stranger, Kind: ledger.KindSimTrade, Mode: gates.ModePaper, Actor: service})
 	})
 	assert.Equal(t, ReasonPayerMismatch, ReasonOf(err))
 	f.clk.Advance(3 * time.Minute)
 	_, err = do(f, func(ctx context.Context, tx pgx.Tx) (Booking, error) {
-		return f.svc.Book(ctx, tx, BookRequest{DisclosureID: other.ID, AccountID: payer, Kind: ledger.KindSimTrade, Mode: gates.ModePaper, Actor: service})
+		return f.svc.book(ctx, tx, bookRequest{DisclosureID: other.ID, AccountID: payer, Kind: ledger.KindSimTrade, Mode: gates.ModePaper, Actor: service})
 	})
 	assert.Equal(t, ReasonQuoteExpired, ReasonOf(err))
 	zeroKey := "itest:" + uuid.NewString()
 	f.publish(zeroKey, fees.ZeroSchedule(quote.ID, 6), time.Time{})
 	free := f.quote(zeroKey, quote.ID, &payer, fees.SideBuy, units(1), "100.00")
 	_, err = do(f, func(ctx context.Context, tx pgx.Tx) (Booking, error) {
-		return f.svc.Book(ctx, tx, BookRequest{DisclosureID: free.ID, AccountID: payer, Kind: ledger.KindSimTrade, Mode: gates.ModePaper, Actor: service})
+		return f.svc.book(ctx, tx, bookRequest{DisclosureID: free.ID, AccountID: payer, Kind: ledger.KindSimTrade, Mode: gates.ModePaper, Actor: service})
 	})
 	assert.Equal(t, ReasonNothingToBook, ReasonOf(err))
 	poor := f.customer(quote.ID, units(1))
 	broke := f.quote(key, quote.ID, &poor, fees.SideBuy, units(2), "100.00")
 	_, err = do(f, func(ctx context.Context, tx pgx.Tx) (Booking, error) {
-		return f.svc.Book(ctx, tx, BookRequest{DisclosureID: broke.ID, AccountID: poor, Kind: ledger.KindSimTrade, Mode: gates.ModePaper, Actor: service})
+		return f.svc.book(ctx, tx, bookRequest{DisclosureID: broke.ID, AccountID: poor, Kind: ledger.KindSimTrade, Mode: gates.ModePaper, Actor: service})
 	})
 	assert.Equal(t, errs.CodeInsufficientBuyingPower, errs.CodeOf(err), "a fee never spends what the payer does not have free")
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
+	"github.com/nodal/controlplane/internal/feeledger"
 	"github.com/nodal/controlplane/internal/fees"
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/id"
@@ -38,16 +39,21 @@ import (
 // A market order fills immediately, in full, against the reference mark (the
 // freshest valuation price of base in quote; a mark older than the venue's
 // maximum age refuses the fill). It is priced through the instrument's
-// published fees.Schedule, whose explicit spread moves the execution price
-// away from the mark: everything the customer pays beyond the mark is an
-// itemized, disclosed component, recomputed by fees.VerifyQuote and
-// fees.VerifyDisclosure before anything is posted. The customer's side is a
-// SIM_TRADE at the mark, the spread is FEES_SPREAD / SPREAD_REVENUE, the
-// platform and strategy fees are FEES_PLATFORM / PLATFORM_FEE_REVENUE, a venue
-// pass-through is FEES_VENUE and a quote-asset network cost FEES_NETWORK. The
-// venue's own side is external and not booked, like the V1 spot venue. The
-// full disclosure and the schedule it was priced under are stored with the
-// fill, so every unit of spread and fee is discoverable from the record.
+// published fees.Schedule -- the fee-ledger version in force under the
+// instrument's key (PaperScheduleKey) at the fill instant, which an operator
+// publishes and versions through the fee ledger -- whose explicit spread
+// moves the execution price away from the mark: everything the customer pays
+// beyond the mark is an itemized, disclosed component, recomputed by
+// fees.VerifyQuote and fees.VerifyDisclosure before anything is posted. The
+// customer's side is a SIM_TRADE at the mark, the spread is FEES_SPREAD /
+// SPREAD_REVENUE, the platform and strategy fees are FEES_PLATFORM /
+// PLATFORM_FEE_REVENUE (each its own pair), a venue pass-through is FEES_VENUE
+// and a quote-asset network cost FEES_NETWORK: exactly the disclosure's
+// charges (feeledger.ChargeEntries). The venue's own side is external and not
+// booked, like the V1 spot venue. The disclosure is recorded in the fee ledger
+// for the payer and booked against the fill's journal and effect, and the full
+// disclosure and the schedule it was priced under are stored with the fill as
+// well, so every unit of spread and fee is discoverable from either record.
 
 // Reasons of the paper venue.
 const (
@@ -87,9 +93,16 @@ type PaperConfig struct {
 	KillSwitches econ.KillSwitchReader
 	Verification VerificationSource
 	Sessions     SessionCalendar
-	// Schedules is the published schedule of every instrument the venue
-	// fills; an instrument without one is refused.
-	Schedules map[instruments.InstrumentID]fees.Schedule
+	// FeeLedger is where every instrument's schedule is published and every
+	// fill's charges are disclosed and booked. An instrument with no schedule
+	// version in force under its key is refused.
+	FeeLedger *feeledger.Service
+	// ScheduleKeyPrefix names the fee-ledger keys the venue prices by: an
+	// instrument's schedule is the version in force under
+	// PaperScheduleKey(ScheduleKeyPrefix, instrument) (default
+	// PaperScheduleKeyPrefix). A caller with its own published schedules (the
+	// strategy marketplace) uses its own prefix.
+	ScheduleKeyPrefix string
 	// MaxMarkAge bounds the age of the mark a fill uses (default 30s); an
 	// instrument's own oracle maximum age applies when it is stricter.
 	MaxMarkAge time.Duration
@@ -116,28 +129,28 @@ type PaperVenue struct {
 	kills     econ.KillSwitchReader
 	verify    VerificationSource
 	sessions  SessionCalendar
-	schedules map[instruments.InstrumentID]fees.Schedule
+	feeLedger *feeledger.Service
+	keyPrefix string
 	maxAge    time.Duration
 	lookback  time.Duration
 	actor     econ.Actor
 }
 
-// NewPaperVenue validates the configuration, including every published
-// schedule, and returns a PaperVenue.
+// NewPaperVenue validates the configuration and returns a PaperVenue.
 func NewPaperVenue(c PaperConfig) (*PaperVenue, error) {
 	if c.Clock == nil || c.Ledger == nil || c.Capital == nil || c.Intents == nil || c.Effects == nil || c.Authorizer == nil ||
-		c.Risk == nil || c.Router == nil || c.Instruments == nil || c.Assets == nil || c.Prices == nil || c.KillSwitches == nil {
+		c.Risk == nil || c.Router == nil || c.Instruments == nil || c.Assets == nil || c.Prices == nil || c.KillSwitches == nil ||
+		c.FeeLedger == nil {
 		return nil, errs.New(errs.CodeValidationFailed, "orders: every dependency of the paper venue is required")
 	}
 	if c.RiskPolicy.Missing() {
 		return nil, errs.New(errs.CodeValidationFailed, "orders: a risk policy is required")
 	}
-	schedules := make(map[instruments.InstrumentID]fees.Schedule, len(c.Schedules))
-	for k, s := range c.Schedules {
-		if err := s.Validate(); err != nil {
-			return nil, err
-		}
-		schedules[k] = s
+	if c.ScheduleKeyPrefix == "" {
+		c.ScheduleKeyPrefix = PaperScheduleKeyPrefix
+	}
+	if !paperKeyPrefixPattern.MatchString(c.ScheduleKeyPrefix) {
+		return nil, errs.New(errs.CodeValidationFailed, "orders: a schedule key prefix is lower-case [a-z0-9_.:/-], at most 91 bytes")
 	}
 	if c.Verification == nil {
 		c.Verification = identityVerification{}
@@ -160,9 +173,24 @@ func NewPaperVenue(c PaperConfig) (*PaperVenue, error) {
 	return &PaperVenue{
 		clk: c.Clock, ledger: c.Ledger, capital: c.Capital, intents: c.Intents, effects: c.Effects, auth: c.Authorizer,
 		risk: c.Risk, policy: c.RiskPolicy, router: c.Router, instr: c.Instruments, assets: c.Assets, prices: c.Prices,
-		kills: c.KillSwitches, verify: c.Verification, sessions: c.Sessions, schedules: schedules, maxAge: c.MaxMarkAge,
-		lookback: c.MarkLookback, actor: c.Actor,
+		kills: c.KillSwitches, verify: c.Verification, sessions: c.Sessions, feeLedger: c.FeeLedger,
+		keyPrefix: c.ScheduleKeyPrefix, maxAge: c.MaxMarkAge, lookback: c.MarkLookback, actor: c.Actor,
 	}, nil
+}
+
+// ScheduleKey is the fee-ledger key whose version in force prices this
+// venue's fills of an instrument.
+func (v *PaperVenue) ScheduleKey(inst instruments.InstrumentID) string {
+	return PaperScheduleKey(v.keyPrefix, inst)
+}
+
+// EnsureSchedule makes s the version in force under an instrument's key
+// (feeledger.EnsureSchedule) and returns it: for a caller that charges its own
+// fixed schedule through the venue (the strategy marketplace's published
+// strategy-fill schedule). Another version in force is refused.
+func (v *PaperVenue) EnsureSchedule(ctx context.Context, tx pgx.Tx, inst instruments.InstrumentID, s fees.Schedule, reason string,
+	actor econ.Actor) (feeledger.PublishedSchedule, error) {
+	return v.feeLedger.EnsureSchedule(ctx, tx, feeledger.PublishRequest{Key: v.ScheduleKey(inst), Schedule: s, Reason: reason, Actor: actor})
 }
 
 // PaperFill is a paper_fills row: one immediate fill and its audit record.
@@ -206,12 +234,15 @@ type paperMarket struct {
 	maxAge        time.Duration
 	calendar      string
 	expiry        *time.Time
+	scheduleKey   string
 	schedule      fees.Schedule
 	scheduleBytes []byte
 	scheduleHash  string
 }
 
-func (v *PaperVenue) market(ctx context.Context, q db.Querier, instrumentID instruments.InstrumentID) (paperMarket, error) {
+// market resolves an instrument, its assets and the schedule version in force
+// under its key at an instant.
+func (v *PaperVenue) market(ctx context.Context, q db.Querier, instrumentID instruments.InstrumentID, at time.Time) (paperMarket, error) {
 	inst, err := v.instr.Get(ctx, q, instrumentID)
 	if err != nil {
 		return paperMarket{}, err
@@ -250,23 +281,23 @@ func (v *PaperVenue) market(ctx context.Context, q db.Querier, instrumentID inst
 			return paperMarket{}, errs.Newf(errs.CodeForbidden, "orders: asset %s is not SIMULATED; the paper venue moves only simulated value", a.ID)
 		}
 	}
-	s, ok := v.schedules[inst.ID]
-	if !ok {
-		return paperMarket{}, rejection(ReasonPaperNoSchedule, "the instrument has no published fee schedule")
+	m.scheduleKey = v.ScheduleKey(inst.ID)
+	pub, err := v.feeLedger.EffectiveSchedule(ctx, q, m.scheduleKey, at)
+	if feeledger.ReasonOf(err) == feeledger.ReasonScheduleNotFound {
+		return paperMarket{}, rejection(ReasonPaperNoSchedule, "the instrument has no fee schedule published and in force").
+			WithField("schedule_key", m.scheduleKey)
 	}
+	if err != nil {
+		return paperMarket{}, err
+	}
+	s := pub.Schedule
 	if s.QuoteAsset != m.quote.ID || s.QuoteDecimals != m.quote.Decimals {
 		return paperMarket{}, rejection(ReasonPaperNoSchedule, "the published schedule is not quoted in the instrument's quote asset")
 	}
 	if s.NetworkFee.Amount.IsPositive() && s.NetworkFee.Asset != m.quote.ID {
 		return paperMarket{}, rejection(ReasonPaperNetworkAsset, "a network cost in another asset cannot be charged on a paper fill")
 	}
-	m.schedule = s
-	if m.scheduleBytes, err = s.Canonical(); err != nil {
-		return paperMarket{}, err
-	}
-	if m.scheduleHash, err = s.Hash(); err != nil {
-		return paperMarket{}, err
-	}
+	m.schedule, m.scheduleBytes, m.scheduleHash = s, pub.Canonical, pub.Hash
 	return m, nil
 }
 
@@ -359,11 +390,11 @@ func (v *PaperVenue) ExecuteIntent(ctx context.Context, tx pgx.Tx, intent econ.I
 	if err != nil {
 		return PaperFill{}, rejection(ReasonPaperIntentShape, "the intent's instrument is not an instrument id")
 	}
-	m, err := v.market(ctx, tx, instrumentID)
+	now := v.clk.Now().UTC()
+	m, err := v.market(ctx, tx, instrumentID, now)
 	if err != nil {
 		return PaperFill{}, err
 	}
-	now := v.clk.Now().UTC()
 	mark, err := v.prices.Latest(ctx, tx, m.base.ID, m.quote.ID, m.maxAge, now)
 	if err != nil {
 		return PaperFill{}, err
@@ -415,22 +446,38 @@ func (v *PaperVenue) ExecuteIntent(ctx context.Context, tx pgx.Tx, intent econ.I
 	if err != nil {
 		return PaperFill{}, err
 	}
-	split := quote.RevenueSplit()
-	amount := func(c fees.BookingCategory) money.Quantity {
-		l, _ := split.Line(c)
-		return l.Amount
+	// The payer's disclosure is recorded in the fee ledger under the very
+	// version that priced the fill, and must be byte for byte the one the
+	// venue computed; what is posted and booked is exactly its charges. A
+	// fill that charges nothing books nothing.
+	charges := feeledger.ChargesOf(disclosure)
+	var feeQuote *feeledger.StoredQuote
+	if !charges.IsZero() {
+		account, base := stored.AccountID, m.base.ID
+		q, err := v.feeLedger.RecordQuote(ctx, tx, feeledger.QuoteRequest{
+			ScheduleKey: m.scheduleKey, At: now, Input: input, Subsystem: econ.SubsystemOrders,
+			IdempotencyKey: "orders:paper:" + stored.ID.String(), AccountID: &account, BaseAsset: &base, Mode: stored.Mode,
+			Actor: v.actor,
+		})
+		if err != nil {
+			return PaperFill{}, writtenFailure{err}
+		}
+		if q.DisclosureHash != discHash || q.ScheduleHash != m.scheduleHash {
+			return PaperFill{}, errs.New(errs.CodeInternal, "orders: the fee ledger disclosed another quote than the paper venue priced").
+				WithField("reason", ReasonPaperDisclosureMismatch).WithField("disclosure_id", q.ID.String())
+		}
+		feeQuote, charges = &q, q.Charges
 	}
 	fill := PaperFill{
 		ID: id.New[id.Any](), IntentID: stored.ID, AccountID: stored.AccountID, InstrumentID: m.inst.ID, VenueLabel: VenueLabelPaper,
 		Side: side, BaseAsset: m.base.ID, QuoteAsset: m.quote.ID, BaseQuantity: quote.Input.BaseQty,
-		NotionalAtReference: quote.NotionalAtReference, SpreadAmount: amount(fees.BookSpreadRevenue),
-		PlatformFeeAmount: amount(fees.BookPlatformFeeRevenue).Add(amount(fees.BookStrategyFeeRevenue)),
-		VenueFeeAmount:    amount(fees.BookVenueFeePassThrough), TotalQuote: quote.Total(),
+		NotionalAtReference: quote.NotionalAtReference, SpreadAmount: charges.Spread,
+		PlatformFeeAmount: charges.Platform.Add(charges.Strategy), VenueFeeAmount: charges.Venue, TotalQuote: quote.Total(),
 		ScheduleVersion: m.schedule.Version, ScheduleHash: m.scheduleHash, Schedule: m.scheduleBytes,
 		Disclosure: disclosure, DisclosureBytes: discBytes, DisclosureHash: discHash, ReservationID: reservation.ID.String(),
 	}
-	if l, _ := split.Line(fees.BookNetworkFeePassThrough); l.InQuoteTotal {
-		fill.NetworkFeeAmount = l.Amount
+	if charges.NetworkInQuote {
+		fill.NetworkFeeAmount = charges.Network
 	}
 	iid := stored.ID
 	key := "orders:paper:" + stored.ID.String()
@@ -449,7 +496,7 @@ func (v *PaperVenue) ExecuteIntent(ctx context.Context, tx pgx.Tx, intent econ.I
 		Kind: ledger.KindSimTrade, IdempotencyKey: key,
 		Reference:   ledger.FinancialEventReference{Type: "paper_fill", ID: fill.ID.String()},
 		EffectiveAt: now, Description: "simulated paper-venue fill at a reference mark with a disclosed spread",
-		Entries: paperEntries(stored.AccountID, side, m.base.ID, m.quote.ID, quote, fill),
+		Entries: paperEntries(stored.AccountID, side, m.base.ID, m.quote.ID, quote, charges),
 		Metadata: map[string]any{
 			"venue_label": VenueLabelPaper, "intent_id": stored.ID.String(), "disclosure_hash": discHash,
 			"schedule_version": m.schedule.Version, "schedule_hash": m.scheduleHash,
@@ -467,16 +514,17 @@ func (v *PaperVenue) ExecuteIntent(ctx context.Context, tx pgx.Tx, intent econ.I
 	if err := json.Unmarshal(discBytes, &discDoc); err != nil {
 		return PaperFill{}, errs.Wrap(err, errs.CodeInternal, "orders: re-read disclosure")
 	}
-	ev, err := econ.RecordEvidence(ctx, tx, econ.Evidence{
-		Key: "orders/paper/" + stored.ID.String(),
-		Document: map[string]any{
-			"kind": "orders.paper_fill.v1", "venue_label": VenueLabelPaper, "intent_id": stored.ID.String(),
-			"account_id": stored.AccountID.String(), "instrument_id": m.inst.ID.String(), "side": string(side),
-			"schedule_version": m.schedule.Version, "schedule_hash": m.scheduleHash, "disclosure_hash": discHash,
-			"disclosure": discDoc, "journal_transaction_id": posted.TransactionID.String(),
-			"reservation_id": reservation.ID.String(),
-		},
-	})
+	evidence := map[string]any{
+		"kind": "orders.paper_fill.v1", "venue_label": VenueLabelPaper, "intent_id": stored.ID.String(),
+		"account_id": stored.AccountID.String(), "instrument_id": m.inst.ID.String(), "side": string(side),
+		"schedule_key": m.scheduleKey, "schedule_version": m.schedule.Version, "schedule_hash": m.scheduleHash,
+		"disclosure_hash": discHash, "disclosure": discDoc, "journal_transaction_id": posted.TransactionID.String(),
+		"reservation_id": reservation.ID.String(),
+	}
+	if feeQuote != nil {
+		evidence["fee_disclosure_id"] = feeQuote.ID.String()
+	}
+	ev, err := econ.RecordEvidence(ctx, tx, econ.Evidence{Key: "orders/paper/" + stored.ID.String(), Document: evidence})
 	if err != nil {
 		return PaperFill{}, err
 	}
@@ -489,6 +537,14 @@ func (v *PaperVenue) ExecuteIntent(ctx context.Context, tx pgx.Tx, intent econ.I
 		return PaperFill{}, err
 	}
 	fill.EffectID = applied.ID
+	if feeQuote != nil {
+		if _, err := v.feeLedger.RecordEmbedded(ctx, tx, feeledger.EmbeddedRequest{
+			DisclosureID: feeQuote.ID, AccountID: stored.AccountID, JournalTransactionID: posted.TransactionID, EffectID: applied.ID,
+			IntentID: &iid, Mode: stored.Mode, CorrelationID: stored.CorrelationID, Actor: v.actor,
+		}); err != nil {
+			return PaperFill{}, writtenFailure{err}
+		}
+	}
 	if err := tx.QueryRow(ctx, `INSERT INTO paper_fills (id, intent_id, account_id, instrument_id, side, base_asset_id, quote_asset_id,
 		base_quantity, notional_at_reference, spread_amount, platform_fee_amount, venue_fee_amount, network_fee_amount, total_quote,
 		schedule_version, schedule_hash, schedule, disclosure, disclosure_hash, reservation_id, journal_transaction_id, effect_id,
@@ -507,8 +563,10 @@ func (v *PaperVenue) ExecuteIntent(ctx context.Context, tx pgx.Tx, intent econ.I
 
 // paperEntries is the customer side of a paper fill (the venue's side is
 // external and not booked): SIM_TRADE at the reference notional, then every
-// disclosed charge on its own pair of entries.
-func paperEntries(account accounts.AccountID, side Side, base, quote assets.AssetID, q fees.Quote, f PaperFill) []ledger.Entry {
+// disclosed charge on its own pair of entries -- exactly the fee ledger's
+// entries for the disclosure (feeledger.ChargeEntries), which is what lets
+// the fee ledger register them against this journal.
+func paperEntries(account accounts.AccountID, side Side, base, quote assets.AssetID, q fees.Quote, charges feeledger.Charges) []ledger.Entry {
 	qty, n := q.Input.BaseQty, q.NotionalAtReference
 	var out []ledger.Entry
 	if side == SideBuy {
@@ -524,24 +582,15 @@ func paperEntries(account accounts.AccountID, side Side, base, quote assets.Asse
 			ledger.Entry{Account: ledger.CustomerAccount(account, ledger.CodeWallet, quote), Side: ledger.Debit, Quantity: n},
 			ledger.Entry{Account: ledger.CustomerAccount(account, ledger.CodeTradingInflow, quote), Side: ledger.Credit, Quantity: n})
 	}
-	if f.SpreadAmount.IsPositive() {
-		out = append(out, feeEntries(account, quote, ledger.CodeFeesSpread, ledger.CodeSpreadRevenue, f.SpreadAmount)...)
-	}
-	if f.PlatformFeeAmount.IsPositive() {
-		out = append(out, feeEntries(account, quote, ledger.CodeFeesPlatform, ledger.CodePlatformFeeRevenue, f.PlatformFeeAmount)...)
-	}
-	for _, ext := range []struct {
-		code   ledger.Code
-		amount money.Quantity
-	}{{ledger.CodeFeesVenue, f.VenueFeeAmount}, {ledger.CodeFeesNetwork, f.NetworkFeeAmount}} {
-		if ext.amount.IsPositive() {
-			out = append(out,
-				ledger.Entry{Account: ledger.CustomerAccount(account, ext.code, quote), Side: ledger.Debit, Quantity: ext.amount},
-				ledger.Entry{Account: ledger.CustomerAccount(account, ledger.CodeWallet, quote), Side: ledger.Credit, Quantity: ext.amount})
-		}
-	}
-	return out
+	return append(out, feeledger.ChargeEntries(account, charges)...)
 }
+
+// writtenFailure is a failure after the fill has written (its reservation,
+// its disclosure): the transaction must roll back, so it is never a refusal a
+// stage records and commits (paperRefusal), whatever its code says.
+type writtenFailure struct{ error }
+
+func (w writtenFailure) Unwrap() error { return w.error }
 
 const paperColumns = `id, intent_id, account_id, instrument_id, side, base_asset_id, quote_asset_id, base_quantity::text,
 	notional_at_reference::text, spread_amount::text, platform_fee_amount::text, venue_fee_amount::text,
@@ -742,7 +791,7 @@ func (v *PaperVenue) paperAccept(ctx context.Context, tx pgx.Tx, r PaperOrderReq
 	if mode == "" {
 		mode = gates.ModePaper
 	}
-	m, err := v.market(ctx, tx, r.InstrumentID)
+	m, err := v.market(ctx, tx, r.InstrumentID, v.clk.Now().UTC())
 	if err != nil {
 		return PaperOutcome{}, err
 	}
@@ -868,7 +917,7 @@ func (v *PaperVenue) riskInput(ctx context.Context, q db.Querier, in econ.Intent
 	if err != nil {
 		return risk.AdvancedInput{}, rejection(ReasonPaperIntentShape, "the intent's instrument is not an instrument id")
 	}
-	m, err := v.market(ctx, q, instrumentID)
+	m, err := v.market(ctx, q, instrumentID, now)
 	if err != nil {
 		return risk.AdvancedInput{}, err
 	}
@@ -989,6 +1038,9 @@ func (v *PaperVenue) paperFillStage(ctx context.Context, tx pgx.Tx, iid econ.Int
 // paperRefusal classifies the refusals ExecuteIntent makes before writing
 // anything, which a stage records instead of rolling back.
 func paperRefusal(err error) (string, bool) {
+	if errors.As(err, new(writtenFailure)) {
+		return "", false
+	}
 	if r := ReasonOf(err); r != "" && r != ReasonPaperDisclosureMismatch {
 		return r, true
 	}

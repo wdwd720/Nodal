@@ -336,6 +336,24 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// economy above. Every capability here moves only SIMULATED value, LIVE is
 	// unrepresentable in the schema, and in STAGING and PROD even a simulated
 	// mode needs its gate ACTIVE (gates.DecideMode).
+	//
+	// The fee ledger (internal/feeledger) is built first and once: every fee
+	// and spread the services below charge -- the internal book's maker and
+	// taker fees, the paper venue's disclosed spread and fees, margin's
+	// liquidation fee -- is disclosed and booked through it in the charging
+	// transaction, and each of them refuses to start without it rather than
+	// charge a fee nobody can find. It also books performance fees (sandbox
+	// accounting, never charged live) and serves the fee routes, with its
+	// package defaults: a two-minute quote TTL and the SYSTEM fee-ledger
+	// service applying its effects.
+	feeLedgerSvc, err := feeledger.NewService(feeledger.Config{
+		Clock: clk, Ledger: ledgerSvc, Capital: capitalSvc, Effects: econ.NewEffectStore(clk, outbox, auditWriter),
+		Authorizer: econ.NewAuthorizer(gateChecker, killChecker), Assets: assetRepo, Audit: auditWriter,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("fee ledger: %w", err)
+	}
+
 	// >>> advanced:margin services
 	//
 	// Margin, leverage, borrowing and liquidation (internal/margin), with the
@@ -374,6 +392,8 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		KillSwitch: killChecker,
 		Venue:      margin.PaperVenue{},
 		Audit:      auditWriter,
+		// Every liquidation fee is disclosed and booked here.
+		FeeLedger: feeLedgerSvc,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("margin service: %w", err)
@@ -499,6 +519,9 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		RiskPolicy: risk.DefaultAdvancedPolicy(), Router: ordersRouter, Instruments: instrumentRepo, Assets: assetRepo,
 		Prices: priceStore, KillSwitches: killChecker,
 		Verification: httpapi.AdvancedVerificationLevels{Rule: compliance.NewAccountVerification(clk)},
+		// A book's schedules are published here when it opens, and every
+		// fill's maker and taker fees are disclosed and booked here.
+		FeeLedger: feeLedgerSvc,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("orders service: %w", err)
@@ -572,7 +595,9 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 
 	// >>> advanced:treasury services
 	//
-	// The house book (internal/treasury) and the fee ledger (internal/feeledger).
+	// The house book (internal/treasury). It charges no customer anything: its
+	// paper fills pay the external venue (HOUSE_FEES) and its book orders pay
+	// no fee, so it takes no fee ledger.
 	// The treasury decides every control itself (its signing policy, the
 	// PRINCIPAL_TRADING and INTERNAL_MATCHING gates and kill switches, its
 	// versioned limits, Risk Kernel V2, the order book's own house rules); this
@@ -588,16 +613,8 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("treasury service: %w", err)
 	}
-	// The fee ledger books disclosed fees and performance fees (sandbox
-	// accounting, never charged live) with its package defaults: a two-minute
-	// quote TTL and the SYSTEM fee-ledger service applying its effects.
-	feeLedgerSvc, err := feeledger.NewService(feeledger.Config{
-		Clock: clk, Ledger: ledgerSvc, Capital: capitalSvc, Effects: econ.NewEffectStore(clk, outbox, auditWriter),
-		Authorizer: econ.NewAuthorizer(gateChecker, killChecker), Assets: assetRepo, Audit: auditWriter,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("fee ledger: %w", err)
-	}
+	// The fee ledger the treasury and fee routes serve (feeLedgerSvc) is the
+	// one built before the margin block, which every charging service shares.
 
 	// >>> advanced:stable services
 	//
@@ -819,9 +836,10 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// A strategy's allowed paper intent fills on the order book's paper venue:
 	// at the reference mark -- no older than the five minutes the follow's own
 	// reference prices may be -- priced through the one published schedule
-	// (httpapi.MarketplacePaperSchedule) whose spread (10 bps), platform fee
-	// (10 bps) and strategy fee (5 bps) are itemized on every fill's stored
-	// disclosure and posted to their own accounts. The account's wallet pays
+	// (httpapi.MarketplacePaperSchedule, published in the fee ledger per
+	// instrument) whose spread (10 bps), platform fee (10 bps) and strategy
+	// fee (5 bps) are itemized on every fill's disclosure, posted to their own
+	// accounts and booked through the fee ledger. The account's wallet pays
 	// it; the venue refuses what the wallet cannot cover, and the follow
 	// records the dispatch as failed.
 	strategyIntents := econ.NewIntentStore(clk, outbox, auditWriter)
@@ -832,6 +850,9 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 			RiskPolicy: risk.DefaultAdvancedPolicy(), Router: strategyRouter, Instruments: instrumentRepo, Assets: assetRepo,
 			Prices: priceStore, KillSwitches: killChecker, MaxMarkAge: 5 * time.Minute,
 			Verification: httpapi.AdvancedVerificationLevels{Rule: compliance.NewAccountVerification(clk)},
+			// The schedule is published in the fee ledger per instrument, and
+			// every fill's spread and fees are disclosed and booked there.
+			FeeLedger: feeLedgerSvc,
 		},
 		Schedule: httpapi.MarketplacePaperSchedule(),
 		Intents:  strategyIntents,

@@ -647,12 +647,19 @@ func MarketplacePaperSchedule() fees.Schedule {
 		Rounding: fees.DefaultRounding()}
 }
 
+// MarketplacePaperScheduleKeyPrefix is the prefix of the fee-ledger keys the
+// schedule of strategy fills is published under, one per instrument
+// ("marketplace:paper:<instrument id>"): its own keys, so an operator's paper
+// schedule of an instrument and the marketplace's never meet.
+const MarketplacePaperScheduleKeyPrefix = "marketplace:paper"
+
 // MarketplacePaperExecutorConfig wires the marketplace's IntentExecutor over
 // the order book's paper venue.
 type MarketplacePaperExecutorConfig struct {
-	// Venue is the paper venue's configuration (orders.PaperConfig); its
-	// Schedules are not read: every instrument a strategy trades is priced
-	// under Schedule.
+	// Venue is the paper venue's configuration (orders.PaperConfig), its fee
+	// ledger included. Its ScheduleKeyPrefix is replaced by
+	// MarketplacePaperScheduleKeyPrefix: every instrument a strategy trades is
+	// priced under Schedule, published there.
 	Venue orders.PaperConfig
 	// Schedule is the published charge schedule of strategy fills -- its
 	// spread and fees disclosed on every fill. It is quoted, fill by fill, in
@@ -670,12 +677,13 @@ type MarketplacePaperExecutorConfig struct {
 // MarketplacePaperExecutor executes the marketplace's risk-approved PAPER
 // intents on the order book's paper venue: an immediate fill of the intent's
 // quantity at the reference mark, priced through the published schedule,
-// whose spread and fees are itemized on the fill's stored disclosure and
-// posted to their own accounts -- the account's real paper execution. The
-// marketplace hands it only intents Risk V2 allowed, inside a savepoint, and
-// exactly once.
+// whose spread and fees are itemized on the fill's stored disclosure, posted
+// to their own accounts and booked through the fee ledger -- the account's
+// real paper execution. The marketplace hands it only intents Risk V2
+// allowed, inside a savepoint, and exactly once.
 type MarketplacePaperExecutor struct {
-	cfg MarketplacePaperExecutorConfig
+	cfg   MarketplacePaperExecutorConfig
+	venue *orders.PaperVenue
 }
 
 var _ marketplace.IntentExecutor = (*MarketplacePaperExecutor)(nil)
@@ -694,14 +702,15 @@ func NewMarketplacePaperExecutor(cfg MarketplacePaperExecutorConfig) (*Marketpla
 	if err := probe.Validate(); err != nil {
 		return nil, err
 	}
-	cfg.Venue.Schedules = nil
-	if _, err := orders.NewPaperVenue(cfg.Venue); err != nil {
+	cfg.Venue.ScheduleKeyPrefix = MarketplacePaperScheduleKeyPrefix
+	venue, err := orders.NewPaperVenue(cfg.Venue)
+	if err != nil {
 		return nil, err
 	}
 	if cfg.Actor == (econ.Actor{}) {
 		cfg.Actor = econ.Actor{Type: security.ActorService, ID: "marketplace-paper-execution"}
 	}
-	return &MarketplacePaperExecutor{cfg: cfg}, nil
+	return &MarketplacePaperExecutor{cfg: cfg, venue: venue}, nil
 }
 
 // ExecutePaper fills the intent on the paper venue and completes it. A refusal
@@ -723,16 +732,17 @@ func (e *MarketplacePaperExecutor) ExecutePaper(ctx context.Context, tx pgx.Tx, 
 	}
 	schedule := e.cfg.Schedule
 	schedule.QuoteAsset, schedule.QuoteDecimals = quote.ID, quote.Decimals
-	venueCfg := e.cfg.Venue
-	venueCfg.Schedules = map[instruments.InstrumentID]fees.Schedule{iid: schedule}
-	venue, err := orders.NewPaperVenue(venueCfg)
-	if err != nil {
+	// The schedule, in the instrument's quote asset, is the fee-ledger version
+	// in force under the instrument's marketplace key -- published by the
+	// first strategy fill of the instrument -- or nothing is filled.
+	if _, err := e.venue.EnsureSchedule(ctx, tx, iid, schedule,
+		"the strategy marketplace's published schedule of strategy paper fills", e.cfg.Actor); err != nil {
 		return marketplace.ExecutionReceipt{}, err
 	}
 	if _, err := e.cfg.Intents.Transition(ctx, tx, ex.Intent.ID, econ.StatusExecuting, e.cfg.Actor, "paper venue fill", ""); err != nil {
 		return marketplace.ExecutionReceipt{}, err
 	}
-	fill, err := venue.ExecuteIntent(ctx, tx, ex.Intent)
+	fill, err := e.venue.ExecuteIntent(ctx, tx, ex.Intent)
 	if err != nil {
 		return marketplace.ExecutionReceipt{}, err
 	}

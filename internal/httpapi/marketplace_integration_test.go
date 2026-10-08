@@ -27,6 +27,7 @@ import (
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/event"
+	"github.com/nodal/controlplane/internal/feeledger"
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/gen/api"
 	"github.com/nodal/controlplane/internal/instruments"
@@ -96,6 +97,7 @@ type marketplaceItest struct {
 	h          *harness
 	prices     *valuation.PriceStore
 	ledger     *ledger.Service
+	fees       *feeledger.Service
 	toolchain  bool
 	instrument string
 	base, quot assets.AssetID
@@ -140,15 +142,22 @@ func newMarketplaceItest(t *testing.T) *marketplaceItest {
 		Identity: compliance.NewAccountVerification(clk), Prices: w.prices, KillSwitches: kills, MaxPriceAge: 5 * time.Minute,
 	})
 	require.NoError(t, err)
-	// The executor is the order book's paper venue, as cmd/api wires it.
+	// The executor is the order book's paper venue, as cmd/api wires it, with
+	// the fee ledger every fill's charges are booked through.
 	intents := econ.NewIntentStore(clk, outbox, aw)
+	capitalSvc := capital.NewService(clk, capital.OutboxEmitter{Outbox: outbox, Clock: clk})
+	w.fees, err = feeledger.NewService(feeledger.Config{
+		Clock: clk, Ledger: w.ledger, Capital: capitalSvc, Effects: econ.NewEffectStore(clk, outbox, aw), Authorizer: auth,
+		Assets: assets.NewRepository(), Audit: aw,
+	})
+	require.NoError(t, err)
 	executor, err := NewMarketplacePaperExecutor(MarketplacePaperExecutorConfig{
 		Venue: orders.PaperConfig{
-			Clock: clk, Ledger: w.ledger, Capital: capital.NewService(clk, capital.OutboxEmitter{Outbox: outbox, Clock: clk}),
+			Clock: clk, Ledger: w.ledger, Capital: capitalSvc,
 			Intents: intents, Effects: econ.NewEffectStore(clk, outbox, aw), Authorizer: auth, Risk: risk.NewStore(),
 			RiskPolicy: risk.DefaultAdvancedPolicy(), Router: router, Instruments: instruments.NewRepository(), Assets: assets.NewRepository(),
 			Prices: w.prices, KillSwitches: kills, MaxMarkAge: 5 * time.Minute,
-			Verification: AdvancedVerificationLevels{Rule: compliance.NewAccountVerification(clk)},
+			Verification: AdvancedVerificationLevels{Rule: compliance.NewAccountVerification(clk)}, FeeLedger: w.fees,
 		},
 		// The one published schedule every deployment prices strategy fills by.
 		Schedule: MarketplacePaperSchedule(),
@@ -464,6 +473,13 @@ func TestIntegration_MarketplaceLifecycleThroughHTTP(t *testing.T) {
 	assert.Equal(t, "150250", spread, "the disclosed 10 bps spread")
 	assert.Equal(t, "225375", platform, "the 10 bps platform fee and the 5 bps strategy fee, disclosed")
 	assert.Equal(t, "150625625", total)
+	assert.Equal(t, 1, countRows(t, w.d, `SELECT count(*) FROM fee_bookings b
+		JOIN paper_fills f ON f.journal_transaction_id = b.journal_transaction_id AND f.account_id = b.account_id
+		JOIN fee_quote_disclosures q ON q.id = b.disclosure_id JOIN fee_schedules s ON s.id = q.schedule_id
+		WHERE f.intent_id = $1 AND b.booking_mode = 'EMBEDDED' AND b.spread_amount = 150250
+		  AND b.platform_fee + b.strategy_fee = 225375 AND q.disclosure_hash = f.disclosure_hash
+		  AND s.schedule_key = 'marketplace:paper:' || f.instrument_id::text`, intent.IntentId),
+		"and every charge of it is booked through the fee ledger, under the marketplace's schedule published for the instrument")
 	var intentStatus string
 	require.NoError(t, w.d.QueryRow(t.Context(), `SELECT status FROM economic_intents WHERE id = $1`, intent.IntentId).Scan(&intentStatus))
 	assert.Equal(t, "COMPLETED", intentStatus)

@@ -14,6 +14,7 @@ import (
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
+	"github.com/nodal/controlplane/internal/feeledger"
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/money"
@@ -141,6 +142,16 @@ func (s *Service) executeStep(ctx context.Context, tx pgx.Tx, a Account, c *Case
 			return Step{}, errs.Wrap(err, errs.CodeInternal, "margin: liquidation asset id")
 		}
 		step.AssetID, step.Mark, step.ExecutionPrice = asset, done.Mark, done.ExecutionPrice
+		// The fee is disclosed to the customer in the fee ledger before it
+		// is charged, and booked against the journal that charges it.
+		var fee *feeledger.StoredQuote
+		if done.Fee.IsPositive() {
+			q, err := s.discloseLiquidationFee(ctx, tx, a, state.NumeraireDecimals, prefix+":fee", done.Fee, done.Proceeds, now)
+			if err != nil {
+				return Step{}, err
+			}
+			fee = &q
+		}
 		tm := s.meta(refLiquidationStep, step.ID.String(), "reduce-only liquidation sale")
 		tp, err := LiquidationPosting(tm, acct, asset, done.Quantity, a.NumeraireAssetID, done.Proceeds, done.Fee)
 		if err != nil {
@@ -151,6 +162,11 @@ func (s *Service) executeStep(ctx context.Context, tx pgx.Tx, a Account, c *Case
 			return Step{}, err
 		}
 		step.TradeJournalID = &trade.Journal
+		if fee != nil {
+			if err := s.bookLiquidationFee(ctx, tx, a, *fee, trade.Journal, trade.Effect.ID); err != nil {
+				return Step{}, err
+			}
+		}
 	case ActionApplyCollateral:
 		step.AssetID = a.NumeraireAssetID
 		rm := s.meta(refLiquidationStep, step.ID.String(), "numeraire collateral applied to the loans")

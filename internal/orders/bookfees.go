@@ -11,7 +11,8 @@ import (
 )
 
 // The internal book charges explicit maker and taker fees from a fees.Schedule
-// and nothing else. Its price is always the counterparty's resting price, so
+// and nothing else, and books each through the fee ledger (feebooking.go).
+// Its price is always the counterparty's resting price, so
 // the schedule may carry no spread at all, and every component it may carry
 // is one that is charged per fill, in proportion to the fill, and can be
 // bounded in advance -- which is what lets a buy order reserve "quantity times
@@ -80,18 +81,26 @@ func FeeBound(maker, taker fees.Schedule, notional money.Quantity, strategy bool
 	return notional.MulDiv(money.QuantityFromInt64(int64(rate)), money.QuantityFromInt64(int64(money.OneHundredPercent)), money.RoundUp)
 }
 
-// fillFee prices one fill under s and returns the explicit fee it charges.
-// The fill's notional is exact by construction of the book's terms; the quote
-// must agree with it, and it must carry no spread.
-func fillFee(s fees.Schedule, side Side, t BookTerms, lots, ticks int64, strategy bool, price money.Price) (money.Quantity, error) {
-	q, err := s.Quote(fees.QuoteInput{
+// fillQuoteInput is what one party's share of a fill is priced as: its side,
+// the fill's base quantity at the fill price (the counterparty's resting
+// price) and whether its order was strategy-originated. The book computes the
+// fee from it and the fee ledger discloses the same input.
+func fillQuoteInput(side Side, t BookTerms, lots int64, strategy bool, price money.Price) fees.QuoteInput {
+	return fees.QuoteInput{
 		Side:               fees.Side(side),
 		BaseQty:            t.LotsToQuantity(lots),
 		BaseDecimals:       t.BaseDecimals,
 		QuoteDecimals:      t.QuoteDecimals,
 		ReferencePrice:     price,
 		StrategyOriginated: strategy,
-	})
+	}
+}
+
+// fillFee prices one fill under s and returns the explicit fee it charges.
+// The fill's notional is exact by construction of the book's terms; the quote
+// must agree with it, and it must carry no spread.
+func fillFee(s fees.Schedule, side Side, t BookTerms, lots, ticks int64, strategy bool, price money.Price) (money.Quantity, error) {
+	q, err := s.Quote(fillQuoteInput(side, t, lots, strategy, price))
 	if err != nil {
 		return money.Quantity{}, err
 	}

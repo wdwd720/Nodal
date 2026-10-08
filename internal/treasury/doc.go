@@ -27,6 +27,13 @@
 //     every fee disclosed (fees.Disclosure, verified before posting) and booked
 //     to HOUSE_FEES.
 //
+// The treasury charges nobody anything. A house order pays no fee on the
+// internal book (it is the platform's own book); the spread and the venue fee
+// of a house paper fill are what the house pays external liquidity, a cost on
+// HOUSE_FEES rather than anyone's charge, so there is nothing for the fee
+// ledger to book. A customer that trades with a house order is charged the
+// book's own fee, which the order book books through the fee ledger.
+//
 // House-versus-customer crossing stays refused by the order book's default
 // rule. SetCrossingRule is the only way the treasury lets a book allow it, and
 // it records an operator, a reason and a customer-facing disclosure that says

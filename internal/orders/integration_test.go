@@ -25,6 +25,7 @@ import (
 	"github.com/nodal/controlplane/internal/db/migrate"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/event"
+	"github.com/nodal/controlplane/internal/feeledger"
 	"github.com/nodal/controlplane/internal/fees"
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/instruments"
@@ -98,6 +99,7 @@ type fixture struct {
 	assets   *assets.Repository
 	kills    *killswitch.Checker
 	router   *legalrouter.Router
+	fees     *feeledger.Service
 	svc      *Service
 	pipe     *Pipeline
 }
@@ -121,6 +123,10 @@ func newFixture(t *testing.T) *fixture {
 		router: router,
 	}
 	f.auth = econ.NewAuthorizer(checker, f.kills)
+	f.fees, err = feeledger.NewService(feeledger.Config{
+		Clock: clk, Ledger: f.ledger, Capital: f.capital, Effects: f.effects, Authorizer: f.auth, Assets: f.assets, Audit: aw,
+	})
+	require.NoError(t, err)
 	f.svc = f.newService()
 	f.pipe, err = NewPipeline(f.svc, testDB)
 	require.NoError(t, err)
@@ -134,7 +140,7 @@ func (f *fixture) newService() *Service {
 	svc, err := NewService(Config{
 		Clock: f.clk, Ledger: f.ledger, Capital: f.capital, Intents: f.intents, Effects: f.effects, Authorizer: f.auth,
 		Registry: f.registry, Risk: f.risk, RiskPolicy: risk.DefaultAdvancedPolicy(), Router: f.router,
-		Instruments: f.instr, Assets: f.assets, Prices: f.prices, KillSwitches: f.kills,
+		Instruments: f.instr, Assets: f.assets, Prices: f.prices, KillSwitches: f.kills, FeeLedger: f.fees,
 	})
 	require.NoError(f.t, err)
 	return svc
@@ -225,9 +231,18 @@ type spotMarket struct {
 }
 
 func bookSchedule(quote assets.AssetID, pct money.BPS) fees.Schedule {
+	return bookScheduleWithStrategy(quote, pct, 0)
+}
+
+// bookScheduleWithStrategy also charges strategy-originated orders a
+// strategy fee.
+func bookScheduleWithStrategy(quote assets.AssetID, pct, strategy money.BPS) fees.Schedule {
 	s := fees.ZeroSchedule(quote, 6)
 	s.Version = fmt.Sprintf("orders-itest-%d-bps", pct)
-	s.PercentageFeeBPS = pct
+	if strategy > 0 {
+		s.Version = fmt.Sprintf("orders-itest-%d-bps-strategy-%d-bps", pct, strategy)
+	}
+	s.PercentageFeeBPS, s.StrategyFeeBPS = pct, strategy
 	return s
 }
 
@@ -244,8 +259,10 @@ func spotTerms(base, quote assets.AssetID) instruments.Terms {
 
 type marketOpts struct {
 	makerBPS, takerBPS money.BPS
-	snapshotInterval   int
-	mode               gates.Mode
+	// strategyBPS is both schedules' strategy fee.
+	strategyBPS      money.BPS
+	snapshotInterval int
+	mode             gates.Mode
 }
 
 func (f *fixture) spotMarket(o marketOpts) spotMarket {
@@ -271,7 +288,8 @@ func (f *fixture) spotMarket(o marketOpts) spotMarket {
 		m.inst = inst.ID
 		m.book, err = f.svc.OpenBook(ctx, tx, OpenBookRequest{
 			InstrumentID: inst.ID, Mode: o.mode, SpotTerms: &terms,
-			MakerSchedule: bookSchedule(quote.ID, o.makerBPS), TakerSchedule: bookSchedule(quote.ID, o.takerBPS),
+			MakerSchedule:    bookScheduleWithStrategy(quote.ID, o.makerBPS, o.strategyBPS),
+			TakerSchedule:    bookScheduleWithStrategy(quote.ID, o.takerBPS, o.strategyBPS),
 			SnapshotInterval: o.snapshotInterval, Actor: systemActor,
 		})
 		return err

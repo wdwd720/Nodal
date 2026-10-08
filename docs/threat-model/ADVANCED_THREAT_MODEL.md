@@ -269,17 +269,24 @@ packages named; `go run ./scripts/inttest -pkg '^\./internal/<pkg>$'` runs a pac
   the customer's favour unless the schedule allows otherwise and says so; every spread charged is discoverable
   from the audit record; performance fees crystallize only above the high-water mark, deposits generate no
   performance, a withdrawal does not erase the accrual, and the period, flow and line chains are bound in SQL
-  (FE006-FE008).
-- **Residual risk:** performance-fee NAVs are supplied by the caller; the subsystems that charge fees call the
-  fee ledger at their own integration points, which are being wired in.
+  (FE006-FE008). Every fee an internal-book trade, a paper-venue fill or a margin liquidation step charges is
+  booked through the fee ledger in the transaction that charges it, against that row's own journal, under the
+  schedule the row names and with a disclosure identical to the row's own; the database refuses the row
+  without its booking (FW001, 00761), so no subsystem can charge a fee the fee ledger and the spread audit never see.
+- **Residual risk:** performance-fee NAVs are supplied by the caller. A book whose fee schedule key is given a
+  different version by an operator stops charging until fixed (fail closed, not silently repriced).
 - **Tests:** `TestProp_FeeConservation`, `TestProp_NoNegativeFeeAndNoFeeAboveTheConfiguredMax`,
   `TestRounding_IsInTheCustomersFavourUnlessAllowedAndDisclosed`, `TestIntegration_SchedulesAreVersionedImmutableAndHashed`,
   `TestIntegration_QuoteDisclosuresAreStoredAndVerifiable`, `TestIntegration_ChargesAreBookedComponentByComponentExactlyOnce`,
   `TestIntegration_EveryChargedSpreadIsDiscoverableFromTheAuditRecord`, `TestIntegration_TheDatabaseRefusesInvalidFeeStates`,
   `TestIntegration_ALosingPeriodChargesNoFee`, `TestIntegration_AGainBelowTheHighWaterMarkChargesNoFee`,
   `TestIntegration_DepositsDoNotGeneratePerformance`, `TestIntegration_AWithdrawalDoesNotEraseTheAccrual`,
-  `TestIntegration_ConcurrentAccrualsAndCrystallizationsAreExactlyOnce` (`internal/feeledger`); demo Scenario D
-  (the fees of a trade are exactly the disclosed schedule).
+  `TestIntegration_ConcurrentAccrualsAndCrystallizationsAreExactlyOnce` (`internal/feeledger`);
+  `TestIntegration_EveryInternalBookFeeIsBookedThroughTheFeeLedger`, `TestIntegration_AReplayedFillBooksItsFeesOnce`,
+  `TestIntegration_TheDatabaseRefusesAnUnbookedFee`, `TestIntegration_EveryPaperFillIsBookedThroughTheFeeLedger`
+  (`internal/orders`); `TestIntegration_TheLiquidationFeeIsBookedThroughTheFeeLedger`,
+  `TestIntegration_TheDatabaseRefusesAnUnbookedLiquidationFee` (`internal/margin`); demo Scenario D (the fees of a
+  trade are exactly the disclosed schedule).
 
 ## 10. Marketplace malicious strategy
 

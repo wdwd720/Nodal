@@ -57,6 +57,14 @@
 // collateral, repaying a deficit -- is an econ intent, routed through the
 // settlement compiler and executed only when the route MayExecuteNow.
 //
+// The liquidation fee is the one fee margin charges, and it is booked
+// through the fee ledger (internal/feeledger) in the step's own transaction
+// (feebooking.go): the policy's rate is a published fee-ledger schedule in the
+// numeraire, ensured in force; the fee is disclosed to the customer as a share
+// of exactly the step's proceeds, posted inside the LIQUIDATION journal and
+// registered against it and the effect that applied it. A kill switch never
+// stops a liquidation, so it does not stop that booking either.
+//
 // A case in MANUAL_REVIEW leaves it only through a resolution one operator
 // proposes and a second, distinct operator approves (resume with a fresh
 // budget window, or declare bankrupt once nothing is left); no interest runs
@@ -103,4 +111,7 @@
 //     deficit coverage) because a kill switch or an inactive gate stops new
 //     risk.
 //   - Change a status without a transition row describing that exact change.
+//   - Charge a liquidation fee the fee ledger has not disclosed to the
+//     customer and booked against the journal that charges it (the database
+//     refuses an unbooked fee too: FW001).
 package margin

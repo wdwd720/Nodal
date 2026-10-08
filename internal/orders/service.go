@@ -18,6 +18,7 @@ import (
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
+	"github.com/nodal/controlplane/internal/feeledger"
 	"github.com/nodal/controlplane/internal/fees"
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/id"
@@ -81,6 +82,11 @@ type Config struct {
 	Assets       *assets.Repository
 	Prices       valuation.PriceSource
 	KillSwitches econ.KillSwitchReader
+	// FeeLedger records every fee a fill charges: the book's schedules are
+	// published through it when the book opens, each paying party's fee is
+	// disclosed and booked through it, and a fill is refused rather than
+	// charged unbooked.
+	FeeLedger *feeledger.Service
 
 	// Verification defaults to the identity resolver read in the caller's
 	// transaction; Sessions defaults to "24x7 only".
@@ -117,6 +123,7 @@ type Service struct {
 	assets    *assets.Repository
 	prices    valuation.PriceSource
 	kills     econ.KillSwitchReader
+	feeLedger *feeledger.Service
 	verify    VerificationSource
 	sessions  SessionCalendar
 	resTTL    time.Duration
@@ -131,7 +138,7 @@ type Service struct {
 func NewService(c Config) (*Service, error) {
 	if c.Clock == nil || c.Ledger == nil || c.Capital == nil || c.Intents == nil || c.Effects == nil ||
 		c.Authorizer == nil || c.Registry == nil || c.Risk == nil || c.Router == nil || c.Instruments == nil ||
-		c.Assets == nil || c.Prices == nil || c.KillSwitches == nil {
+		c.Assets == nil || c.Prices == nil || c.KillSwitches == nil || c.FeeLedger == nil {
 		return nil, errs.New(errs.CodeValidationFailed, "orders: every dependency of the order service is required")
 	}
 	if c.RiskPolicy.Missing() {
@@ -161,7 +168,7 @@ func NewService(c Config) (*Service, error) {
 	return &Service{
 		clk: c.Clock, ledger: c.Ledger, capital: c.Capital, intents: c.Intents, effects: c.Effects, auth: c.Authorizer,
 		registry: c.Registry, risk: c.Risk, policy: c.RiskPolicy, router: c.Router, instr: c.Instruments, assets: c.Assets,
-		prices: c.Prices, kills: c.KillSwitches, verify: c.Verification, sessions: c.Sessions, resTTL: c.ReservationTTL,
+		prices: c.Prices, kills: c.KillSwitches, feeLedger: c.FeeLedger, verify: c.Verification, sessions: c.Sessions, resTTL: c.ReservationTTL,
 		lookback: c.MarkLookback, actor: c.Actor, engines: newEngineCache(), configs: map[BookID]*bookConfig{},
 	}, nil
 }
@@ -385,6 +392,13 @@ func (s *Service) OpenBook(ctx context.Context, tx pgx.Tx, r OpenBookRequest) (B
 			return Book{}, errs.New(errs.CodeConflict, "orders: this instrument's book is already open with different terms").
 				WithField("book_id", cfg.ID.String())
 		}
+	}
+	// The schedules the book charges are published in the fee ledger from
+	// the instant it opens, so the version a fill names is in force before
+	// any order arrives (and a book opened before the fee ledger was wired
+	// publishes them when it is opened again).
+	if err := s.publishBookSchedules(ctx, tx, cfg, r.Actor); err != nil {
+		return Book{}, err
 	}
 	return bookView(cfg, cur), nil
 }

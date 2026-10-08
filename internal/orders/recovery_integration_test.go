@@ -75,7 +75,7 @@ func TestIntegration_KillSwitchesStopNewOrders(t *testing.T) {
 			Clock: f.clk, Ledger: f.ledger, Capital: f.capital, Intents: f.intents, Effects: f.effects,
 			Authorizer: econ.NewAuthorizer(checker, kills), Registry: f.registry, Risk: f.risk,
 			RiskPolicy: risk.DefaultAdvancedPolicy(), Router: f.router, Instruments: f.instr, Assets: f.assets,
-			Prices: f.prices, KillSwitches: kills,
+			Prices: f.prices, KillSwitches: kills, FeeLedger: f.fees,
 		})
 		require.NoError(t, err)
 		p, err := NewPipeline(svc, testDB)

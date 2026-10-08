@@ -16,9 +16,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nodal/controlplane/internal/accounts"
+	"github.com/nodal/controlplane/internal/audit"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
+	"github.com/nodal/controlplane/internal/event"
 	"github.com/nodal/controlplane/internal/feeledger"
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/gen/api"
@@ -42,14 +44,37 @@ func feeScheduleBody(label, quote string) map[string]any {
 }
 
 // book charges a recorded quote to its payer through the fee ledger, as the
-// subsystem a fee accompanies would: there is no HTTP route that books one.
+// subsystem a fee accompanies does: the disclosure's charges posted inside a
+// SIM_TRADE journal of the charge's own, applied by an effect, and registered
+// with RecordEmbedded. There is no HTTP route that books one.
 func (w *treasuryWorld) book(did string, payer accounts.AccountID) {
 	w.t.Helper()
 	disclosure, err := feeledger.ParseDisclosureID(did)
 	require.NoError(w.t, err)
+	service := econ.Actor{Type: security.ActorService, ID: "orders-service"}
+	effects := econ.NewEffectStore(w.clk, event.NewOutbox(w.clk), audit.NewWriterWithBuildVersion("httpapi-fees-itest"))
 	require.NoError(w.t, w.d.InTx(w.t.Context(), db.TxOptions{Isolation: pgx.ReadCommitted}, func(ctx context.Context, tx pgx.Tx) error {
-		_, err := w.fees.Book(ctx, tx, feeledger.BookRequest{DisclosureID: disclosure, AccountID: payer, Kind: ledger.KindSimTrade,
-			Mode: gates.ModePaper, Actor: econ.Actor{Type: security.ActorService, ID: "orders-service"}})
+		q, err := w.fees.Quote(ctx, tx, disclosure)
+		if err != nil {
+			return err
+		}
+		ref := uuid.NewString()
+		posted, err := w.ledger.Post(ctx, tx, ledger.Posting{Kind: ledger.KindSimTrade, IdempotencyKey: "itest-fee-charge:" + ref,
+			Reference: ledger.FinancialEventReference{Type: "itest_fee_charge", ID: ref}, EffectiveAt: w.clk.Now(),
+			Entries: feeledger.ChargeEntries(payer, q.Charges)})
+		if err != nil {
+			return err
+		}
+		eff, _, err := effects.Begin(ctx, tx, econ.BeginRequest{Key: "itest-fee-charge:" + ref, Subsystem: econ.SubsystemOrders,
+			Kind: "PAPER_FILL", AccountID: payer.String(), Request: map[string]string{"disclosure_id": did}, PostsLedger: true, Actor: service})
+		if err != nil {
+			return err
+		}
+		if _, err := effects.Apply(ctx, tx, eff.ID, econ.ApplyRequest{JournalTransactionID: &posted.TransactionID, Actor: service}); err != nil {
+			return err
+		}
+		_, err = w.fees.RecordEmbedded(ctx, tx, feeledger.EmbeddedRequest{DisclosureID: disclosure, AccountID: payer,
+			JournalTransactionID: posted.TransactionID, EffectID: eff.ID, Mode: gates.ModePaper, Actor: service})
 		return err
 	}))
 }
