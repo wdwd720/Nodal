@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { lazy, Suspense, type ReactNode } from "react";
 import { Route, Routes } from "react-router-dom";
 
 import { AppShell } from "./components/AppShell.tsx";
@@ -20,6 +20,15 @@ import { Settings } from "./pages/Settings.tsx";
 import { SignIn } from "./pages/SignIn.tsx";
 import { StrategyBuilder } from "./pages/StrategyBuilder.tsx";
 import { Trade } from "./pages/Trade.tsx";
+
+/**
+ * The advanced (sandbox) area is its own chunk: it grows with every subsystem
+ * section registered in it, and a customer who never opens it should not
+ * download it.
+ */
+const AdvancedArea = lazy(() =>
+  import("./pages/advanced/AdvancedArea.tsx").then((module) => ({ default: module.AdvancedArea })),
+);
 
 export function App(): ReactNode {
   const session = useSession();
@@ -74,6 +83,16 @@ export function App(): ReactNode {
         <Route path="/agents" element={<Agents />} />
         <Route path="/lab" element={<Lab />} />
         <Route path="/activity" element={<Activity />} />
+        {/* The advanced capabilities, sandbox only (ADR-0020): one area with its
+            own sub-navigation, so every page of it carries the same notice. */}
+        <Route
+          path="/advanced/*"
+          element={
+            <Suspense fallback={<Loading label="Loading the advanced (sandbox) area…" />}>
+              <AdvancedArea />
+            </Suspense>
+          }
+        />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<NotFound />} />
       </Routes>

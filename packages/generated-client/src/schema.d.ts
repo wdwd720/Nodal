@@ -3942,6 +3942,9 @@ export interface components {
             pending_transfer_reservations: components["schemas"]["USD"];
             pending_withdrawal_reservations: components["schemas"]["USD"];
             policy_version: string;
+            quote_asset_id: components["schemas"]["UUID"];
+            /** @description The sandbox asset every figure is valued in at par (SBX-USD) */
+            quote_symbol: string;
             reasons: components["schemas"]["BuyingPowerV2Reason"][];
             risk_increasing_buying_power: components["schemas"]["USD"];
             strategy_reservations: components["schemas"]["USD"];
@@ -4180,6 +4183,7 @@ export interface components {
         };
         EconomicIntentPage: components["schemas"]["Page"] & {
             items: components["schemas"]["EconomicIntent"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
         };
         Fill: {
             external_fill_id: string;
@@ -4286,6 +4290,8 @@ export interface components {
             venue_code: string;
         };
         InstrumentTermsVersion: {
+            /** @description Who defined or amended these terms (an operator or service identity) */
+            actor_id: string;
             actor_type: string;
             created_at: components["schemas"]["Timestamp"];
             reason: string;

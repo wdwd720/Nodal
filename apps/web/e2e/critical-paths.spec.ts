@@ -156,9 +156,12 @@ test.describe("the internal economy is separate from the rest", () => {
   };
 
   const figureIn = (text: string, what: string): bigint => {
-    const match = /([\d,]+(?:\.\d+)?)\s*Credits/.exec(text);
-    if (match === null) throw new Error(`no ${what} in ${text}`);
-    return baseUnits(match[1]);
+    // `?.[1]` and not `[1]`: the capture group is typed `string | undefined`
+    // under noUncheckedIndexedAccess, and a missing figure must fail here
+    // rather than reach baseUnits as undefined.
+    const figure = /([\d,]+(?:\.\d+)?)\s*Credits/.exec(text)?.[1];
+    if (figure === undefined) throw new Error(`no ${what} in ${text}`);
+    return baseUnits(figure);
   };
 
   test("a customer can buy something and their Credits fall by exactly the price", async ({ page }) => {

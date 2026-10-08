@@ -42,7 +42,7 @@ type fakeAdvanced struct {
 	intent    econ.Intent
 	effect    econ.Effect
 	decision  risk.AdvancedDecisionRecord
-	bp        buyingpower.V2
+	bp        AdvancedBuyingPower
 	next      string
 	lastAcct  accounts.AccountID
 	lastLimit int
@@ -89,7 +89,7 @@ func (f *fakeAdvanced) RiskDecisions(_ context.Context, acct accounts.AccountID,
 	return []risk.AdvancedDecisionRecord{f.decision}, f.fail()
 }
 
-func (f *fakeAdvanced) BuyingPower(_ context.Context, acct accounts.AccountID) (buyingpower.V2, error) {
+func (f *fakeAdvanced) BuyingPower(_ context.Context, acct accounts.AccountID) (AdvancedBuyingPower, error) {
 	f.record(acct, 0)
 	return f.bp, f.fail()
 }
@@ -150,13 +150,13 @@ func newFakeAdvanced() *fakeAdvanced {
 			ReasonCodes: []string{}, InputHash: "ih", PolicyVersion: "advanced-risk/1", PolicyHash: "ph",
 			EvaluatorVersion: risk.AdvancedEvaluatorVersion, DecisionHash: "dh", EvaluatedAt: testNow,
 		},
-		bp: buyingpower.V2{
+		bp: AdvancedBuyingPower{Quote: assets.Asset{ID: testAssetID, Symbol: "SBX-USD"}, V2: buyingpower.V2{
 			GrossEquity: usd("1234.56"), EligibleCollateral: usd("1200.00"), Haircuts: usd("34.56"),
 			EligibleEquity: usd("1200.00"), Withdrawable: usd("1000.01"), TradeBuyingPower: usd("1100.00"),
 			RiskIncreasingBuyingPower: usd("1100.00"), PolicyVersion: "buyingpower-v2/1", AsOf: testNow,
 			Reasons: []buyingpower.V2Reason{{Code: "STALE_MARK", Detail: "a mark is stale", Amount: usd("10.00")}},
 			Lines:   []buyingpower.V2Line{{Field: "gross_equity", Component: "WALLET", AssetID: testAssetID.String(), AmountUSD: usd("1234.56"), Detail: "held"}},
-		},
+		}},
 	}
 }
 
@@ -321,6 +321,8 @@ func TestAdvancedBuyingPower_IsExactDecimalStringsInTheSimulatedDomain(t *testin
 	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
 	raw := res.raw()
 	assert.Equal(t, "SIMULATED", raw["value_domain"])
+	assert.Equal(t, "SBX-USD", raw["quote_symbol"], "the figures name the asset they are valued in")
+	assert.Equal(t, testAssetID.String(), raw["quote_asset_id"])
 	assert.Equal(t, "1234.56", raw["gross_equity"])
 	assert.Equal(t, "1000.01", raw["withdrawable"])
 	assert.Equal(t, "0.00", raw["maintenance_margin"])
@@ -357,4 +359,21 @@ func TestAdvancedRoutes_PortErrorsKeepTheirCode(t *testing.T) {
 	res := h.do(http.MethodGet, "/v1/advanced/buying-power?account_id="+testAccountID.String(), nil)
 	require.Equal(t, http.StatusNotFound, res.Code, "body=%s", res.Body.String())
 	assert.Equal(t, errs.CodeNotFound, res.problem().Code)
+}
+
+// An intent page states the value domain of the notionals it carries, and a
+// terms version names who wrote it.
+func TestAdvancedReads_StateTheirDomainAndAuthors(t *testing.T) {
+	t.Parallel()
+	h, fa := newAdvancedHarness(t)
+	fa.instr.History[0].ActorID = "op-7"
+	res := h.do(http.MethodGet, "/v1/advanced/intents?account_id="+testAccountID.String(), nil)
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	assert.Equal(t, "SIMULATED", res.raw()["value_domain"])
+
+	res = h.do(http.MethodGet, "/v1/advanced/instruments/"+testAdvInstr.String(), nil)
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	var d api.AdvancedInstrumentDetail
+	res.json(&d)
+	assert.Equal(t, "op-7", d.Versions[0].ActorId)
 }

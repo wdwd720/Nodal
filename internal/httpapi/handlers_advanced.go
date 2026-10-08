@@ -101,7 +101,8 @@ func (s *Server) GetAdvancedInstrumentsInstrumentId(ctx context.Context, request
 	}
 	for _, h := range v.History {
 		detail.Versions = append(detail.Versions, api.InstrumentTermsVersion{
-			Version: h.Version, TermsHash: hex.EncodeToString(h.ContentHash), Reason: h.Reason, ActorType: h.ActorType, CreatedAt: h.CreatedAt,
+			Version: h.Version, TermsHash: hex.EncodeToString(h.ContentHash), Reason: h.Reason, ActorType: h.ActorType,
+			ActorId: h.ActorID, CreatedAt: h.CreatedAt,
 		})
 	}
 	return api.GetAdvancedInstrumentsInstrumentId200JSONResponse(detail), nil
@@ -124,7 +125,7 @@ func (s *Server) GetAdvancedIntents(ctx context.Context, request api.GetAdvanced
 	if err != nil {
 		return nil, err
 	}
-	page := api.EconomicIntentPage{Items: make([]api.EconomicIntent, 0, len(items)), NextCursor: nextCursor(next)}
+	page := api.EconomicIntentPage{ValueDomain: api.SIMULATED, Items: make([]api.EconomicIntent, 0, len(items)), NextCursor: nextCursor(next)}
 	for _, in := range items {
 		page.Items = append(page.Items, toAPIEconomicIntent(in))
 	}
@@ -213,12 +214,13 @@ func (s *Server) GetAdvancedBuyingPower(ctx context.Context, request api.GetAdva
 	if err != nil {
 		return nil, err
 	}
-	bp, err := s.opts.Ports.Advanced.BuyingPower(ctx, account)
+	res, err := s.opts.Ports.Advanced.BuyingPower(ctx, account)
 	if err != nil {
 		return nil, err
 	}
+	bp := res.V2
 	out := api.BuyingPowerV2{
-		ValueDomain: api.SIMULATED, GrossEquity: bp.GrossEquity.String(), EligibleCollateral: bp.EligibleCollateral.String(),
+		ValueDomain: api.SIMULATED, QuoteAssetId: toUUID(res.Quote.ID), QuoteSymbol: res.Quote.Symbol, GrossEquity: bp.GrossEquity.String(), EligibleCollateral: bp.EligibleCollateral.String(),
 		Haircuts: bp.Haircuts.String(), BorrowLiabilities: bp.BorrowLiabilities.String(), InitialMarginUsed: bp.InitialMarginUsed.String(),
 		MaintenanceMargin: bp.MaintenanceMargin.String(), OpenOrderReservations: bp.OpenOrderReservations.String(),
 		PendingTransferReservations: bp.PendingTransferReservations.String(), PendingWithdrawalReservations: bp.PendingWithdrawalReservations.String(),

@@ -14,6 +14,7 @@ import (
 
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/audit"
+	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/compliance"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/errs"
@@ -93,4 +94,51 @@ func TestIntegration_Compliance_UpsertAuditsAndRejectsSelfAttestation(t *testing
 	bad = p
 	bad.VerifiedAt = nil
 	assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(bad.Validate()))
+}
+
+// AccountVerification fails closed: only a VERIFIED, unexpired profile of the
+// account's owner reads as verified.
+func TestIntegration_AccountVerificationFailsClosed(t *testing.T) {
+	d := openDB(t)
+	ctx := context.Background()
+	repo := compliance.NewRepository(audit.NewWriter())
+	now := time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC)
+	clk := clock.NewFake(now)
+	v := compliance.NewAccountVerification(clk)
+
+	account := func(p *compliance.Profile) accounts.AccountID {
+		u, err := accounts.NewRepository().CreateUser(ctx, d.Pool(), "https://idp.test", "sub-"+id.New[id.Any]().String(), nil)
+		require.NoError(t, err)
+		a, err := accounts.NewRepository().CreateAccount(ctx, d.Pool(), u.ID, accounts.KindCustomer)
+		require.NoError(t, err)
+		if p != nil {
+			p.UserID = u.ID
+			require.NoError(t, d.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
+				_, err := repo.Upsert(ctx, tx, *p, compliance.Change{ActorType: security.ActorSystem, ActorID: "kyc", Reason: "fixture"})
+				return err
+			}))
+		}
+		return a.ID
+	}
+	verifiedAt := now.Add(-time.Hour)
+	expiresAt := now.Add(time.Hour)
+
+	ok, err := v.IdentityVerified(ctx, d.Pool(), account(nil))
+	require.NoError(t, err)
+	assert.False(t, ok, "no profile: unverified")
+
+	ok, err = v.IdentityVerified(ctx, d.Pool(), account(&compliance.Profile{IdentityState: compliance.IdentityPending, SanctionsState: compliance.SanctionsClear}))
+	require.NoError(t, err)
+	assert.False(t, ok, "pending: unverified")
+
+	verified := account(&compliance.Profile{IdentityState: compliance.IdentityVerified, SanctionsState: compliance.SanctionsClear,
+		VerifiedAt: &verifiedAt, ExpiresAt: &expiresAt})
+	ok, err = v.IdentityVerified(ctx, d.Pool(), verified)
+	require.NoError(t, err)
+	assert.True(t, ok, "verified and unexpired")
+
+	clk.Advance(2 * time.Hour)
+	ok, err = v.IdentityVerified(ctx, d.Pool(), verified)
+	require.NoError(t, err)
+	assert.False(t, ok, "verification expired: unverified")
 }
