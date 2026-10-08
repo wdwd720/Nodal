@@ -159,11 +159,30 @@ func (s *Service) SubmitOrderIntent(ctx context.Context, tx pgx.Tx, req OrderReq
 	if err != nil {
 		return econ.Intent{}, err
 	}
-	if !route.Permitted {
+	// A ROUTED intent is accepted, priced, reserved and placed with nothing
+	// asked in between, so it needs a route that may execute now: one the
+	// legal router permits only once a person has confirmed it (or an
+	// operator reviewed it) is permission to ask, and the order path has no
+	// such step. It is refused with that step among its reasons (review 3,
+	// F5).
+	if !route.MayExecuteNow() {
 		return s.intents.Transition(ctx, tx, in.ID, econ.StatusRejected, s.actor,
-			"refused by the settlement compiler: "+strings.Join(route.Reasons, ","), "ROUTE_REFUSED")
+			"refused by the settlement compiler: "+strings.Join(routeRefusalReasons(route), ","), "ROUTE_REFUSED")
 	}
 	return s.intents.Transition(ctx, tx, in.ID, econ.StatusRouted, s.actor, "routed to the equities subsystem", "")
+}
+
+// routeRefusalReasons are why a route may not execute now, sorted: the
+// compiler's refusals, and for a route it permits only after a person's
+// confirmation or an operator's review, that step (REQUIRES_USER_CONFIRMATION,
+// REQUIRES_MANUAL_REVIEW).
+func routeRefusalReasons(route settlement.Route) []string {
+	reasons := append([]string{}, route.Reasons...)
+	if route.Permitted && route.RequiredConfirmation != settlement.ConfirmNone {
+		reasons = append(reasons, "REQUIRES_"+string(route.RequiredConfirmation))
+	}
+	sort.Strings(reasons)
+	return reasons
 }
 
 // AcceptOrder turns a ROUTED equity intent into an order: it authorizes the

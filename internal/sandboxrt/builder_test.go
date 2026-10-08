@@ -93,7 +93,7 @@ func TestBuilder_EnvironmentCarriesNothingFromTheParent(t *testing.T) {
 	assert.Equal(t, "wasip1", seen["GOOS"])
 	assert.Equal(t, "wasm", seen["GOARCH"])
 	assert.Equal(t, filepath.Dir(goBin), seen["PATH"])
-	for _, k := range []string{"GOCACHE", "GOPATH", "HOME"} {
+	for _, k := range []string{"GOCACHE", "GOPATH", "HOME", "GOTMPDIR", "TMPDIR"} {
 		assert.True(t, strings.HasPrefix(seen[k], "$BUILD/"), "%s=%s lives in the build directory, which the kept log does not name", k, seen[k])
 	}
 	assert.Len(t, b.environment("/x"), len(BuildEnvironmentKeys()))
@@ -146,14 +146,16 @@ func TestBuilder_EmbedsEverySDKSourceFile(t *testing.T) {
 
 // TestBuilder_CompileIsReachableOnlyThroughScan proves structurally that the
 // unscanned compile step has exactly one production caller, Build, and that
-// Build scans first. The test-only buildTrustedForTest is the only other
-// caller, and it lives in a _test.go file.
+// Build scans first; and that the step beneath it, buildIn, is called only by
+// compile and by warm, which builds the package's own warm-up program and
+// scans it first too. The test-only buildTrustedForTest is the only other
+// caller of compile, and it lives in a _test.go file.
 func TestBuilder_CompileIsReachableOnlyThroughScan(t *testing.T) {
 	fset := token.NewFileSet()
 	pkgs, err := parser.ParseDir(fset, ".", func(fi os.FileInfo) bool { return !strings.HasSuffix(fi.Name(), "_test.go") }, 0)
 	require.NoError(t, err)
-	callers := map[string]bool{}
-	buildCallsScan := false
+	callers := map[string]map[string]bool{"compile": {}, "buildIn": {}}
+	scans := map[string]bool{}
 	for _, pkg := range pkgs {
 		for _, f := range pkg.Files {
 			for _, decl := range f.Decls {
@@ -168,12 +170,12 @@ func TestBuilder_CompileIsReachableOnlyThroughScan(t *testing.T) {
 					}
 					switch fun := call.Fun.(type) {
 					case *ast.SelectorExpr:
-						if fun.Sel.Name == "compile" {
-							callers[fn.Name.Name] = true
+						if c, ok := callers[fun.Sel.Name]; ok {
+							c[fn.Name.Name] = true
 						}
 					case *ast.Ident:
-						if fun.Name == "Scan" && fn.Name.Name == "Build" {
-							buildCallsScan = true
+						if fun.Name == "Scan" {
+							scans[fn.Name.Name] = true
 						}
 					}
 					return true
@@ -181,8 +183,10 @@ func TestBuilder_CompileIsReachableOnlyThroughScan(t *testing.T) {
 			}
 		}
 	}
-	assert.Equal(t, map[string]bool{"Build": true}, callers, "only Build may call compile")
-	assert.True(t, buildCallsScan, "Build scans before it compiles")
+	assert.Equal(t, map[string]bool{"Build": true}, callers["compile"], "only Build may call compile")
+	assert.True(t, scans["Build"], "Build scans before it compiles")
+	assert.Equal(t, map[string]bool{"compile": true, "warm": true}, callers["buildIn"], "only compile and warm may build")
+	assert.True(t, scans["warm"], "warm scans its own program before it builds it")
 }
 
 func TestBuilder_RealBuildsAreReproducibleAndRefuseBrokenCode(t *testing.T) {
@@ -226,6 +230,9 @@ func TestBuilder_RejectsAnUnusableConfiguration(t *testing.T) {
 		"log above what a validation stores":            {GoBinary: goBin, MaxLogBytes: MaxBuildLogBytesCap + 1},
 		"artifact above what the database accepts":      {GoBinary: goBin, MaxArtifactBytes: MaxArtifactBytesCap + 1},
 		"memory too small for any build":                {GoBinary: goBin, MaxMemoryBytes: 1 << 20},
+		"disk too small for any build":                  {GoBinary: goBin, MaxDiskBytes: 1 << 20},
+		"no build could ever run":                       {GoBinary: goBin, MaxConcurrentBuilds: -1},
+		"a work area named relative to somewhere":       {GoBinary: goBin, TempDir: "relative/work"},
 		"a running build measured less than per second": {GoBinary: goBin, SampleInterval: 2 * time.Second},
 	} {
 		_, err := NewBuilder(cfg)
@@ -236,6 +243,10 @@ func TestBuilder_RejectsAnUnusableConfiguration(t *testing.T) {
 	assert.Equal(t, int64(32<<20), b.cfg.MaxArtifactBytes, "safe defaults")
 	assert.Equal(t, uint64(1<<30), b.cfg.MaxMemoryBytes)
 	assert.Equal(t, MaxBuildLogBytesCap, b.cfg.MaxLogBytes)
+	assert.Equal(t, int64(512<<20), b.cfg.MaxDiskBytes)
+	assert.Equal(t, 2, b.cfg.MaxConcurrentBuilds)
+	assert.Equal(t, 2, cap(b.slots))
+	assert.Equal(t, os.TempDir(), b.cfg.TempDir, "the work area defaults to the system's temporary directory")
 }
 
 // outputStub is a toolchain whose build writes a module of the given size.
