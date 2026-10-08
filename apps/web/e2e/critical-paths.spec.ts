@@ -9,6 +9,8 @@
  */
 import { expect, test, type Page } from "@playwright/test";
 
+import { goto } from "./pace.ts";
+
 const PAGES: ReadonlyArray<{ readonly path: string; readonly heading: string }> = [
   { path: "/", heading: "Home" },
   { path: "/add-funds", heading: "Add funds" },
@@ -47,7 +49,7 @@ async function accountId(page: Page): Promise<string> {
 test.describe("the nine required pages", () => {
   for (const { path, heading } of PAGES) {
     test(`${heading} renders`, async ({ page }) => {
-      await page.goto(path);
+      await goto(page, path);
       await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
       // Exactly one h1 per page: the document outline is the navigation aid a
       // screen reader user actually has.
@@ -69,7 +71,7 @@ test.describe("the nine required pages", () => {
   }
 
   test("every section is reachable from the navigation", async ({ page }) => {
-    await page.goto("/");
+    await goto(page, "/");
     for (const { heading } of PAGES) {
       await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: heading }).click();
       await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
@@ -80,7 +82,7 @@ test.describe("the nine required pages", () => {
 test.describe("the internal economy is separate from the rest", () => {
   for (const { path, heading } of INTERNAL_ECONOMY_PAGES) {
     test(`${heading} renders`, async ({ page }) => {
-      await page.goto(path);
+      await goto(page, path);
       await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
       await expect(page.locator("h1")).toHaveCount(1);
       await expect(page.locator(".malformed")).toHaveCount(0);
@@ -166,7 +168,7 @@ test.describe("the internal economy is separate from the rest", () => {
 
   test("a customer can buy something and their Credits fall by exactly the price", async ({ page }) => {
     const creditsShown = async (): Promise<bigint> => {
-      await page.goto("/nodal-economy");
+      await goto(page, "/nodal-economy");
       await page.waitForLoadState("networkidle");
       const field = page.locator(".field", { hasText: "Usable inside Nodal" }).first();
       return figureIn(await field.innerText(), "Credit figure");
@@ -174,7 +176,7 @@ test.describe("the internal economy is separate from the rest", () => {
 
     const before = await creditsShown();
 
-    await page.goto("/marketplace");
+    await goto(page, "/marketplace");
     await page.waitForLoadState("networkidle");
     // Each product is its own <article class="panel-nested" aria-label={title}>.
     // Locating the CARD and then its own price and its own button is the whole
@@ -229,7 +231,7 @@ test.describe("the internal economy is separate from the rest", () => {
   });
 
   test("every internal-economy page is reachable from the navigation", async ({ page }) => {
-    await page.goto("/");
+    await goto(page, "/");
     for (const { heading } of INTERNAL_ECONOMY_PAGES) {
       await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: heading }).click();
       await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
@@ -237,7 +239,7 @@ test.describe("the internal economy is separate from the rest", () => {
   });
 
   test("home names all three pots and adds none of them", async ({ page }) => {
-    await page.goto("/");
+    await goto(page, "/");
     const panel = page.locator(".panel", { hasText: "Three kinds of value" });
     await expect(panel).toBeVisible();
     for (const name of ["Real Capital", "Nodal Economy", "Simulated Capital"]) {
@@ -254,7 +256,7 @@ test.describe("the internal economy is separate from the rest", () => {
     // reads what actually rendered, which the source scan cannot do for text
     // that arrives from the API.
     for (const { path } of INTERNAL_ECONOMY_PAGES) {
-      await page.goto(path);
+      await goto(page, path);
       await expect(page.locator("h1")).toHaveCount(1);
       const text = await page.evaluate(() => document.body.innerText);
       if (!text.includes("Credits")) continue;
@@ -272,7 +274,7 @@ test("home shows the figures the backend computed, unchanged", async ({ page }) 
   expect(response.ok()).toBeTruthy();
   const body = (await response.json()) as Record<string, string>;
 
-  await page.goto("/");
+  await goto(page, "/");
   await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
 
   // The rendered figure is the wire string with grouping applied and nothing else.
@@ -312,7 +314,7 @@ test("home shows the figures the backend computed, unchanged", async ({ page }) 
 });
 
 test("home discloses what the balance actually is", async ({ page }) => {
-  await page.goto("/");
+  await goto(page, "/");
   const disclosure = page.getByLabel("What you are actually holding");
   await expect(disclosure).toContainText("USDC");
   await expect(disclosure).toContainText("stablecoin");
@@ -320,7 +322,7 @@ test("home discloses what the balance actually is", async ({ page }) => {
 });
 
 test("trade: a quote the backend cannot produce is reported, not faked", async ({ page }) => {
-  await page.goto("/trade");
+  await goto(page, "/trade");
   await expect(page.getByRole("heading", { level: 1, name: "Trade" })).toBeVisible();
 
   // Exact mint identity is on the page before anything is priced.
@@ -337,7 +339,7 @@ test("trade: a quote the backend cannot produce is reported, not faked", async (
 });
 
 test("trade: a simulated order is submitted and its real state is polled", async ({ page }) => {
-  await page.goto("/trade");
+  await goto(page, "/trade");
   await page.getByLabel("Amount to commit, in US dollars of value").fill("25");
 
   // PAPER is the default; assert it rather than assume it.
@@ -360,7 +362,7 @@ test("trade: a simulated order is submitted and its real state is polled", async
 });
 
 test("add funds: the backend's refusal is shown with its code", async ({ page }) => {
-  await page.goto("/add-funds");
+  await goto(page, "/add-funds");
   await page.getByLabel("Amount in US dollars").fill("25");
   await expect(page.getByText("Will be sent as 25.00")).toBeVisible();
   await page.getByRole("button", { name: "Start funding" }).click();
@@ -376,7 +378,7 @@ test("portfolio shows exact units beside every valuation", async ({ page }) => {
   const response = await page.request.get(`/v1/accounts/${id}/holdings`);
   const body = (await response.json()) as { holdings: Array<{ quantity: string; symbol: string }> };
 
-  await page.goto("/portfolio");
+  await goto(page, "/portfolio");
   await expect(page.getByRole("heading", { level: 1, name: "Portfolio" })).toBeVisible();
 
   for (const holding of body.holdings) {
@@ -386,7 +388,7 @@ test("portfolio shows exact units beside every valuation", async ({ page }) => {
 });
 
 test("strategy builder compiles a real document and derives its effects", async ({ page }) => {
-  await page.goto("/strategy");
+  await goto(page, "/strategy");
   await page.getByRole("button", { name: "Compile", exact: true }).click();
 
   await expect(page.getByText("The document compiled")).toBeVisible();
@@ -406,7 +408,7 @@ test("strategy builder compiles a real document and derives its effects", async 
 });
 
 test("activity draws every lifecycle stage, including the ones with no rows", async ({ page }) => {
-  await page.goto("/activity");
+  await goto(page, "/activity");
   const stages = [
     "Data event",
     "Prediction",
@@ -429,7 +431,7 @@ test("settings lists real sessions and refuses a withdrawal with a reason", asyn
   const response = await page.request.get("/v1/sessions");
   const sessions = (await response.json()) as Array<{ id: string }>;
 
-  await page.goto("/settings");
+  await goto(page, "/settings");
   await expect(page.getByRole("heading", { level: 1, name: "Settings and security" })).toBeVisible();
   for (const session of sessions.slice(0, 3)) {
     await expect(page.getByText(session.id, { exact: false }).first()).toBeVisible();
@@ -453,7 +455,7 @@ test("no dead controls anywhere in the application", async ({ page }) => {
   // this enumerates everything interactive and requires each one to either do
   // something real or be disabled with a stated reason.
   for (const { path } of PAGES) {
-    await page.goto(path);
+    await goto(page, path);
     await expect(page.locator("h1")).toHaveCount(1);
 
     const controls = page.locator("button, a[href], input, select, textarea");
@@ -509,7 +511,7 @@ test("no dead controls anywhere in the application", async ({ page }) => {
 });
 
 test("keyboard: the skip link is the first stop and reaches main", async ({ page }) => {
-  await page.goto("/");
+  await goto(page, "/");
   // Tab must not be pressed while the boot screen is up: it holds no focusable
   // element, so the keypress would be swallowed and focus would never reach the
   // skip link that the rendered page puts first.
@@ -524,7 +526,7 @@ test("keyboard: the skip link is the first stop and reaches main", async ({ page
 test("the layout reflows on a narrow viewport without sideways scrolling", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   for (const { path } of PAGES) {
-    await page.goto(path);
+    await goto(page, path);
     await expect(page.locator("h1")).toHaveCount(1);
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -536,7 +538,7 @@ test("the layout reflows on a narrow viewport without sideways scrolling", async
 test("an unauthenticated visitor is asked to sign in rather than shown zeroes", async ({ browser }) => {
   const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
   const page = await context.newPage();
-  await page.goto("/");
+  await goto(page, "/");
   await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Continue to sign in" })).toBeEnabled();
   // Not a single figure is rendered to a signed-out visitor.

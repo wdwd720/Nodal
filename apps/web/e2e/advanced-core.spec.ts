@@ -20,6 +20,8 @@ import { randomUUID } from "node:crypto";
 
 import { expect, test, type Locator, type Page, type Response } from "@playwright/test";
 
+import { goto } from "./pace.ts";
+
 /** The accessible name of the notice every page of the area opens with. */
 const NOTICE = "Simulated value — sandbox only";
 
@@ -121,7 +123,7 @@ async function visit(page: Page, path: string): Promise<Map<string, unknown>> {
     );
   };
   page.on("response", listener);
-  await page.goto(path);
+  await goto(page, path);
   await settle(page);
   page.off("response", listener);
   return new Map(await Promise.all(pending));
@@ -135,7 +137,7 @@ async function expectRefusal(panel: Locator, problem: Problem): Promise<void> {
 test.describe("the advanced (sandbox) area", () => {
   for (const { path, heading } of CORE_PAGES) {
     test(`${heading} renders under the simulated-value notice`, async ({ page }) => {
-      await page.goto(path);
+      await goto(page, path);
       await expect(page.getByRole("heading", { level: 1, name: heading, exact: true })).toBeVisible();
       await expect(page.locator("h1")).toHaveCount(1);
 
@@ -152,7 +154,7 @@ test.describe("the advanced (sandbox) area", () => {
   }
 
   test("/advanced opens on the portfolio, and the overview is one link away", async ({ page }) => {
-    await page.goto("/advanced");
+    await goto(page, "/advanced");
     await expect(page).toHaveURL(/\/advanced\/portfolio$/);
     await expect(page.getByRole("heading", { level: 1, name: "Portfolio", exact: true })).toBeVisible();
     await page
@@ -164,7 +166,7 @@ test.describe("the advanced (sandbox) area", () => {
   });
 
   test("the area is reachable from the main navigation, and each core section from its own", async ({ page }) => {
-    await page.goto("/");
+    await goto(page, "/");
     await expect(page.locator("h1")).toHaveCount(1);
     await page
       .getByRole("navigation", { name: "Sections", exact: true })
@@ -201,7 +203,7 @@ test("LIVE is refused for every capability with LIVE_NOT_IMPLEMENTED, and the ta
   }
 
   // Then the page: one row per capability, and every cell says what the backend decided.
-  await page.goto("/advanced/overview");
+  await goto(page, "/advanced/overview");
   await settle(page);
   const table = page.getByRole("table", { name: "Decision for every capability and mode", exact: true });
   await expect(table.locator("tbody tr")).toHaveCount(body.items.length);
@@ -230,7 +232,7 @@ test("buying power V2 shows the backend's breakdown, or its refusal and code —
   const response = await page.request.get(`/v1/advanced/buying-power?account_id=${id}`);
   const body: unknown = await response.json();
 
-  await page.goto("/advanced/buying-power");
+  await goto(page, "/advanced/buying-power");
   await settle(page);
 
   if (response.ok()) {
@@ -309,7 +311,7 @@ test("an unknown intent is answered NOT_FOUND, and a listed one opens with its c
   // A well-formed UUIDv7 that nobody recorded: the version nibble of a random v4 set to 7.
   const v4 = randomUUID();
   const unknown = `${v4.slice(0, 14)}7${v4.slice(15)}`;
-  await page.goto(`/advanced/activity/intents/${unknown}`);
+  await goto(page, `/advanced/activity/intents/${unknown}`);
   await expect(page.getByRole("heading", { level: 1, name: "Economic intent", exact: true })).toBeVisible();
   await settle(page);
   await expect(page.getByRole("note", { name: NOTICE, exact: true })).toBeVisible();
@@ -321,7 +323,7 @@ test("an unknown intent is answered NOT_FOUND, and a listed one opens with its c
   const body = (await response.json()) as { items: Array<{ id: string; content_hash: string }> };
   const first = body.items[0];
 
-  await page.goto("/advanced/activity");
+  await goto(page, "/advanced/activity");
   await settle(page);
   const intents = page.getByRole("region", { name: "Economic intents", exact: true });
   if (first === undefined) {
@@ -340,7 +342,7 @@ test("instruments: the list, the kind filter, and one instrument's terms history
     items: Array<{ id: string; kind: string; canonical_name: string }>;
   };
 
-  await page.goto("/advanced/instruments");
+  await goto(page, "/advanced/instruments");
   await settle(page);
   const panel = page.getByRole("region", { name: "Canonical instruments", exact: true });
   const first = all.items[0];
@@ -375,7 +377,7 @@ test("instruments: the list, the kind filter, and one instrument's terms history
 });
 
 test("an unknown instrument kind in the address is reported and not sent", async ({ page }) => {
-  await page.goto("/advanced/instruments?kind=NOT_A_KIND");
+  await goto(page, "/advanced/instruments?kind=NOT_A_KIND");
   await settle(page);
   await expect(page.getByRole("status").filter({ hasText: "NOT_A_KIND" })).toBeVisible();
   await expect(page.getByLabel("Instrument kind")).toHaveValue("");
@@ -397,7 +399,7 @@ for (const { path } of CORE_PAGES) {
 
 test("no dead controls in the advanced area", async ({ page }) => {
   for (const { path } of CORE_PAGES) {
-    await page.goto(path);
+    await goto(page, path);
     await settle(page);
 
     const buttons = page.locator("main button");
@@ -425,7 +427,7 @@ test("no dead controls in the advanced area", async ({ page }) => {
 test("the advanced pages reflow at 390px without sideways scrolling", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   for (const { path } of CORE_PAGES) {
-    await page.goto(path);
+    await goto(page, path);
     await settle(page);
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,

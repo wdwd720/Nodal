@@ -18,13 +18,19 @@
  *   - where a market exists, its books, the account's shares and the
  *     complete-set form are drawn from the backend's answers.
  *
- * A seeded database usually holds no prediction market, and a customer cannot
- * define one, so the market-level checks take the stated-absence branch there;
- * that is the honest outcome, not a skipped test.
+ * A seeded database holds no prediction market, and a customer cannot define
+ * one, so before its tests run this spec has the operator ("admin", signed in
+ * with a strong sign-in in a context of its own) define and open a SANDBOX
+ * market of its own. The market-level checks then always have a market, and
+ * never depend on what another spec left behind; the stated-absence branches
+ * remain for a deployment where defining one is refused.
  */
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type BrowserContext, type Locator, type Page } from "@playwright/test";
+
+import { goto } from "./pace.ts";
+import { signIn } from "./sign-in.ts";
 
 const NOTICE = "Simulated value — sandbox only";
 const LIST = "/advanced/prediction-markets";
@@ -87,8 +93,49 @@ async function listed(page: Page, status: string): Promise<MarketRow[]> {
   return body.items;
 }
 
-/** The first market in any status, if the deployment has one. */
+/** The OPEN market this spec defined for itself before its tests ran. */
+let ownMarket: MarketRow | undefined;
+
+test.beforeAll(async ({ browser }) => {
+  const now = Date.now();
+  // The customer's faucet grant creates the sandbox dollar, the market's collateral.
+  const customer = await browser.newContext({ storageState: ".playwright/state.json" });
+  let operator: BrowserContext | undefined;
+  try {
+    const page = await customer.newPage();
+    const grant = await post(page, "/v1/advanced/transfers/faucet/grants", { account_id: await accountId(page), amount: "1" });
+    expect([201, 429], `the faucet runs in this deployment: ${JSON.stringify(grant.body)}`).toContain(grant.status);
+
+    const signedIn = await signIn(browser, "admin", true);
+    operator = signedIn.context;
+    const op = signedIn.page;
+
+    const created = await post(op, "/v1/advanced/prediction-markets", {
+      symbol: `E2E-PM-${randomBytes(3).toString("hex").toUpperCase()}`,
+      question: "Does the prediction-market suite draw a market of its own?",
+      outcomes: ["YES", "NO"],
+      mode: "SANDBOX",
+      open_at: new Date(now - 60_000).toISOString(),
+      close_at: new Date(now + 24 * 60 * 60_000).toISOString(),
+      dispute_window_ms: 0,
+      oracle_source: "e2e",
+      oracle_public_key: "ab".repeat(32),
+    });
+    expect(created.status, `the operator defines a market: ${JSON.stringify(created.body)}`).toBe(201);
+    const id = (created.body as { id: string }).id;
+    const opened = await post(op, `/v1/advanced/prediction-markets/${id}/open`, {});
+    expect(opened.status, `the operator opens it: ${JSON.stringify(opened.body)}`).toBe(200);
+    ownMarket = (await listed(page, "OPEN")).find((market) => market.id === id);
+    expect(ownMarket, "the market the operator opened is listed OPEN").toBeTruthy();
+  } finally {
+    await operator?.close();
+    await customer.close();
+  }
+});
+
+/** This spec's own market; otherwise the first market in any status, if the deployment has one. */
 async function anyMarket(page: Page): Promise<MarketRow | undefined> {
+  if (ownMarket !== undefined) return ownMarket;
   for (const status of ["OPEN", ...STATUSES.filter((s) => s !== "OPEN")]) {
     const first = (await listed(page, status))[0];
     if (first !== undefined) return first;
@@ -102,7 +149,7 @@ async function expectRefusal(region: Locator, code: string): Promise<void> {
 
 test.describe("prediction markets (sandbox)", () => {
   test("the section renders under the simulated-value notice and is reachable from the area", async ({ page }) => {
-    await page.goto("/advanced/overview");
+    await goto(page, "/advanced/overview");
     await expect(page.locator("h1")).toHaveCount(1);
     await page
       .getByRole("navigation", { name: "Advanced area", exact: true })
@@ -121,7 +168,7 @@ test.describe("prediction markets (sandbox)", () => {
   test("the list is exactly the backend's list for the status asked for", async ({ page }) => {
     for (const status of ["OPEN", "SETTLED"] as const) {
       const items = await listed(page, status);
-      await page.goto(`${LIST}?status=${status}`);
+      await goto(page, `${LIST}?status=${status}`);
       await settle(page);
       const panel = page.getByRole("region", { name: "Markets", exact: true });
       await expect(panel.getByLabel("Market status")).toHaveValue(status);
@@ -137,21 +184,21 @@ test.describe("prediction markets (sandbox)", () => {
     }
 
     // Choosing a status asks the backend for it; the address says which.
-    await page.goto(LIST);
+    await goto(page, LIST);
     await settle(page);
     await page.getByLabel("Market status").selectOption("VOIDED");
     await expect(page).toHaveURL(/[?&]status=VOIDED$/);
   });
 
   test("an unknown status in the address is reported and not sent", async ({ page }) => {
-    await page.goto(`${LIST}?status=LIVE`);
+    await goto(page, `${LIST}?status=LIVE`);
     await settle(page);
     await expect(page.getByRole("status").filter({ hasText: "LIVE" }).first()).toBeVisible();
     await expect(page.getByLabel("Market status")).toHaveValue("OPEN");
   });
 
   test("an unknown market answers NOT_FOUND on its page", async ({ page }) => {
-    await page.goto(`${LIST}/${unknownId()}`);
+    await goto(page, `${LIST}/${unknownId()}`);
     await expect(page.getByRole("heading", { level: 1, name: "Prediction market", exact: true })).toBeVisible();
     await settle(page);
     await expect(page.getByRole("note", { name: NOTICE, exact: true })).toBeVisible();
@@ -192,12 +239,12 @@ test.describe("prediction markets (sandbox)", () => {
     expect(approved.status, "approving a void is an operator action").toBe(403);
     expect(isProblem(approved.body) && approved.body.code).toBe("FORBIDDEN");
 
-    await page.goto(LIST);
+    await goto(page, LIST);
     await settle(page);
     await expect(page.getByRole("region", { name: "Define a market", exact: true })).toHaveCount(0);
     const market = await anyMarket(page);
     if (market !== undefined) {
-      await page.goto(`${LIST}/${market.id}`);
+      await goto(page, `${LIST}/${market.id}`);
       await settle(page);
       await expect(page.getByRole("region", { name: "Operator actions", exact: true })).toHaveCount(0);
     }
@@ -262,7 +309,7 @@ test.describe("prediction markets (sandbox)", () => {
       const none = await post(page, `/v1/advanced/prediction-markets/${market.id}/held-payouts/claim`, { account_id: own });
       expect(none.status).toBe(404);
       expect(isProblem(none.body) && none.body.code).toBe("NOT_FOUND");
-      await page.goto(`${LIST}/${market.id}`);
+      await goto(page, `${LIST}/${market.id}`);
       await settle(page);
       await expect(page.getByRole("region", { name: "Held payout", exact: true })).toHaveCount(0);
     }
@@ -271,7 +318,7 @@ test.describe("prediction markets (sandbox)", () => {
   test("a market's page draws its books, the account's shares and the set form from the backend", async ({ page }) => {
     const market = await anyMarket(page);
     if (market === undefined) {
-      await page.goto(LIST);
+      await goto(page, LIST);
       await settle(page);
       await expect(page.getByRole("region", { name: "Markets", exact: true })).toContainText("No OPEN markets");
       return;
@@ -285,7 +332,7 @@ test.describe("prediction markets (sandbox)", () => {
       await page.request.get(`/v1/advanced/prediction-markets/${market.id}/positions?account_id=${own}`)
     ).json()) as { items: Array<{ outcome_symbol: string; quantity: string }> };
 
-    await page.goto(`${LIST}/${market.id}`);
+    await goto(page, `${LIST}/${market.id}`);
     await expect(page.getByRole("heading", { level: 1, name: market.symbol, exact: true })).toBeVisible();
     await settle(page);
     await expect(page.getByRole("note", { name: NOTICE, exact: true })).toBeVisible();
@@ -324,7 +371,7 @@ test.describe("prediction markets (sandbox)", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     const market = await anyMarket(page);
     for (const path of market === undefined ? [LIST] : [LIST, `${LIST}/${market.id}`]) {
-      await page.goto(path);
+      await goto(page, path);
       await settle(page);
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -337,7 +384,7 @@ test.describe("prediction markets (sandbox)", () => {
     const market = await anyMarket(page);
     const paths = market === undefined ? [LIST] : [LIST, `${LIST}/${market.id}`];
     for (const path of paths) {
-      await page.goto(path);
+      await goto(page, path);
       await settle(page);
       const buttons = page.locator("main button");
       const count = await buttons.count();

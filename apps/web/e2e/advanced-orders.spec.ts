@@ -19,10 +19,17 @@
  *     operator-only), no route of this API changes the crossing rule or
  *     places a house order, and an order the backend refuses is shown with
  *     the very code it sent, linked to the order it recorded.
+ *
+ * The LOCAL seed opens no book and a customer cannot open one, so the order
+ * test opens its own through the API, as the operator ("admin", signed in with
+ * a strong sign-in in a context of its own) would.
  */
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 
-import { expect, test, type Page, type Response } from "@playwright/test";
+import { expect, test, type Browser, type BrowserContext, type Page, type Response } from "@playwright/test";
+
+import { goto } from "./pace.ts";
+import { signIn } from "./sign-in.ts";
 
 const NOTICE = "Simulated value — sandbox only";
 
@@ -140,10 +147,99 @@ async function listBooks(page: Page): Promise<BookRow[]> {
   return body.items;
 }
 
+/**
+ * The operator session this file's tests share. Signing in is rate limited --
+ * CP_API_RATE_LIMIT_AUTH allows 30 requests a minute from one address by
+ * default, and a sign-in is four of them -- and the suite signs in far more
+ * often than a person would, so the operator signs in once for the file. A
+ * strong sign-in stays recent far longer than this file takes to run.
+ */
+let operatorSession: { context: BrowserContext; page: Page } | undefined;
+
+async function operator(browser: Browser): Promise<Page> {
+  operatorSession ??= await signIn(browser, "admin", true);
+  return operatorSession.page;
+}
+
+test.afterAll(async () => {
+  await operatorSession?.context.close();
+  operatorSession = undefined;
+});
+
+/** A setup command through the API, same-origin, with its own idempotency key. */
+async function setup(page: Page, path: string, body: unknown): Promise<{ readonly status: number; readonly body: unknown }> {
+  const response = await page.request.post(`/v1${path}`, {
+    headers: { "Content-Type": "application/json", "Idempotency-Key": randomUUID(), "Sec-Fetch-Site": "same-origin" },
+    data: JSON.stringify(body),
+  });
+  return { status: response.status(), body: (await response.json().catch(() => undefined)) as unknown };
+}
+
+/**
+ * Opens an internal book through the API, as an operator does. The
+ * instrument is one outcome of a fresh SANDBOX prediction market: a 24x7
+ * instrument whose shares trade against the sandbox dollar, which is the only
+ * kind of quote asset a book accepts. The customer's faucet grant creates the
+ * sandbox dollar (the market's collateral) and gives the customer something to
+ * reserve against; the operator defines the market, opens it and opens the
+ * book of its first outcome.
+ */
+async function openABook(page: Page, browser: Browser): Promise<BookRow> {
+  const grant = await setup(page, "/advanced/transfers/faucet/grants", { account_id: await accountId(page), amount: "100" });
+  expect([201, 429], `the faucet runs in this deployment: ${JSON.stringify(grant.body)}`).toContain(grant.status);
+  const op = await operator(browser);
+  const now = Date.now();
+  const created = await setup(op, "/advanced/prediction-markets", {
+    symbol: `E2E-BOOK-${randomBytes(3).toString("hex").toUpperCase()}`,
+    question: "Does the order-book suite place an order on a book an operator opened?",
+    outcomes: ["YES", "NO"],
+    mode: "SANDBOX",
+    open_at: new Date(now - 60_000).toISOString(),
+    close_at: new Date(now + 24 * 60 * 60_000).toISOString(),
+    dispute_window_ms: 0,
+    oracle_source: "e2e",
+    oracle_public_key: "ab".repeat(32),
+  });
+  expect(created.status, `the operator defines a market: ${JSON.stringify(created.body)}`).toBe(201);
+  const market = created.body as {
+    id: string;
+    collateral_asset_id: string;
+    collateral_decimals: number;
+    outcomes: Array<{ instrument_id: string; share_asset_id: string }>;
+  };
+  const opened = await setup(op, `/advanced/prediction-markets/${market.id}/open`, {});
+  expect(opened.status, `the operator opens it: ${JSON.stringify(opened.body)}`).toBe(200);
+  const instrument = market.outcomes[0]?.instrument_id ?? "";
+  // Risk Kernel V2 values an order at the share's reference mark and refuses
+  // one it cannot value (RISK_ORACLE_UNAVAILABLE); the operator records it.
+  const mark = await setup(op, "/advanced/ops/marks", {
+    asset_id: market.outcomes[0]?.share_asset_id ?? "",
+    price: "0.5",
+    source: "e2e-order-book",
+  });
+  expect(mark.status, `the operator marks the share: ${JSON.stringify(mark.body)}`).toBe(201);
+  const schedule = (side: string, bps: number): unknown => ({
+    version: `e2e-${side}-${randomBytes(3).toString("hex")}`,
+    quote_asset_id: market.collateral_asset_id,
+    quote_decimals: market.collateral_decimals,
+    percentage_fee_bps: bps,
+  });
+  const book = await setup(op, "/advanced/books", {
+    instrument_id: instrument,
+    mode: "SANDBOX",
+    maker_fee: schedule("maker", 10),
+    taker_fee: schedule("taker", 20),
+  });
+  expect(book.status, `the operator opens the outcome's book: ${JSON.stringify(book.body)}`).toBe(201);
+  const listed = (await listBooks(page)).find((row) => row.instrument_id === instrument);
+  expect(listed?.status, "the book the operator opened is listed, OPEN").toBe("OPEN");
+  return listed as BookRow;
+}
+
 test.describe("the order-book section", () => {
   for (const { path, heading } of PAGES) {
     test(`${heading} renders under the simulated-value notice`, async ({ page }) => {
-      await page.goto(path);
+      await goto(page, path);
       await expect(page.getByRole("heading", { level: 1, name: heading, exact: true })).toBeVisible();
       const notice = page.getByRole("note", { name: NOTICE, exact: true });
       await expect(notice).toBeVisible();
@@ -156,7 +252,7 @@ test.describe("the order-book section", () => {
   }
 
   test("is a section of the advanced area", async ({ page }) => {
-    await page.goto("/advanced/overview");
+    await goto(page, "/advanced/overview");
     await page
       .getByRole("navigation", { name: "Advanced area", exact: true })
       .getByRole("link", { name: "Order books", exact: true })
@@ -165,7 +261,10 @@ test.describe("the order-book section", () => {
   });
 });
 
-test("books are simulated internal books that disclose their fees and crossing rule, drawn as sent", async ({ page }) => {
+test("books are simulated internal books that disclose their fees and crossing rule, drawn as sent", async ({ page, browser }) => {
+  // With no book listed there is nothing to draw but the empty state, so the
+  // operator opens one first and the book's own page is checked as well.
+  if ((await listBooks(page)).length === 0) await openABook(page, browser);
   const books = await listBooks(page);
   for (const book of books) {
     expect(book.value_domain).toBe("SIMULATED");
@@ -183,7 +282,7 @@ test("books are simulated internal books that disclose their fees and crossing r
     }
   }
 
-  await page.goto("/advanced/order-books");
+  await goto(page, "/advanced/order-books");
   await settle(page);
   if (books.length === 0) {
     await expect(page.getByText("No order books", { exact: true })).toBeVisible();
@@ -226,15 +325,15 @@ test("an account's orders and trades are its own; another account's are refused 
   const proof = await page.request.get(`/v1/advanced/books/${ABSENT}/trades/1/proof`);
   expect(proof.status()).toBe(404);
 
-  await page.goto(`/advanced/order-books/orders/${ABSENT}`);
+  await goto(page, `/advanced/order-books/orders/${ABSENT}`);
   await settle(page);
   await expect(page.locator(".explain-meta").first()).toContainText("code NOT_FOUND");
-  await page.goto(`/advanced/order-books/books/${ABSENT}/trades/1`);
+  await goto(page, `/advanced/order-books/books/${ABSENT}/trades/1`);
   await settle(page);
   await expect(page.locator(".explain-meta").first()).toContainText("code NOT_FOUND");
 
   const orders = (await (await page.request.get(`/v1/advanced/books/orders?account_id=${own}`)).json()) as { items: unknown[] };
-  await page.goto("/advanced/order-books/orders");
+  await goto(page, "/advanced/order-books/orders");
   await settle(page);
   if (orders.items.length === 0) {
     await expect(page.getByText("No working orders", { exact: true })).toBeVisible();
@@ -245,7 +344,7 @@ test("an account's orders and trades are its own; another account's are refused 
 
 test("commands are refused with their stable codes, and none changes the crossing rule or places a house order", async ({ page }) => {
   const own = await accountId(page);
-  await page.goto("/advanced/order-books");
+  await goto(page, "/advanced/order-books");
   await settle(page);
 
   const order = { account_id: own, side: "BUY", order_type: "LIMIT", time_in_force: "GTC", price: "1", quantity: "1" };
@@ -282,13 +381,12 @@ test("commands are refused with their stable codes, and none changes the crossin
   }
 });
 
-test("an order is confirmed once, and the page shows exactly what the backend answered", async ({ page }) => {
-  const books = await listBooks(page);
-  const open = books.find((book) => book.status === "OPEN");
-  test.skip(open === undefined, "the seed holds no OPEN internal book to place an order on");
-  const book = open as BookRow;
+test("an order is confirmed once, and the page shows exactly what the backend answered", async ({ page, browser }) => {
+  // A book of this spec's own, so the order lands on a book it knows is OPEN
+  // and was not left behind by another spec.
+  const book = await openABook(page, browser);
 
-  await page.goto(`/advanced/order-books/books/${book.instrument_id}`);
+  await goto(page, `/advanced/order-books/books/${book.instrument_id}`);
   await settle(page);
   const panel = page.getByRole("region", { name: "Place an order", exact: true });
   const confirm = panel.getByRole("button", { name: /^Confirm: buy on the book/ });

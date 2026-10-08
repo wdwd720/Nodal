@@ -12,6 +12,8 @@
  */
 import { expect, test, type Page } from "@playwright/test";
 
+import { goto } from "./pace.ts";
+
 const ROUTES = [
   "/",
   "/add-funds",
@@ -62,7 +64,7 @@ async function visibleText(page: Page): Promise<string> {
 
 for (const route of ROUTES) {
   test(`rendered text of ${route} uses no forbidden phrasing`, async ({ page }) => {
-    await page.goto(route);
+    await goto(page, route);
     await expect(page.locator("h1")).toHaveCount(1);
     const text = await visibleText(page);
     for (const [pattern, why] of FORBIDDEN) {
@@ -73,7 +75,7 @@ for (const route of ROUTES) {
 
 test("a page showing balances discloses that they are USDC", async ({ page }) => {
   for (const route of ["/", "/portfolio", "/add-funds"]) {
-    await page.goto(route);
+    await goto(page, route);
     const text = await visibleText(page);
     expect(text, `${route} names the settlement asset`).toContain("USDC");
     expect(text.toLowerCase(), `${route} says what USDC is`).toContain("stablecoin");
@@ -81,7 +83,7 @@ test("a page showing balances discloses that they are USDC", async ({ page }) =>
 });
 
 test("simulated output is labelled wherever it appears", async ({ page }) => {
-  await page.goto("/lab");
+  await goto(page, "/lab");
   const text = await visibleText(page);
   expect(text).toContain("No real capital was committed");
   // Every mode badge states whether capital is real.
@@ -90,7 +92,7 @@ test("simulated output is labelled wherever it appears", async ({ page }) => {
 
 test("a model score never appears without the denial beside it", async ({ page }) => {
   for (const route of ROUTES) {
-    await page.goto(route);
+    await goto(page, route);
     const text = await visibleText(page);
     if (!/confidence/i.test(text)) continue;
     expect(text, `${route}: confidence appears, so the denial must too`).toContain(
@@ -100,14 +102,14 @@ test("a model score never appears without the denial beside it", async ({ page }
 });
 
 test("pending settlement is never hidden", async ({ page }) => {
-  await page.goto("/add-funds");
+  await goto(page, "/add-funds");
   const text = await visibleText(page);
   expect(text).toContain("not spendable until the backend marks them available");
 });
 
 test("the risk statement is on every page", async ({ page }) => {
   for (const route of ROUTES) {
-    await page.goto(route);
+    await goto(page, route);
     const text = await visibleText(page);
     expect(text, `${route} carries the risk statement`).toContain("can lose money");
   }
@@ -116,7 +118,7 @@ test("the risk statement is on every page", async ({ page }) => {
 test("no capability that is off is shown as a zero", async ({ page }) => {
   // The quote endpoint is unavailable in this deployment. The trade page must
   // say so and must not put a figure where the price would be.
-  await page.goto("/trade");
+  await goto(page, "/trade");
   await page.getByLabel("Amount to commit, in US dollars of value").fill("100");
   await page.getByRole("button", { name: "Get a quote" }).click();
   const panel = page.locator(".panel", { hasText: "Non-binding, fully disclosed" });

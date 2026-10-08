@@ -20,6 +20,9 @@ import { randomBytes, randomUUID } from "node:crypto";
 
 import { expect, test, type Browser, type BrowserContext, type Locator, type Page } from "@playwright/test";
 
+import { goto } from "./pace.ts";
+import { signIn } from "./sign-in.ts";
+
 const NOTICE = "Simulated value — sandbox only";
 const CONSOLE = "/advanced/operator";
 const MARKS_PATH = "/v1/advanced/ops/marks";
@@ -68,6 +71,27 @@ function hex(bytes: number): string {
   return randomBytes(bytes).toString("hex");
 }
 
+/**
+ * A well-formed UUIDv7 nobody recorded: the version nibble of a random v4 set
+ * to 7. The contract's UUID is "UUIDv7 in canonical form", so a bare v4 from
+ * randomUUID() is a malformed id the backend refuses with VALIDATION_FAILED
+ * before it looks anything up -- it can never stand for "an id nobody holds".
+ */
+function unknownId(): string {
+  const v4 = randomUUID();
+  return `${v4.slice(0, 14)}7${v4.slice(15)}`;
+}
+
+/**
+ * An instant as a datetime-local control holds it: local time to the minute.
+ * The browser normalises the control's value and drops seconds that are zero,
+ * so a value written with ":00" would not be the value the control holds.
+ */
+function localMinute(at: Date): string {
+  const two = (n: number): string => String(n).padStart(2, "0");
+  return `${String(at.getFullYear())}-${two(at.getMonth() + 1)}-${two(at.getDate())}T${two(at.getHours())}:${two(at.getMinutes())}`;
+}
+
 /** Waits until a page has its answer on screen and nothing says it is still loading. */
 async function settle(page: Page): Promise<void> {
   await expect(page.locator("h1")).toHaveCount(1);
@@ -75,17 +99,29 @@ async function settle(page: Page): Promise<void> {
   await expect(page.locator(".loading")).toHaveCount(0);
 }
 
-/** Signs a development identity in, in a fresh context, through the real OIDC flow. */
-async function signIn(browser: Browser, identity: string, mfa: boolean): Promise<{ context: BrowserContext; page: Page }> {
-  const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
-  const page = await context.newPage();
-  await page.goto("/v1/auth/login");
-  await expect(page.getByRole("heading", { name: "Choose an identity" })).toBeVisible();
-  const row = page.locator("li", { has: page.locator("code", { hasText: new RegExp(`^${identity}$`) }) });
-  await row.getByRole("link", { name: mfa ? "sign in with MFA" : "sign in", exact: true }).first().click();
-  await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
-  return { context, page };
+/**
+ * Signed-in sessions this file's tests share, one per identity and strength.
+ * Signing in is rate limited -- CP_API_RATE_LIMIT_AUTH allows 30 requests a
+ * minute from one address by default, and a sign-in is four of them -- and the
+ * suite signs in far more often than a person would, so a test reuses the
+ * session an earlier test of this file opened instead of signing in again. A
+ * strong sign-in stays recent far longer than this file takes to run.
+ */
+const sessions = new Map<string, { context: BrowserContext; page: Page }>();
+
+async function session(browser: Browser, identity: string, mfa: boolean): Promise<{ context: BrowserContext; page: Page }> {
+  const key = `${identity}${mfa ? ":mfa" : ""}`;
+  const open = sessions.get(key);
+  if (open !== undefined) return open;
+  const signedIn = await signIn(browser, identity, mfa);
+  sessions.set(key, signedIn);
+  return signedIn;
 }
+
+test.afterAll(async () => {
+  for (const open of sessions.values()) await open.context.close();
+  sessions.clear();
+});
 
 /** A command as the browser would send it: same-origin, JSON, with a fresh idempotency key. */
 async function command(page: Page, path: string, body: unknown): Promise<{ readonly status: number; readonly body: unknown }> {
@@ -141,7 +177,7 @@ async function simulatedAssetToMark(customer: Page, operator: Page): Promise<str
 
 test.describe("the operator console", () => {
   test("renders under the simulated-value notice and is reachable from the area's navigation", async ({ page }) => {
-    await page.goto("/advanced/overview");
+    await goto(page, "/advanced/overview");
     await page
       .getByRole("navigation", { name: "Advanced area", exact: true })
       .getByRole("link", { name: "Operator console", exact: true })
@@ -159,13 +195,13 @@ test.describe("the operator console", () => {
     expect(overview.status(), "a customer holds no sandbox:operate").toBe(403);
     const problem = (await overview.json()) as Problem;
     expect(problem.code).toBe("FORBIDDEN");
-    const marks = await page.request.get(`${MARKS_PATH}?asset_id=${randomUUID()}`);
+    const marks = await page.request.get(`${MARKS_PATH}?asset_id=${unknownId()}`);
     expect(marks.status()).toBe(403);
-    const posted = await command(page, MARKS_PATH, { asset_id: randomUUID(), price: "1.5", source: "e2e-customer" });
+    const posted = await command(page, MARKS_PATH, { asset_id: unknownId(), price: "1.5", source: "e2e-customer" });
     expect(posted.status, "a customer may not record a reference mark").toBe(403);
     expect((posted.body as Problem).code).toBe("FORBIDDEN");
 
-    await page.goto(CONSOLE);
+    await goto(page, CONSOLE);
     await settle(page);
     await expectCode(page.getByRole("region", { name: "Awaiting an operator", exact: true }), problem.code);
     await expectCode(page.getByRole("region", { name: "Circuit breakers", exact: true }), problem.code);
@@ -174,7 +210,7 @@ test.describe("the operator console", () => {
   });
 
   test("an operator reads the overview figure for figure", async ({ browser }) => {
-    const admin = await signIn(browser, "admin", true);
+    const admin = await session(browser, "admin", true);
     const response = await admin.page.request.get("/v1/advanced/ops/overview");
     expect(response.status()).toBe(200);
     const overview = (await response.json()) as Overview;
@@ -245,7 +281,7 @@ test.describe("the operator console", () => {
       expect(overview.chains_configured).toBe(false);
       await expectCode(venue, "UNSUPPORTED");
     }
-    await expect(venue).toContainText("the paper venue fills at the latest fresh reference mark");
+    await expect(venue).toContainText("The paper venue fills at the latest fresh reference mark");
 
     // Every subsystem's operator page is linked at a route that exists.
     const links = admin.page.getByRole("region", { name: "Operator pages", exact: true }).locator("a[href]");
@@ -255,11 +291,10 @@ test.describe("the operator console", () => {
       const href = (await links.nth(i).getAttribute("href")) ?? "";
       expect(href.startsWith("/advanced/"), href).toBe(true);
     }
-    await admin.context.close();
   });
 
   test("a reference mark is recorded through the page and appears among the asset's marks", async ({ page, browser }) => {
-    const admin = await signIn(browser, "admin", true);
+    const admin = await session(browser, "admin", true);
     const assetId = await simulatedAssetToMark(page, admin.page);
     test.skip(assetId === undefined, "this deployment offers no SIMULATED asset other than the sandbox dollar to mark");
     const asset = assetId as string;
@@ -296,8 +331,7 @@ test.describe("the operator console", () => {
     // An observation in the future is refused, through the same form, and nothing is recorded.
     await form.getByRole("button", { name: "Done", exact: true }).click();
     const future = new Date(Date.now() + 2 * 60 * 60 * 1000);
-    const local = `${String(future.getFullYear())}-${String(future.getMonth() + 1).padStart(2, "0")}-${String(future.getDate()).padStart(2, "0")}T${String(future.getHours()).padStart(2, "0")}:${String(future.getMinutes()).padStart(2, "0")}:00`;
-    await form.getByLabel("Observed at (optional)", { exact: true }).fill(local);
+    await form.getByLabel("Observed at (optional)", { exact: true }).fill(localMinute(future));
     await form.getByRole("button", { name: "Review: Record the mark", exact: true }).click();
     const [refused] = await Promise.all([
       admin.page.waitForResponse((r) => new URL(r.url()).pathname === MARKS_PATH && r.request().method() === "POST"),
@@ -313,11 +347,10 @@ test.describe("the operator console", () => {
     expect((tooFine.body as Problem).code).toBe("PRECISION_LOSS");
     const zero = await command(admin.page, MARKS_PATH, { asset_id: asset, price: "0", source });
     expect(zero.status, "a price must be positive").toBe(400);
-    await admin.context.close();
   });
 
   test("a mark of an asset that is not SIMULATED is refused", async ({ browser }) => {
-    const admin = await signIn(browser, "admin", true);
+    const admin = await session(browser, "admin", true);
     const assets = (await (await admin.page.request.get("/v1/assets")).json()) as Asset[];
     const real = assets.find((asset) => asset.kind !== "SIMULATED");
     test.skip(real === undefined, "the registry lists no asset that is not SIMULATED");
@@ -328,23 +361,27 @@ test.describe("the operator console", () => {
     });
     expect(refused.status, "only SIMULATED assets take a sandbox reference mark").toBe(403);
     expect((refused.body as Problem).code).toBe("FORBIDDEN");
-    const unknown = await command(admin.page, MARKS_PATH, { asset_id: randomUUID(), price: "1.25", source: "e2e" });
+    const unknown = await command(admin.page, MARKS_PATH, { asset_id: unknownId(), price: "1.25", source: "e2e" });
     expect(unknown.status, "an asset the registry does not hold").toBe(404);
-    await admin.context.close();
+    expect((unknown.body as Problem).code).toBe("NOT_FOUND");
+    // A malformed id is refused as such before anything is looked up.
+    const malformed = await command(admin.page, MARKS_PATH, { asset_id: randomUUID(), price: "1.25", source: "e2e" });
+    expect(malformed.status, "an id that is not a UUIDv7").toBe(400);
+    expect((malformed.body as Problem).code).toBe("VALIDATION_FAILED");
   });
 
   test("the bridge leg actions are refused to a customer, and an unknown leg is the backend's to name", async ({
     page,
     browser,
   }) => {
-    const unknown = randomUUID();
+    const unknown = unknownId();
     const actions = ["resume-relay", "resolve-review", "refund"] as const;
     for (const action of actions) {
       const refused = await command(page, `/v1/advanced/bridge/legs/${unknown}/${action}`, { reason: "a customer may not act on a leg" });
       expect(refused.status, `${action}: a customer holds no sandbox:operate`).toBe(403);
       expect((refused.body as Problem).code).toBe("FORBIDDEN");
     }
-    const admin = await signIn(browser, "admin", true);
+    const admin = await session(browser, "admin", true);
     for (const action of actions) {
       const answer = await command(admin.page, `/v1/advanced/bridge/legs/${unknown}/${action}`, {
         reason: "end-to-end check of an unknown leg",
@@ -358,11 +395,10 @@ test.describe("the operator console", () => {
     // A reason is required: an empty one never reaches the service.
     const reasonless = await command(admin.page, `/v1/advanced/bridge/legs/${unknown}/refund`, { reason: "" });
     expect([400, 422]).toContain(reasonless.status);
-    await admin.context.close();
   });
 
   test("no dead controls on the console", async ({ browser }) => {
-    const admin = await signIn(browser, "admin", true);
+    const admin = await session(browser, "admin", true);
     await admin.page.goto(CONSOLE);
     await settle(admin.page);
     const buttons = admin.page.locator("main button");
@@ -378,6 +414,5 @@ test.describe("the operator console", () => {
     const text = await admin.page.locator("main").innerText();
     expect(text, "the console states sandbox prices, never a dollar figure").not.toMatch(/\$\s?[0-9]/);
     expect(text).not.toMatch(/\bcash\b/i);
-    await admin.context.close();
   });
 });
