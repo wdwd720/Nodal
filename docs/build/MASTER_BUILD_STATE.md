@@ -86,22 +86,34 @@ are not running here; nothing in the advanced work depends on them.
 - Demo: 8 scenarios (0, A, B, C, D, G, H, I), 79 checks; threat model complete (17 entries, cited tests
   machine-checked); restore drill at 758 (263 tables, 0 drift).
 
+- Later on 2026-10-08: treasury and fee API + UI (`d6c713f`, 00759: a house order exists only as a treasury
+  action); marketplace and sandbox runtime review-2 hardening (`55f7581`, 00757: performance from the books,
+  reference-priced notionals, bounded builds outside transactions, a sandbox budget, no self-clearance; paper
+  follows fill on the order book's paper venue); delegated authority API + UI (`f3f6d58`; agents stay off HTTP);
+  `docs/reviews/ADVANCED_SYSTEMS_REVIEW.md` (`a982e27`: all 27 findings of reviews 1 and 2 fixed).
+- The advanced portfolio API and page (`3974f6a`); upkeep robustness (`79aa241`, 00760: per-item isolation with a
+  backoff ledger, network filtering, converging MATCHED records, BOOK_JOURNAL and TRANSFERS kinds; settlement runs
+  and stable passes report per-item failures); the agent runtime acting under delegated authority in-process
+  (`73cd86e`, through `delegation.AgentAdmission`, which can only admit). `internal/orders` and
+  `internal/delegation` are in `test/reachability`. Restore drill at 760: 269 tables, 0 drift.
+- Review 3, the red team of the integrated system at `a982e27`: one Medium and four Low findings, four
+  observations; no High.
+
 ## In flight (isolated worktrees, merged by the integrator)
 
-Treasury/fees API + UI (with 00759: a house order exists only as a treasury action); delegated authority API +
-UI (agents stay off HTTP — they act in-process); marketplace + sandbox runtime review-2 hardening (00757, and
-the order book's paper venue as the marketplace's executor); upkeep robustness (00760: per-item isolation in
-batch upkeep, network filtering, reconciliation record convergence, dedicated reconciliation kinds).
+The fee ledger wired into the subsystems that charge fees (margin, orders, treasury); delegated authority
+hardening from the red team (00762: a swap's action label must match its direction of value, a disabled strategy
+version stops delegated actions, fair execute-pending runs, venues never backed by a treasury book); the other
+red-team fixes (00763: strategy builds bounded on disk, confirmation-needing routes never executed, supply-controlled
+assets only through issuance, the order book proof compares trades and postings); `docs/portfolio/TECHNICAL_EVIDENCE.md`.
 
 ## Next exact work
 
-1. Merge the four lanes; orders joins `test/reachability` once the paper venue has its caller.
-2. Agent runtime ↔ delegated authority (the agent emitter requests delegated swaps in-process); a portfolio
-   page; the fee ledger wired into the subsystems that charge fees.
-3. Demo Scenarios E (strategy sandbox) and F (delegation).
-4. A red-team review of the integrated system, its fixes, then the three reviews (`docs/reviews/`), README,
-   `docs/portfolio/TECHNICAL_EVIDENCE.md`, `ADVANCED_TEST_EVIDENCE.md` refreshed from one full run at one commit,
-   traceability, a recorded performance run on an idle machine, the Playwright suite against a live API.
+1. Merge the four lanes; write `docs/reviews/SECURITY_RED_TEAM.md` with every finding's fix and regression test.
+2. Demo Scenarios E (strategy sandbox) and F (delegated agent).
+3. `docs/reviews/PORTFOLIO_CLAIMS_REVIEW.md` (an independent reviewer), the README, `ADVANCED_TEST_EVIDENCE.md`
+   refreshed from one full run at one commit, traceability, a recorded performance run on an idle machine, the
+   Playwright suite against a live API.
 
 ## Verification commands that matter for this goal
 
