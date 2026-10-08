@@ -12,6 +12,9 @@
  *   - another account's shares are refused before any market is looked up,
  *     an unknown market is NOT_FOUND, and a fraction of a complete set is
  *     VALIDATION_FAILED;
+ *   - a void is two operators' act (proposal, then approval) and a customer
+ *     is refused both; a held payout is claimed only on the caller's own
+ *     account, and a market that holds none answers NOT_FOUND;
  *   - where a market exists, its books, the account's shares and the
  *     complete-set form are drawn from the backend's answers.
  *
@@ -178,6 +181,16 @@ test.describe("prediction markets (sandbox)", () => {
     }
     const resolved = await post(page, `/v1/advanced/prediction-markets/${target}/resolve`, {});
     expect(resolved.status).toBe(403);
+    // A void is two operators' act: a customer can neither propose one nor approve one.
+    const proposed = await post(page, `/v1/advanced/prediction-markets/${target}/void-proposals`, {
+      reason: "a customer would like this market voided",
+      evidence: { statement: "none" },
+    });
+    expect(proposed.status, "proposing a void is an operator action").toBe(403);
+    expect(isProblem(proposed.body) && proposed.body.code).toBe("FORBIDDEN");
+    const approved = await post(page, `/v1/advanced/prediction-markets/${target}/void-proposals/${unknownId()}/approve`, {});
+    expect(approved.status, "approving a void is an operator action").toBe(403);
+    expect(isProblem(approved.body) && approved.body.code).toBe("FORBIDDEN");
 
     await page.goto(LIST);
     await settle(page);
@@ -225,6 +238,34 @@ test.describe("prediction markets (sandbox)", () => {
       quantity: "1000000",
     });
     expect(foreign.status, "a set is only ever issued on the caller's own account").toBe(403);
+  });
+
+  test("a held payout is claimed only on the caller's own account, and only where the market holds one", async ({ page }) => {
+    const own = await accountId(page);
+    const foreign = await post(page, `/v1/advanced/prediction-markets/${unknownId()}/held-payouts/claim`, {
+      account_id: unknownId(),
+    });
+    expect(foreign.status, "a payout is claimed only by the account it is held for").toBe(403);
+    expect(isProblem(foreign.body) && foreign.body.code).toBe("FORBIDDEN");
+
+    const nowhere = await post(page, `/v1/advanced/prediction-markets/${unknownId()}/held-payouts/claim`, { account_id: own });
+    expect(nowhere.status, "the caller's own account on a market that does not exist").toBe(404);
+    expect(isProblem(nowhere.body) && nowhere.body.code).toBe("NOT_FOUND");
+
+    const market = await anyMarket(page);
+    if (market === undefined) return;
+    const shares = (await (
+      await page.request.get(`/v1/advanced/prediction-markets/${market.id}/positions?account_id=${own}`)
+    ).json()) as { held_payout?: { claimed: boolean } };
+    if (shares.held_payout === undefined) {
+      // The market holds nothing for this account, and says so when asked.
+      const none = await post(page, `/v1/advanced/prediction-markets/${market.id}/held-payouts/claim`, { account_id: own });
+      expect(none.status).toBe(404);
+      expect(isProblem(none.body) && none.body.code).toBe("NOT_FOUND");
+      await page.goto(`${LIST}/${market.id}`);
+      await settle(page);
+      await expect(page.getByRole("region", { name: "Held payout", exact: true })).toHaveCount(0);
+    }
   });
 
   test("a market's page draws its books, the account's shares and the set form from the backend", async ({ page }) => {
