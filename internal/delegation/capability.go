@@ -291,6 +291,12 @@ const (
 	// ReasonActionMismatch: the swap's action label is not what the swap
 	// does (SwapAction).
 	ReasonActionMismatch = "DELEGATION_ACTION_MISMATCH"
+	// ReasonSignerKeyNotRegistered: the account has no delegated wallet key
+	// registered on the chain, so there is no wallet for an admission to
+	// plan from. The key is registered when the account's owner grants a
+	// capability on that chain (Service.GrantCapability); an admission
+	// derives and registers nothing.
+	ReasonSignerKeyNotRegistered = "DELEGATION_SIGNER_KEY_NOT_REGISTERED"
 )
 
 // Use is one use of a capability the caller asks to make, with the usage

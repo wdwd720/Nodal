@@ -28,7 +28,7 @@ const ReasonNetworkUnrecorded = "DELEGATION_NETWORK_UNRECORDED"
 
 // Network is the devnet network this service's host carries: the one its
 // swaps and withdrawals are admitted, signed, submitted and observed on.
-func (s *Service) Network() string { return s.host.Config().Network }
+func (s *admitter) Network() string { return s.chain.Config().Network }
 
 // requireNetwork refuses, without changing anything, to sign, submit or
 // observe a subject of another network -- or one whose network was never

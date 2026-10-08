@@ -105,15 +105,38 @@
 // The DelegatedSigner derives each account's Ed25519 devnet key per chain
 // from one master seed it holds (HMAC-SHA256, domain-separated), so nothing
 // secret is stored and a restart with the same seed recovers every key. Only
-// public keys are registered (delegated_signer_keys). No method returns,
-// logs or formats a private key or seed; every signer formats as its public
-// key or its name.
+// public keys are registered (delegated_signer_keys), and they are
+// registered by the account owner's grant (GrantCapability): on every chain
+// the capability allows, in the grant's own transaction, in the process that
+// holds the signer -- and a key already registered that the signer does not
+// derive refuses the grant. No method returns, logs or formats a private key
+// or seed; every signer formats as its public key or its name.
+//
+// # An admission holds no key
+//
+// A Service is an admitter -- the half that admits: RequestSwap,
+// ProposeWithdrawal, the agent's authentication and the capability reads --
+// with the delegated signer, the venue co-signers and the chain's write side.
+// The admitter holds no key, by its type: it plans from the delegated wallet
+// key the grant registered and refuses an account with none on the chain
+// (ReasonSignerKeyNotRegistered), before anything is recorded; it counts a
+// venue able to co-sign when the venue's house book is ACTIVE and its
+// co-signer's public key -- the address the venue was registered at -- is
+// registered; it holds a swap's slippage bound to the signing policy; and it
+// only reads the chain (ChainReader). The agent runtime's facade
+// (AgentAdmission) holds an admitter alone, so the agent worker holds no
+// private key material. The processes that sign (cmd/api, cmd/advanced-worker)
+// keep the real signer and co-signers and check them again before anything
+// is signed (ReasonSignerKeyMismatch, ReasonVenueSignerUnavailable).
 //
 // # What this package must never do
 //
 //   - Let an agent sign, see a key, apply an effect, post to the ledger,
 //     approve a withdrawal, or create, widen, extend or re-target a
 //     capability.
+//   - Let an admission derive or register a key, or hand the agent's side a
+//     signer, a co-signer or a seed: AgentAdmission takes none and holds
+//     none.
 //   - Sign anything the inspector has not proved is exactly the persisted
 //     plan, sign twice for one swap or withdrawal, or trust any caller input
 //     beyond identifiers and the bytes to be signed.

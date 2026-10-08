@@ -21,20 +21,26 @@
 // refuses to execute LIVE runs when it is anything other than ACTIVE; it has
 // no code path that can change it.
 //
-// The worker signs nothing. Its money-adjacent writes are proposals: a trade
-// intent, which the rest of the platform then validates, risk-checks,
-// reserves capital for and executes independently; and, when the sandbox
-// chain is configured (CP_SANDBOX_DEVNET_NETWORK, CP_SANDBOX_DEVNET_SEED_REF),
-// an agent's delegated swap request or withdrawal proposal under a capability
-// its account's owner granted. For those it builds the admission facade
-// (delegation.NewAgentAdmission) from the sandbox seed exactly as cmd/api
-// derives the delegated signer and the venue co-signers -- the facade needs
-// the delegated wallet's address and the venues' co-signers to judge a
-// request -- and hands the derived seeds straight to it: the worker holds no
-// signer, and nothing it holds can sign, submit, settle or decide. The owner's
-// decision, the operator's execute-pending route and the advanced worker's
-// delegation upkeep carry an admitted request further. Without a sandbox
-// chain no agent is offered a delegated tool, and every run is told why.
+// The worker signs nothing, and holds no private key material: no seed, no
+// key, no signer and no venue co-signer. Its money-adjacent writes are
+// proposals: a trade intent, which the rest of the platform then validates,
+// risk-checks, reserves capital for and executes independently; and, when the
+// sandbox chain is configured (CP_SANDBOX_DEVNET_NETWORK), an agent's
+// delegated swap request or withdrawal proposal under a capability its
+// account's owner granted. For those it builds the admission facade
+// (delegation.NewAgentAdmission) from the deployment's settings and the
+// sandbox chain opened for reading only, without its seed: the host replays
+// the network's recorded history under the attester public key its genesis
+// names, and refuses to write anything. The facade plans from the delegated
+// wallet's public key, registered when the account's owner granted the
+// capability (in cmd/api, which holds the signer), and counts a venue able to
+// co-sign when its house book is ACTIVE and its co-signer's public key is
+// registered. The worker never reads CP_SANDBOX_DEVNET_SEED_REF: the
+// configuration loader is not shown it, and the worker warns when its
+// environment carries it. The owner's decision, the operator's execute-pending
+// route (cmd/api) and the advanced worker's delegation upkeep carry an
+// admitted request further, with the real keys. Without a sandbox chain no
+// agent is offered a delegated tool, and every run is told why.
 //
 // Exit codes: 0 success, 1 failure, 2 usage error.
 package main
@@ -182,10 +188,12 @@ environment variable can enable it.
 
 Delegated authority (an agent's delegated swap requests and withdrawal
 proposals, PAPER runs only) is wired when the sandbox chain is configured:
-CP_SANDBOX_DEVNET_NETWORK and CP_SANDBOX_DEVNET_SEED_REF, the same values
-cmd/api uses. Without them no agent is offered a delegated tool. Requests are
-admitted against the gates of CP_API_ENABLED_CAPABILITIES and routed by
-CP_API_LEGAL_POLICY, read as cmd/api reads them.
+CP_SANDBOX_DEVNET_NETWORK, the network cmd/api opens, which this worker only
+reads. The worker holds no seed and never reads CP_SANDBOX_DEVNET_SEED_REF;
+leave it out of this binary's environment. Without the network no agent is
+offered a delegated tool. Requests are admitted against the gates of
+CP_API_ENABLED_CAPABILITIES and routed by CP_API_LEGAL_POLICY, read as
+cmd/api reads them.
 `, envTickInterval, defaultTickInterval, envResolveInterval, defaultResolveInterval, envBatch, defaultBatch)
 }
 
@@ -200,12 +208,18 @@ func wire(ctx context.Context, lookup func(string) (string, bool), stderr io.Wri
 			return inner(k)
 		}
 	}
-	cfg, err := config.Load(ctx, config.ServiceAgentWorker, lookup)
+	// The configuration loader never sees the sandbox chain's seed reference;
+	// the network is read beside it (sandboxNetworkOnly).
+	cfg, sandboxNetwork, seedOffered, err := loadWorkerConfig(ctx, lookup)
 	if err != nil {
 		return nil, err
 	}
 	log := observability.NewLogger(cfg.Env, stderr).
 		With("service", "agent-worker", "build_version", cfg.BuildVersion, "env", cfg.Env)
+	if seedOffered {
+		log.Warn("this binary never reads the sandbox chain's seed: remove its reference from the agent worker's environment",
+			"variable", envSandboxSeedRef)
+	}
 	resolverCfg := config.NewResolver(cfg.Env, lookup)
 	dbURL, err := resolverCfg.Resolve(ctx, cfg.Database.AppURL)
 	if err != nil {
@@ -255,8 +269,9 @@ func wire(ctx context.Context, lookup func(string) (string, bool), stderr io.Wri
 	}
 
 	// Delegated authority, when the sandbox chain is configured: the
-	// admission facade and nothing more (see wireDelegation).
-	admission, delegatedReason, err := wireDelegation(ctx, cfg, resolverCfg, database, clk)
+	// admission facade over the chain read without its seed, and nothing
+	// more (see wireDelegation).
+	admission, delegatedReason, err := wireDelegation(ctx, cfg, sandboxNetwork, database, clk)
 	if err != nil {
 		database.Close()
 		return nil, err
@@ -265,7 +280,7 @@ func wire(ctx context.Context, lookup func(string) (string, bool), stderr io.Wri
 		log.Warn("delegated authority is not wired", "reason", delegatedReason)
 	} else {
 		log.Info("delegated authority is wired: agents holding a capability may request delegated swaps and propose withdrawals",
-			"network", cfg.Sandbox.DevnetNetwork)
+			"network", sandboxNetwork)
 	}
 
 	// The evaluator, the tool adapters and the model provider are attached by

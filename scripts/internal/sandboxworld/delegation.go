@@ -37,9 +37,12 @@ import (
 // its co-signer's address, on a LIQUIDITY_PROVISION house book of its own.
 //
 // The agent's side is cmd/agent-worker's (wireDelegation): the admission
-// facade (delegation.NewAgentAdmission), built from the same seed and the
-// registered venues' co-signer seeds, which is all of delegated authority an
-// agent tree may hold. It admits; it never signs, decides or settles.
+// facade (delegation.NewAgentAdmission), built from the world's settings and
+// its chain, read only, and no seed or key -- all of delegated authority an
+// agent tree may hold. It plans from the delegated wallet key the owner's
+// grant registered through the platform's service, counts a venue able to
+// co-sign from its registration, and admits; it never signs, decides or
+// settles.
 type Delegation struct {
 	Service   *delegation.Service
 	Admission *delegation.AgentAdmission
@@ -84,42 +87,15 @@ func (w *World) OpenDelegation(ctx context.Context) (*Delegation, error) {
 		venues[0]); err != nil {
 		return nil, fmt.Errorf("sandboxworld: register the sandbox venue: %w", err)
 	}
-	names, err := registeredVenueNames(ctx, w)
-	if err != nil {
-		return nil, err
-	}
-	seeds := make(map[string][devnet.SeedSize]byte, len(names))
-	for _, name := range names {
-		seeds[name] = seed.VenueSeed(name)
-	}
-	// No capability is enabled by configuration and the legal router is the
+	// The agent's side takes the settings and the chain, and no seed: no
+	// capability is enabled by configuration and the legal router is the
 	// conservative one, as for every other service of the world.
 	if d.Admission, err = delegation.NewAgentAdmission(delegation.AdmissionConfig{
-		DB: w.DB, Clock: w.Clock, Environment: w.Env, Host: w.Host, BuildVersion: w.component,
-		SignerSeed: seed.Derive(sandboxchain.PurposeDelegatedSigner), VenueSeeds: seeds,
+		Clock: w.Clock, Environment: w.Env, Host: w.Host, BuildVersion: w.component,
 	}); err != nil {
 		return nil, fmt.Errorf("sandboxworld: delegated authority admission: %w", err)
 	}
 	return d, nil
-}
-
-// registeredVenueNames reads the registered delegation venues by name, as
-// cmd/agent-worker does: the agent's side co-signs for exactly those.
-func registeredVenueNames(ctx context.Context, w *World) ([]string, error) {
-	rows, err := w.DB.Query(ctx, `SELECT name FROM delegation_venues ORDER BY name`)
-	if err != nil {
-		return nil, fmt.Errorf("sandboxworld: delegation venues: %w", err)
-	}
-	defer rows.Close()
-	var out []string
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return nil, fmt.Errorf("sandboxworld: delegation venues: %w", err)
-		}
-		out = append(out, name)
-	}
-	return out, rows.Err()
 }
 
 // Sandbox tokens. A delegated swap moves devnet tokens: the delegated wallet
