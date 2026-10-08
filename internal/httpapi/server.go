@@ -84,6 +84,9 @@ type Ports struct {
 	// >>> advanced:bridge port
 
 	// >>> advanced:predmarket port
+	// PredictionMarkets serves prediction markets (internal/predmarket);
+	// every figure it returns is value domain SIMULATED.
+	PredictionMarkets PredictionMarketsPort
 
 	// >>> advanced:marketplace port
 

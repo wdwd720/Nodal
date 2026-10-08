@@ -1495,6 +1495,96 @@ func (e PayoutRequestState) Valid() bool {
 	}
 }
 
+// Defines values for PredictionMarketMode.
+const (
+	PredictionMarketModePAPER   PredictionMarketMode = "PAPER"
+	PredictionMarketModeSANDBOX PredictionMarketMode = "SANDBOX"
+)
+
+// Valid indicates whether the value is a known member of the PredictionMarketMode enum.
+func (e PredictionMarketMode) Valid() bool {
+	switch e {
+	case PredictionMarketModePAPER:
+		return true
+	case PredictionMarketModeSANDBOX:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PredictionOracleKind.
+const (
+	PredictionOracleKindSANDBOX PredictionOracleKind = "SANDBOX"
+)
+
+// Valid indicates whether the value is a known member of the PredictionOracleKind enum.
+func (e PredictionOracleKind) Valid() bool {
+	switch e {
+	case PredictionOracleKindSANDBOX:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PredictionResolutionKind.
+const (
+	DISPUTEOVERTURNED PredictionResolutionKind = "DISPUTE_OVERTURNED"
+	DISPUTEUPHELD     PredictionResolutionKind = "DISPUTE_UPHELD"
+	ORACLE            PredictionResolutionKind = "ORACLE"
+)
+
+// Valid indicates whether the value is a known member of the PredictionResolutionKind enum.
+func (e PredictionResolutionKind) Valid() bool {
+	switch e {
+	case DISPUTEOVERTURNED:
+		return true
+	case DISPUTEUPHELD:
+		return true
+	case ORACLE:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PredictionRoundingPolicy.
+const (
+	EXACT          PredictionRoundingPolicy = "EXACT"
+	FLOORPERHOLDER PredictionRoundingPolicy = "FLOOR_PER_HOLDER"
+)
+
+// Valid indicates whether the value is a known member of the PredictionRoundingPolicy enum.
+func (e PredictionRoundingPolicy) Valid() bool {
+	switch e {
+	case EXACT:
+		return true
+	case FLOORPERHOLDER:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PredictionSetAction.
+const (
+	ISSUE  PredictionSetAction = "ISSUE"
+	REDEEM PredictionSetAction = "REDEEM"
+)
+
+// Valid indicates whether the value is a known member of the PredictionSetAction enum.
+func (e PredictionSetAction) Valid() bool {
+	switch e {
+	case ISSUE:
+		return true
+	case REDEEM:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PrincipalActorType.
 const (
 	PrincipalActorTypeOPERATOR PrincipalActorType = "OPERATOR"
@@ -2610,6 +2700,27 @@ type CreatePayoutRequest struct {
 
 	// DestinationId UUIDv7 in canonical form
 	DestinationId *UUID `json:"destination_id,omitempty"`
+}
+
+// CreatePredictionMarketRequest defines model for CreatePredictionMarketRequest.
+type CreatePredictionMarketRequest struct {
+	CloseAt Timestamp `json:"close_at"`
+
+	// DisputeWindowMs Whole milliseconds within 0..30 days
+	DisputeWindowMs int64                `json:"dispute_window_ms"`
+	Mode            PredictionMarketMode `json:"mode"`
+	OpenAt          Timestamp            `json:"open_at"`
+
+	// OraclePublicKey hex Ed25519 public key (64 hex characters)
+	OraclePublicKey string `json:"oracle_public_key"`
+	OracleSource    string `json:"oracle_source"`
+
+	// Outcomes 2..64 distinct symbols of 1..24 of A-Z 0-9 _ -
+	Outcomes []string `json:"outcomes"`
+	Question string   `json:"question"`
+
+	// Symbol 1..32 of A-Z 0-9 _ -, starting alphanumeric
+	Symbol string `json:"symbol"`
 }
 
 // CreditBalance The breakdown PART XX requires. gross is every remaining unit; payout_eligible is what the named policy version permits to be withdrawn right now. They are different numbers and the product must never show one where it means the other.
@@ -3836,6 +3947,507 @@ type PayoutRequestPage struct {
 	Items []PayoutRequest `json:"items"`
 }
 
+// PredictionActor defines model for PredictionActor.
+type PredictionActor struct {
+	ActorId   string `json:"actor_id"`
+	ActorType string `json:"actor_type"`
+}
+
+// PredictionBookOutcome defines model for PredictionBookOutcome.
+type PredictionBookOutcome struct {
+	// HeldByCustomers Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	HeldByCustomers Quantity `json:"held_by_customers"`
+	Index           int      `json:"index"`
+
+	// ShareAssetId UUIDv7 in canonical form
+	ShareAssetId UUID `json:"share_asset_id"`
+
+	// SharesIssued Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	SharesIssued Quantity `json:"shares_issued"`
+
+	// SharesOutstanding Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	SharesOutstanding Quantity `json:"shares_outstanding"`
+	Symbol            string   `json:"symbol"`
+}
+
+// PredictionDispute defines model for PredictionDispute.
+type PredictionDispute struct {
+	EvidenceRef    string `json:"evidence_ref"`
+	EvidenceSha256 string `json:"evidence_sha256"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// MarketId UUIDv7 in canonical form
+	MarketId UUID            `json:"market_id"`
+	RaisedAt Timestamp       `json:"raised_at"`
+	RaisedBy PredictionActor `json:"raised_by"`
+	Reason   string          `json:"reason"`
+
+	// ResolutionId UUIDv7 in canonical form
+	ResolutionId UUID `json:"resolution_id"`
+}
+
+// PredictionDisputeRequest defines model for PredictionDisputeRequest.
+type PredictionDisputeRequest struct {
+	Evidence map[string]interface{} `json:"evidence"`
+
+	// Reason 8..2000 characters
+	Reason string `json:"reason"`
+}
+
+// PredictionDisputeResult defines model for PredictionDisputeResult.
+type PredictionDisputeResult struct {
+	Dispute PredictionDispute `json:"dispute"`
+	Market  PredictionMarket  `json:"market"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// PredictionEscrowBooks defines model for PredictionEscrowBooks.
+type PredictionEscrowBooks struct {
+	// Collateral Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Collateral Quantity `json:"collateral"`
+
+	// CollateralAssetId UUIDv7 in canonical form
+	CollateralAssetId  UUID   `json:"collateral_asset_id"`
+	CollateralDecimals int    `json:"collateral_decimals"`
+	CollateralSymbol   string `json:"collateral_symbol"`
+
+	// Escrow Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Escrow Quantity `json:"escrow"`
+
+	// MarketId UUIDv7 in canonical form
+	MarketId UUID `json:"market_id"`
+
+	// MarketStatus One of DRAFT, OPEN, CLOSED, RESOLVING, RESOLVED, DISPUTED, SETTLED, VOIDED. DRAFT → OPEN → CLOSED → RESOLVING → RESOLVED → SETTLED; RESOLVED → DISPUTED → RESOLVED or VOIDED; any state but SETTLED and VOIDED → VOIDED. Declared without an enum on purpose: its values are shared with other schemas' enums, and a shared enum value renames the generated constants of every schema that holds it.
+	MarketStatus PredictionMarketStatus  `json:"market_status"`
+	Outcomes     []PredictionBookOutcome `json:"outcomes"`
+
+	// Reconciles True when the books satisfy escrow = collateral = outstanding(i) + residual and issued(i) = outstanding(i) = held(i)
+	Reconciles bool `json:"reconciles"`
+
+	// Residual The residual the market's settlement record discloses; zero without one
+	//
+	// Examples: 1500000000
+	Residual      Quantity `json:"residual"`
+	ShareDecimals int      `json:"share_decimals"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+	Violations  []string             `json:"violations"`
+}
+
+// PredictionEscrowReconciliation defines model for PredictionEscrowReconciliation.
+type PredictionEscrowReconciliation struct {
+	BlocksNewRisk bool                   `json:"blocks_new_risk"`
+	Difference    map[string]interface{} `json:"difference"`
+	Expected      map[string]interface{} `json:"expected"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// Kind PREDICTION_ESCROW
+	Kind      string     `json:"kind"`
+	MatchedAt *Timestamp `json:"matched_at,omitempty"`
+	Material  bool       `json:"material"`
+
+	// Mode EVENT_DRIVEN, PERIODIC or FULL
+	Mode      string                 `json:"mode"`
+	Observed  map[string]interface{} `json:"observed"`
+	OpenedAt  Timestamp              `json:"opened_at"`
+	ScopeId   string                 `json:"scope_id"`
+	ScopeType string                 `json:"scope_type"`
+
+	// Status OPEN, MATCHED, MISMATCH, INVESTIGATING, RESOLVED_AUTOMATIC, RESOLVED_MANUAL or ESCALATED
+	Status string `json:"status"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// PredictionMarket defines model for PredictionMarket.
+type PredictionMarket struct {
+	CloseAt Timestamp `json:"close_at"`
+
+	// CollateralAssetId UUIDv7 in canonical form
+	CollateralAssetId  UUID            `json:"collateral_asset_id"`
+	CollateralDecimals int             `json:"collateral_decimals"`
+	CollateralSymbol   string          `json:"collateral_symbol"`
+	CreatedAt          Timestamp       `json:"created_at"`
+	CreatedBy          PredictionActor `json:"created_by"`
+
+	// CurrentResolutionId UUIDv7 in canonical form
+	CurrentResolutionId *UUID `json:"current_resolution_id,omitempty"`
+
+	// DefinitionHash hex sha256 of the canonical definition
+	DefinitionHash  string `json:"definition_hash"`
+	DisputeWindowMs int64  `json:"dispute_window_ms"`
+
+	// FacilityId The PREDICTION_MARKET facility whose books are the market's escrow
+	FacilityId UUID `json:"facility_id"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// InstrumentId UUIDv7 in canonical form
+	InstrumentId UUID                 `json:"instrument_id"`
+	Mode         PredictionMarketMode `json:"mode"`
+	OpenAt       Timestamp            `json:"open_at"`
+
+	// OraclePublicKey hex Ed25519 public key the market accepts reports from
+	OraclePublicKey string              `json:"oracle_public_key"`
+	OracleSource    string              `json:"oracle_source"`
+	Outcomes        []PredictionOutcome `json:"outcomes"`
+	Question        string              `json:"question"`
+	ShareDecimals   int                 `json:"share_decimals"`
+
+	// Status One of DRAFT, OPEN, CLOSED, RESOLVING, RESOLVED, DISPUTED, SETTLED, VOIDED. DRAFT → OPEN → CLOSED → RESOLVING → RESOLVED → SETTLED; RESOLVED → DISPUTED → RESOLVED or VOIDED; any state but SETTLED and VOIDED → VOIDED. Declared without an enum on purpose: its values are shared with other schemas' enums, and a shared enum value renames the generated constants of every schema that holds it.
+	Status PredictionMarketStatus `json:"status"`
+	Symbol string                 `json:"symbol"`
+
+	// UnitQuantity Collateral base units one complete set costs and one winning share pays
+	//
+	// Examples: 1500000000
+	UnitQuantity Quantity  `json:"unit_quantity"`
+	UpdatedAt    Timestamp `json:"updated_at"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// PredictionMarketDetail defines model for PredictionMarketDetail.
+type PredictionMarketDetail struct {
+	// Disputes Oldest first
+	Disputes []PredictionDispute `json:"disputes"`
+	Market   PredictionMarket    `json:"market"`
+
+	// Resolutions Oldest first
+	Resolutions []PredictionResolution `json:"resolutions"`
+
+	// Settlement Absent until the market settles or is voided
+	Settlement *PredictionSettlement `json:"settlement,omitempty"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// PredictionMarketList defines model for PredictionMarketList.
+type PredictionMarketList struct {
+	Items []PredictionMarket `json:"items"`
+
+	// Status One of DRAFT, OPEN, CLOSED, RESOLVING, RESOLVED, DISPUTED, SETTLED, VOIDED. DRAFT → OPEN → CLOSED → RESOLVING → RESOLVED → SETTLED; RESOLVED → DISPUTED → RESOLVED or VOIDED; any state but SETTLED and VOIDED → VOIDED. Declared without an enum on purpose: its values are shared with other schemas' enums, and a shared enum value renames the generated constants of every schema that holds it.
+	Status PredictionMarketStatus `json:"status"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// PredictionMarketMode defines model for PredictionMarketMode.
+type PredictionMarketMode string
+
+// PredictionMarketStatus One of DRAFT, OPEN, CLOSED, RESOLVING, RESOLVED, DISPUTED, SETTLED, VOIDED. DRAFT → OPEN → CLOSED → RESOLVING → RESOLVED → SETTLED; RESOLVED → DISPUTED → RESOLVED or VOIDED; any state but SETTLED and VOIDED → VOIDED. Declared without an enum on purpose: its values are shared with other schemas' enums, and a shared enum value renames the generated constants of every schema that holds it.
+type PredictionMarketStatus = string
+
+// PredictionOracle defines model for PredictionOracle.
+type PredictionOracle struct {
+	Kind PredictionOracleKind `json:"kind"`
+
+	// PublicKey hex Ed25519 public key
+	PublicKey string `json:"public_key"`
+	Source    string `json:"source"`
+}
+
+// PredictionOracleKind defines model for PredictionOracle.Kind.
+type PredictionOracleKind string
+
+// PredictionOracleObservation defines model for PredictionOracleObservation.
+type PredictionOracleObservation struct {
+	Report     PredictionOracleReport `json:"report"`
+	ReportHash string                 `json:"report_hash"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// PredictionOracleObservationRequest defines model for PredictionOracleObservationRequest.
+type PredictionOracleObservationRequest struct {
+	// Evidence The source document the oracle saw (1..16384 bytes); its sha256 is signed
+	Evidence   string    `json:"evidence"`
+	ObservedAt Timestamp `json:"observed_at"`
+	Outcome    string    `json:"outcome"`
+}
+
+// PredictionOracleReport defines model for PredictionOracleReport.
+type PredictionOracleReport struct {
+	// Evidence standard base64
+	Evidence string `json:"evidence"`
+	MarketId string `json:"market_id"`
+
+	// ObservedAt RFC 3339 in UTC
+	ObservedAt string `json:"observed_at"`
+	Outcome    string `json:"outcome"`
+
+	// Signature standard base64 Ed25519 signature
+	Signature string `json:"signature"`
+	Source    string `json:"source"`
+}
+
+// PredictionOutcome defines model for PredictionOutcome.
+type PredictionOutcome struct {
+	Index int `json:"index"`
+
+	// InstrumentId The outcome's EVENT_OUTCOME instrument for the internal order book
+	InstrumentId UUID `json:"instrument_id"`
+
+	// ShareAssetId UUIDv7 in canonical form
+	ShareAssetId UUID   `json:"share_asset_id"`
+	Symbol       string `json:"symbol"`
+}
+
+// PredictionPayoutLine defines model for PredictionPayoutLine.
+type PredictionPayoutLine struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// Amount Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Amount Quantity `json:"amount"`
+
+	// IntentId UUIDv7 in canonical form
+	IntentId UUID `json:"intent_id"`
+
+	// JournalTransactionId UUIDv7 in canonical form
+	JournalTransactionId *UUID                  `json:"journal_transaction_id,omitempty"`
+	Shares               []PredictionShareCount `json:"shares"`
+}
+
+// PredictionPosition defines model for PredictionPosition.
+type PredictionPosition struct {
+	AsOf          Timestamp `json:"as_of"`
+	OutcomeIndex  int       `json:"outcome_index"`
+	OutcomeSymbol string    `json:"outcome_symbol"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity Quantity `json:"quantity"`
+
+	// ShareAssetId UUIDv7 in canonical form
+	ShareAssetId UUID `json:"share_asset_id"`
+}
+
+// PredictionPositionList defines model for PredictionPositionList.
+type PredictionPositionList struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID                 `json:"account_id"`
+	Items     []PredictionPosition `json:"items"`
+
+	// MarketId UUIDv7 in canonical form
+	MarketId      UUID `json:"market_id"`
+	ShareDecimals int  `json:"share_decimals"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// PredictionResolution defines model for PredictionResolution.
+type PredictionResolution struct {
+	AcceptedAt Timestamp       `json:"accepted_at"`
+	AcceptedBy PredictionActor `json:"accepted_by"`
+
+	// DisputeId UUIDv7 in canonical form
+	DisputeId      *UUID  `json:"dispute_id,omitempty"`
+	EvidenceRef    string `json:"evidence_ref"`
+	EvidenceSha256 string `json:"evidence_sha256"`
+
+	// Id UUIDv7 in canonical form
+	Id   UUID                     `json:"id"`
+	Kind PredictionResolutionKind `json:"kind"`
+
+	// MarketId UUIDv7 in canonical form
+	MarketId      UUID   `json:"market_id"`
+	OutcomeIndex  int    `json:"outcome_index"`
+	OutcomeSymbol string `json:"outcome_symbol"`
+	Reason        string `json:"reason"`
+
+	// ReportHash hex sha256 of the verified report's signed bytes and signature
+	ReportHash       *string    `json:"report_hash,omitempty"`
+	ReportObservedAt *Timestamp `json:"report_observed_at,omitempty"`
+	ReportSource     *string    `json:"report_source,omitempty"`
+
+	// SupersedesId UUIDv7 in canonical form
+	SupersedesId *UUID `json:"supersedes_id,omitempty"`
+}
+
+// PredictionResolutionKind defines model for PredictionResolutionKind.
+type PredictionResolutionKind string
+
+// PredictionResolutionResult defines model for PredictionResolutionResult.
+type PredictionResolutionResult struct {
+	Market PredictionMarket `json:"market"`
+
+	// Replay True when the report had already been accepted; nothing changed
+	Replay     bool                 `json:"replay"`
+	Resolution PredictionResolution `json:"resolution"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// PredictionResolveRequest defines model for PredictionResolveRequest.
+type PredictionResolveRequest struct {
+	Reason *string `json:"reason,omitempty"`
+}
+
+// PredictionRoundingPolicy defines model for PredictionRoundingPolicy.
+type PredictionRoundingPolicy string
+
+// PredictionRulingRequest defines model for PredictionRulingRequest.
+type PredictionRulingRequest struct {
+	Evidence *map[string]interface{} `json:"evidence,omitempty"`
+
+	// Reason 8..2000 characters
+	Reason string `json:"reason"`
+}
+
+// PredictionSetAction defines model for PredictionSetAction.
+type PredictionSetAction string
+
+// PredictionSetRequest defines model for PredictionSetRequest.
+type PredictionSetRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// Quantity Complete sets in share base units, a positive multiple of the market's unit_quantity
+	//
+	// Examples: 1500000000
+	Quantity Quantity `json:"quantity"`
+}
+
+// PredictionSetResult defines model for PredictionSetResult.
+type PredictionSetResult struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID                `json:"account_id"`
+	Action    PredictionSetAction `json:"action"`
+	Effect    *EconomicEffect     `json:"effect,omitempty"`
+	Intent    EconomicIntent      `json:"intent"`
+
+	// JournalTransactionId UUIDv7 in canonical form
+	JournalTransactionId *UUID `json:"journal_transaction_id,omitempty"`
+
+	// MarketId UUIDv7 in canonical form
+	MarketId UUID `json:"market_id"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity Quantity `json:"quantity"`
+
+	// Replay True when the economic intent already existed; nothing new happened
+	Replay           bool    `json:"replay"`
+	RiskDecisionHash *string `json:"risk_decision_hash,omitempty"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// PredictionSettlement defines model for PredictionSettlement.
+type PredictionSettlement struct {
+	// EscrowBefore Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	EscrowBefore   Quantity `json:"escrow_before"`
+	EvidenceRef    string   `json:"evidence_ref"`
+	EvidenceSha256 string   `json:"evidence_sha256"`
+	HolderCount    int      `json:"holder_count"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// Kind PAYOUT (a resolved market paid its winners) or REFUND (a void refunded every share); no enum, see PredictionMarketStatus
+	Kind PredictionSettlementKind `json:"kind"`
+
+	// MarketId UUIDv7 in canonical form
+	MarketId     UUID `json:"market_id"`
+	OutcomeCount int  `json:"outcome_count"`
+
+	// RefundRatePerShare Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	RefundRatePerShare *Quantity `json:"refund_rate_per_share,omitempty"`
+
+	// Residual What the escrow keeps; zero after a payout, disclosed after a refund
+	//
+	// Examples: 1500000000
+	Residual Quantity `json:"residual"`
+
+	// ResolutionId UUIDv7 in canonical form
+	ResolutionId   *UUID                    `json:"resolution_id,omitempty"`
+	RoundingPolicy PredictionRoundingPolicy `json:"rounding_policy"`
+	SettledAt      Timestamp                `json:"settled_at"`
+	SettledBy      PredictionActor          `json:"settled_by"`
+
+	// TotalPaid Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	TotalPaid Quantity `json:"total_paid"`
+
+	// UnitQuantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	UnitQuantity         Quantity `json:"unit_quantity"`
+	WinningOutcomeIndex  *int     `json:"winning_outcome_index,omitempty"`
+	WinningOutcomeSymbol *string  `json:"winning_outcome_symbol,omitempty"`
+}
+
+// PredictionSettlementKind PAYOUT (a resolved market paid its winners) or REFUND (a void refunded every share); no enum, see PredictionMarketStatus
+type PredictionSettlementKind = string
+
+// PredictionSettlementResult defines model for PredictionSettlementResult.
+type PredictionSettlementResult struct {
+	// Lines What this call paid, one line per holder; empty on a replay
+	Lines  []PredictionPayoutLine `json:"lines"`
+	Market PredictionMarket       `json:"market"`
+
+	// Replay True when the market had already settled (or been voided); nothing was paid
+	Replay     bool                 `json:"replay"`
+	Settlement PredictionSettlement `json:"settlement"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// PredictionShareCount defines model for PredictionShareCount.
+type PredictionShareCount struct {
+	OutcomeSymbol string `json:"outcome_symbol"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity Quantity `json:"quantity"`
+}
+
+// PredictionVoidRequest defines model for PredictionVoidRequest.
+type PredictionVoidRequest struct {
+	Evidence *map[string]interface{} `json:"evidence,omitempty"`
+
+	// Reason 8..2000 characters
+	Reason string `json:"reason"`
+}
+
 // Principal defines model for Principal.
 type Principal struct {
 	AccountIds       []UUID             `json:"account_ids"`
@@ -4534,6 +5146,95 @@ type GetAdvancedIntentsParams struct {
 	Limit     *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// GetAdvancedPredictionMarketsParams defines parameters for GetAdvancedPredictionMarkets.
+type GetAdvancedPredictionMarketsParams struct {
+	Status PredictionMarketStatus `form:"status" json:"status"`
+	Limit  *Limit                 `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PostAdvancedPredictionMarketsParams defines parameters for PostAdvancedPredictionMarkets.
+type PostAdvancedPredictionMarketsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedPredictionMarketsMarketIdCloseParams defines parameters for PostAdvancedPredictionMarketsMarketIdClose.
+type PostAdvancedPredictionMarketsMarketIdCloseParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedPredictionMarketsMarketIdDisputeParams defines parameters for PostAdvancedPredictionMarketsMarketIdDispute.
+type PostAdvancedPredictionMarketsMarketIdDisputeParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedPredictionMarketsMarketIdIssuancesParams defines parameters for PostAdvancedPredictionMarketsMarketIdIssuances.
+type PostAdvancedPredictionMarketsMarketIdIssuancesParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedPredictionMarketsMarketIdOpenParams defines parameters for PostAdvancedPredictionMarketsMarketIdOpen.
+type PostAdvancedPredictionMarketsMarketIdOpenParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedPredictionMarketsMarketIdOracleObservationsParams defines parameters for PostAdvancedPredictionMarketsMarketIdOracleObservations.
+type PostAdvancedPredictionMarketsMarketIdOracleObservationsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetAdvancedPredictionMarketsMarketIdPositionsParams defines parameters for GetAdvancedPredictionMarketsMarketIdPositions.
+type GetAdvancedPredictionMarketsMarketIdPositionsParams struct {
+	AccountId UUID `form:"account_id" json:"account_id"`
+}
+
+// PostAdvancedPredictionMarketsMarketIdReconcileParams defines parameters for PostAdvancedPredictionMarketsMarketIdReconcile.
+type PostAdvancedPredictionMarketsMarketIdReconcileParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedPredictionMarketsMarketIdRedemptionsParams defines parameters for PostAdvancedPredictionMarketsMarketIdRedemptions.
+type PostAdvancedPredictionMarketsMarketIdRedemptionsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedPredictionMarketsMarketIdRequestResolutionParams defines parameters for PostAdvancedPredictionMarketsMarketIdRequestResolution.
+type PostAdvancedPredictionMarketsMarketIdRequestResolutionParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedPredictionMarketsMarketIdResolveParams defines parameters for PostAdvancedPredictionMarketsMarketIdResolve.
+type PostAdvancedPredictionMarketsMarketIdResolveParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedPredictionMarketsMarketIdSettleParams defines parameters for PostAdvancedPredictionMarketsMarketIdSettle.
+type PostAdvancedPredictionMarketsMarketIdSettleParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedPredictionMarketsMarketIdUpholdParams defines parameters for PostAdvancedPredictionMarketsMarketIdUphold.
+type PostAdvancedPredictionMarketsMarketIdUpholdParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedPredictionMarketsMarketIdVoidParams defines parameters for PostAdvancedPredictionMarketsMarketIdVoid.
+type PostAdvancedPredictionMarketsMarketIdVoidParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // GetAdvancedRiskDecisionsParams defines parameters for GetAdvancedRiskDecisions.
 type GetAdvancedRiskDecisionsParams struct {
 	AccountId UUID   `form:"account_id" json:"account_id"`
@@ -4743,6 +5444,30 @@ type PostAdminKillSwitchesJSONRequestBody = KillSwitchRequest
 // PostAdminReconciliationRecordsRecordIdResolveJSONRequestBody defines body for PostAdminReconciliationRecordsRecordIdResolve for application/json ContentType.
 type PostAdminReconciliationRecordsRecordIdResolveJSONRequestBody = ReconciliationResolution
 
+// PostAdvancedPredictionMarketsJSONRequestBody defines body for PostAdvancedPredictionMarkets for application/json ContentType.
+type PostAdvancedPredictionMarketsJSONRequestBody = CreatePredictionMarketRequest
+
+// PostAdvancedPredictionMarketsMarketIdDisputeJSONRequestBody defines body for PostAdvancedPredictionMarketsMarketIdDispute for application/json ContentType.
+type PostAdvancedPredictionMarketsMarketIdDisputeJSONRequestBody = PredictionDisputeRequest
+
+// PostAdvancedPredictionMarketsMarketIdIssuancesJSONRequestBody defines body for PostAdvancedPredictionMarketsMarketIdIssuances for application/json ContentType.
+type PostAdvancedPredictionMarketsMarketIdIssuancesJSONRequestBody = PredictionSetRequest
+
+// PostAdvancedPredictionMarketsMarketIdOracleObservationsJSONRequestBody defines body for PostAdvancedPredictionMarketsMarketIdOracleObservations for application/json ContentType.
+type PostAdvancedPredictionMarketsMarketIdOracleObservationsJSONRequestBody = PredictionOracleObservationRequest
+
+// PostAdvancedPredictionMarketsMarketIdRedemptionsJSONRequestBody defines body for PostAdvancedPredictionMarketsMarketIdRedemptions for application/json ContentType.
+type PostAdvancedPredictionMarketsMarketIdRedemptionsJSONRequestBody = PredictionSetRequest
+
+// PostAdvancedPredictionMarketsMarketIdResolveJSONRequestBody defines body for PostAdvancedPredictionMarketsMarketIdResolve for application/json ContentType.
+type PostAdvancedPredictionMarketsMarketIdResolveJSONRequestBody = PredictionResolveRequest
+
+// PostAdvancedPredictionMarketsMarketIdUpholdJSONRequestBody defines body for PostAdvancedPredictionMarketsMarketIdUphold for application/json ContentType.
+type PostAdvancedPredictionMarketsMarketIdUpholdJSONRequestBody = PredictionRulingRequest
+
+// PostAdvancedPredictionMarketsMarketIdVoidJSONRequestBody defines body for PostAdvancedPredictionMarketsMarketIdVoid for application/json ContentType.
+type PostAdvancedPredictionMarketsMarketIdVoidJSONRequestBody = PredictionVoidRequest
+
 // PostFundingDepositsJSONRequestBody defines body for PostFundingDeposits for application/json ContentType.
 type PostFundingDepositsJSONRequestBody = StartDepositRequest
 
@@ -4874,6 +5599,60 @@ type ServerInterface interface {
 	// GetAdvancedIntentsIntentId One economic intent
 	// (GET /advanced/intents/{intentId})
 	GetAdvancedIntentsIntentId(w http.ResponseWriter, r *http.Request, intentId UUID)
+	// GetAdvancedPredictionMarkets Prediction markets in one lifecycle status, soonest close first
+	// (GET /advanced/prediction-markets)
+	GetAdvancedPredictionMarkets(w http.ResponseWriter, r *http.Request, params GetAdvancedPredictionMarketsParams)
+	// PostAdvancedPredictionMarkets Define a prediction market in DRAFT, collateralised in the sandbox dollar (operator)
+	// (POST /advanced/prediction-markets)
+	PostAdvancedPredictionMarkets(w http.ResponseWriter, r *http.Request, params PostAdvancedPredictionMarketsParams)
+	// GetAdvancedPredictionMarketsOracle The oracle this deployment resolves prediction markets from (sandbox oracle in LOCAL, TEST and DEV only)
+	// (GET /advanced/prediction-markets/oracle)
+	GetAdvancedPredictionMarketsOracle(w http.ResponseWriter, r *http.Request)
+	// GetAdvancedPredictionMarketsMarketId One market with its outcomes, resolutions, disputes and settlement record
+	// (GET /advanced/prediction-markets/{marketId})
+	GetAdvancedPredictionMarketsMarketId(w http.ResponseWriter, r *http.Request, marketId MarketId)
+	// GetAdvancedPredictionMarketsMarketIdBooks The market's escrow books, one snapshot, and whether they satisfy the escrow identity
+	// (GET /advanced/prediction-markets/{marketId}/books)
+	GetAdvancedPredictionMarketsMarketIdBooks(w http.ResponseWriter, r *http.Request, marketId MarketId)
+	// PostAdvancedPredictionMarketsMarketIdClose Close an OPEN market at or after its close time (operator)
+	// (POST /advanced/prediction-markets/{marketId}/close)
+	PostAdvancedPredictionMarketsMarketIdClose(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdCloseParams)
+	// PostAdvancedPredictionMarketsMarketIdDispute Dispute a RESOLVED market's oracle resolution, blocking settlement (operator)
+	// (POST /advanced/prediction-markets/{marketId}/dispute)
+	PostAdvancedPredictionMarketsMarketIdDispute(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdDisputeParams)
+	// PostAdvancedPredictionMarketsMarketIdIssuances Issue complete sets (collateral into the escrow, one share of every outcome per set)
+	// (POST /advanced/prediction-markets/{marketId}/issuances)
+	PostAdvancedPredictionMarketsMarketIdIssuances(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdIssuancesParams)
+	// PostAdvancedPredictionMarketsMarketIdOpen Open a DRAFT market at or after its open time (operator)
+	// (POST /advanced/prediction-markets/{marketId}/open)
+	PostAdvancedPredictionMarketsMarketIdOpen(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdOpenParams)
+	// PostAdvancedPredictionMarketsMarketIdOracleObservations Record what the sandbox oracle observed for a market (operator; sandbox oracle only)
+	// (POST /advanced/prediction-markets/{marketId}/oracle-observations)
+	PostAdvancedPredictionMarketsMarketIdOracleObservations(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdOracleObservationsParams)
+	// GetAdvancedPredictionMarketsMarketIdPositions An account's outcome shares in one market
+	// (GET /advanced/prediction-markets/{marketId}/positions)
+	GetAdvancedPredictionMarketsMarketIdPositions(w http.ResponseWriter, r *http.Request, marketId MarketId, params GetAdvancedPredictionMarketsMarketIdPositionsParams)
+	// PostAdvancedPredictionMarketsMarketIdReconcile Run the PREDICTION_ESCROW reconciliation for one market (operator; compares and records, moves nothing)
+	// (POST /advanced/prediction-markets/{marketId}/reconcile)
+	PostAdvancedPredictionMarketsMarketIdReconcile(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdReconcileParams)
+	// PostAdvancedPredictionMarketsMarketIdRedemptions Redeem complete sets (one share of every outcome per set back into collateral)
+	// (POST /advanced/prediction-markets/{marketId}/redemptions)
+	PostAdvancedPredictionMarketsMarketIdRedemptions(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdRedemptionsParams)
+	// PostAdvancedPredictionMarketsMarketIdRequestResolution Move a CLOSED market to RESOLVING, awaiting an oracle report (operator)
+	// (POST /advanced/prediction-markets/{marketId}/request-resolution)
+	PostAdvancedPredictionMarketsMarketIdRequestResolution(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdRequestResolutionParams)
+	// PostAdvancedPredictionMarketsMarketIdResolve Resolve from the configured oracle's report, verified against the market's oracle key (operator)
+	// (POST /advanced/prediction-markets/{marketId}/resolve)
+	PostAdvancedPredictionMarketsMarketIdResolve(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdResolveParams)
+	// PostAdvancedPredictionMarketsMarketIdSettle Settle a RESOLVED market from its escrow once its dispute window has passed (operator)
+	// (POST /advanced/prediction-markets/{marketId}/settle)
+	PostAdvancedPredictionMarketsMarketIdSettle(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdSettleParams)
+	// PostAdvancedPredictionMarketsMarketIdUphold Close a dispute keeping the disputed outcome (operator; not the creator, not the disputer)
+	// (POST /advanced/prediction-markets/{marketId}/uphold)
+	PostAdvancedPredictionMarketsMarketIdUphold(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdUpholdParams)
+	// PostAdvancedPredictionMarketsMarketIdVoid Void a market that has not settled and refund every share (operator; not the creator)
+	// (POST /advanced/prediction-markets/{marketId}/void)
+	PostAdvancedPredictionMarketsMarketIdVoid(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdVoidParams)
 	// GetAdvancedRiskDecisions Risk Kernel V2 decisions about an account's intents, newest first
 	// (GET /advanced/risk/decisions)
 	GetAdvancedRiskDecisions(w http.ResponseWriter, r *http.Request, params GetAdvancedRiskDecisionsParams)
@@ -5180,6 +5959,114 @@ func (_ Unimplemented) GetAdvancedIntents(w http.ResponseWriter, r *http.Request
 // GetAdvancedIntentsIntentId One economic intent
 // (GET /advanced/intents/{intentId})
 func (_ Unimplemented) GetAdvancedIntentsIntentId(w http.ResponseWriter, r *http.Request, intentId UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedPredictionMarkets Prediction markets in one lifecycle status, soonest close first
+// (GET /advanced/prediction-markets)
+func (_ Unimplemented) GetAdvancedPredictionMarkets(w http.ResponseWriter, r *http.Request, params GetAdvancedPredictionMarketsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedPredictionMarkets Define a prediction market in DRAFT, collateralised in the sandbox dollar (operator)
+// (POST /advanced/prediction-markets)
+func (_ Unimplemented) PostAdvancedPredictionMarkets(w http.ResponseWriter, r *http.Request, params PostAdvancedPredictionMarketsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedPredictionMarketsOracle The oracle this deployment resolves prediction markets from (sandbox oracle in LOCAL, TEST and DEV only)
+// (GET /advanced/prediction-markets/oracle)
+func (_ Unimplemented) GetAdvancedPredictionMarketsOracle(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedPredictionMarketsMarketId One market with its outcomes, resolutions, disputes and settlement record
+// (GET /advanced/prediction-markets/{marketId})
+func (_ Unimplemented) GetAdvancedPredictionMarketsMarketId(w http.ResponseWriter, r *http.Request, marketId MarketId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedPredictionMarketsMarketIdBooks The market's escrow books, one snapshot, and whether they satisfy the escrow identity
+// (GET /advanced/prediction-markets/{marketId}/books)
+func (_ Unimplemented) GetAdvancedPredictionMarketsMarketIdBooks(w http.ResponseWriter, r *http.Request, marketId MarketId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedPredictionMarketsMarketIdClose Close an OPEN market at or after its close time (operator)
+// (POST /advanced/prediction-markets/{marketId}/close)
+func (_ Unimplemented) PostAdvancedPredictionMarketsMarketIdClose(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdCloseParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedPredictionMarketsMarketIdDispute Dispute a RESOLVED market's oracle resolution, blocking settlement (operator)
+// (POST /advanced/prediction-markets/{marketId}/dispute)
+func (_ Unimplemented) PostAdvancedPredictionMarketsMarketIdDispute(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdDisputeParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedPredictionMarketsMarketIdIssuances Issue complete sets (collateral into the escrow, one share of every outcome per set)
+// (POST /advanced/prediction-markets/{marketId}/issuances)
+func (_ Unimplemented) PostAdvancedPredictionMarketsMarketIdIssuances(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdIssuancesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedPredictionMarketsMarketIdOpen Open a DRAFT market at or after its open time (operator)
+// (POST /advanced/prediction-markets/{marketId}/open)
+func (_ Unimplemented) PostAdvancedPredictionMarketsMarketIdOpen(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdOpenParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedPredictionMarketsMarketIdOracleObservations Record what the sandbox oracle observed for a market (operator; sandbox oracle only)
+// (POST /advanced/prediction-markets/{marketId}/oracle-observations)
+func (_ Unimplemented) PostAdvancedPredictionMarketsMarketIdOracleObservations(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdOracleObservationsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedPredictionMarketsMarketIdPositions An account's outcome shares in one market
+// (GET /advanced/prediction-markets/{marketId}/positions)
+func (_ Unimplemented) GetAdvancedPredictionMarketsMarketIdPositions(w http.ResponseWriter, r *http.Request, marketId MarketId, params GetAdvancedPredictionMarketsMarketIdPositionsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedPredictionMarketsMarketIdReconcile Run the PREDICTION_ESCROW reconciliation for one market (operator; compares and records, moves nothing)
+// (POST /advanced/prediction-markets/{marketId}/reconcile)
+func (_ Unimplemented) PostAdvancedPredictionMarketsMarketIdReconcile(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdReconcileParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedPredictionMarketsMarketIdRedemptions Redeem complete sets (one share of every outcome per set back into collateral)
+// (POST /advanced/prediction-markets/{marketId}/redemptions)
+func (_ Unimplemented) PostAdvancedPredictionMarketsMarketIdRedemptions(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdRedemptionsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedPredictionMarketsMarketIdRequestResolution Move a CLOSED market to RESOLVING, awaiting an oracle report (operator)
+// (POST /advanced/prediction-markets/{marketId}/request-resolution)
+func (_ Unimplemented) PostAdvancedPredictionMarketsMarketIdRequestResolution(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdRequestResolutionParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedPredictionMarketsMarketIdResolve Resolve from the configured oracle's report, verified against the market's oracle key (operator)
+// (POST /advanced/prediction-markets/{marketId}/resolve)
+func (_ Unimplemented) PostAdvancedPredictionMarketsMarketIdResolve(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdResolveParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedPredictionMarketsMarketIdSettle Settle a RESOLVED market from its escrow once its dispute window has passed (operator)
+// (POST /advanced/prediction-markets/{marketId}/settle)
+func (_ Unimplemented) PostAdvancedPredictionMarketsMarketIdSettle(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdSettleParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedPredictionMarketsMarketIdUphold Close a dispute keeping the disputed outcome (operator; not the creator, not the disputer)
+// (POST /advanced/prediction-markets/{marketId}/uphold)
+func (_ Unimplemented) PostAdvancedPredictionMarketsMarketIdUphold(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdUpholdParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedPredictionMarketsMarketIdVoid Void a market that has not settled and refund every share (operator; not the creator)
+// (POST /advanced/prediction-markets/{marketId}/void)
+func (_ Unimplemented) PostAdvancedPredictionMarketsMarketIdVoid(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdVoidParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -6619,6 +7506,853 @@ func (siw *ServerInterfaceWrapper) GetAdvancedIntentsIntentId(w http.ResponseWri
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetAdvancedIntentsIntentId(w, r, intentId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedPredictionMarkets operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedPredictionMarkets(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedPredictionMarketsParams
+
+	// ------------- Required query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedPredictionMarkets(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedPredictionMarkets operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedPredictionMarkets(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedPredictionMarketsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedPredictionMarkets(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedPredictionMarketsOracle operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedPredictionMarketsOracle(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedPredictionMarketsOracle(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedPredictionMarketsMarketId operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedPredictionMarketsMarketId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedPredictionMarketsMarketId(w, r, marketId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedPredictionMarketsMarketIdBooks operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedPredictionMarketsMarketIdBooks(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedPredictionMarketsMarketIdBooks(w, r, marketId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedPredictionMarketsMarketIdClose operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedPredictionMarketsMarketIdClose(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedPredictionMarketsMarketIdCloseParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedPredictionMarketsMarketIdClose(w, r, marketId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedPredictionMarketsMarketIdDispute operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedPredictionMarketsMarketIdDispute(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedPredictionMarketsMarketIdDisputeParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedPredictionMarketsMarketIdDispute(w, r, marketId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedPredictionMarketsMarketIdIssuances operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedPredictionMarketsMarketIdIssuances(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedPredictionMarketsMarketIdIssuancesParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedPredictionMarketsMarketIdIssuances(w, r, marketId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedPredictionMarketsMarketIdOpen operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedPredictionMarketsMarketIdOpen(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedPredictionMarketsMarketIdOpenParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedPredictionMarketsMarketIdOpen(w, r, marketId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedPredictionMarketsMarketIdOracleObservations operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedPredictionMarketsMarketIdOracleObservations(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedPredictionMarketsMarketIdOracleObservationsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedPredictionMarketsMarketIdOracleObservations(w, r, marketId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedPredictionMarketsMarketIdPositions operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedPredictionMarketsMarketIdPositions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedPredictionMarketsMarketIdPositionsParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedPredictionMarketsMarketIdPositions(w, r, marketId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedPredictionMarketsMarketIdReconcile operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedPredictionMarketsMarketIdReconcile(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedPredictionMarketsMarketIdReconcileParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedPredictionMarketsMarketIdReconcile(w, r, marketId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedPredictionMarketsMarketIdRedemptions operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedPredictionMarketsMarketIdRedemptions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedPredictionMarketsMarketIdRedemptionsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedPredictionMarketsMarketIdRedemptions(w, r, marketId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedPredictionMarketsMarketIdRequestResolution operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedPredictionMarketsMarketIdRequestResolution(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedPredictionMarketsMarketIdRequestResolutionParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedPredictionMarketsMarketIdRequestResolution(w, r, marketId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedPredictionMarketsMarketIdResolve operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedPredictionMarketsMarketIdResolve(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedPredictionMarketsMarketIdResolveParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedPredictionMarketsMarketIdResolve(w, r, marketId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedPredictionMarketsMarketIdSettle operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedPredictionMarketsMarketIdSettle(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedPredictionMarketsMarketIdSettleParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedPredictionMarketsMarketIdSettle(w, r, marketId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedPredictionMarketsMarketIdUphold operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedPredictionMarketsMarketIdUphold(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedPredictionMarketsMarketIdUpholdParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedPredictionMarketsMarketIdUphold(w, r, marketId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedPredictionMarketsMarketIdVoid operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedPredictionMarketsMarketIdVoid(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedPredictionMarketsMarketIdVoidParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedPredictionMarketsMarketIdVoid(w, r, marketId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -8690,6 +10424,60 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/advanced/buying-power", wrapper.GetAdvancedBuyingPower)
 	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/prediction-markets", wrapper.GetAdvancedPredictionMarkets)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/prediction-markets", wrapper.PostAdvancedPredictionMarkets)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/prediction-markets/oracle", wrapper.GetAdvancedPredictionMarketsOracle)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/prediction-markets/{marketId}", wrapper.GetAdvancedPredictionMarketsMarketId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/prediction-markets/{marketId}/books", wrapper.GetAdvancedPredictionMarketsMarketIdBooks)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/prediction-markets/{marketId}/positions", wrapper.GetAdvancedPredictionMarketsMarketIdPositions)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/prediction-markets/{marketId}/issuances", wrapper.PostAdvancedPredictionMarketsMarketIdIssuances)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/prediction-markets/{marketId}/redemptions", wrapper.PostAdvancedPredictionMarketsMarketIdRedemptions)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/prediction-markets/{marketId}/open", wrapper.PostAdvancedPredictionMarketsMarketIdOpen)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/prediction-markets/{marketId}/close", wrapper.PostAdvancedPredictionMarketsMarketIdClose)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/prediction-markets/{marketId}/request-resolution", wrapper.PostAdvancedPredictionMarketsMarketIdRequestResolution)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/prediction-markets/{marketId}/oracle-observations", wrapper.PostAdvancedPredictionMarketsMarketIdOracleObservations)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/prediction-markets/{marketId}/resolve", wrapper.PostAdvancedPredictionMarketsMarketIdResolve)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/prediction-markets/{marketId}/dispute", wrapper.PostAdvancedPredictionMarketsMarketIdDispute)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/prediction-markets/{marketId}/uphold", wrapper.PostAdvancedPredictionMarketsMarketIdUphold)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/prediction-markets/{marketId}/void", wrapper.PostAdvancedPredictionMarketsMarketIdVoid)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/prediction-markets/{marketId}/settle", wrapper.PostAdvancedPredictionMarketsMarketIdSettle)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/prediction-markets/{marketId}/reconcile", wrapper.PostAdvancedPredictionMarketsMarketIdReconcile)
+	})
 
 	return r
 }
@@ -9627,6 +11415,1046 @@ func (response GetAdvancedIntentsIntentId404ApplicationProblemPlusJSONResponse) 
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedPredictionMarketsRequestObject struct {
+	Params GetAdvancedPredictionMarketsParams
+}
+
+type GetAdvancedPredictionMarketsResponseObject interface {
+	VisitGetAdvancedPredictionMarketsResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedPredictionMarkets200JSONResponse PredictionMarketList
+
+func (response GetAdvancedPredictionMarkets200JSONResponse) VisitGetAdvancedPredictionMarketsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedPredictionMarkets400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedPredictionMarkets400ApplicationProblemPlusJSONResponse) VisitGetAdvancedPredictionMarketsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsRequestObject struct {
+	Params PostAdvancedPredictionMarketsParams
+	Body   *PostAdvancedPredictionMarketsJSONRequestBody
+}
+
+type PostAdvancedPredictionMarketsResponseObject interface {
+	VisitPostAdvancedPredictionMarketsResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedPredictionMarkets200JSONResponse PredictionMarket
+
+func (response PostAdvancedPredictionMarkets200JSONResponse) VisitPostAdvancedPredictionMarketsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarkets201JSONResponse PredictionMarket
+
+func (response PostAdvancedPredictionMarkets201JSONResponse) VisitPostAdvancedPredictionMarketsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarkets403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedPredictionMarkets403ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarkets409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarkets409ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarkets422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarkets422ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedPredictionMarketsOracleRequestObject struct {
+}
+
+type GetAdvancedPredictionMarketsOracleResponseObject interface {
+	VisitGetAdvancedPredictionMarketsOracleResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedPredictionMarketsOracle200JSONResponse PredictionOracle
+
+func (response GetAdvancedPredictionMarketsOracle200JSONResponse) VisitGetAdvancedPredictionMarketsOracleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedPredictionMarketsOracle503ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedPredictionMarketsOracle503ApplicationProblemPlusJSONResponse) VisitGetAdvancedPredictionMarketsOracleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedPredictionMarketsMarketIdRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+}
+
+type GetAdvancedPredictionMarketsMarketIdResponseObject interface {
+	VisitGetAdvancedPredictionMarketsMarketIdResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedPredictionMarketsMarketId200JSONResponse PredictionMarketDetail
+
+func (response GetAdvancedPredictionMarketsMarketId200JSONResponse) VisitGetAdvancedPredictionMarketsMarketIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedPredictionMarketsMarketId404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedPredictionMarketsMarketId404ApplicationProblemPlusJSONResponse) VisitGetAdvancedPredictionMarketsMarketIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedPredictionMarketsMarketIdBooksRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+}
+
+type GetAdvancedPredictionMarketsMarketIdBooksResponseObject interface {
+	VisitGetAdvancedPredictionMarketsMarketIdBooksResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedPredictionMarketsMarketIdBooks200JSONResponse PredictionEscrowBooks
+
+func (response GetAdvancedPredictionMarketsMarketIdBooks200JSONResponse) VisitGetAdvancedPredictionMarketsMarketIdBooksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedPredictionMarketsMarketIdBooks404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedPredictionMarketsMarketIdBooks404ApplicationProblemPlusJSONResponse) VisitGetAdvancedPredictionMarketsMarketIdBooksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdCloseRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+	Params   PostAdvancedPredictionMarketsMarketIdCloseParams
+}
+
+type PostAdvancedPredictionMarketsMarketIdCloseResponseObject interface {
+	VisitPostAdvancedPredictionMarketsMarketIdCloseResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedPredictionMarketsMarketIdClose200JSONResponse PredictionMarket
+
+func (response PostAdvancedPredictionMarketsMarketIdClose200JSONResponse) VisitPostAdvancedPredictionMarketsMarketIdCloseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdClose404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedPredictionMarketsMarketIdClose404ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdCloseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdClose409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdClose409ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdCloseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdDisputeRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+	Params   PostAdvancedPredictionMarketsMarketIdDisputeParams
+	Body     *PostAdvancedPredictionMarketsMarketIdDisputeJSONRequestBody
+}
+
+type PostAdvancedPredictionMarketsMarketIdDisputeResponseObject interface {
+	VisitPostAdvancedPredictionMarketsMarketIdDisputeResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedPredictionMarketsMarketIdDispute200JSONResponse PredictionDisputeResult
+
+func (response PostAdvancedPredictionMarketsMarketIdDispute200JSONResponse) VisitPostAdvancedPredictionMarketsMarketIdDisputeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdDispute404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedPredictionMarketsMarketIdDispute404ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdDisputeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdDispute409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdDispute409ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdDisputeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdIssuancesRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+	Params   PostAdvancedPredictionMarketsMarketIdIssuancesParams
+	Body     *PostAdvancedPredictionMarketsMarketIdIssuancesJSONRequestBody
+}
+
+type PostAdvancedPredictionMarketsMarketIdIssuancesResponseObject interface {
+	VisitPostAdvancedPredictionMarketsMarketIdIssuancesResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedPredictionMarketsMarketIdIssuances200JSONResponse PredictionSetResult
+
+func (response PostAdvancedPredictionMarketsMarketIdIssuances200JSONResponse) VisitPostAdvancedPredictionMarketsMarketIdIssuancesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdIssuances403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedPredictionMarketsMarketIdIssuances403ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdIssuancesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdIssuances404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdIssuances404ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdIssuancesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdIssuances409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdIssuances409ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdIssuancesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdIssuances422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdIssuances422ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdIssuancesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdOpenRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+	Params   PostAdvancedPredictionMarketsMarketIdOpenParams
+}
+
+type PostAdvancedPredictionMarketsMarketIdOpenResponseObject interface {
+	VisitPostAdvancedPredictionMarketsMarketIdOpenResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedPredictionMarketsMarketIdOpen200JSONResponse PredictionMarket
+
+func (response PostAdvancedPredictionMarketsMarketIdOpen200JSONResponse) VisitPostAdvancedPredictionMarketsMarketIdOpenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdOpen404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedPredictionMarketsMarketIdOpen404ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdOpenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdOpen409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdOpen409ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdOpenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdOracleObservationsRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+	Params   PostAdvancedPredictionMarketsMarketIdOracleObservationsParams
+	Body     *PostAdvancedPredictionMarketsMarketIdOracleObservationsJSONRequestBody
+}
+
+type PostAdvancedPredictionMarketsMarketIdOracleObservationsResponseObject interface {
+	VisitPostAdvancedPredictionMarketsMarketIdOracleObservationsResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedPredictionMarketsMarketIdOracleObservations200JSONResponse PredictionOracleObservation
+
+func (response PostAdvancedPredictionMarketsMarketIdOracleObservations200JSONResponse) VisitPostAdvancedPredictionMarketsMarketIdOracleObservationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdOracleObservations404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedPredictionMarketsMarketIdOracleObservations404ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdOracleObservationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdOracleObservations422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdOracleObservations422ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdOracleObservationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdOracleObservations503ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdOracleObservations503ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdOracleObservationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedPredictionMarketsMarketIdPositionsRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+	Params   GetAdvancedPredictionMarketsMarketIdPositionsParams
+}
+
+type GetAdvancedPredictionMarketsMarketIdPositionsResponseObject interface {
+	VisitGetAdvancedPredictionMarketsMarketIdPositionsResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedPredictionMarketsMarketIdPositions200JSONResponse PredictionPositionList
+
+func (response GetAdvancedPredictionMarketsMarketIdPositions200JSONResponse) VisitGetAdvancedPredictionMarketsMarketIdPositionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedPredictionMarketsMarketIdPositions403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedPredictionMarketsMarketIdPositions403ApplicationProblemPlusJSONResponse) VisitGetAdvancedPredictionMarketsMarketIdPositionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedPredictionMarketsMarketIdPositions404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedPredictionMarketsMarketIdPositions404ApplicationProblemPlusJSONResponse) VisitGetAdvancedPredictionMarketsMarketIdPositionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdReconcileRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+	Params   PostAdvancedPredictionMarketsMarketIdReconcileParams
+}
+
+type PostAdvancedPredictionMarketsMarketIdReconcileResponseObject interface {
+	VisitPostAdvancedPredictionMarketsMarketIdReconcileResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedPredictionMarketsMarketIdReconcile200JSONResponse PredictionEscrowReconciliation
+
+func (response PostAdvancedPredictionMarketsMarketIdReconcile200JSONResponse) VisitPostAdvancedPredictionMarketsMarketIdReconcileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdReconcile404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedPredictionMarketsMarketIdReconcile404ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdReconcileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdRedemptionsRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+	Params   PostAdvancedPredictionMarketsMarketIdRedemptionsParams
+	Body     *PostAdvancedPredictionMarketsMarketIdRedemptionsJSONRequestBody
+}
+
+type PostAdvancedPredictionMarketsMarketIdRedemptionsResponseObject interface {
+	VisitPostAdvancedPredictionMarketsMarketIdRedemptionsResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedPredictionMarketsMarketIdRedemptions200JSONResponse PredictionSetResult
+
+func (response PostAdvancedPredictionMarketsMarketIdRedemptions200JSONResponse) VisitPostAdvancedPredictionMarketsMarketIdRedemptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdRedemptions403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedPredictionMarketsMarketIdRedemptions403ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdRedemptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdRedemptions404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdRedemptions404ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdRedemptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdRedemptions409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdRedemptions409ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdRedemptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdRedemptions422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdRedemptions422ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdRedemptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdRequestResolutionRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+	Params   PostAdvancedPredictionMarketsMarketIdRequestResolutionParams
+}
+
+type PostAdvancedPredictionMarketsMarketIdRequestResolutionResponseObject interface {
+	VisitPostAdvancedPredictionMarketsMarketIdRequestResolutionResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedPredictionMarketsMarketIdRequestResolution200JSONResponse PredictionMarket
+
+func (response PostAdvancedPredictionMarketsMarketIdRequestResolution200JSONResponse) VisitPostAdvancedPredictionMarketsMarketIdRequestResolutionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdRequestResolution404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedPredictionMarketsMarketIdRequestResolution404ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdRequestResolutionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdRequestResolution409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdRequestResolution409ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdRequestResolutionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdResolveRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+	Params   PostAdvancedPredictionMarketsMarketIdResolveParams
+	Body     *PostAdvancedPredictionMarketsMarketIdResolveJSONRequestBody
+}
+
+type PostAdvancedPredictionMarketsMarketIdResolveResponseObject interface {
+	VisitPostAdvancedPredictionMarketsMarketIdResolveResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedPredictionMarketsMarketIdResolve200JSONResponse PredictionResolutionResult
+
+func (response PostAdvancedPredictionMarketsMarketIdResolve200JSONResponse) VisitPostAdvancedPredictionMarketsMarketIdResolveResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdResolve403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedPredictionMarketsMarketIdResolve403ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdResolveResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdResolve404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdResolve404ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdResolveResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdResolve409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdResolve409ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdResolveResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdResolve503ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdResolve503ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdResolveResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdSettleRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+	Params   PostAdvancedPredictionMarketsMarketIdSettleParams
+}
+
+type PostAdvancedPredictionMarketsMarketIdSettleResponseObject interface {
+	VisitPostAdvancedPredictionMarketsMarketIdSettleResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedPredictionMarketsMarketIdSettle200JSONResponse PredictionSettlementResult
+
+func (response PostAdvancedPredictionMarketsMarketIdSettle200JSONResponse) VisitPostAdvancedPredictionMarketsMarketIdSettleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdSettle404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedPredictionMarketsMarketIdSettle404ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdSettleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdSettle409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdSettle409ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdSettleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdUpholdRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+	Params   PostAdvancedPredictionMarketsMarketIdUpholdParams
+	Body     *PostAdvancedPredictionMarketsMarketIdUpholdJSONRequestBody
+}
+
+type PostAdvancedPredictionMarketsMarketIdUpholdResponseObject interface {
+	VisitPostAdvancedPredictionMarketsMarketIdUpholdResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedPredictionMarketsMarketIdUphold200JSONResponse PredictionResolutionResult
+
+func (response PostAdvancedPredictionMarketsMarketIdUphold200JSONResponse) VisitPostAdvancedPredictionMarketsMarketIdUpholdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdUphold403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedPredictionMarketsMarketIdUphold403ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdUpholdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdUphold404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdUphold404ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdUpholdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdUphold409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdUphold409ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdUpholdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdVoidRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+	Params   PostAdvancedPredictionMarketsMarketIdVoidParams
+	Body     *PostAdvancedPredictionMarketsMarketIdVoidJSONRequestBody
+}
+
+type PostAdvancedPredictionMarketsMarketIdVoidResponseObject interface {
+	VisitPostAdvancedPredictionMarketsMarketIdVoidResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedPredictionMarketsMarketIdVoid200JSONResponse PredictionSettlementResult
+
+func (response PostAdvancedPredictionMarketsMarketIdVoid200JSONResponse) VisitPostAdvancedPredictionMarketsMarketIdVoidResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdVoid403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedPredictionMarketsMarketIdVoid403ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdVoidResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdVoid404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdVoid404ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdVoidResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdVoid409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdVoid409ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdVoidResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -11664,6 +14492,60 @@ type StrictServerInterface interface {
 	// GetAdvancedIntentsIntentId One economic intent
 	// (GET /advanced/intents/{intentId})
 	GetAdvancedIntentsIntentId(ctx context.Context, request GetAdvancedIntentsIntentIdRequestObject) (GetAdvancedIntentsIntentIdResponseObject, error)
+	// GetAdvancedPredictionMarkets Prediction markets in one lifecycle status, soonest close first
+	// (GET /advanced/prediction-markets)
+	GetAdvancedPredictionMarkets(ctx context.Context, request GetAdvancedPredictionMarketsRequestObject) (GetAdvancedPredictionMarketsResponseObject, error)
+	// PostAdvancedPredictionMarkets Define a prediction market in DRAFT, collateralised in the sandbox dollar (operator)
+	// (POST /advanced/prediction-markets)
+	PostAdvancedPredictionMarkets(ctx context.Context, request PostAdvancedPredictionMarketsRequestObject) (PostAdvancedPredictionMarketsResponseObject, error)
+	// GetAdvancedPredictionMarketsOracle The oracle this deployment resolves prediction markets from (sandbox oracle in LOCAL, TEST and DEV only)
+	// (GET /advanced/prediction-markets/oracle)
+	GetAdvancedPredictionMarketsOracle(ctx context.Context, request GetAdvancedPredictionMarketsOracleRequestObject) (GetAdvancedPredictionMarketsOracleResponseObject, error)
+	// GetAdvancedPredictionMarketsMarketId One market with its outcomes, resolutions, disputes and settlement record
+	// (GET /advanced/prediction-markets/{marketId})
+	GetAdvancedPredictionMarketsMarketId(ctx context.Context, request GetAdvancedPredictionMarketsMarketIdRequestObject) (GetAdvancedPredictionMarketsMarketIdResponseObject, error)
+	// GetAdvancedPredictionMarketsMarketIdBooks The market's escrow books, one snapshot, and whether they satisfy the escrow identity
+	// (GET /advanced/prediction-markets/{marketId}/books)
+	GetAdvancedPredictionMarketsMarketIdBooks(ctx context.Context, request GetAdvancedPredictionMarketsMarketIdBooksRequestObject) (GetAdvancedPredictionMarketsMarketIdBooksResponseObject, error)
+	// PostAdvancedPredictionMarketsMarketIdClose Close an OPEN market at or after its close time (operator)
+	// (POST /advanced/prediction-markets/{marketId}/close)
+	PostAdvancedPredictionMarketsMarketIdClose(ctx context.Context, request PostAdvancedPredictionMarketsMarketIdCloseRequestObject) (PostAdvancedPredictionMarketsMarketIdCloseResponseObject, error)
+	// PostAdvancedPredictionMarketsMarketIdDispute Dispute a RESOLVED market's oracle resolution, blocking settlement (operator)
+	// (POST /advanced/prediction-markets/{marketId}/dispute)
+	PostAdvancedPredictionMarketsMarketIdDispute(ctx context.Context, request PostAdvancedPredictionMarketsMarketIdDisputeRequestObject) (PostAdvancedPredictionMarketsMarketIdDisputeResponseObject, error)
+	// PostAdvancedPredictionMarketsMarketIdIssuances Issue complete sets (collateral into the escrow, one share of every outcome per set)
+	// (POST /advanced/prediction-markets/{marketId}/issuances)
+	PostAdvancedPredictionMarketsMarketIdIssuances(ctx context.Context, request PostAdvancedPredictionMarketsMarketIdIssuancesRequestObject) (PostAdvancedPredictionMarketsMarketIdIssuancesResponseObject, error)
+	// PostAdvancedPredictionMarketsMarketIdOpen Open a DRAFT market at or after its open time (operator)
+	// (POST /advanced/prediction-markets/{marketId}/open)
+	PostAdvancedPredictionMarketsMarketIdOpen(ctx context.Context, request PostAdvancedPredictionMarketsMarketIdOpenRequestObject) (PostAdvancedPredictionMarketsMarketIdOpenResponseObject, error)
+	// PostAdvancedPredictionMarketsMarketIdOracleObservations Record what the sandbox oracle observed for a market (operator; sandbox oracle only)
+	// (POST /advanced/prediction-markets/{marketId}/oracle-observations)
+	PostAdvancedPredictionMarketsMarketIdOracleObservations(ctx context.Context, request PostAdvancedPredictionMarketsMarketIdOracleObservationsRequestObject) (PostAdvancedPredictionMarketsMarketIdOracleObservationsResponseObject, error)
+	// GetAdvancedPredictionMarketsMarketIdPositions An account's outcome shares in one market
+	// (GET /advanced/prediction-markets/{marketId}/positions)
+	GetAdvancedPredictionMarketsMarketIdPositions(ctx context.Context, request GetAdvancedPredictionMarketsMarketIdPositionsRequestObject) (GetAdvancedPredictionMarketsMarketIdPositionsResponseObject, error)
+	// PostAdvancedPredictionMarketsMarketIdReconcile Run the PREDICTION_ESCROW reconciliation for one market (operator; compares and records, moves nothing)
+	// (POST /advanced/prediction-markets/{marketId}/reconcile)
+	PostAdvancedPredictionMarketsMarketIdReconcile(ctx context.Context, request PostAdvancedPredictionMarketsMarketIdReconcileRequestObject) (PostAdvancedPredictionMarketsMarketIdReconcileResponseObject, error)
+	// PostAdvancedPredictionMarketsMarketIdRedemptions Redeem complete sets (one share of every outcome per set back into collateral)
+	// (POST /advanced/prediction-markets/{marketId}/redemptions)
+	PostAdvancedPredictionMarketsMarketIdRedemptions(ctx context.Context, request PostAdvancedPredictionMarketsMarketIdRedemptionsRequestObject) (PostAdvancedPredictionMarketsMarketIdRedemptionsResponseObject, error)
+	// PostAdvancedPredictionMarketsMarketIdRequestResolution Move a CLOSED market to RESOLVING, awaiting an oracle report (operator)
+	// (POST /advanced/prediction-markets/{marketId}/request-resolution)
+	PostAdvancedPredictionMarketsMarketIdRequestResolution(ctx context.Context, request PostAdvancedPredictionMarketsMarketIdRequestResolutionRequestObject) (PostAdvancedPredictionMarketsMarketIdRequestResolutionResponseObject, error)
+	// PostAdvancedPredictionMarketsMarketIdResolve Resolve from the configured oracle's report, verified against the market's oracle key (operator)
+	// (POST /advanced/prediction-markets/{marketId}/resolve)
+	PostAdvancedPredictionMarketsMarketIdResolve(ctx context.Context, request PostAdvancedPredictionMarketsMarketIdResolveRequestObject) (PostAdvancedPredictionMarketsMarketIdResolveResponseObject, error)
+	// PostAdvancedPredictionMarketsMarketIdSettle Settle a RESOLVED market from its escrow once its dispute window has passed (operator)
+	// (POST /advanced/prediction-markets/{marketId}/settle)
+	PostAdvancedPredictionMarketsMarketIdSettle(ctx context.Context, request PostAdvancedPredictionMarketsMarketIdSettleRequestObject) (PostAdvancedPredictionMarketsMarketIdSettleResponseObject, error)
+	// PostAdvancedPredictionMarketsMarketIdUphold Close a dispute keeping the disputed outcome (operator; not the creator, not the disputer)
+	// (POST /advanced/prediction-markets/{marketId}/uphold)
+	PostAdvancedPredictionMarketsMarketIdUphold(ctx context.Context, request PostAdvancedPredictionMarketsMarketIdUpholdRequestObject) (PostAdvancedPredictionMarketsMarketIdUpholdResponseObject, error)
+	// PostAdvancedPredictionMarketsMarketIdVoid Void a market that has not settled and refund every share (operator; not the creator)
+	// (POST /advanced/prediction-markets/{marketId}/void)
+	PostAdvancedPredictionMarketsMarketIdVoid(ctx context.Context, request PostAdvancedPredictionMarketsMarketIdVoidRequestObject) (PostAdvancedPredictionMarketsMarketIdVoidResponseObject, error)
 	// GetAdvancedRiskDecisions Risk Kernel V2 decisions about an account's intents, newest first
 	// (GET /advanced/risk/decisions)
 	GetAdvancedRiskDecisions(ctx context.Context, request GetAdvancedRiskDecisionsRequestObject) (GetAdvancedRiskDecisionsResponseObject, error)
@@ -12600,6 +15482,541 @@ func (sh *strictHandler) GetAdvancedIntentsIntentId(w http.ResponseWriter, r *ht
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetAdvancedIntentsIntentIdResponseObject); ok {
 		if err := validResponse.VisitGetAdvancedIntentsIntentIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedPredictionMarkets operation middleware
+func (sh *strictHandler) GetAdvancedPredictionMarkets(w http.ResponseWriter, r *http.Request, params GetAdvancedPredictionMarketsParams) {
+	var request GetAdvancedPredictionMarketsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedPredictionMarkets(ctx, request.(GetAdvancedPredictionMarketsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedPredictionMarkets")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedPredictionMarketsResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedPredictionMarketsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedPredictionMarkets operation middleware
+func (sh *strictHandler) PostAdvancedPredictionMarkets(w http.ResponseWriter, r *http.Request, params PostAdvancedPredictionMarketsParams) {
+	var request PostAdvancedPredictionMarketsRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedPredictionMarketsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedPredictionMarkets(ctx, request.(PostAdvancedPredictionMarketsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedPredictionMarkets")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedPredictionMarketsResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedPredictionMarketsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedPredictionMarketsOracle operation middleware
+func (sh *strictHandler) GetAdvancedPredictionMarketsOracle(w http.ResponseWriter, r *http.Request) {
+	var request GetAdvancedPredictionMarketsOracleRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedPredictionMarketsOracle(ctx, request.(GetAdvancedPredictionMarketsOracleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedPredictionMarketsOracle")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedPredictionMarketsOracleResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedPredictionMarketsOracleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedPredictionMarketsMarketId operation middleware
+func (sh *strictHandler) GetAdvancedPredictionMarketsMarketId(w http.ResponseWriter, r *http.Request, marketId MarketId) {
+	var request GetAdvancedPredictionMarketsMarketIdRequestObject
+
+	request.MarketId = marketId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedPredictionMarketsMarketId(ctx, request.(GetAdvancedPredictionMarketsMarketIdRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedPredictionMarketsMarketId")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedPredictionMarketsMarketIdResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedPredictionMarketsMarketIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedPredictionMarketsMarketIdBooks operation middleware
+func (sh *strictHandler) GetAdvancedPredictionMarketsMarketIdBooks(w http.ResponseWriter, r *http.Request, marketId MarketId) {
+	var request GetAdvancedPredictionMarketsMarketIdBooksRequestObject
+
+	request.MarketId = marketId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedPredictionMarketsMarketIdBooks(ctx, request.(GetAdvancedPredictionMarketsMarketIdBooksRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedPredictionMarketsMarketIdBooks")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedPredictionMarketsMarketIdBooksResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedPredictionMarketsMarketIdBooksResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedPredictionMarketsMarketIdClose operation middleware
+func (sh *strictHandler) PostAdvancedPredictionMarketsMarketIdClose(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdCloseParams) {
+	var request PostAdvancedPredictionMarketsMarketIdCloseRequestObject
+
+	request.MarketId = marketId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedPredictionMarketsMarketIdClose(ctx, request.(PostAdvancedPredictionMarketsMarketIdCloseRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedPredictionMarketsMarketIdClose")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedPredictionMarketsMarketIdCloseResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedPredictionMarketsMarketIdCloseResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedPredictionMarketsMarketIdDispute operation middleware
+func (sh *strictHandler) PostAdvancedPredictionMarketsMarketIdDispute(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdDisputeParams) {
+	var request PostAdvancedPredictionMarketsMarketIdDisputeRequestObject
+
+	request.MarketId = marketId
+	request.Params = params
+
+	var body PostAdvancedPredictionMarketsMarketIdDisputeJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedPredictionMarketsMarketIdDispute(ctx, request.(PostAdvancedPredictionMarketsMarketIdDisputeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedPredictionMarketsMarketIdDispute")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedPredictionMarketsMarketIdDisputeResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedPredictionMarketsMarketIdDisputeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedPredictionMarketsMarketIdIssuances operation middleware
+func (sh *strictHandler) PostAdvancedPredictionMarketsMarketIdIssuances(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdIssuancesParams) {
+	var request PostAdvancedPredictionMarketsMarketIdIssuancesRequestObject
+
+	request.MarketId = marketId
+	request.Params = params
+
+	var body PostAdvancedPredictionMarketsMarketIdIssuancesJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedPredictionMarketsMarketIdIssuances(ctx, request.(PostAdvancedPredictionMarketsMarketIdIssuancesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedPredictionMarketsMarketIdIssuances")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedPredictionMarketsMarketIdIssuancesResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedPredictionMarketsMarketIdIssuancesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedPredictionMarketsMarketIdOpen operation middleware
+func (sh *strictHandler) PostAdvancedPredictionMarketsMarketIdOpen(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdOpenParams) {
+	var request PostAdvancedPredictionMarketsMarketIdOpenRequestObject
+
+	request.MarketId = marketId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedPredictionMarketsMarketIdOpen(ctx, request.(PostAdvancedPredictionMarketsMarketIdOpenRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedPredictionMarketsMarketIdOpen")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedPredictionMarketsMarketIdOpenResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedPredictionMarketsMarketIdOpenResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedPredictionMarketsMarketIdOracleObservations operation middleware
+func (sh *strictHandler) PostAdvancedPredictionMarketsMarketIdOracleObservations(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdOracleObservationsParams) {
+	var request PostAdvancedPredictionMarketsMarketIdOracleObservationsRequestObject
+
+	request.MarketId = marketId
+	request.Params = params
+
+	var body PostAdvancedPredictionMarketsMarketIdOracleObservationsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedPredictionMarketsMarketIdOracleObservations(ctx, request.(PostAdvancedPredictionMarketsMarketIdOracleObservationsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedPredictionMarketsMarketIdOracleObservations")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedPredictionMarketsMarketIdOracleObservationsResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedPredictionMarketsMarketIdOracleObservationsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedPredictionMarketsMarketIdPositions operation middleware
+func (sh *strictHandler) GetAdvancedPredictionMarketsMarketIdPositions(w http.ResponseWriter, r *http.Request, marketId MarketId, params GetAdvancedPredictionMarketsMarketIdPositionsParams) {
+	var request GetAdvancedPredictionMarketsMarketIdPositionsRequestObject
+
+	request.MarketId = marketId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedPredictionMarketsMarketIdPositions(ctx, request.(GetAdvancedPredictionMarketsMarketIdPositionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedPredictionMarketsMarketIdPositions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedPredictionMarketsMarketIdPositionsResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedPredictionMarketsMarketIdPositionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedPredictionMarketsMarketIdReconcile operation middleware
+func (sh *strictHandler) PostAdvancedPredictionMarketsMarketIdReconcile(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdReconcileParams) {
+	var request PostAdvancedPredictionMarketsMarketIdReconcileRequestObject
+
+	request.MarketId = marketId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedPredictionMarketsMarketIdReconcile(ctx, request.(PostAdvancedPredictionMarketsMarketIdReconcileRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedPredictionMarketsMarketIdReconcile")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedPredictionMarketsMarketIdReconcileResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedPredictionMarketsMarketIdReconcileResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedPredictionMarketsMarketIdRedemptions operation middleware
+func (sh *strictHandler) PostAdvancedPredictionMarketsMarketIdRedemptions(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdRedemptionsParams) {
+	var request PostAdvancedPredictionMarketsMarketIdRedemptionsRequestObject
+
+	request.MarketId = marketId
+	request.Params = params
+
+	var body PostAdvancedPredictionMarketsMarketIdRedemptionsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedPredictionMarketsMarketIdRedemptions(ctx, request.(PostAdvancedPredictionMarketsMarketIdRedemptionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedPredictionMarketsMarketIdRedemptions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedPredictionMarketsMarketIdRedemptionsResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedPredictionMarketsMarketIdRedemptionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedPredictionMarketsMarketIdRequestResolution operation middleware
+func (sh *strictHandler) PostAdvancedPredictionMarketsMarketIdRequestResolution(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdRequestResolutionParams) {
+	var request PostAdvancedPredictionMarketsMarketIdRequestResolutionRequestObject
+
+	request.MarketId = marketId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedPredictionMarketsMarketIdRequestResolution(ctx, request.(PostAdvancedPredictionMarketsMarketIdRequestResolutionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedPredictionMarketsMarketIdRequestResolution")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedPredictionMarketsMarketIdRequestResolutionResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedPredictionMarketsMarketIdRequestResolutionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedPredictionMarketsMarketIdResolve operation middleware
+func (sh *strictHandler) PostAdvancedPredictionMarketsMarketIdResolve(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdResolveParams) {
+	var request PostAdvancedPredictionMarketsMarketIdResolveRequestObject
+
+	request.MarketId = marketId
+	request.Params = params
+
+	var body PostAdvancedPredictionMarketsMarketIdResolveJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedPredictionMarketsMarketIdResolve(ctx, request.(PostAdvancedPredictionMarketsMarketIdResolveRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedPredictionMarketsMarketIdResolve")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedPredictionMarketsMarketIdResolveResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedPredictionMarketsMarketIdResolveResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedPredictionMarketsMarketIdSettle operation middleware
+func (sh *strictHandler) PostAdvancedPredictionMarketsMarketIdSettle(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdSettleParams) {
+	var request PostAdvancedPredictionMarketsMarketIdSettleRequestObject
+
+	request.MarketId = marketId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedPredictionMarketsMarketIdSettle(ctx, request.(PostAdvancedPredictionMarketsMarketIdSettleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedPredictionMarketsMarketIdSettle")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedPredictionMarketsMarketIdSettleResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedPredictionMarketsMarketIdSettleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedPredictionMarketsMarketIdUphold operation middleware
+func (sh *strictHandler) PostAdvancedPredictionMarketsMarketIdUphold(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdUpholdParams) {
+	var request PostAdvancedPredictionMarketsMarketIdUpholdRequestObject
+
+	request.MarketId = marketId
+	request.Params = params
+
+	var body PostAdvancedPredictionMarketsMarketIdUpholdJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedPredictionMarketsMarketIdUphold(ctx, request.(PostAdvancedPredictionMarketsMarketIdUpholdRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedPredictionMarketsMarketIdUphold")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedPredictionMarketsMarketIdUpholdResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedPredictionMarketsMarketIdUpholdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedPredictionMarketsMarketIdVoid operation middleware
+func (sh *strictHandler) PostAdvancedPredictionMarketsMarketIdVoid(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdVoidParams) {
+	var request PostAdvancedPredictionMarketsMarketIdVoidRequestObject
+
+	request.MarketId = marketId
+	request.Params = params
+
+	var body PostAdvancedPredictionMarketsMarketIdVoidJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedPredictionMarketsMarketIdVoid(ctx, request.(PostAdvancedPredictionMarketsMarketIdVoidRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedPredictionMarketsMarketIdVoid")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedPredictionMarketsMarketIdVoidResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedPredictionMarketsMarketIdVoidResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -13959,310 +17376,380 @@ func (sh *strictHandler) PostWithdrawals(w http.ResponseWriter, r *http.Request,
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
-	"HnFQ4RHLdVhO9FioxPG543gwA259/uXz/x4A",
+	"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",
+	"NDq3HA9mwp2PP338/wYA",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

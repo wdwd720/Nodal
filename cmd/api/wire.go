@@ -49,6 +49,7 @@ import (
 	"github.com/nodal/controlplane/internal/observability"
 	"github.com/nodal/controlplane/internal/payout"
 	"github.com/nodal/controlplane/internal/positions"
+	"github.com/nodal/controlplane/internal/predmarket"
 	"github.com/nodal/controlplane/internal/provider"
 	"github.com/nodal/controlplane/internal/provider/stripe"
 	"github.com/nodal/controlplane/internal/ratelimit"
@@ -323,6 +324,63 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// >>> advanced:bridge services
 
 	// >>> advanced:predmarket services
+	//
+	// Prediction markets (internal/predmarket). The service is built from the
+	// ledger, capital service, asset and instrument repositories, gate checker,
+	// kill switches and audit writer constructed above; the econ stores, risk
+	// store and reconciliation repository it takes are stateless wrappers over
+	// the same clock, outbox and audit writer as their siblings below.
+	//
+	// The oracle: the deterministic sandbox oracle, whose Ed25519 key derives
+	// from a fixed seed anyone can read, exists only where fake providers are
+	// allowed (LOCAL, TEST, DEV). Everywhere else no oracle is configured, so
+	// resolution answers PROVIDER_UNAVAILABLE instead of trusting a key whose
+	// private half is in the source tree.
+	var predmarketOracle *predmarket.SandboxOracle
+	if cfg.Env.AllowsFakeProviders() {
+		predmarketOracle, err = predmarket.NewSandboxOracle("nodal-sandbox-oracle", []byte("nodal.predmarket.sandbox-oracle!"))
+		if err != nil {
+			return nil, fmt.Errorf("prediction market sandbox oracle: %w", err)
+		}
+	}
+	// The same legal policy the rest of the API routes against; the
+	// conservative one (which permits simulation) when none is selected, since
+	// the service needs a router rather than a nil meaning "conservative".
+	predmarketRouter, err := legalRouterFor(cfg.Env, in.cfg.API.LegalPolicy)
+	if err != nil {
+		return nil, err
+	}
+	if predmarketRouter == nil {
+		if predmarketRouter, err = legalrouter.New(legalrouter.ConservativePolicy()); err != nil {
+			return nil, fmt.Errorf("prediction market legal router: %w", err)
+		}
+	}
+	predmarketConfig := predmarket.Config{
+		Clock:          clk,
+		Intents:        econ.NewIntentStore(clk, outbox, auditWriter),
+		Effects:        econ.NewEffectStore(clk, outbox, auditWriter),
+		Authorizer:     econ.NewAuthorizer(gateChecker, killChecker),
+		Registry:       econ.NewRegistry(),
+		KillSwitches:   killChecker,
+		Ledger:         ledgerSvc,
+		Capital:        capitalSvc,
+		Risk:           risk.NewStore(),
+		RiskPolicy:     risk.DefaultAdvancedPolicy(),
+		Router:         predmarketRouter,
+		Instruments:    instrumentRepo,
+		Assets:         assetRepo,
+		Reconciliation: reconciliation.NewRepository(clk, outbox, auditWriter),
+		Audit:          auditWriter,
+	}
+	if predmarketOracle != nil {
+		// Only a real oracle: a nil *SandboxOracle in the interface field
+		// would not compare equal to nil and would be called.
+		predmarketConfig.Oracle = predmarketOracle
+	}
+	predmarketSvc, err := predmarket.NewService(predmarketConfig)
+	if err != nil {
+		return nil, fmt.Errorf("prediction markets: %w", err)
+	}
 
 	// >>> advanced:marketplace services
 
@@ -357,6 +415,8 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		// >>> advanced:bridge deps
 
 		// >>> advanced:predmarket deps
+		PredictionMarkets: predmarketSvc,
+		PredictionOracle:  predmarketOracle,
 
 		// >>> advanced:marketplace deps
 

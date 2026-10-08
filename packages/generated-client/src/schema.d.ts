@@ -1080,6 +1080,806 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/advanced/prediction-markets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Prediction markets in one lifecycle status, soonest close first */
+        get: {
+            parameters: {
+                query: {
+                    limit?: components["parameters"]["Limit"];
+                    status: components["schemas"]["PredictionMarketStatus"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Markets in that status (the service does not page; the list is bounded by limit) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PredictionMarketList"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /**
+         * Define a prediction market in DRAFT, collateralised in the sandbox dollar (operator)
+         * @description Creating an existing symbol with an identical definition replays it (200); another definition under the same symbol is INVALID_IDEMPOTENCY_REUSE. The creator can never resolve or void the market.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreatePredictionMarketRequest"];
+                };
+            };
+            responses: {
+                /** @description The same definition already exists, or an idempotent replay */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PredictionMarket"];
+                    };
+                };
+                /** @description Market defined in DRAFT */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PredictionMarket"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/prediction-markets/{marketId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One market with its outcomes, resolutions, disputes and settlement record */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    marketId: components["parameters"]["MarketId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The market */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PredictionMarketDetail"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/prediction-markets/{marketId}/books": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The market's escrow books, one snapshot, and whether they satisfy the escrow identity */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    marketId: components["parameters"]["MarketId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Escrow, collateral and every outcome's shares issued, outstanding and held by customers */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PredictionEscrowBooks"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/prediction-markets/{marketId}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Close an OPEN market at or after its close time (operator) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    marketId: components["parameters"]["MarketId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The market after the step */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PredictionMarket"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/prediction-markets/{marketId}/dispute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Dispute a RESOLVED market's oracle resolution, blocking settlement (operator) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    marketId: components["parameters"]["MarketId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["PredictionDisputeRequest"];
+                };
+            };
+            responses: {
+                /** @description The dispute and the market, now DISPUTED */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PredictionDisputeResult"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/prediction-markets/{marketId}/issuances": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Issue complete sets (collateral into the escrow, one share of every outcome per set) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    marketId: components["parameters"]["MarketId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["PredictionSetRequest"];
+                };
+            };
+            responses: {
+                /** @description The issuance as the economic kernel carried it out */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PredictionSetResult"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/prediction-markets/{marketId}/open": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Open a DRAFT market at or after its open time (operator) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    marketId: components["parameters"]["MarketId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The market after the step */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PredictionMarket"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/prediction-markets/{marketId}/oracle-observations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record what the sandbox oracle observed for a market (operator; sandbox oracle only)
+         * @description The sandbox oracle is the stand-in for the world a market asks about. An observation is what it will sign when a resolution asks it for a report; a later observation replaces an earlier one. Observations live in the API process's memory. Without a sandbox oracle this answers PROVIDER_UNAVAILABLE.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    marketId: components["parameters"]["MarketId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["PredictionOracleObservationRequest"];
+                };
+            };
+            responses: {
+                /** @description The signed report the oracle will now deliver for the market */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PredictionOracleObservation"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+                503: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/prediction-markets/{marketId}/positions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** An account's outcome shares in one market */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                };
+                header?: never;
+                path: {
+                    marketId: components["parameters"]["MarketId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Every outcome share the account holds in the market (none listed means none held) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PredictionPositionList"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/prediction-markets/{marketId}/reconcile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run the PREDICTION_ESCROW reconciliation for one market (operator; compares and records, moves nothing) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    marketId: components["parameters"]["MarketId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The reconciliation record, MATCHED or a material MISMATCH naming every violation */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PredictionEscrowReconciliation"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/prediction-markets/{marketId}/redemptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Redeem complete sets (one share of every outcome per set back into collateral) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    marketId: components["parameters"]["MarketId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["PredictionSetRequest"];
+                };
+            };
+            responses: {
+                /** @description The redemption as the economic kernel carried it out */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PredictionSetResult"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/prediction-markets/{marketId}/request-resolution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Move a CLOSED market to RESOLVING, awaiting an oracle report (operator) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    marketId: components["parameters"]["MarketId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The market after the step */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PredictionMarket"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/prediction-markets/{marketId}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolve from the configured oracle's report, verified against the market's oracle key (operator)
+         * @description RESOLVING: the report resolves the market. DISPUTED: a report closes the dispute (DISPUTE_OVERTURNED when its outcome differs, DISPUTE_UPHELD when it does not). Replaying an accepted report changes nothing. The market's creator, and for a dispute the operator who raised it, are refused. With no oracle configured this answers PROVIDER_UNAVAILABLE.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    marketId: components["parameters"]["MarketId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["PredictionResolveRequest"];
+                };
+            };
+            responses: {
+                /** @description The market and the resolution now in force */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PredictionResolutionResult"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                503: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/prediction-markets/{marketId}/settle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Settle a RESOLVED market from its escrow once its dispute window has passed (operator)
+         * @description Every winning share pays exactly one collateral unit and every share is retired; the escrow is empty afterwards. Settling a SETTLED market returns its record and pays nothing (replay true).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    marketId: components["parameters"]["MarketId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The settlement record and what this call paid */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PredictionSettlementResult"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/prediction-markets/{marketId}/uphold": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Close a dispute keeping the disputed outcome (operator; not the creator, not the disputer) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    marketId: components["parameters"]["MarketId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["PredictionRulingRequest"];
+                };
+            };
+            responses: {
+                /** @description The market and its DISPUTE_UPHELD resolution */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PredictionResolutionResult"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/prediction-markets/{marketId}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Void a market that has not settled and refund every share (operator; not the creator) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    marketId: components["parameters"]["MarketId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["PredictionVoidRequest"];
+                };
+            };
+            responses: {
+                /** @description The refund record, with the residual it discloses */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PredictionSettlementResult"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/prediction-markets/oracle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The oracle this deployment resolves prediction markets from (sandbox oracle in LOCAL, TEST and DEV only) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The oracle's source name and Ed25519 public key, which a market registers at creation */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PredictionOracle"];
+                    };
+                };
+                503: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/advanced/risk/decisions": {
         parameters: {
             query?: never;
@@ -3382,6 +4182,24 @@ export interface components {
             amount: components["schemas"]["Quantity"];
             destination_id?: components["schemas"]["UUID"];
         };
+        CreatePredictionMarketRequest: {
+            close_at: components["schemas"]["Timestamp"];
+            /**
+             * Format: int64
+             * @description Whole milliseconds within 0..30 days
+             */
+            dispute_window_ms: number;
+            mode: components["schemas"]["PredictionMarketMode"];
+            open_at: components["schemas"]["Timestamp"];
+            /** @description hex Ed25519 public key (64 hex characters) */
+            oracle_public_key: string;
+            oracle_source: string;
+            /** @description 2..64 distinct symbols of 1..24 of A-Z 0-9 _ - */
+            outcomes: string[];
+            question: string;
+            /** @description 1..32 of A-Z 0-9 _ -, starting alphanumeric */
+            symbol: string;
+        };
         /** @description The breakdown PART XX requires. gross is every remaining unit; payout_eligible is what the named policy version permits to be withdrawn right now. They are different numbers and the product must never show one where it means the other. */
         CreditBalance: {
             account_id: components["schemas"]["UUID"];
@@ -3959,6 +4777,291 @@ export interface components {
         };
         PayoutRequestPage: {
             items: components["schemas"]["PayoutRequest"][];
+        };
+        PredictionActor: {
+            actor_id: string;
+            actor_type: string;
+        };
+        PredictionBookOutcome: {
+            held_by_customers: components["schemas"]["Quantity"];
+            index: number;
+            share_asset_id: components["schemas"]["UUID"];
+            shares_issued: components["schemas"]["Quantity"];
+            shares_outstanding: components["schemas"]["Quantity"];
+            symbol: string;
+        };
+        PredictionDispute: {
+            evidence_ref: string;
+            evidence_sha256: string;
+            id: components["schemas"]["UUID"];
+            market_id: components["schemas"]["UUID"];
+            raised_at: components["schemas"]["Timestamp"];
+            raised_by: components["schemas"]["PredictionActor"];
+            reason: string;
+            resolution_id: components["schemas"]["UUID"];
+        };
+        PredictionDisputeRequest: {
+            evidence: {
+                [key: string]: unknown;
+            };
+            /** @description 8..2000 characters */
+            reason: string;
+        };
+        PredictionDisputeResult: {
+            dispute: components["schemas"]["PredictionDispute"];
+            market: components["schemas"]["PredictionMarket"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        PredictionEscrowBooks: {
+            collateral: components["schemas"]["Quantity"];
+            collateral_asset_id: components["schemas"]["UUID"];
+            collateral_decimals: number;
+            collateral_symbol: string;
+            escrow: components["schemas"]["Quantity"];
+            market_id: components["schemas"]["UUID"];
+            market_status: components["schemas"]["PredictionMarketStatus"];
+            outcomes: components["schemas"]["PredictionBookOutcome"][];
+            /** @description True when the books satisfy escrow = collateral = outstanding(i) + residual and issued(i) = outstanding(i) = held(i) */
+            reconciles: boolean;
+            /** @description The residual the market's settlement record discloses; zero without one */
+            residual: components["schemas"]["Quantity"];
+            share_decimals: number;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            violations: string[];
+        };
+        PredictionEscrowReconciliation: {
+            blocks_new_risk: boolean;
+            difference: {
+                [key: string]: unknown;
+            };
+            expected: {
+                [key: string]: unknown;
+            };
+            id: components["schemas"]["UUID"];
+            /** @description PREDICTION_ESCROW */
+            kind: string;
+            matched_at?: components["schemas"]["Timestamp"];
+            material: boolean;
+            /** @description EVENT_DRIVEN, PERIODIC or FULL */
+            mode: string;
+            observed: {
+                [key: string]: unknown;
+            };
+            opened_at: components["schemas"]["Timestamp"];
+            scope_id: string;
+            scope_type: string;
+            /** @description OPEN, MATCHED, MISMATCH, INVESTIGATING, RESOLVED_AUTOMATIC, RESOLVED_MANUAL or ESCALATED */
+            status: string;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        PredictionMarket: {
+            close_at: components["schemas"]["Timestamp"];
+            collateral_asset_id: components["schemas"]["UUID"];
+            collateral_decimals: number;
+            collateral_symbol: string;
+            created_at: components["schemas"]["Timestamp"];
+            created_by: components["schemas"]["PredictionActor"];
+            current_resolution_id?: components["schemas"]["UUID"];
+            /** @description hex sha256 of the canonical definition */
+            definition_hash: string;
+            /** Format: int64 */
+            dispute_window_ms: number;
+            /** @description The PREDICTION_MARKET facility whose books are the market's escrow */
+            facility_id: components["schemas"]["UUID"];
+            id: components["schemas"]["UUID"];
+            instrument_id: components["schemas"]["UUID"];
+            mode: components["schemas"]["PredictionMarketMode"];
+            open_at: components["schemas"]["Timestamp"];
+            /** @description hex Ed25519 public key the market accepts reports from */
+            oracle_public_key: string;
+            oracle_source: string;
+            outcomes: components["schemas"]["PredictionOutcome"][];
+            question: string;
+            share_decimals: number;
+            status: components["schemas"]["PredictionMarketStatus"];
+            symbol: string;
+            /** @description Collateral base units one complete set costs and one winning share pays */
+            unit_quantity: components["schemas"]["Quantity"];
+            updated_at: components["schemas"]["Timestamp"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        PredictionMarketDetail: {
+            /** @description Oldest first */
+            disputes: components["schemas"]["PredictionDispute"][];
+            market: components["schemas"]["PredictionMarket"];
+            /** @description Oldest first */
+            resolutions: components["schemas"]["PredictionResolution"][];
+            /** @description Absent until the market settles or is voided */
+            settlement?: components["schemas"]["PredictionSettlement"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        PredictionMarketList: {
+            items: components["schemas"]["PredictionMarket"][];
+            status: components["schemas"]["PredictionMarketStatus"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @enum {string} */
+        PredictionMarketMode: "PAPER" | "SANDBOX";
+        /** @description One of DRAFT, OPEN, CLOSED, RESOLVING, RESOLVED, DISPUTED, SETTLED, VOIDED. DRAFT → OPEN → CLOSED → RESOLVING → RESOLVED → SETTLED; RESOLVED → DISPUTED → RESOLVED or VOIDED; any state but SETTLED and VOIDED → VOIDED. Declared without an enum on purpose: its values are shared with other schemas' enums, and a shared enum value renames the generated constants of every schema that holds it. */
+        PredictionMarketStatus: string;
+        PredictionOracle: {
+            /** @enum {string} */
+            kind: "SANDBOX";
+            /** @description hex Ed25519 public key */
+            public_key: string;
+            source: string;
+        };
+        PredictionOracleObservation: {
+            report: components["schemas"]["PredictionOracleReport"];
+            report_hash: string;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        PredictionOracleObservationRequest: {
+            /** @description The source document the oracle saw (1..16384 bytes); its sha256 is signed */
+            evidence: string;
+            observed_at: components["schemas"]["Timestamp"];
+            outcome: string;
+        };
+        PredictionOracleReport: {
+            /** @description standard base64 */
+            evidence: string;
+            market_id: string;
+            /** @description RFC 3339 in UTC */
+            observed_at: string;
+            outcome: string;
+            /** @description standard base64 Ed25519 signature */
+            signature: string;
+            source: string;
+        };
+        PredictionOutcome: {
+            index: number;
+            /** @description The outcome's EVENT_OUTCOME instrument for the internal order book */
+            instrument_id: components["schemas"]["UUID"];
+            share_asset_id: components["schemas"]["UUID"];
+            symbol: string;
+        };
+        PredictionPayoutLine: {
+            account_id: components["schemas"]["UUID"];
+            amount: components["schemas"]["Quantity"];
+            intent_id: components["schemas"]["UUID"];
+            journal_transaction_id?: components["schemas"]["UUID"];
+            shares: components["schemas"]["PredictionShareCount"][];
+        };
+        PredictionPosition: {
+            as_of: components["schemas"]["Timestamp"];
+            outcome_index: number;
+            outcome_symbol: string;
+            quantity: components["schemas"]["Quantity"];
+            share_asset_id: components["schemas"]["UUID"];
+        };
+        PredictionPositionList: {
+            account_id: components["schemas"]["UUID"];
+            items: components["schemas"]["PredictionPosition"][];
+            market_id: components["schemas"]["UUID"];
+            share_decimals: number;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        PredictionResolution: {
+            accepted_at: components["schemas"]["Timestamp"];
+            accepted_by: components["schemas"]["PredictionActor"];
+            dispute_id?: components["schemas"]["UUID"];
+            evidence_ref: string;
+            evidence_sha256: string;
+            id: components["schemas"]["UUID"];
+            kind: components["schemas"]["PredictionResolutionKind"];
+            market_id: components["schemas"]["UUID"];
+            outcome_index: number;
+            outcome_symbol: string;
+            reason: string;
+            /** @description hex sha256 of the verified report's signed bytes and signature */
+            report_hash?: string;
+            report_observed_at?: components["schemas"]["Timestamp"];
+            report_source?: string;
+            supersedes_id?: components["schemas"]["UUID"];
+        };
+        /** @enum {string} */
+        PredictionResolutionKind: "ORACLE" | "DISPUTE_UPHELD" | "DISPUTE_OVERTURNED";
+        PredictionResolutionResult: {
+            market: components["schemas"]["PredictionMarket"];
+            /** @description True when the report had already been accepted; nothing changed */
+            replay: boolean;
+            resolution: components["schemas"]["PredictionResolution"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        PredictionResolveRequest: {
+            reason?: string;
+        };
+        /** @enum {string} */
+        PredictionRoundingPolicy: "EXACT" | "FLOOR_PER_HOLDER";
+        PredictionRulingRequest: {
+            evidence?: {
+                [key: string]: unknown;
+            };
+            /** @description 8..2000 characters */
+            reason: string;
+        };
+        /** @enum {string} */
+        PredictionSetAction: "ISSUE" | "REDEEM";
+        PredictionSetRequest: {
+            account_id: components["schemas"]["UUID"];
+            /** @description Complete sets in share base units, a positive multiple of the market's unit_quantity */
+            quantity: components["schemas"]["Quantity"];
+        };
+        PredictionSetResult: {
+            account_id: components["schemas"]["UUID"];
+            action: components["schemas"]["PredictionSetAction"];
+            effect?: components["schemas"]["EconomicEffect"];
+            intent: components["schemas"]["EconomicIntent"];
+            journal_transaction_id?: components["schemas"]["UUID"];
+            market_id: components["schemas"]["UUID"];
+            quantity: components["schemas"]["Quantity"];
+            /** @description True when the economic intent already existed; nothing new happened */
+            replay: boolean;
+            risk_decision_hash?: string;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        PredictionSettlement: {
+            escrow_before: components["schemas"]["Quantity"];
+            evidence_ref: string;
+            evidence_sha256: string;
+            holder_count: number;
+            id: components["schemas"]["UUID"];
+            kind: components["schemas"]["PredictionSettlementKind"];
+            market_id: components["schemas"]["UUID"];
+            outcome_count: number;
+            refund_rate_per_share?: components["schemas"]["Quantity"];
+            /** @description What the escrow keeps; zero after a payout, disclosed after a refund */
+            residual: components["schemas"]["Quantity"];
+            resolution_id?: components["schemas"]["UUID"];
+            rounding_policy: components["schemas"]["PredictionRoundingPolicy"];
+            settled_at: components["schemas"]["Timestamp"];
+            settled_by: components["schemas"]["PredictionActor"];
+            total_paid: components["schemas"]["Quantity"];
+            unit_quantity: components["schemas"]["Quantity"];
+            winning_outcome_index?: number;
+            winning_outcome_symbol?: string;
+        };
+        /** @description PAYOUT (a resolved market paid its winners) or REFUND (a void refunded every share); no enum, see PredictionMarketStatus */
+        PredictionSettlementKind: string;
+        PredictionSettlementResult: {
+            /** @description What this call paid, one line per holder; empty on a replay */
+            lines: components["schemas"]["PredictionPayoutLine"][];
+            market: components["schemas"]["PredictionMarket"];
+            /** @description True when the market had already settled (or been voided); nothing was paid */
+            replay: boolean;
+            settlement: components["schemas"]["PredictionSettlement"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        PredictionShareCount: {
+            outcome_symbol: string;
+            quantity: components["schemas"]["Quantity"];
+        };
+        PredictionVoidRequest: {
+            evidence?: {
+                [key: string]: unknown;
+            };
+            /** @description 8..2000 characters */
+            reason: string;
         };
         Principal: {
             account_ids: components["schemas"]["UUID"][];
