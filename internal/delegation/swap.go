@@ -122,7 +122,7 @@ type swapTerms struct {
 // capability, record the intent, route it, price it at the venue, measure
 // the capability against it, run Risk V2, reserve the pay asset, record the
 // usage and the plan. Nothing is signed. In the caller's transaction.
-func (s *Service) RequestSwap(ctx context.Context, tx pgx.Tx, req SwapRequest) (SwapTicket, error) {
+func (s *admitter) RequestSwap(ctx context.Context, tx pgx.Tx, req SwapRequest) (SwapTicket, error) {
 	if err := req.validate(); err != nil {
 		return SwapTicket{}, err
 	}
@@ -160,7 +160,7 @@ func (s *Service) RequestSwap(ctx context.Context, tx pgx.Tx, req SwapRequest) (
 	if err != nil {
 		return SwapTicket{}, err
 	}
-	wallet, err := s.signer.EnsureKey(ctx, tx, req.AccountID, venue.Chain)
+	wallet, err := admittedWallet(ctx, tx, req.AccountID, venue.Chain)
 	if err != nil {
 		return SwapTicket{}, err
 	}
@@ -243,7 +243,7 @@ func (s *Service) RequestSwap(ctx context.Context, tx pgx.Tx, req SwapRequest) (
 		}
 		return refuse(errs.CodeStaleMarketData, RefusalPriceUnavailable, "the venue has no fresh price for one of the assets")
 	}
-	if req.MaxSlippageBPS > s.signer.Policy().MaxSlippageBPS {
+	if req.MaxSlippageBPS > s.signing.MaxSlippageBPS {
 		return refuse(errs.CodeValidationFailed, ReasonSlippageAbovePolicy, "the slippage bound is above the signing policy's")
 	}
 	quote, err := ComputeQuote(QuoteInput{AmountIn: amountIn, PayDecimals: pay.Decimals, ReceiveDecimals: recv.Decimals,
@@ -307,7 +307,7 @@ func (s *Service) RequestSwap(ctx context.Context, tx pgx.Tx, req SwapRequest) (
 	if err := insertUsage(ctx, tx, usage, c, SubjectSwap, sid.String(), action, quote.NotionalUSD, now); err != nil {
 		return SwapTicket{}, err
 	}
-	fee, ok := HostFees(s.host)(venue.Chain)
+	fee, ok := HostFees(s.chain)(venue.Chain)
 	if !ok {
 		return SwapTicket{}, errs.New(errs.CodeValidationFailed, "delegation: the host does not run chain "+string(venue.Chain))
 	}
@@ -368,7 +368,7 @@ func (s *Service) RequestSwap(ctx context.Context, tx pgx.Tx, req SwapRequest) (
 	return SwapTicket{Swap: sw}, nil
 }
 
-func (s *Service) replaySwap(ctx context.Context, tx pgx.Tx, in econ.Intent) (SwapTicket, error) {
+func (s *admitter) replaySwap(ctx context.Context, tx pgx.Tx, in econ.Intent) (SwapTicket, error) {
 	sw, found, err := swapByIntent(ctx, tx, in.ID)
 	if err != nil {
 		return SwapTicket{}, err
@@ -410,7 +410,7 @@ func devnetMints(chain devnet.ChainID, pay, recv assets.Asset) (devnet.PublicKey
 // receive asset beyond what its open swaps have already promised. Admissions
 // against one venue are serialized by a transaction-scoped advisory lock, so
 // two admissions cannot promise the same inventory.
-func (s *Service) venueCovers(ctx context.Context, tx pgx.Tx, v Venue, asset assets.AssetID, amountOut money.Quantity) (bool, error) {
+func (s *admitter) venueCovers(ctx context.Context, tx pgx.Tx, v Venue, asset assets.AssetID, amountOut money.Quantity) (bool, error) {
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, "delegation/venue/"+v.ID.String()); err != nil {
 		return false, dbErr("lock venue", err)
 	}
@@ -443,7 +443,7 @@ func (s *Service) venueCovers(ctx context.Context, tx pgx.Tx, v Venue, asset ass
 // and the ones that apply (balance, settlement, chain, venue), and persists
 // the decision whatever it says. Whether the swap increases risk is its
 // action as SwapAction derived it -- never the agent's label.
-func (s *Service) evaluateSwapRisk(ctx context.Context, tx pgx.Tx, in econ.Intent, action ActionClass, agent agentRow,
+func (s *admitter) evaluateSwapRisk(ctx context.Context, tx pgx.Tx, in econ.Intent, action ActionClass, agent agentRow,
 	exposure, pay assets.Asset, payPrice money.Price, payPar bool, recvPrice money.Price, recvPar bool, venue Venue, quote Quote,
 	check AuthorityCheck, now time.Time) (risk.AdvancedDecision, error) {
 	acct, err := s.loadAccount(ctx, tx, in.AccountID)
@@ -488,7 +488,10 @@ func (s *Service) evaluateSwapRisk(ctx context.Context, tx pgx.Tx, in econ.Inten
 		}
 	}
 	class, _ := ClassifyAsset(exposure)
-	_, venueSigner := s.venues[venue.Address]
+	coSignable, err := venueCanCoSign(ctx, tx, venue)
+	if err != nil {
+		return risk.AdvancedDecision{}, err
+	}
 	input := risk.AdvancedInput{
 		Stage: risk.StagePreTrade,
 		Intent: risk.AdvancedIntent{ID: in.ID.String(), Kind: string(in.Kind), AccountID: in.AccountID.String(),
@@ -500,8 +503,8 @@ func (s *Service) evaluateSwapRisk(ctx context.Context, tx pgx.Tx, in econ.Inten
 		Instrument:   &risk.InstrumentSnapshot{Status: string(exposure.Status), SessionOpen: true, Expired: false},
 		Balance:      &risk.BalanceSnapshot{Available: available, Required: required},
 		Oracle:       &risk.OracleSnapshot{Available: true, ObservedAt: observed},
-		Venue:        &risk.VenueSnapshot{Healthy: venueSigner},
-		Chain:        &risk.ChainSnapshot{Healthy: s.host.Health(ctx, venue.Chain) == nil},
+		Venue:        &risk.VenueSnapshot{Healthy: coSignable},
+		Chain:        &risk.ChainSnapshot{Healthy: s.chain.Health(ctx, venue.Chain) == nil},
 		Settlement:   &risk.SettlementSnapshot{UnknownEffects: unknown},
 		Authority:    check.Snapshot(),
 		Strategy:     &risk.StrategySnapshot{Approved: approved && agent.usable(), ManifestPermits: check.InScope},
@@ -517,7 +520,7 @@ func (s *Service) evaluateSwapRisk(ctx context.Context, tx pgx.Tx, in econ.Inten
 
 // transitionSwap moves a swap and writes everything the move licenses: the
 // transition row, the set-once columns, the audit event.
-func (s *Service) transitionSwap(ctx context.Context, tx pgx.Tx, sw Swap, to SwapStatus, actor Actor, reason string, set subjectSet) (Swap, error) {
+func (s *admitter) transitionSwap(ctx context.Context, tx pgx.Tx, sw Swap, to SwapStatus, actor Actor, reason string, set subjectSet) (Swap, error) {
 	if !CanTransitionSwap(sw.Status, to) {
 		return Swap{}, errs.Newf(errs.CodeInvalidStateTransition, "delegation: swap %s cannot move %s -> %s", sw.ID, sw.Status, to)
 	}

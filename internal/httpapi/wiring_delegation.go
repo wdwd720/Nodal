@@ -373,6 +373,11 @@ func (a delegationAdapter) Venues(ctx context.Context) (DelegationVenuesView, er
 
 // --- the owner's commands ----------------------------------------------------------
 
+// Grant records the owner's grant. In the same transaction the service
+// registers the account's delegated wallet key on every chain the grant
+// allows (delegation.Service.GrantCapability): this process holds the
+// delegated signer, so it is where the key is derived and registered, and
+// the agent runtime's admission -- which holds no key -- only reads it.
 func (a delegationAdapter) Grant(ctx context.Context, r delegation.GrantRequest) (DelegationCapabilityView, error) {
 	var out DelegationCapabilityView
 	err := a.write(ctx, func(ctx context.Context, tx pgx.Tx) error {

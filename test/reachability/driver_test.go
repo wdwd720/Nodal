@@ -58,9 +58,10 @@ var reachedThroughDriver = map[string]string{
 	// withdrawal in a transaction each, with the one submission between
 	// them: ExecuteSwap and ExecuteWithdrawal are what the owner's decision
 	// route and the operator's execute-pending route call (internal/httpapi),
-	// and the delegated signer signs only inside them. The agent's admission
-	// registers the delegated wallet's key: the agent runtime calls
-	// AgentAdmission.RequestSwap (internal/agent).
+	// and the delegated signer signs only inside them. The delegated wallet's
+	// key is registered by the owner's grant, where the signer is -- the
+	// grant route calls Service.GrantCapability (internal/httpapi) -- and the
+	// agent's admission only reads it.
 	"internal/delegation.SignSwap":                   "Service.ExecuteSwap",
 	"internal/delegation.GateSwapSubmission":         "Service.ExecuteSwap",
 	"internal/delegation.RecordSwapSubmission":       "Service.ExecuteSwap",
@@ -70,7 +71,7 @@ var reachedThroughDriver = map[string]string{
 	"internal/delegation.GateWithdrawalSubmission":   "Service.ExecuteWithdrawal",
 	"internal/delegation.RecordWithdrawalSubmission": "Service.ExecuteWithdrawal",
 	"internal/delegation.SettleWithdrawal":           "Service.ExecuteWithdrawal",
-	"internal/delegation.EnsureKey":                  "AgentAdmission.RequestSwap",
+	"internal/delegation.EnsureKey":                  "Service.GrantCapability",
 	// The delegation upkeep expires each stale swap and withdrawal in its own
 	// transaction (00760): ExpireStale is what the advanced worker's
 	// delegation.upkeep job calls (internal/advancedjobs).

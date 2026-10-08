@@ -882,9 +882,12 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// one every delegation route answers UNSUPPORTED. Its keys derive from the
 	// same seed (internal/sandboxchain): the delegated wallet signer from
 	// PurposeDelegatedSigner and one co-signer per sandbox venue from the
-	// venue's name; the seed and the keys never leave the signers. No agent
-	// reaches any of it over HTTP: the agent runtime admits an agent's requests
-	// in-process. The identity rule is D-055's, never a request's.
+	// venue's name; the seed and the keys never leave the signers. The owner's
+	// grant registers the account's delegated wallet key here, where the
+	// signer is (delegation.Service.GrantCapability). No agent reaches any of
+	// it over HTTP: the agent runtime admits an agent's requests in-process
+	// from the registered key and holds no key, signer or seed of its own. The
+	// identity rule is D-055's, never a request's.
 	var delegationDeps httpapi.DelegationDeps
 	if sandboxChain != nil {
 		var delegationRouter *legalrouter.Router

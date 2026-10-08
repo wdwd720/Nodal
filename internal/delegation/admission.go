@@ -2,13 +2,11 @@ package delegation
 
 import (
 	"context"
-	"sort"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/nodal/controlplane/internal/accounts"
-	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/audit"
 	"github.com/nodal/controlplane/internal/capital"
 	"github.com/nodal/controlplane/internal/clock"
@@ -23,7 +21,6 @@ import (
 	"github.com/nodal/controlplane/internal/killswitch"
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/legalrouter"
-	"github.com/nodal/controlplane/internal/reconciliation"
 	"github.com/nodal/controlplane/internal/risk"
 	"github.com/nodal/controlplane/internal/valuation"
 )
@@ -40,33 +37,50 @@ import (
 // depguard rule agent-authority -- keeps internal/gates, internal/killswitch
 // and internal/capital out of its source, so it cannot build a Service; nor
 // may it hold one, because a Service also records the owner's decisions,
-// signs through the delegated signer, submits and settles. NewAgentAdmission
-// therefore builds the platform readers those packages provide exactly as
-// every other binary builds them, wires the Service with them, and keeps that
-// Service unexported: there is no method here that signs, executes, decides,
-// grants, revokes, registers a venue or sets a policy, and no accessor for
-// the Service, its signer, its venues or its seeds. What this admits is then
-// carried on by code the agent cannot reach: the owner's decision path, the
-// operator's execute-pending route and the advanced worker's delegation
-// upkeep.
+// signs through the delegated signer, co-signs as the venues, submits and
+// settles. NewAgentAdmission therefore builds the platform readers those
+// packages provide exactly as every other binary builds them and wires them
+// into an admitter -- the half of a Service that admits, and a different
+// type: there is no method here that signs, executes, decides, grants,
+// revokes, registers a venue or sets a policy, and no accessor for anything
+// it holds.
+//
+// It holds no private key material, and needs none. The delegated wallet it
+// plans from is the public key registered when the account's owner granted a
+// capability on the chain (Service.GrantCapability, in the process that
+// holds the signer); an account with no key there is refused
+// (ReasonSignerKeyNotRegistered). A venue counts as able to co-sign when its
+// house book is ACTIVE and its co-signer's public key -- the address it was
+// registered at -- is registered. The chain is only read. What this admits
+// is carried on by code the agent cannot reach, in the processes that hold
+// the delegated signer and the real venue co-signers and check them again
+// before anything is signed: the owner's decision path and the operator's
+// execute-pending route (cmd/api) and the advanced worker's delegation
+// upkeep (cmd/advanced-worker).
 type AgentAdmission struct {
-	svc *Service
+	adm *admitter
 }
 
-// AdmissionConfig is what the agent runtime's composition root supplies.
-// Everything else the Service needs is built here with the platform defaults
-// cmd/api and cmd/advanced-worker use: the kill-switch reader
-// (killswitch.Policy{}), the capability-gate checker over the deployment's
-// enabled-capability list, the capital service on the outbox, Risk Kernel V2
-// with its default policy, the ledger, the price store, the identity rule of
-// D-055, the compliance profiles, reconciliation, the account and asset
-// repositories, and the default signing policy.
+// AdmissionConfig is what the agent runtime's composition root supplies: the
+// deployment's settings and a view of the sandbox chain, and no key, signer
+// or seed. Everything else the admitter needs is built here with the
+// platform defaults cmd/api and cmd/advanced-worker use: the kill-switch
+// reader (killswitch.Policy{}), the capability-gate checker over the
+// deployment's enabled-capability list, the capital service on the outbox,
+// Risk Kernel V2 with its default policy, the ledger, the price store, the
+// identity rule of D-055, the compliance profiles, the account repository
+// and the default signing policy (a policy, held to the slippage bound;
+// never a key). The facade holds no database handle of its own: each call
+// runs in the transaction, or on the querier, its caller hands it.
 type AdmissionConfig struct {
-	DB          *db.DB
 	Clock       clock.Clock
 	Environment config.Environment
-	// Host is the sandbox chain the capabilities act on (sandboxchain.Chain).
-	Host ChainHost
+	// Host is the sandbox chain the capabilities act on, read and never
+	// written: its configuration (the network, each chain's fee) and each
+	// chain's health. A *devnethost.Host satisfies it, including one opened
+	// without the seed over a history that refuses every append
+	// (cmd/agent-worker).
+	Host ChainReader
 	// EnabledCapabilities is the deployment's enabled-capability list
 	// (CP_API_ENABLED_CAPABILITIES): a gate that is not on it is inactive.
 	// Names are matched case-insensitively and an unknown name enables
@@ -77,22 +91,12 @@ type AdmissionConfig struct {
 	// BuildVersion is recorded on audit events and journal transactions;
 	// empty is config.BuildVersion.
 	BuildVersion string
-	// SignerSeed is the delegated signer's master seed
-	// (sandboxchain.Seed.Derive(sandboxchain.PurposeDelegatedSigner)). The
-	// admission path needs the delegated wallet's address, which only the
-	// signer derives; the signer it builds is never reachable from here.
-	SignerSeed [32]byte
-	// VenueSeeds are the co-signer seeds of the venues this deployment
-	// co-signs for, by venue name (sandboxchain.Seed.VenueSeed(name)). Risk
-	// V2 counts a venue healthy only when it can co-sign, so a venue missing
-	// here is refused, never admitted.
-	VenueSeeds map[string][devnet.SeedSize]byte
 }
 
-// NewAgentAdmission builds the Service from c and returns the facade over it.
+// NewAgentAdmission builds the admitter from c and returns the facade over it.
 func NewAgentAdmission(c AdmissionConfig) (*AgentAdmission, error) {
-	if c.DB == nil || c.Clock == nil || !c.Environment.IsValid() || c.Host == nil {
-		return nil, errs.New(errs.CodeInternal, "delegation: the agent admission needs the database, a clock, a valid environment and the sandbox chain")
+	if c.Clock == nil || !c.Environment.IsValid() || c.Host == nil {
+		return nil, errs.New(errs.CodeInternal, "delegation: the agent admission needs a clock, a valid environment and the sandbox chain")
 	}
 	router := c.Router
 	if router == nil {
@@ -115,57 +119,47 @@ func NewAgentAdmission(c AdmissionConfig) (*AgentAdmission, error) {
 	if err != nil {
 		return nil, errs.Wrap(err, errs.CodeInternal, "delegation: the gate checker")
 	}
-	signer, err := NewDelegatedSigner(c.SignerSeed, SignerConfig{Environment: c.Environment, Clock: c.Clock,
-		Policy: DefaultSigningPolicy(), Fees: HostFees(c.Host)})
-	if err != nil {
+	signing := DefaultSigningPolicy()
+	if err := signing.Validate(); err != nil {
 		return nil, err
-	}
-	names := make([]string, 0, len(c.VenueSeeds))
-	for name := range c.VenueSeeds {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	venues := make([]*VenueSigner, 0, len(names))
-	for _, name := range names {
-		venues = append(venues, NewVenueSigner(c.VenueSeeds[name]))
 	}
 	outbox := event.NewOutbox(c.Clock)
 	writer := audit.NewWriterWithBuildVersion(build)
 	kills := killswitch.NewChecker(killswitch.Policy{})
-	svc, err := New(Deps{
-		DB: c.DB, Clock: c.Clock, Environment: c.Environment, Host: c.Host,
-		Intents: econ.NewIntentStore(c.Clock, outbox, writer), Effects: econ.NewEffectStore(c.Clock, outbox, writer),
-		Authorizer: econ.NewAuthorizer(checker, kills), Kills: kills, Ledger: ledger.NewService(c.Clock, build),
-		Capital: capital.NewService(c.Clock, capital.OutboxEmitter{Outbox: outbox, Clock: c.Clock}),
-		Risk:    risk.NewStore(), RiskPolicy: risk.DefaultAdvancedPolicy(), Router: router,
-		Prices: valuation.NewPriceStore(c.Clock), Identity: compliance.NewAccountVerification(c.Clock),
-		Profiles: compliance.NewRepository(writer), Reconciliation: reconciliation.NewRepository(c.Clock, outbox, writer),
-		Audit: writer, Accounts: accounts.NewRepository(), Assets: assets.NewRepository(), Signer: signer, Venues: venues,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &AgentAdmission{svc: svc}, nil
+	return &AgentAdmission{adm: &admitter{
+		clk: c.Clock, env: c.Environment, chain: c.Host, intents: econ.NewIntentStore(c.Clock, outbox, writer),
+		authorizer: econ.NewAuthorizer(checker, kills), kills: kills, ledger: ledger.NewService(c.Clock, build),
+		capital: capital.NewService(c.Clock, capital.OutboxEmitter{Outbox: outbox, Clock: c.Clock}),
+		risk:    risk.NewStore(), policy: risk.DefaultAdvancedPolicy(), router: router,
+		prices: valuation.NewPriceStore(c.Clock), identity: compliance.NewAccountVerification(c.Clock),
+		profiles: compliance.NewRepository(writer), audit: writer, accounts: accounts.NewRepository(), signing: signing,
+		params: Params{}.withDefaults(),
+	}}, nil
 }
 
-// RequestSwap admits the calling agent's delegated swap: Service.RequestSwap,
-// in the caller's transaction, under the AGENT principal in ctx. Nothing is
-// signed; a refusal is recorded and returned in the ticket. The request's
-// Action must be what the swap does (SwapAction): REDUCE_EXPOSURE only for
-// paying a token for a USD-pegged stable unit, ACQUIRE_EXPOSURE for anything
-// else. A label that is not is refused, recorded (ReasonActionMismatch), and
-// the capability, the account's status and Risk V2 are only ever measured
-// against what the swap does.
+// RequestSwap admits the calling agent's delegated swap (Service.RequestSwap
+// is the same method), in the caller's transaction, under the AGENT
+// principal in ctx. Nothing is signed; a refusal is recorded and returned in
+// the ticket. The request's Action must be what the swap does (SwapAction):
+// REDUCE_EXPOSURE only for paying a token for a USD-pegged stable unit,
+// ACQUIRE_EXPOSURE for anything else. A label that is not is refused,
+// recorded (ReasonActionMismatch), and the capability, the account's status
+// and Risk V2 are only ever measured against what the swap does. An account
+// with no delegated wallet key registered on the venue's chain is refused
+// before anything is recorded (ReasonSignerKeyNotRegistered).
 func (a *AgentAdmission) RequestSwap(ctx context.Context, tx pgx.Tx, req SwapRequest) (SwapTicket, error) {
-	return a.svc.RequestSwap(ctx, tx, req)
+	return a.adm.RequestSwap(ctx, tx, req)
 }
 
-// ProposeWithdrawal records the calling agent's withdrawal proposal:
-// Service.ProposeWithdrawal, in the caller's transaction, under the AGENT
-// principal in ctx. A person decides it unless the account's policy
-// auto-approves it in a test environment; nothing is signed or submitted.
+// ProposeWithdrawal records the calling agent's withdrawal proposal
+// (Service.ProposeWithdrawal is the same method), in the caller's
+// transaction, under the AGENT principal in ctx. A person decides it unless
+// the account's policy auto-approves it in a test environment; nothing is
+// signed or submitted. An account with no delegated wallet key registered on
+// the destination's chain is refused before anything is recorded
+// (ReasonSignerKeyNotRegistered).
 func (a *AgentAdmission) ProposeWithdrawal(ctx context.Context, tx pgx.Tx, req ProposalRequest) (WithdrawalTicket, error) {
-	return a.svc.ProposeWithdrawal(ctx, tx, req)
+	return a.adm.ProposeWithdrawal(ctx, tx, req)
 }
 
 // AgentCapabilities returns the capabilities the account's owner granted the
@@ -174,11 +168,11 @@ func (a *AgentAdmission) ProposeWithdrawal(ctx context.Context, tx pgx.Tx, req P
 // and another agent's grants are never returned. Whether one may be used now
 // is Capability.UsableAt's to say, and every admission measures it again.
 func (a *AgentAdmission) AgentCapabilities(ctx context.Context, q db.Querier, account accounts.AccountID) ([]Capability, error) {
-	_, agent, err := a.svc.agentFor(ctx, q, account)
+	_, agent, err := a.adm.agentFor(ctx, q, account)
 	if err != nil {
 		return nil, err
 	}
-	all, err := a.svc.ListCapabilities(ctx, q, account)
+	all, err := a.adm.ListCapabilities(ctx, q, account)
 	if err != nil {
 		return nil, err
 	}
@@ -189,4 +183,43 @@ func (a *AgentAdmission) AgentCapabilities(ctx context.Context, q db.Querier, ac
 		}
 	}
 	return out, nil
+}
+
+// admittedWallet is the account's delegated wallet on chain as an admission
+// plans from it: the public key registered when the account's owner granted
+// a capability on that chain. Nothing is derived and nothing is registered
+// here. An account with no key on chain is refused
+// (ReasonSignerKeyNotRegistered): no grant has given its agents that chain.
+// That the registered key is the one the delegated signer derives is the
+// signer's to check, and it checks it again before it signs.
+func admittedWallet(ctx context.Context, q db.Querier, account accounts.AccountID, chain devnet.ChainID) (devnet.PublicKey, error) {
+	key, ok, err := registeredKey(ctx, q, account, chain)
+	if err != nil {
+		return devnet.PublicKey{}, err
+	}
+	if !ok {
+		return devnet.PublicKey{}, errs.New(errs.CodeForbidden, "delegation: the account has no delegated wallet key on "+string(chain)+
+			"; the key is registered when the account's owner grants a capability on that chain").
+			WithField("reason", ReasonSignerKeyNotRegistered)
+	}
+	return key, nil
+}
+
+// venueCanCoSign is whether v counts as able to co-sign at admission, judged
+// from what is registered and nothing else: its house book is ACTIVE, and
+// its co-signer's public key -- the address it was registered at, which a
+// venue keeps for ever -- is registered. A switch that disables the venue is
+// the kill switches' to apply, and they are. Whether a process holds the
+// co-signer for that key is checked where the co-signers are: a signing
+// process refuses a swap at a venue it cannot co-sign for, before anything
+// is signed (ReasonVenueSignerUnavailable).
+func venueCanCoSign(ctx context.Context, q db.Querier, v Venue) (bool, error) {
+	if v.Address.IsZero() {
+		return false, nil
+	}
+	house, err := econ.NewRegistry().HouseAccount(ctx, q, v.HouseAccountID)
+	if err != nil {
+		return false, err
+	}
+	return house.Status == econ.HouseActive, nil
 }
