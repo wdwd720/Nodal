@@ -12,7 +12,7 @@ an external provider's sandbox) · `BLOCKED_EXTERNAL` · `LIVE_CAPABLE_BUT_DISAB
 code (`gates.DecideMode` → `LIVE_NOT_IMPLEMENTED`) and unrepresentable in the database (D-049). The live
 column below says what activation would need, never that it is near.
 
-Last updated: 2026-10-08 — foundation, kernel amendments (00733), transfers + faucet (00744), margin (00740), derivatives (00741) and prediction markets (00749) merged; other subsystem lanes in progress.
+Last updated: 2026-10-08 — foundation, kernel amendments (00733), transfers + faucet (00744), margin (00740), derivatives (00741), prediction markets (00749), strategy marketplace (00750) and sandboxed runs (00751) merged; other subsystem lanes in progress.
 
 ## Summary
 
@@ -33,8 +33,8 @@ Last updated: 2026-10-08 — foundation, kernel amendments (00733), transfers + 
 | 13 | Principal / treasury book (§11) | IN_PROGRESS | PAPER/SANDBOX | B-15 |
 | 14 | Transparent spread + fee engine (§12) | IN_PROGRESS (pure engine VERIFIED_LOCAL; fee ledger pending) | PAPER/SANDBOX | B-15 |
 | 15 | Performance fee engine (§13) | IN_PROGRESS (pure engine VERIFIED_LOCAL; persistence pending) | PAPER/SANDBOX | B-15 |
-| 16 | Strategy marketplace (§14) | IN_PROGRESS | PAPER | B-15 |
-| 17 | Sandboxed user code (§15) | IN_PROGRESS | SANDBOX | B-19 |
+| 16 | Strategy marketplace (§14) | VERIFIED_LOCAL (API in progress) | PAPER | B-15 |
+| 17 | Sandboxed user code (§15) | VERIFIED_LOCAL (API in progress) | SANDBOX | B-19 |
 | 18 | Delegated agent signing (§16) | NOT_STARTED | SANDBOX/DEVNET | B-18 |
 | 19 | Delegated agent withdrawals (§17) | NOT_STARTED | SANDBOX/DEVNET | B-18 |
 | 20 | Cross-chain buying power (§18) | NOT_STARTED | SANDBOX/DEVNET | B-20 |
@@ -102,3 +102,10 @@ Last updated: 2026-10-08 — foundation, kernel amendments (00733), transfers + 
 - **DB:** `00741_derivatives.sql` (DV001–DV004; one settlement per instrument, one funding accrual per position and interval).
 - **Tests:** `TestProp_RoundTripRealizedPnLIsExact`, `TestProp_FundingConservesOnABalancedBook`, `TestProp_OptionPayoffIsExactAndPutCallParityHolds`, `TestProp_AssignFIFOConserves`, `TestProp_AnalyticsGreeksAreSane`, `TestProp_EveryPostingTemplateBalancesPerParty`, integration (`FuturesPnLIsExactThroughTheLedger`, `AmericanExerciseAndFIFOAssignmentConserve`, `OptionExpirySettlementIsExact`, `ConcurrentSettlementPostsOnce`, `VariationMarginRunsOncePerInterval`, `StaleOraclePreventsARiskIncreasingOrderButNotClosing`, `ConcurrentOpensCannotOverspendMargin`, `TheClearingHouseNetsToZeroForAMatchedBook`).
 - **Limitations:** only cash-settled, 24x7 instruments with a whole-unit tick value; funding rounds down once per contract per interval; variation margin settles at the mark current when the run happens; every flow-producing derivative operation serializes on one clearing-house lock.
+
+### 16–17. Strategy marketplace and sandboxed user code
+- **Implementation:** `internal/sandboxrt` (static scan of strategy source with forbidden imports refused, a builder that compiles Go to WASM with an embedded SDK and an environment carrying nothing from the parent, a wazero runner with wall-time, memory (metered allocator), output-size and no-network/no-filesystem limits, output parsing into proposals checked against a manifest, proposals converted to economic intents that then go through the normal route/gate/Risk V2 path — untrusted code can only ever produce risk-checked intents, never a transfer or withdrawal) and `internal/marketplace` (listing lifecycle with review by someone other than the creator, immutable manifests, PAPER-only installs, paper-follow producing intents and evidence, forks with provenance, evaluations and performance snapshots).
+- **DB:** `00750_strategy_marketplace.sql` (MK001–MK010), `00751_sandbox_runs.sql` (SX001: a run's violation count matches its violation rows).
+- **Tests:** sandbox escape suite (`TestSandbox_FilesystemEscapeAttemptFails`, `…NetworkAttemptFails`, `…ForkBombBlocked`, `…CPUInfiniteLoopKilled`, `…MemoryBombKilled`, `…OversizedOutputKilled`, `…EnvironmentSecretsAbsent`, `…StrategyCannotConstructALiveSigningCall`), `TestProp_NoStrategyOutputBecomesATransferOrWithdrawal`, `TestSandbox_SameArtifactSameInputIsByteIdentical`, `FuzzScan`, `TestIntegration_Prop_UntrustedOutputOnlyBecomesRiskCheckedIntents`, `TestIntegration_CreatorCannotApproveOwnListing`, `TestIntegration_InstallIsPaperOnly`, `TestIntegration_ConcurrentFollowsOfOneSnapshotDispatchOnce`.
+- **Measured:** cold start (compile) 1.16 s on a quiet machine, per-run p50 7.6 ms, p95 9.2 ms for a 4.9 MB strategy module (lane measurement; the performance report re-measures).
+- **Limitations:** under `-race` the Go-built module tests skip (each compile takes about two minutes); host-side concurrency is still raced with hand-assembled modules. Any violation in a run rejects every intent from that run.

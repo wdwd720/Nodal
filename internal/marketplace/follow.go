@@ -103,9 +103,6 @@ func (s *Service) PaperFollow(ctx context.Context, tx pgx.Tx, req FollowRequest)
 	if req.Trigger != TriggerExplicit && req.Trigger != TriggerScheduled {
 		return FollowRun{}, errs.Newf(errs.CodeValidationFailed, "marketplace: unknown follow trigger %q", req.Trigger)
 	}
-	if err := checkEconTransitionsImmediately(ctx, tx); err != nil {
-		return FollowRun{}, err
-	}
 	// The install row lock serializes every follow of one install.
 	install, err := s.loadInstall(ctx, tx, req.InstallID, true)
 	if err != nil {
