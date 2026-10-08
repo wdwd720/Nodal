@@ -83,15 +83,17 @@ func liquidationFeeInput(numeraire assets.AssetID, decimals uint8, proceeds mone
 func (s *Service) discloseLiquidationFee(ctx context.Context, tx pgx.Tx, a Account, decimals uint8, key string, fee,
 	proceeds money.Quantity, at time.Time) (feeledger.StoredQuote, error) {
 	scheduleKey := LiquidationFeeScheduleKey(a.NumeraireAssetID, s.policy.LiquidationFeeBPS)
-	if _, err := s.d.FeeLedger.EnsureSchedule(ctx, tx, feeledger.PublishRequest{
+	pub, err := s.d.FeeLedger.EnsureSchedule(ctx, tx, feeledger.PublishRequest{
 		Key: scheduleKey, Schedule: LiquidationFeeSchedule(s.policy, a.NumeraireAssetID, decimals), Actor: s.actor,
 		Reason: "the liquidation fee of margin policy " + s.policy.Version,
-	}); err != nil {
+	})
+	if err != nil {
 		return feeledger.StoredQuote{}, err
 	}
 	payer, numeraire := a.AccountID, a.NumeraireAssetID
 	q, err := s.d.FeeLedger.RecordQuote(ctx, tx, feeledger.QuoteRequest{
-		ScheduleKey: scheduleKey, Input: liquidationFeeInput(numeraire, decimals, proceeds, at), Subsystem: econ.SubsystemMargin,
+		ScheduleKey: scheduleKey, At: feeledger.QuoteAt(pub, s.d.Clock.Now().UTC()),
+		Input: liquidationFeeInput(numeraire, decimals, proceeds, at), Subsystem: econ.SubsystemMargin,
 		IdempotencyKey: key, AccountID: &payer, BaseAsset: &numeraire, Mode: a.Mode, Actor: s.actor, RiskReducing: true,
 	})
 	if err != nil {

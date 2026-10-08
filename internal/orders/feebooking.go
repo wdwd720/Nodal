@@ -145,12 +145,14 @@ type feeCharge struct {
 func (s *Service) quoteFill(ctx context.Context, tx pgx.Tx, c *bookConfig, role FeeRole, o orderRow, tradeSeq, lots int64,
 	price money.Price, fee money.Quantity) (feeledger.StoredQuote, error) {
 	req := bookScheduleRequest(c, role, s.actor)
-	if _, err := s.feeLedger.EnsureSchedule(ctx, tx, req); err != nil {
+	pub, err := s.feeLedger.EnsureSchedule(ctx, tx, req)
+	if err != nil {
 		return feeledger.StoredQuote{}, err
 	}
 	base := c.Terms.BaseAsset
 	q, err := s.feeLedger.RecordQuote(ctx, tx, feeledger.QuoteRequest{
-		ScheduleKey: req.Key, Input: fillQuoteInput(o.Side, c.Terms, lots, o.strategy(), price), Subsystem: econ.SubsystemOrders,
+		ScheduleKey: req.Key, At: feeledger.QuoteAt(pub, s.clk.Now().UTC()),
+		Input: fillQuoteInput(o.Side, c.Terms, lots, o.strategy(), price), Subsystem: econ.SubsystemOrders,
 		IdempotencyKey: tradeKey(c.ID, tradeSeq) + ":" + string(role), AccountID: o.AccountID, BaseAsset: &base, Mode: c.Mode,
 		Actor: s.actor,
 	})

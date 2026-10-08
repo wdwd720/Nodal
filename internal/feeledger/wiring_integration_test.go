@@ -84,6 +84,36 @@ func TestIntegration_EnsureScheduleIsTheVersionInForceOrRefuses(t *testing.T) {
 	got, err := f.svc.EffectiveSchedule(f.ctx, testDB, fresh, f.clk.Now())
 	require.NoError(t, err)
 	assert.Equal(t, p.ID, got.ID)
+	assert.Equal(t, f.clk.Now(), QuoteAt(p, f.clk.Now()), "a version in force prices now")
+
+	// Exactly this schedule published by a process whose clock runs ahead:
+	// nothing is in force here yet and it is the next to take effect, so it
+	// governs, and a charge under it is priced at its effective instant.
+	ahead := "itest:ensure:" + uuid.NewString()
+	from := f.clk.Now().Add(time.Minute)
+	f.publish(ahead, ours, from)
+	key = ahead
+	next, err := ensure(ours, service, time.Time{})
+	require.NoError(t, err)
+	assert.Equal(t, 1, next.Version)
+	assert.True(t, from.Equal(QuoteAt(next, f.clk.Now())), "priced at the version's effective instant")
+	payer := f.customer(quote.ID, units(1_000))
+	q, err := do(f, func(ctx context.Context, tx pgx.Tx) (StoredQuote, error) {
+		return f.svc.RecordQuote(ctx, tx, QuoteRequest{ScheduleKey: ahead, At: QuoteAt(next, f.clk.Now()), Subsystem: econ.SubsystemOrders,
+			IdempotencyKey: "ahead-" + uuid.NewString(), AccountID: &payer, Mode: gates.ModePaper, Actor: service,
+			Input: fees.QuoteInput{Side: fees.SideBuy, BaseQty: units(1), BaseDecimals: 6, QuoteDecimals: 6,
+				ReferencePrice: f.price(quote.ID, "100.00")}})
+	})
+	require.NoError(t, err)
+	assert.Equal(t, next.ID, q.ScheduleID)
+	// Another schedule taking effect next governs the key: refused, and
+	// nothing is published over it.
+	theirs := "itest:ensure:" + uuid.NewString()
+	f.publish(theirs, other, f.clk.Now().Add(time.Minute))
+	key = theirs
+	_, err = ensure(ours, service, time.Time{})
+	assert.Equal(t, ReasonScheduleNotInForce, ReasonOf(err))
+	assert.Equal(t, 1, f.count(`SELECT count(*) FROM fee_schedules WHERE schedule_key = $1`, theirs))
 }
 
 // TestIntegration_ARiskReducingChargeIsNotStoppedByAKillSwitch: a SPREAD_ENGINE
