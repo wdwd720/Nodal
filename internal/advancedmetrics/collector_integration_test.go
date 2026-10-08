@@ -96,6 +96,15 @@ type fixture struct {
 	reader   *sdkmetric.ManualReader
 	metrics  *observability.AdvancedMetrics
 	extra    *Instruments
+	// The collaborators the services above were built with, for the tests
+	// that build more of them.
+	outbox  *event.Outbox
+	audit   *audit.PGWriter
+	intents *econ.IntentStore
+	authz   *econ.Authorizer
+	kills   *killswitch.Checker
+	router  *legalrouter.Router
+	fees    *feeledger.Service
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -120,6 +129,7 @@ func newFixture(t *testing.T) *fixture {
 	}
 	intents := econ.NewIntentStore(clk, out, aw)
 	authz := econ.NewAuthorizer(checker, kills)
+	f.outbox, f.audit, f.intents, f.authz, f.kills, f.router = out, aw, intents, authz, kills, router
 	require.NoError(t, testDB.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
 		var err error
 		f.usd, err = econ.EnsureSandboxDollar(ctx, tx)
@@ -129,6 +139,7 @@ func newFixture(t *testing.T) *fixture {
 		Clock: clk, Ledger: f.ledger, Capital: f.capital, Effects: f.effects, Authorizer: authz, Assets: f.assets, Audit: aw,
 	})
 	require.NoError(t, err)
+	f.fees = feeLedger
 	f.margin, err = margin.NewService(margin.Config{
 		Policy: margin.DefaultPolicy(), RiskPolicy: risk.DefaultAdvancedPolicy(),
 		LendingPoolName: "Margin lending pool (sandbox)", InsuranceFundName: "Margin insurance fund (sandbox)",
@@ -602,6 +613,34 @@ func TestIntegration_CountersCountEachNewRowOncePerProcess(t *testing.T) {
 // dollar, valued at par).
 func (f *fixture) trade() int64 {
 	f.t.Helper()
+	inst, eth := f.spotBook()
+	maker, taker := f.customer(), f.customer()
+	f.fund(maker.account, eth.ID, units(1, eth.Decimals))
+	f.fund(taker.account, f.usd.ID, units(5_000, 6))
+	_, err := f.pipeline.Submit(f.ctx, f.limit(maker, inst, eth, orders.SideSell, "2500.00", 1))
+	require.NoError(f.t, err)
+	out, err := f.pipeline.Submit(f.ctx, f.limit(taker, inst, eth, orders.SideBuy, "2500.00", 1))
+	require.NoError(f.t, err)
+	require.Len(f.t, out.Trades, 1)
+	return 2500_00
+}
+
+// limit is a GTC limit order of whole units of base at a decimal price in
+// the sandbox dollar.
+func (f *fixture) limit(c customer, inst instruments.InstrumentID, base assets.Asset, side orders.Side, price string, whole int64) orders.OrderRequest {
+	f.t.Helper()
+	p, err := money.PriceFromDecimalString(price, f.usd.ID.String(), "order", f.clk.Now())
+	require.NoError(f.t, err)
+	return orders.OrderRequest{InstrumentID: inst, AccountID: c.account, Side: side, Type: orders.TypeLimit, TimeInForce: orders.GTC,
+		Price: &p, Quantity: units(whole, base.Decimals), IdempotencyKey: "advancedmetrics-" + uuid.NewString(),
+		ActorType: security.ActorUser, ActorID: c.user.String()}
+}
+
+// spotBook opens a fee-free PAPER book for a fresh simulated asset against
+// the sandbox dollar, ticks of 0.01 and lots of 0.0001, the asset marked at
+// 2500.00, and returns the instrument and the asset.
+func (f *fixture) spotBook() (instruments.InstrumentID, assets.Asset) {
+	f.t.Helper()
 	eth := f.simAsset("AMETH", 8)
 	var inst instruments.InstrumentID
 	f.inTx(func(ctx context.Context, tx pgx.Tx) error {
@@ -624,20 +663,5 @@ func (f *fixture) trade() int64 {
 		return err
 	})
 	f.mark(eth.ID, "2500.00")
-	maker, taker := f.customer(), f.customer()
-	f.fund(maker.account, eth.ID, units(1, eth.Decimals))
-	f.fund(taker.account, f.usd.ID, units(5_000, 6))
-	order := func(c customer, side orders.Side) orders.OrderRequest {
-		p, err := money.PriceFromDecimalString("2500.00", f.usd.ID.String(), "order", f.clk.Now())
-		require.NoError(f.t, err)
-		return orders.OrderRequest{InstrumentID: inst, AccountID: c.account, Side: side, Type: orders.TypeLimit, TimeInForce: orders.GTC,
-			Price: &p, Quantity: units(1, eth.Decimals), IdempotencyKey: "advancedmetrics-" + uuid.NewString(),
-			ActorType: security.ActorUser, ActorID: c.user.String()}
-	}
-	_, err := f.pipeline.Submit(f.ctx, order(maker, orders.SideSell))
-	require.NoError(f.t, err)
-	out, err := f.pipeline.Submit(f.ctx, order(taker, orders.SideBuy))
-	require.NoError(f.t, err)
-	require.Len(f.t, out.Trades, 1)
-	return 2500_00
+	return inst, eth
 }

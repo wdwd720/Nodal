@@ -20,6 +20,7 @@ import (
 
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/admin"
+	"github.com/nodal/controlplane/internal/advancedmetrics"
 	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/audit"
 	"github.com/nodal/controlplane/internal/auth"
@@ -526,7 +527,19 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("orders service: %w", err)
 	}
-	ordersPipeline, err := orders.NewPipeline(ordersSvc, database)
+	// A latency belongs to its request, so the pipeline times each customer
+	// submit and cancel it runs and records it here (advanced_order_latency,
+	// advanced_cancel_latency); every other advanced instrument is recorded
+	// from the database by the advanced worker.
+	advancedInstruments, err := observability.NewAdvancedMetrics(meter)
+	if err != nil {
+		return nil, fmt.Errorf("advanced metrics: %w", err)
+	}
+	orderLatency, err := advancedmetrics.NewOrderLatency(advancedInstruments)
+	if err != nil {
+		return nil, fmt.Errorf("order latency: %w", err)
+	}
+	ordersPipeline, err := orders.NewPipeline(ordersSvc, database, orders.WithObserver(orderLatency))
 	if err != nil {
 		return nil, fmt.Errorf("orders pipeline: %w", err)
 	}

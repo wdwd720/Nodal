@@ -900,7 +900,7 @@ func (s *Service) GateSwapSubmission(ctx context.Context, tx pgx.Tx, sid SwapID)
 	if code == "" {
 		return sw, nil
 	}
-	out, err := s.failSwap(ctx, tx, sw, ReasonBlockedBeforeSubmission+":"+code, "stopped before submission: "+detail)
+	out, err := s.failSwap(ctx, tx, sw, BlockedBeforeSubmission(code), "stopped before submission: "+detail)
 	if err != nil {
 		return Swap{}, err
 	}

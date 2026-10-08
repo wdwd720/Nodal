@@ -1,6 +1,8 @@
 // Package advancedmetrics records the advanced capabilities' instruments
-// (observability.AdvancedMetrics, prefix advanced_) from what the database
-// holds, and the health of the advanced worker's jobs.
+// (observability.AdvancedMetrics, prefix advanced_): from what the database
+// holds (the Collector, run by the advanced worker), from the order book's
+// request path (OrderLatency, the pipeline's observer in the API), and the
+// health of the advanced worker's jobs (JobHealth).
 //
 // # Gauges
 //
@@ -65,32 +67,107 @@
 // the status the intent was refused from: RECEIVED is routing, ROUTED risk,
 // and so on), advanced_signing_requests per verdict of the delegated signing
 // provider, and advanced_withdrawal_proposals per evaluation outcome of a
-// delegated withdrawal (AUTO_APPROVE or HUMAN_REQUIRED). Intent rows carry
+// delegated withdrawal (AUTO_APPROVE or HUMAN_REQUIRED); and the execution,
+// circuit-breaker, authority and network counters below. Intent rows carry
 // their service's timestamp rather than the database's; the lag covers the
 // skew between the two clocks.
 //
-// # Not recorded here, and why
+// # Execution: fill and rejection rates, and the external route
 //
-//   - advanced_order_latency and advanced_cancel_latency: a latency is a
-//     property of a request, not of a row; the request path records it or
-//     nobody can.
-//   - advanced_fill_rate_*, advanced_rejection_rate_* and
-//     advanced_external_route_volume: derivable from book_orders and the paper
-//     fills, but no external route exists in this build and the rate pairs
-//     want the order path's own denominators; left to the execution path.
-//   - advanced_circuit_breaker_events: no subsystem records a circuit breaker
-//     trip as a row.
-//   - advanced_authority_violations: delegation marks no refusal as one. A
-//     capability refusal is a REJECTED agent intent with one of the package's
-//     DELEGATION_* codes, which mix authority (scope, limits, expiry) with
-//     timing (a lapsed quote, a cooling period), and a request refused before
-//     its intent exists leaves no row; which codes count is the delegation
-//     package's to define, as an exported set.
-//   - advanced_sandbox_network_violations: the WASM sandbox gives a strategy
-//     no network import at all, so there is nothing to violate and no code
-//     that records it.
+// advanced_fill_rate_* and advanced_rejection_rate_* are counter pairs a
+// dashboard divides, counted here from book_orders (attribute owner_type,
+// CUSTOMER or HOUSE): both denominators are every book order recorded,
+// counted when it is recorded; advanced_fill_rate_filled is every book
+// order's first fill -- its first trade, as maker or taker -- counted in the
+// window of that trade; advanced_rejection_rate_rejected is every book order
+// that ended REJECTED, at acceptance, at a later stage or by the engine,
+// counted when it was rejected (a rejected order never changes again, OB003).
+// They are counted from the rows rather than on the request path because the
+// request path does not see every fill -- a resting order fills inside
+// another order's command or a replace, a house order is placed by the
+// treasury, a submission a crash interrupted is finished by Pipeline.Resume or
+// the upkeep sweep -- and a retried request would be counted twice; the rows
+// count each order, each first fill and each rejection once. A request
+// refused before any order was recorded (malformed, priced off the book's
+// tick, sent to a book that is not open) is no order and is in neither pair;
+// its latency is in advanced_order_latency with outcome REFUSED.
+//
+// advanced_external_route_volume is the notional the order book's paper venue
+// filled (orders.PaperVenue, paper_fills). The paper venue is this build's
+// stand-in for an external venue -- external simulated liquidity whose own
+// side is not booked -- so what it fills is the volume that went to a venue
+// other than the internal book. Nothing routes a resting or unmatched book
+// order to it: it fills what is sent to it, which today is the strategy
+// marketplace's paper follows. Each fill counts at its reference-mark notional
+// (the SIM_TRADE's; the spread and the fees are disclosed charges beside it),
+// valued as the internal match volume is; fills whose quote asset cannot be
+// valued are counted in advanced_unvalued_route_fills instead. The equities
+// paper broker and the treasury's house paper venue keep fills of their own
+// and are not this venue.
+//
+// # Circuit breakers, authority violations, network violations
+//
+// advanced_circuit_breaker_events counts trips, attributes kind and reason: a
+// stable asset paused by its breaker (kind STABLE_ASSET; the breaker writes
+// exactly one tripping alert per pause, stable_peg_alerts.breaker_tripped,
+// whose kind is the reason: PRICE_DEVIATION, RESERVE_SHORTFALL or
+// SUPPLY_MISMATCH) and a bridge route paused by its breaker (kind
+// BRIDGE_ROUTE, reason RECONCILIATION_MISMATCH: the route's ACTIVE to PAUSED
+// transition by bridge.BreakerActorID). An operator's pause is not a trip.
+// Breakers that are conditions rather than trips are not counted: an open
+// reconciliation record that blocks new risk (the derivatives clearing
+// breaker, CLEARING_UNRECONCILED, is one, as are the records the stable asset
+// and the bridge name to Risk V2) is in advanced_open_reconciliation_records
+// by kind, and the treasury's limits, evaluated per request, refuse as
+// advanced_risk_denies with reason RISK_CIRCUIT_BREAKER.
+//
+// advanced_authority_violations counts the refused delegated requests whose
+// refusal violated the owner's grant, once each, attributes kind (SWAP or
+// WITHDRAWAL) and stage. Which refusals are violations is delegation's to
+// say: delegation.AuthorityViolationCodes (scope, limits, expiry, revocation,
+// the action label, a destination off an allow-list) and, for a capability
+// check Risk V2 refused at admission, delegation.AuthorityViolationRiskReasons.
+// They are counted from the rows delegation records for a refused request:
+// stage ADMISSION is an agent intent rejected under a violation code before
+// anything was planned for it, or one Risk V2 refused with an authority
+// reason; stage EXECUTION is an admitted swap or withdrawal refused when it
+// was checked again -- its intent rejected under a violation code by the
+// check before signing (or the expiry sweep's), a signing decision that names
+// one, or a signed subject stopped before its submission for one. A request
+// refused before its intent exists (no such capability on the account, an
+// inactive agent, a destination not on the account, no withdrawal policy)
+// leaves no row and is not counted; and a withdrawal the account's policy
+// refuses records only the first of the policy's codes, in sort order, as its
+// intent's rejection code, so one whose first code is not a violation (its
+// compliance state, its daily limit) is not counted even when a later one is.
+//
+// advanced_sandbox_network_violations counts the strategy versions the
+// scanner refused for an import that would reach the network or another
+// process. The runtime gives a module no network or process import, so such
+// an attempt can only be refused at scan time: a version whose validation row
+// says the scanner refused it with a forbidden import (FAILED, SCAN_REJECTED,
+// IMPORT_FORBIDDEN) counts once when one of the imports refused would give
+// the network or another process (sandboxrt.NetworkOrProcessAccess: net and
+// everything under it, os/exec, os/signal, syscall). Which imports those were
+// the collector asks the scanner itself, re-scanning the version's stored
+// source -- immutable, and checked against the version's digest when stored.
+//
+// # Recorded on the request path: order and cancel latency
+//
+// advanced_order_latency and advanced_cancel_latency are not rows: a latency
+// belongs to a request. OrderLatency is orders.Pipeline's observer
+// (orders.WithObserver; cmd/api wires it), recording each customer Submit and
+// Cancel the pipeline runs once, in the process that ran it, in milliseconds
+// of monotonic time, attribute outcome (OK, REFUSED or FAILED, by the error's
+// status class). A replace, a house order, a prediction market's bulk cancel
+// at its close (Service.CancelResting, run by the advanced worker) and a paper
+// venue fill are not timed.
+//
+// # Not recorded, and why
+//
 //   - advanced_provider_mismatches: no advanced reconciliation compares
 //     against an external provider; every kind is internal or a devnet chain.
+//     Nothing records it, and no dashboard widget or alarm reads it.
 //
 // # Job health
 //
@@ -105,8 +182,9 @@
 //     have, or at a mark older than the API accepts.
 //   - Count a row twice in one process, or count history again on restart.
 //   - Put a high-cardinality attribute on an instrument: attributes are
-//     subsystem, kind, reason, stage, actor_type, outcome, stable_asset and
-//     job, all small closed sets (stable_asset is one per issued asset).
+//     subsystem, kind, reason, stage, actor_type, outcome, owner_type,
+//     stable_asset and job, all small closed sets (stable_asset is one per
+//     issued asset).
 //   - Use floating point: every value is an int64 (USD minor units, basis
 //     points, counts, seconds, milliseconds).
 package advancedmetrics

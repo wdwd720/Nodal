@@ -1047,7 +1047,7 @@ func (s *Service) GateWithdrawalSubmission(ctx context.Context, tx pgx.Tx, wid W
 	if code == "" {
 		return w, nil
 	}
-	out, err := s.failWithdrawal(ctx, tx, w, ReasonBlockedBeforeSubmission+":"+code, "stopped before submission: "+detail)
+	out, err := s.failWithdrawal(ctx, tx, w, BlockedBeforeSubmission(code), "stopped before submission: "+detail)
 	if err != nil {
 		return Withdrawal{}, err
 	}
