@@ -10,12 +10,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/db/migrate"
 	"github.com/nodal/controlplane/internal/errs"
+	"github.com/nodal/controlplane/internal/id"
 )
 
 // These run the guard's real SQL against a real PostgreSQL. The unit tests use
@@ -23,9 +25,10 @@ import (
 // parse, that they name columns and states this schema actually has, and that
 // the numbers they return are the ones the ceilings are compared against.
 //
-// Nothing here writes a row. Every threshold is tested by measuring what is
-// already there and setting the ceiling relative to it, which means the same
-// test is safe against a scratch database and against a live one.
+// Nothing here leaves a row behind. Every threshold is tested by measuring what
+// is there and setting the ceiling relative to it; the one test that needs a
+// non-zero count inserts its rows in a transaction it always rolls back. The
+// same tests are therefore safe against a scratch database and a live one.
 
 var (
 	testAppURL     = os.Getenv("CP_TEST_DATABASE_URL")
@@ -193,17 +196,34 @@ func TestIntegration_TheAtRiskSumActuallySeesCapturedMoney(t *testing.T) {
 // exactly what the database currently reports and checks the guard refuses --
 // then one above it and checks the guard admits.
 //
-// Setting the ceiling from the measurement rather than inserting rows is what
-// makes this safe to run against a live database: it writes nothing and still
-// exercises the real number.
+// Setting the ceiling from the measurement is what makes this safe to run
+// against a live database. It used to measure whatever happened to be there,
+// and on a freshly provisioned database -- which is what `make integration`
+// gives every package -- every count is zero. Zero is not an expressible
+// ceiling (a zero limit means "no limit"), so the test fell back to a ceiling
+// of one, the guard correctly admitted the first action, and the test failed
+// on every scratch database while passing on a developer's populated one.
+//
+// So one row per measured dimension is inserted first, inside a transaction
+// that is always rolled back. Every measurement and every Admit runs on that
+// transaction, so the refusal half is exercised against a non-zero value
+// everywhere, and the database is left exactly as it was found.
 func TestIntegration_EachCeilingRefusesAtTheMeasuredValue(t *testing.T) {
 	d := requireDB(t)
 	ctx := context.Background()
 
+	tx, err := d.Pool().Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	seedOneOfEachMeasuredRow(ctx, t, tx)
+
 	base, err := NewGuard(bigBudget(), time.Now)
 	require.NoError(t, err)
-	r, err := base.Measure(ctx, d)
+	r, err := base.Measure(ctx, tx)
 	require.NoError(t, err)
+	require.Positive(t, r.Accounts, "the seeded account is invisible to the measurement")
+	require.Positive(t, r.PurchasesToday, "the seeded funding is invisible to the 24-hour count")
+	require.Positive(t, r.AtRiskMinor, "the seeded at-risk funding is invisible to the money-at-risk sum")
 
 	cases := []struct {
 		name    string
@@ -244,7 +264,7 @@ func TestIntegration_EachCeilingRefusesAtTheMeasuredValue(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			atLimit, err := NewGuard(tc.atLimit, time.Now)
 			require.NoError(t, err)
-			_, err = atLimit.Admit(ctx, d, tc.action)
+			_, err = atLimit.Admit(ctx, tx, tc.action)
 			require.Error(t, err, "%s must refuse at the measured value", tc.name)
 			assert.ErrorIs(t, err, ErrAtCapacity)
 			assert.Equal(t, errs.CodeAtCapacity, errs.CodeOf(err))
@@ -252,10 +272,33 @@ func TestIntegration_EachCeilingRefusesAtTheMeasuredValue(t *testing.T) {
 
 			below, err := NewGuard(tc.below, time.Now)
 			require.NoError(t, err)
-			_, err = below.Admit(ctx, d, tc.action)
+			_, err = below.Admit(ctx, tx, tc.action)
 			require.NoError(t, err, "%s must admit below the ceiling", tc.name)
 		})
 	}
+}
+
+// seedOneOfEachMeasuredRow inserts a user, an account and one CREATED credit
+// funding -- the smallest set of rows that makes every count the guard measures
+// non-zero. The caller owns tx and rolls it back.
+func seedOneOfEachMeasuredRow(ctx context.Context, t *testing.T, tx pgx.Tx) {
+	t.Helper()
+	userID := id.New[id.Any]().String()
+	accountID := id.New[id.Any]().String()
+	fundingID := id.New[id.Any]().String()
+	_, err := tx.Exec(ctx,
+		`INSERT INTO users (id, idp_issuer, idp_subject, status) VALUES ($1, 'capacity-test', $2, 'ACTIVE')`,
+		userID, "sub-"+userID)
+	require.NoError(t, err)
+	_, err = tx.Exec(ctx,
+		`INSERT INTO accounts (id, owner_user_id, kind, status) VALUES ($1, $2, 'CUSTOMER', 'ACTIVE')`,
+		accountID, userID)
+	require.NoError(t, err)
+	_, err = tx.Exec(ctx,
+		`INSERT INTO credit_fundings (id, account_id, provider, state, credit_quantity, paid_amount_minor, idempotency_key)
+		 VALUES ($1, $2, 'capacity-test', 'CREATED', 1000, 1000, $3)`,
+		fundingID, accountID, "capacity-test-"+fundingID)
+	require.NoError(t, err)
 }
 
 // TestIntegration_AnAmountCannotCarryTheTierPastItsCeiling, measured against
