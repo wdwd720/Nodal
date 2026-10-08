@@ -1,5 +1,6 @@
 // Command seed loads clearly labeled LOCAL development data (PART 146): dev
-// identities with accounts, a devnet USDC/SOL asset pair with a Jupiter
+// identities with accounts (admin an ADMIN operator, finance a FINANCE
+// operator, in operator_roles), a devnet USDC/SOL asset pair with a Jupiter
 // listing, conservative asset policies, one price observation, and a SEED
 // ledger posting of fake USDC for the first customer.
 //
@@ -183,9 +184,16 @@ func run() error {
 		}
 		summary = append(summary, "policies: USDC NORMAL 100%, SOL 80% collateral; prices: SOL 150.00 USD, USDC 1.00 USD")
 
-		// Dev identities → users + accounts.
+		// Dev identities → users + accounts. Operator roles live in
+		// operator_roles, never in the identity provider (whose dev_roles
+		// claim the login ignores): "admin" is the platform's ADMIN, and
+		// "finance" holds FINANCE -- the correction authority
+		// (ledger:post_correction) the second, distinct operator of a
+		// dual-controlled transfer reversal needs, so a reversal one operator
+		// proposes can be approved by another, in the browser too.
+		operatorRoles := map[string]security.Role{"admin": security.RoleAdmin, "finance": security.RoleFinance}
 		var customerA accounts.Account
-		for _, name := range []string{"customer-a", "customer-b", "admin"} {
+		for _, name := range []string{"customer-a", "customer-b", "admin", "finance"} {
 			subject := "dev:" + name
 			u, err := acct.GetUserBySubject(ctx, tx, devIssuer, subject)
 			switch {
@@ -200,11 +208,6 @@ func run() error {
 				if name == "customer-a" {
 					customerA = a
 				}
-				if name == "admin" {
-					if _, err := tx.Exec(ctx, `INSERT INTO operator_roles (user_id, role, reason) VALUES ($1, 'ADMIN', 'LOCAL seed') ON CONFLICT DO NOTHING`, u.ID); err != nil {
-						return err
-					}
-				}
 			case err != nil:
 				return err
 			case name == "customer-a":
@@ -214,8 +217,13 @@ func run() error {
 				}
 				customerA = owned[0]
 			}
+			if role, ok := operatorRoles[name]; ok {
+				if _, err := tx.Exec(ctx, `INSERT INTO operator_roles (user_id, role, reason) VALUES ($1, $2, 'LOCAL seed') ON CONFLICT DO NOTHING`, u.ID, string(role)); err != nil {
+					return err
+				}
+			}
 		}
-		summary = append(summary, "users: dev:customer-a, dev:customer-b, dev:admin (ADMIN operator role)")
+		summary = append(summary, "users: dev:customer-a, dev:customer-b, dev:admin (ADMIN operator role), dev:finance (FINANCE operator role)")
 
 		// SEED posting: 10,000 fake USDC for customer-a.
 		//
