@@ -90,13 +90,14 @@
 //
 // # Execution runs and venues
 //
-// ExecutableSubjects is what an execution run takes: only subjects that can
-// be signed now (no swap past its quote, no withdrawal still cooling), the
-// accounts taking turns with at most Params.ExecutablePerAccount each, and
-// within a turn the swap whose quote expires soonest first, so no account's
-// waiting subjects can keep another's from being carried out. DueSwaps,
-// DueWithdrawals, PendingSwaps and PendingWithdrawals are what an expiry
-// sweep looks at. A venue's counterparty is a house book of its own: never a
+// ExecutableSubjects is what an execution run takes: only subjects of the
+// service's network that can be signed now (no swap past its quote, no
+// withdrawal still cooling), the accounts taking turns with at most
+// Params.ExecutablePerAccount each, and within a turn the swap whose quote
+// expires soonest first, so no account's waiting subjects can keep another's
+// from being carried out. DueSwaps, DueWithdrawals, PendingSwaps and
+// PendingWithdrawals are what an expiry sweep looks at, the ones past their
+// deadline first. A venue's counterparty is a house book of its own: never a
 // treasury book and never another venue's (DG008).
 //
 // # Keys
