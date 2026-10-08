@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/nodal/controlplane/internal/agent/livegate"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/money"
@@ -499,82 +500,18 @@ func (Store) ListOpenRuns(ctx context.Context, q db.Querier, limit int) ([]Run, 
 
 // LiveTradingCapability is the capability gate that must be ACTIVE in this
 // environment before any agent may run in LIVE mode (PART 70).
-const LiveTradingCapability = "LIVE_AGENT_TRADING"
+const LiveTradingCapability = livegate.Capability
 
 // LiveTrading is this package's read of the LIVE_AGENT_TRADING gate at one
-// instant. Reason names the condition that refused and is empty when Enabled;
-// it is the string an operator sees next to a refused LIVE run, so "expired"
-// must not be reported as "ACTIVE".
-type LiveTrading struct {
-	Enabled bool
-	State   string
-	Reason  string
-}
-
-// Refusal reasons. They deliberately match the wording of the equivalent
-// conditions in internal/gates so that the two readers of one gate can be
-// compared by anyone reading the logs, as well as by the agreement test.
-const (
-	reasonNoGateRow       = "no gate row"
-	reasonStateNotActive  = "gate state is not ACTIVE"
-	reasonRevoked         = "gate is revoked"
-	reasonNoEffectiveAt   = "effective_at is not set"
-	reasonNotYetEffective = "effective_at is in the future"
-	reasonExpired         = "expires_at has passed"
-)
+// instant (livegate.LiveTrading).
+type LiveTrading = livegate.LiveTrading
 
 // LiveTradingEnabled reports whether the LIVE_AGENT_TRADING gate permits live
-// agent trading in env at now. It is a SELECT on capability_gates: this package
-// must not import internal/gates (an agent tree can never reach the gate
-// controller), and it must never be able to change a gate. The gate defaults
-// to DISABLED and no environment variable can turn it on: only the dual-
-// controlled gate workflow in internal/gates can, under an operator principal.
-//
-// It used to select effective_at and expires_at and then decide on `state`
-// alone, discarding both -- so a gate whose window had closed still read as
-// live here, while gates.Evaluate called the same row inactive (F-72). Nothing
-// calls gates.Admin.ExpireDue, so the persisted state never catches up on its
-// own: the divergence lasted for as long as the row sat there.
-//
-// The conditions below are the ones that can change after activation without a
-// state transition. The quorum and evidence conditions gates.Evaluate also
-// applies are not re-checked here, and need not be: Activate enforces them
-// before it writes ACTIVE, and 00701 leaves cp_app no UPDATE on any column of
-// this table except `version`, so no approver, evidence reference or window can
-// be moved underneath us by the application at all.
+// agent trading in env at now: livegate.Read, a SELECT on capability_gates.
+// This package must not import internal/gates (an agent tree can never reach
+// the gate controller), and it must never be able to change a gate. The read
+// lives in internal/agent/livegate so that internal/gates can test it against
+// gates.Evaluate without an import cycle.
 func (Store) LiveTradingEnabled(ctx context.Context, q db.Querier, env string, now time.Time) (LiveTrading, error) {
-	var (
-		state       string
-		effectiveAt *time.Time
-		expiresAt   *time.Time
-		revokedAt   *time.Time
-	)
-	err := q.QueryRow(ctx,
-		`SELECT state, effective_at, expires_at, revoked_at FROM capability_gates
-			WHERE capability = $1 AND environment = $2`,
-		LiveTradingCapability, env).Scan(&state, &effectiveAt, &expiresAt, &revokedAt)
-	switch {
-	case isNoRows(err):
-		// Absent means disabled: fail closed.
-		return LiveTrading{State: "DISABLED", Reason: reasonNoGateRow}, nil
-	case err != nil:
-		return LiveTrading{}, errs.Wrap(err, errs.CodeInternal, "agent: read live trading gate")
-	}
-	now = now.UTC()
-	refuse := func(reason string) (LiveTrading, error) {
-		return LiveTrading{State: state, Reason: reason}, nil
-	}
-	switch {
-	case state != "ACTIVE":
-		return refuse(reasonStateNotActive)
-	case revokedAt != nil:
-		return refuse(reasonRevoked)
-	case effectiveAt == nil:
-		return refuse(reasonNoEffectiveAt)
-	case now.Before(*effectiveAt):
-		return refuse(reasonNotYetEffective)
-	case expiresAt != nil && !now.Before(*expiresAt):
-		return refuse(reasonExpired)
-	}
-	return LiveTrading{Enabled: true, State: state}, nil
+	return livegate.Read(ctx, q, env, now)
 }
