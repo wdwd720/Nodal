@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -260,6 +261,72 @@ func setList(dst func(*Config) *[]string) applyFn {
 	}
 }
 
+// jobNamePattern is the shape of an advanced worker job name: dotted
+// lower-case segments, e.g. "margin.interest" or "capital.reservation_expiry".
+var jobNamePattern = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$`)
+
+// jobPairs splits "<job>=<value>,..." into its pairs, refusing a malformed
+// pair, a malformed job name and a name given twice. Whether the worker
+// schedules a job of that name is the worker's question, not this table's.
+func jobPairs(raw string) ([][2]string, error) {
+	var out [][2]string
+	seen := map[string]bool{}
+	for _, item := range splitList(raw) {
+		name, value, ok := strings.Cut(item, "=")
+		name, value = strings.TrimSpace(name), strings.TrimSpace(value)
+		if !ok || value == "" {
+			return nil, fmt.Errorf("invalid pair %q (want <job>=<value>)", item)
+		}
+		if !jobNamePattern.MatchString(name) {
+			return nil, fmt.Errorf("invalid job name %q (want dotted lower-case segments, e.g. margin.interest)", name)
+		}
+		if seen[name] {
+			return nil, fmt.Errorf("job %q is given twice", name)
+		}
+		seen[name] = true
+		out = append(out, [2]string{name, value})
+	}
+	return out, nil
+}
+
+func setJobDurations(dst func(*Config) *map[string]time.Duration) applyFn {
+	return func(c *Config, raw string) error {
+		pairs, err := jobPairs(raw)
+		if err != nil {
+			return err
+		}
+		out := make(map[string]time.Duration, len(pairs))
+		for _, p := range pairs {
+			d, err := time.ParseDuration(p[1])
+			if err != nil || d <= 0 {
+				return fmt.Errorf("job %q: invalid interval %q (want a positive duration, e.g. 30s, 5m, 1h)", p[0], p[1])
+			}
+			out[p[0]] = d
+		}
+		*dst(c) = out
+		return nil
+	}
+}
+
+func setJobInts(dst func(*Config) *map[string]int) applyFn {
+	return func(c *Config, raw string) error {
+		pairs, err := jobPairs(raw)
+		if err != nil {
+			return err
+		}
+		out := make(map[string]int, len(pairs))
+		for _, p := range pairs {
+			n, err := strconv.ParseInt(p[1], 10, 32)
+			if err != nil || n <= 0 {
+				return fmt.Errorf("job %q: invalid batch size %q (want a positive integer)", p[0], p[1])
+			}
+			out[p[0]] = int(n)
+		}
+		*dst(c) = out
+		return nil
+	}
+}
+
 func splitList(raw string) []string {
 	var out []string
 	for _, p := range strings.Split(raw, ",") {
@@ -341,6 +408,7 @@ const (
 	secSeed       = "Seed"
 	secRetention  = "Retention (days per retention class)" // #nosec G101 -- config section heading, not a credential
 	secSandbox    = "Sandbox chains (simulated value only)"
+	secAdvanced   = "Advanced worker (cmd/advanced-worker only)"
 )
 
 func specs() []varSpec {
@@ -573,6 +641,17 @@ func specs() []varSpec {
 			setString(func(c *Config) *string { return &c.Sandbox.DevnetNetwork })),
 		secretVar(opt("CP_SANDBOX_DEVNET_SEED_REF", secSandbox, "SecretRef to the 64 hexadecimal characters every platform sandbox chain key derives from (custody, issuer, reserve snapshots, bridge attester). Required when CP_SANDBOX_DEVNET_NETWORK is set; changing it orphans every simulated asset already on that network. The example is a published seed: a plain value is accepted only in LOCAL and TEST.", "8ba28c49ce9db1683cc3976600f4b291512c0d860ac74b76d175b3d72673f374",
 			setSecret(func(c *Config) *SecretRef { return &c.Sandbox.DevnetSeedRef }))),
+
+		only(ServiceAdvancedWorker, opt("CP_ADVANCED_WORKER_INTERVALS", secAdvanced, "Per-job run intervals overriding the documented defaults, as comma-separated <job>=<duration> pairs (e.g. margin.interest=30m). `advanced-worker list` prints every job and its default; a name the worker does not schedule is refused at startup. Nothing here can stop a job: settlement, liquidation, expiry and reconciliation always run.", "",
+			setJobDurations(func(c *Config) *map[string]time.Duration { return &c.AdvancedWorker.Intervals }))),
+		only(ServiceAdvancedWorker, opt("CP_ADVANCED_WORKER_BATCHES", secAdvanced, "Per-job batch sizes (the most units one run takes on) overriding the documented defaults, as comma-separated <job>=<count> pairs (e.g. margin.mark_to_market=200). A job clamps a size to the bound its subsystem enforces.", "",
+			setJobInts(func(c *Config) *map[string]int { return &c.AdvancedWorker.Batches }))),
+		only(ServiceAdvancedWorker, opt("CP_ADVANCED_WORKER_RUN_TIMEOUT", secAdvanced, "Bound on one run of any advanced job (Go duration). A run that overruns is recorded as failed and the job is not started again until it returns. Empty takes the default, 5m.", "5m",
+			setDuration(func(c *Config) *time.Duration { return &c.AdvancedWorker.RunTimeout }))),
+		only(ServiceAdvancedWorker, opt("CP_ADVANCED_WORKER_DRAIN_TIMEOUT", secAdvanced, "How long runs in flight may finish after SIGTERM before they are cancelled (Go duration). Every unit of work is its own transaction, so a cancelled run loses at most the unit it was in. Empty takes the default, 25s.", "25s",
+			setDuration(func(c *Config) *time.Duration { return &c.AdvancedWorker.DrainTimeout }))),
+		only(ServiceAdvancedWorker, opt("CP_ADVANCED_WORKER_METRICS_INTERVAL", secAdvanced, "How often the advanced_* metrics are collected from the database (Go duration). Empty takes the default, 1m.", "1m",
+			setDuration(func(c *Config) *time.Duration { return &c.AdvancedWorker.MetricsInterval }))),
 
 		req("CP_RETENTION_LOGIN_ATTEMPT_DAYS", secRetention, "Days a login_attempts row is kept after it expired. It holds a plaintext OIDC nonce and PKCE verifier; the durable record of a login is a security_events row. Minimum 1.", "2",
 			setInt(func(c *Config) *int { return &c.Retention.LoginAttemptDays })),
