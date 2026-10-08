@@ -24,6 +24,7 @@ Status: written 2026-09-05 against the working tree of the same date (goal PART 
 | [temporal-outage.md](./temporal-outage.md) | task-queue backlog, Temporal unreachable, deposits stuck | SEV2 | none for trading; funding lifecycle pauses; never run activities by hand | OPERATIONS |
 | [clickhouse-outage.md](./clickhouse-outage.md) | ClickHouse unreachable, ingest consumer lag | SEV3 (SEV2 if LIVE strategies depend on it) | confirm the trading path has no ClickHouse dependency; `AGENT_PAUSE` affected agents | OPERATIONS |
 | [global-kill-and-reenable.md](./global-kill-and-reenable.md) | invoked by SEV1 runbooks; monthly staging drill (PART 165) | procedure | `POST /admin/kill-switches` `GLOBAL_NEW_RISK_KILL` | OPERATIONS (activate) / BREAK_GLASS (release) |
+| [advanced-sandbox-reconciliation.md](./advanced-sandbox-reconciliation.md) | `advanced_reserve_mismatches`, `advanced_unmatched_economic_effects` (15 min), `advanced_chain_mismatches` | SEV1 (reserve mismatch); SEV2 otherwise | confirm the breaker paused the asset or route; run its reconciliation; never resubmit | OPERATIONS / RISK |
 | [submission-unknown.md](./submission-unknown.md) | `unknown_submissions`, `unknown_submission_rate` breach, attempts in `SUBMISSION_UNKNOWN` (PART 48) | SEV2 (elevated unknown submissions); SEV1 on disagreement | do nothing to the order; let recovery adopt or prove absent | OPERATIONS |
 
 ## Rules that apply to every runbook
