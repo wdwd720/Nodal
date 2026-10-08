@@ -12,7 +12,7 @@ an external provider's sandbox) · `BLOCKED_EXTERNAL` · `LIVE_CAPABLE_BUT_DISAB
 code (`gates.DecideMode` → `LIVE_NOT_IMPLEMENTED`) and unrepresentable in the database (D-049). The live
 column below says what activation would need, never that it is near.
 
-Last updated: 2026-10-07 — foundation committed (`964eadb`); subsystem lanes in progress.
+Last updated: 2026-10-08 — foundation, kernel amendments (00733), transfers + faucet (00744) and margin (00740) merged; other subsystem lanes in progress.
 
 ## Summary
 
@@ -25,26 +25,26 @@ Last updated: 2026-10-07 — foundation committed (`964eadb`); subsystem lanes i
 | 5 | Capability gates + mode policy (§28) | VERIFIED_LOCAL | — | — |
 | 6 | Risk Kernel V2 (§21) | VERIFIED_LOCAL | — | — |
 | 7 | Stable asset subsystem (§5) | IN_PROGRESS | SANDBOX/DEVNET | B-16 |
-| 8 | Margin + leverage engine (§6) | IN_PROGRESS | PAPER/SANDBOX | B-15 |
+| 8 | Margin + leverage engine (§6) | VERIFIED_LOCAL (API in progress) | PAPER/SANDBOX | B-15 |
 | 9 | Derivatives: futures, perps, options (§7) | IN_PROGRESS | PAPER/SANDBOX | B-15, B-17 |
 | 10 | Equities abstraction (§8) | IN_PROGRESS | PAPER/SANDBOX | B-15, B-17 |
-| 11 | Internal matching engine (§9) | IN_PROGRESS | internal simulation | B-15 |
-| 12 | Customer-to-customer transfers (§10) | IN_PROGRESS | SANDBOX | B-15 |
+| 11 | Internal matching engine (§9) | IN_PROGRESS (pure engine VERIFIED_LOCAL; persistent book in progress) | internal simulation | B-15 |
+| 12 | Customer-to-customer transfers (§10) | VERIFIED_LOCAL (API in progress) | SANDBOX | B-15 |
 | 13 | Principal / treasury book (§11) | IN_PROGRESS | PAPER/SANDBOX | B-15 |
-| 14 | Transparent spread + fee engine (§12) | IN_PROGRESS | PAPER/SANDBOX | B-15 |
-| 15 | Performance fee engine (§13) | IN_PROGRESS | PAPER/SANDBOX | B-15 |
+| 14 | Transparent spread + fee engine (§12) | IN_PROGRESS (pure engine VERIFIED_LOCAL; fee ledger pending) | PAPER/SANDBOX | B-15 |
+| 15 | Performance fee engine (§13) | IN_PROGRESS (pure engine VERIFIED_LOCAL; persistence pending) | PAPER/SANDBOX | B-15 |
 | 16 | Strategy marketplace (§14) | IN_PROGRESS | PAPER | B-15 |
 | 17 | Sandboxed user code (§15) | IN_PROGRESS | SANDBOX | B-19 |
 | 18 | Delegated agent signing (§16) | NOT_STARTED | SANDBOX/DEVNET | B-18 |
 | 19 | Delegated agent withdrawals (§17) | NOT_STARTED | SANDBOX/DEVNET | B-18 |
 | 20 | Cross-chain buying power (§18) | NOT_STARTED | SANDBOX/DEVNET | B-20 |
 | 21 | Prediction markets (§19) | NOT_STARTED | PAPER/SANDBOX | B-15, B-17 |
-| 22 | Universal buying power V2 (§20) | NOT_STARTED | — | — |
+| 22 | Universal buying power V2 (§20) | VERIFIED_LOCAL (margin wired; derivatives, bridge pending) | SIMULATED domain | — |
 | 23 | Provider layer modes (§27) | IN_PROGRESS | fake/sandbox | B-17, B-20 |
 | 24 | Observability (§29) | NOT_STARTED | — | — |
-| 25 | API surface (§25) | NOT_STARTED | — | — |
-| 26 | Web application (§26) | NOT_STARTED | — | — |
-| 27 | Demo scenarios A–I (§34) | NOT_STARTED | — | — |
+| 25 | API surface (§25) | IN_PROGRESS (core reads VERIFIED_LOCAL; per-subsystem lanes running) | — | — |
+| 26 | Web application (§26) | IN_PROGRESS (advanced area lane running) | — | — |
+| 27 | Demo scenarios A–I (§34) | IN_PROGRESS (`make advanced-demo`: transfer prologue and B pass) | — | — |
 
 ## Foundation detail
 
@@ -74,3 +74,19 @@ Last updated: 2026-10-07 — foundation committed (`964eadb`); subsystem lanes i
 - **Implementation:** `internal/risk/advanced.go`.
 - **DB:** `advanced_risk_decisions` (append-only; verdict/reasons CHECK).
 - **Tests:** `internal/risk/advanced_test.go`, `advanced_integration_test.go`.
+
+### 8. Margin, leverage, borrowing, liquidation
+- **Implementation:** `internal/margin` (pure engine: `Evaluate`, `ComputeHaircut`, `PlanLiquidation`, `RunStress`; service: accounts, collateral, borrow/repay with interest-first repayment, accrual, leveraged paper spot buys, mark-to-market, liquidation queue, step-by-step liquidation with a slippage cap and step budget, insurance-fund deficit cover, stress runs); `BuyingPowerReader` feeds buying power V2 from the engine's own evaluation.
+- **DB:** `00740_margin.sql` (MG001–MG006; append-only histories; step budget and slippage caps as constraints; closed-case rule).
+- **Tests:** property tests (`TestProp_LiquidationIsDeterministicReduceOnlyAndTerminates`, `TestProp_NoWithdrawalBreachesMaintenance`, `TestProp_MarginAvailableNeverExceedsCapacity`, `TestProp_LosingLeveragedPositionNeverIncreasesWithdrawableBuyingPower`, `TestProp_StaleMarksBlockNewLeverage`, `TestProp_EquityIdentityHolds`, `TestProp_HaircutIsMonotoneInEachFactor`); integration (`ScenarioB_FromFundingToACoveredDeficit`, `ConcurrentBorrowsCannotSpendTheSameMarginTwice`, `ConcurrentLeveragedBuysCannotSpendTheSameMarginTwice`, `InterestAccrualReplayIsIdempotent`, `StalePriceLiquidationIsRefused`, `DatabaseRefusesInvalidMarginStates`, `BuyingPowerV2SeesTheMarginEngine`); demo scenario B.
+- **Limitations:** one margin account per customer account (ISOLATED margins one position); the service lends only the numeraire; derivatives cases go to MANUAL_REVIEW; deficit cover refuses when the insurance fund is short.
+
+### 12. Customer-to-customer transfers and the sandbox faucet
+- **Implementation:** `internal/transfers` (send with recipient rules, sender modes, handles, compliance screen, velocity and threshold step-up, Risk Kernel V2, reservation, posting template, effect, evidence; operator reversal by compensation; database-only reconciliation), `internal/sandboxfund` (faucet with a rolling per-account cap); one sandbox dollar owned by `econ`.
+- **DB:** `00744_transfers.sql` (PT001–PT005, SF001–SF002), `00733` (multi-step transition binding, reservation ↔ economic intent, transfer notification kinds).
+- **Tests:** `TestProp_TransfersAndReversalsConserveCustomerWallets`, `TestIntegration_ConcurrentTransfersCannotDoubleSpend` (50 goroutines, exactly 10 succeed), `TestIntegration_HundredConcurrentTransfersPreserveInvariants`, `TestIntegration_ADuplicateTransferIsIdempotent`, `TestIntegration_AReversalCompensatesAndNeverEditsHistory`, `TestIntegration_AnAgentNeverTransfersAndTheCompilerAgrees`, bypass tests for AU001/SM002/PT001–PT005, faucet cap and concurrency tests; demo scenario 0.
+- **Limitations:** recipients must be CUSTOMER accounts; the default screen blocks only a configured list (no sanctions feed: B-06); a reversal that cannot proceed answers CONFLICT and records nothing.
+
+### 22. Universal buying power V2
+- **Implementation:** `internal/capital/buyingpower/v2.go`, `v2_load.go` (ledger + reservations + marks, SIMULATED domain only), margin wired through `margin.BuyingPowerReader`; served at `GET /v1/advanced/buying-power`.
+- **Tests:** `v2_test.go`, `v2_integration_test.go`, `TestIntegration_BuyingPowerV2SeesTheMarginEngine`, `TestIntegration_AdvancedReadsServeTheRealStores`.
