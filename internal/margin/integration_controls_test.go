@@ -343,6 +343,12 @@ func TestIntegration_DatabaseRefusesInvalidMarginStates(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, "MG004", db.SQLState(err))
 
+	// Only a terminal case carries closed_at, and every terminal case does
+	// (margin_liquidation_cases_closed): an open case cannot be marked closed.
+	err = exec(`UPDATE margin_liquidation_cases SET closed_at = now() WHERE id = $1`, cid)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "margin_liquidation_cases_closed", "%v", err)
+
 	// A status change without a transition row is refused at COMMIT.
 	err = exec(`UPDATE margin_liquidation_cases SET status = 'IN_PROGRESS' WHERE id = $1`, cid)
 	require.Error(t, err)

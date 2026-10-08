@@ -286,7 +286,8 @@ func (s *Service) repay(ctx context.Context, tx pgx.Tx, a Account, in *econ.Inte
 	}
 	res, err := s.d.Capital.Reserve(ctx, tx, capital.ReserveRequest{
 		AccountID: a.AccountID.String(), AssetID: a.NumeraireAssetID, Quantity: r.Amount,
-		ActorType: r.Requester.Type, ActorID: r.Requester.ID, IdempotencyKey: key + ":reserve", TTL: reservationTTL,
+		EconomicIntentID: in.ID.String(),
+		ActorType:        r.Requester.Type, ActorID: r.Requester.ID, IdempotencyKey: key + ":reserve", TTL: reservationTTL,
 		Reason: "margin repayment",
 	})
 	if err != nil {

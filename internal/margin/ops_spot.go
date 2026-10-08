@@ -243,7 +243,8 @@ func (s *Service) openSpot(ctx context.Context, tx pgx.Tx, a Account, in *econ.I
 	// 2. Reserve the cost on the wallet.
 	res, err := s.d.Capital.Reserve(ctx, tx, capital.ReserveRequest{
 		AccountID: a.AccountID.String(), AssetID: a.NumeraireAssetID, Quantity: cost,
-		ActorType: r.Requester.Type, ActorID: r.Requester.ID, IdempotencyKey: prefix + ":reserve", TTL: reservationTTL,
+		EconomicIntentID: in.ID.String(),
+		ActorType:        r.Requester.Type, ActorID: r.Requester.ID, IdempotencyKey: prefix + ":reserve", TTL: reservationTTL,
 		Reason: "margin leveraged buy",
 	})
 	if err != nil {

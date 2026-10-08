@@ -47,6 +47,7 @@ import (
 	"github.com/nodal/controlplane/internal/intent"
 	"github.com/nodal/controlplane/internal/killswitch"
 	"github.com/nodal/controlplane/internal/ledger"
+	"github.com/nodal/controlplane/internal/margin"
 	"github.com/nodal/controlplane/internal/notification"
 	"github.com/nodal/controlplane/internal/prediction"
 	"github.com/nodal/controlplane/internal/reconciliation"
@@ -187,6 +188,18 @@ func registry() []pair {
 		{table: "transfer_sender_modes", constraint: "transfer_sender_modes_mode_check", source: "transfers.AllSenderModes()", values: str(transfers.AllSenderModes())},
 		{table: "sandbox_fundings", constraint: "sandbox_fundings_environment_check", source: "sandboxfund.AllEnvironments()", values: str(sandboxfund.AllEnvironments())},
 		{table: "sandbox_fundings", constraint: "sandbox_fundings_actor_type_check", source: "sandboxfund.AllowedActorTypes()", values: str(sandboxfund.AllowedActorTypes())},
+
+		// Migration 00740 (margin, leverage, liquidation).
+		{table: "margin_accounts", constraint: "margin_accounts_margin_mode_check", source: "margin.AllMarginModes()", values: str(margin.AllMarginModes())},
+		{table: "margin_accounts", constraint: "margin_accounts_mode_check", source: "margin.RunModes()", values: str(margin.RunModes())},
+		{table: "margin_accounts", constraint: "margin_accounts_status_check", source: "margin.AllAccountStatuses()", values: str(margin.AllAccountStatuses())},
+		{table: "margin_accounts", constraint: "margin_accounts_opened_by_actor_type_check", source: "margin.OpenerActorTypes()", values: str(margin.OpenerActorTypes())},
+		{table: "margin_borrow_lots", constraint: "margin_borrow_lots_close_reason_check", source: "margin.AllLotCloseReasons()", values: str(margin.AllLotCloseReasons())},
+		{table: "margin_collateral_moves", constraint: "margin_collateral_moves_direction_check", source: "margin.AllMoveDirections()", values: str(margin.AllMoveDirections())},
+		{table: "margin_calls", constraint: "margin_calls_status_check", source: "margin.AllCallStatuses()", values: str(margin.AllCallStatuses())},
+		{table: "margin_liquidation_cases", constraint: "margin_liquidation_cases_status_check", source: "margin.AllCaseStatuses()", values: str(margin.AllCaseStatuses())},
+		{table: "margin_liquidation_cases", constraint: "margin_liquidation_cases_target_check", source: "margin.AllLiquidationTargets()", values: str(margin.AllLiquidationTargets())},
+		{table: "margin_liquidation_steps", constraint: "margin_liquidation_steps_action_check", source: "margin.AllStepActions()", values: str(margin.AllStepActions())},
 	}
 	for _, table := range []string{
 		"agent_runs", "agents", "calibration_snapshots", "cost_accounting", "counterfactuals",
@@ -258,6 +271,10 @@ var bespoke = []string{
 	// SIMULATED value only. internal/econ's
 	// TestIntegration_HouseAndFacilityBooksCannotHoldRealValue drives it.
 	"ledger_accounts.ledger_accounts_segregated_books_are_simulated",
+	// Not a list of values but a rule: a liquidation case carries closed_at
+	// exactly when its status is terminal. internal/margin's
+	// TestIntegration_DatabaseRefusesInvalidMarginStates drives it.
+	"margin_liquidation_cases.margin_liquidation_cases_closed",
 }
 
 var (

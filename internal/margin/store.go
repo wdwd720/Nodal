@@ -240,16 +240,19 @@ func (st *store) accountByID(ctx context.Context, q db.Querier, mid AccountID, l
 // instead of at COMMIT. The bindings stay exactly as strict: a status change
 // that no transition row describes is still refused (AU001), only sooner.
 //
-// It exists because on this branch a deferred binding keeps one edge per row
-// and transaction, so a lifecycle of several steps in one transaction (an
-// intent RECEIVED -> ROUTED -> RISK_APPROVED -> EXECUTING -> COMPLETED, an
-// account MARGIN_CALL -> LIQUIDATING -> NORMAL) would fail at COMMIT. Every
-// transition here, and in econ, writes its row before its UPDATE, so
-// immediate checks pass. Migration 00733 on main makes edges accumulate;
-// this helper and its call sites are deleted when the branch merges.
+// It exists because a deferred edge binding keeps one edge per row and
+// transaction, so a lifecycle of several steps in one transaction (an account
+// MARGIN_CALL -> LIQUIDATING -> NORMAL) would fail at COMMIT. The economic
+// intent and effect bindings no longer need this: their status machines are
+// acyclic, so migration 00733 lets their edges accumulate. These margin
+// machines are NOT acyclic (an account can return to NORMAL and be called
+// again), so an accumulated edge could license the same change twice; checking
+// each change at the end of its own statement, against the row written just
+// before it, keeps every change licensed by exactly one row. Every transition
+// here writes its row before its UPDATE.
 func bindingsImmediate(ctx context.Context, tx pgx.Tx) error {
-	_, err := tx.Exec(ctx, `SET CONSTRAINTS economic_intents_require_transition, economic_effects_require_transition,
-		margin_accounts_require_transition, margin_calls_require_transition, margin_liquidation_cases_require_transition IMMEDIATE`)
+	_, err := tx.Exec(ctx, `SET CONSTRAINTS margin_accounts_require_transition, margin_calls_require_transition,
+		margin_liquidation_cases_require_transition IMMEDIATE`)
 	return dbErr("check transition bindings immediately", err)
 }
 
