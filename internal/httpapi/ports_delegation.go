@@ -67,8 +67,11 @@ type DelegationPort interface {
 	AllCapabilities(ctx context.Context, status delegation.CapabilityStatus, cursor string, limit int) (DelegationCapabilityPage, error)
 	Pending(ctx context.Context, limit int) (DelegationPendingView, error)
 	RegisterVenue(ctx context.Context, r DelegationVenueRegistration) (DelegationVenueView, error)
-	// ExecutePending executes, oldest first, every swap and withdrawal that
-	// is ready: admitted or approved swaps, approved withdrawals.
+	// ExecutePending executes the swaps and withdrawals that can be signed
+	// now, as delegation.Service.ExecutableSubjects chooses them: fairly
+	// across accounts (at most Params.ExecutablePerAccount of one account per
+	// run), swaps with the soonest-expiring quote first, and never a
+	// withdrawal still in its cooling period or a subject of another network.
 	ExecutePending(ctx context.Context, limit int) ([]DelegationExecutionResult, error)
 }
 

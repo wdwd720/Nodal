@@ -32,6 +32,16 @@
 //     records the capability usage and the settlement plan (a delivery-
 //     versus-payment exchange with the venue at the venue's quote, bounded by
 //     the agent's slippage). Every refusal is recorded.
+//   - What a swap does is derived from the direction of its value
+//     (SwapAction), never taken from the agent: only paying a token for a
+//     USD-pegged stable unit -- the venue's quote side -- reduces exposure;
+//     everything else acquires it. The agent's label is its claim, and a
+//     claim that disagrees is refused, recorded. The capability's action
+//     classes, the account's status (a RESTRICTED account only reduces),
+//     Risk V2's risk-increasing flag (and with it the platform's single-trade
+//     cap) and every re-check before signing use the derived action, and the
+//     database binds the stored action to the pay and receive assets at
+//     admission and again at signing (DG007).
 //   - When the capability requires it, the account's owner approves or
 //     declines the exact plan (bound by its hash).
 //   - SignSwap compiles the transaction from the persisted plan, and the
@@ -67,6 +77,29 @@
 // SANDBOX_WITHDRAWAL. An account freeze (account status or kill switch) stops
 // a withdrawal at every step before submission.
 //
+// # Kill switches
+//
+// Every kill-switch check of a delegated flow -- the swap request, its
+// signing and the last check before its submission; the withdrawal proposal,
+// its approval, its signing and the last check before its submission --
+// names the account, the agent and the strategy version the agent runs, so
+// an ACCOUNT_FREEZE, an AGENT_PAUSE or a STRATEGY_VERSION_DISABLE stops the
+// agent's activity at every one of them, and Risk V2 is told the version too.
+// Observing and settling a subject already signed and submitted consults no
+// switch: what the chain finalized is booked.
+//
+// # Execution runs and venues
+//
+// ExecutableSubjects is what an execution run takes: only subjects of the
+// service's network that can be signed now (no swap past its quote, no
+// withdrawal still cooling), the accounts taking turns with at most
+// Params.ExecutablePerAccount each, and within a turn the swap whose quote
+// expires soonest first, so no account's waiting subjects can keep another's
+// from being carried out. DueSwaps, DueWithdrawals, PendingSwaps and
+// PendingWithdrawals are what an expiry sweep looks at, the ones past their
+// deadline first. A venue's counterparty is a house book of its own: never a
+// treasury book and never another venue's (DG008).
+//
 // # Keys
 //
 // The DelegatedSigner derives each account's Ed25519 devnet key per chain
@@ -86,6 +119,12 @@
 //     beyond identifiers and the bytes to be signed.
 //   - Let a capability act across an account boundary, outside its scope,
 //     after its expiry or revocation, or beyond any of its limits.
+//   - Let an agent's label decide whether a swap acquires or reduces
+//     exposure, or let a kill switch on the agent's strategy version go
+//     unconsulted before submission.
+//   - Let one account's waiting subjects hold the places of another's in an
+//     execution run, or back a venue with a treasury book or another venue's
+//     house book.
 //   - Substitute a destination or change an amount after approval.
 //   - Resubmit a transaction whose outcome is unknown, or post before the
 //     chain has finalized what the posting records.

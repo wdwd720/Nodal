@@ -5365,11 +5365,14 @@ paths:
   /advanced/delegation/ops/execute-pending:
     post:
       tags: [advanced]
-      summary: Operator — execute every swap and withdrawal that is ready, oldest first (step-up)
+      summary: Operator — execute the swaps and withdrawals that can be signed now, fairly across accounts (step-up)
       description: >-
         Admitted and approved swaps and approved withdrawals are each executed under the service's own
-        authority: inspected, signed, submitted exactly once and settled. The service refuses what may not go
-        ahead (a revoked capability, a cooling period, a closed gate); each subject's outcome is reported.
+        authority: inspected, signed, submitted exactly once and settled. A run takes only subjects that can be
+        signed now — never a withdrawal still in its cooling period, a swap past its quote or a subject of
+        another network — with the accounts taking turns and at most a fixed number of one account's subjects
+        per run, swaps whose quote expires soonest first. The service refuses what may not go ahead (a revoked
+        capability, a closed gate, a kill switch); each subject's outcome is reported.
       parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
       requestBody:
         required: true

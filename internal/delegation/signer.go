@@ -151,6 +151,9 @@ type signingState struct {
 	signable     bool
 	needApproval bool
 	approval     *approvalRow
+	// subjectCodes are refusals about the subject itself that the
+	// capability check cannot see (a swap whose label is not what it does).
+	subjectCodes []string
 	use          Use
 	inspect      func(m devnet.Message, c Capability) []string
 	policy       func(now time.Time) []string
@@ -200,10 +203,12 @@ func (s *DelegatedSigner) Sign(ctx context.Context, tx pgx.Tx, req SignRequest) 
 	// 1. The capability, validated again from its row.
 	st.use.Now, st.use.Environment = now, s.env
 	codes = append(codes, capability.Check(st.use).Codes...)
-	// 2. The subject: signable, approved when it must be, on the plan it carries.
+	// 2. The subject: signable, what it says it is, approved when it must be,
+	// on the plan it carries.
 	if !st.signable {
 		codes = append(codes, ReasonSubjectNotSignable)
 	}
+	codes = append(codes, st.subjectCodes...)
 	if st.needApproval {
 		switch {
 		case st.approval == nil || st.approval.Decision != DecisionApprove:
@@ -289,10 +294,16 @@ func (s *DelegatedSigner) swapState(ctx context.Context, tx pgx.Tx, subject stri
 	if !ok {
 		classes = nil
 	}
+	// The capability is measured against what the swap does, derived from
+	// its assets again here, never against its label.
+	action := SwapAction(payAsset, recvAsset)
 	st := signingState{
 		kind: SubjectSwap, subject: sw.ID.String(), account: sw.AccountID, capabilityID: sw.CapabilityID, chain: sw.Chain,
 		wallet: sw.Wallet, planHash: sw.PlanHash, message: sw.Message, signable: sw.Status.Signable(),
 		needApproval: sw.RequiresApproval,
+	}
+	if action != sw.Action {
+		st.subjectCodes = append(st.subjectCodes, ReasonActionMismatch)
 	}
 	if a, found, err := swapApproval(ctx, tx, sw.ID); err != nil {
 		return signingState{}, err
@@ -307,7 +318,7 @@ func (s *DelegatedSigner) swapState(ctx context.Context, tx pgx.Tx, subject stri
 	if err != nil {
 		return signingState{}, err
 	}
-	st.use = Use{AccountID: sw.AccountID, AgentID: sw.AgentID, StrategyID: strategy, Action: sw.Action, Classes: classes,
+	st.use = Use{AccountID: sw.AccountID, AgentID: sw.AgentID, StrategyID: strategy, Action: action, Classes: classes,
 		Chain: sw.Chain, Destination: venue.Address, Notional: sw.NotionalUSD, DayUsed: dayUsed, TotalUsed: totalUsed, Mode: sw.Mode}
 	st.inspect = func(m devnet.Message, c Capability) []string {
 		fee, _ := s.fees(sw.Chain)

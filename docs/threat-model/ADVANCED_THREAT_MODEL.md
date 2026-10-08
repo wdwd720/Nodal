@@ -239,13 +239,17 @@ packages named; `go run ./scripts/inttest -pkg '^\./internal/<pkg>$'` runs a pac
   segment — treasury postings stay in it (TY004) and no customer fund is reachable by a house strategy; only
   the house service or an operator acts for the house (TY002); every house order is evaluated against the book's
   loss, inventory and exposure limits, including concurrently; a house fill against a customer needs a disclosed
-  sandbox crossing rule (TY006); the kill switch stops new house orders.
-- **Residual risk:** a direct call of the order book's house-order entry point bypasses the treasury's limits;
-  the treasury API lane adds a database binding that a house order exists only as a treasury action (00759).
+  sandbox crossing rule (TY006); the kill switch stops new house orders. Every house order on the book is the
+  result of an applied treasury action, so none reaches the book around the treasury's limits (TY007, 00759). A
+  delegated-swap venue is backed by a house book of its own: never a treasury book or another venue's, and a
+  venue's book can never become a treasury book (DG008, 00762), so delegated swaps cannot move the treasury's
+  inventory outside its actions and limits.
+- **Residual risk:** none known beyond the sandbox's single-operator actions listed in `SECURITY_RED_TEAM.md`.
 - **Tests:** `TestIntegration_HouseAndCustomerLedgersAreSegregated`, `TestIntegration_NoCustomerFundsAreAvailableToTheHouseStrategy`,
   `TestIntegration_OnlyTheHouseServiceOrAnOperatorActsForTheHouse`, `TestIntegration_ConcurrentHouseOrdersCannotBreachALimitTogether`,
   `TestIntegration_HouseCustomerCrossingNeedsADisclosedSandboxRule`, `TestIntegration_TheDatabaseRefusesInvalidTreasuryStates`
-  (`internal/treasury`); `TestIntegration_HouseAndFacilityBooksCannotHoldRealValue`, `TestIntegration_FacilityBooksAreSegregatedByKind`,
+  (`internal/treasury`); `TestIntegration_HouseOrdersExistOnlyThroughTheTreasury` (`internal/httpapi`);
+  `TestIntegration_AVenueNeedsAHouseBookOfItsOwn` (`internal/delegation`); `TestIntegration_HouseAndFacilityBooksCannotHoldRealValue`, `TestIntegration_FacilityBooksAreSegregatedByKind`,
   `TestIntegration_ASimulatedOnlyKindCannotTouchRealCapital`, `TestIntegration_ATransferMustBalancePerParty`
   (`internal/econ`); `TestProp_EveryTemplateBalancesPerPartyAndIsSimulatedOnly` (`internal/margin`);
   `TestIntegration_TheDatabaseRefusesAClearingFlowThatDoesNotBalancePerParty` (`internal/derivatives`);
@@ -342,13 +346,27 @@ packages named; `go run ./scripts/inttest -pkg '^\./internal/<pkg>$'` runs a pac
 - **Controls (delegated authority, `internal/delegation`):** an agent acts only under a capability its customer
   granted — scoped to instrument and action classes, chains, limits and a lifetime, hashed over every term — and
   a capability never expands itself and never crosses an account boundary (DG003); the actors of a grant are
-  never agents; an expired or revoked capability refuses every use.
-- **Residual risk:** review finding F5 (an agent requester could post a customer's collateral) is fixed
-  (`d91ead2`). The delegation API admits agent principals to two routes only (a swap request and a withdrawal
-  proposal); this entry is revised when that surface merges.
+  never agents; an expired or revoked capability refuses every use. A swap is checked under the action its
+  direction of value makes it — never the label the agent sent — so a purchase labelled as a reduction is
+  refused (`DELEGATION_ACTION_MISMATCH`) and can pass neither a reduce-only capability, nor a restricted
+  account's reduce-only rule, nor the platform's single-trade cap; the database checks the stored label against
+  the swap's assets at admission and again at signing (DG007). Every kill-switch check of an agent names its
+  current strategy version, so `STRATEGY_VERSION_DISABLE` stops its swaps and withdrawals at every step.
+- **Controls (the agent runtime):** agents never reach the HTTP surface. The runtime acts in-process through
+  `delegation.AgentAdmission`, which can request a swap, propose a withdrawal and read the agent's own
+  capabilities, and nothing else — it holds no service, signer or seed — and a delegated tool is offered only
+  under an active, unexpired, intact capability in a PAPER run.
+- **Residual risk:** review-1 finding F5 (an agent requester could post a customer's collateral) and red-team
+  findings F1 (the swap's label) and F2 (the strategy-version kill switch) are fixed (`SECURITY_RED_TEAM.md`). A
+  kill-switch check uses the agent's current strategy version, not the version that made the request.
 - **Tests:** `TestIntegration_StrategyCannotSelfExpandCapability`, `TestIntegration_CapabilityCannotCrossAccountBoundary`,
   `TestTheActorsOfAGrantAreNeverAgents`, `TestIntegration_ExpiredTokenRejected`, `TestIntegration_RevokedTokenRejected`,
-  `TestProp_CapabilityLimitsNeverOverspend` (`internal/delegation`); `TestIntegration_AnAgentCannotPostCollateral`
+  `TestProp_CapabilityLimitsNeverOverspend`, `TestIntegration_AReduceOnlyCapabilityNeverBuysExposure`,
+  `TestIntegration_ARestrictedAccountsAgentOnlyReducesExposure`, `TestIntegration_ThePlatformSingleTradeCapBindsEveryPurchase`,
+  `TestIntegration_TheDatabaseBindsASwapsActionToItsDirection`, `TestIntegration_AStrategyVersionKillSwitchStopsItsAgentAtEveryStep`,
+  `TestAgentAdmissionExposesOnlyAdmissionAndTheCapabilityRead` (`internal/delegation`);
+  `TestTheRuntimeHoldsNoDelegationServiceOrSigner`, `TestDelegatedToolsAreOfferedOnlyUnderAUsableCapabilityInAPaperRun`
+  (`internal/agent`); `TestIntegration_AnAgentCannotPostCollateral`
   (`internal/margin`); `TestRoute_TheCompilerForbidsAgentTransfersAtEveryLevel`, `TestIntegration_AnAgentNeverTransfersAndTheCompilerAgrees`
   (`internal/transfers`); `TestNoOperationAdmitsAnAgent` (`internal/httpapi`); `TestIntegration_AnAgentCannotTouchTheMarketplace`
   (`internal/marketplace`); `TestProp_NoStrategyOutputBecomesATransferOrWithdrawal` (`internal/sandboxrt`).

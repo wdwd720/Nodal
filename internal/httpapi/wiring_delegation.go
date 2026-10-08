@@ -571,34 +571,17 @@ func (a delegationAdapter) RegisterVenue(ctx context.Context, r DelegationVenueR
 	return out, err
 }
 
-// delegationCandidate is one subject an execution run takes.
-type delegationCandidate struct {
-	kind    delegation.SubjectKind
-	id      string
-	account accounts.AccountID
-	status  string
-}
-
+// ExecutePending carries out what the delegation service selects as
+// executable now (delegation.Service.ExecutableSubjects): only subjects that
+// can be signed now, the accounts taking turns with a cap on each, the swap
+// whose quote expires soonest first. The selection is the service's; nothing
+// here decides which subjects run.
 func (a delegationAdapter) ExecutePending(ctx context.Context, limit int) ([]DelegationExecutionResult, error) {
 	if limit < 1 || limit > delegationExecuteMax {
 		limit = delegationExecuteMax
 	}
-	rows, err := a.db.Query(ctx, delegationExecutableSQL, limit)
+	candidates, err := a.svc.ExecutableSubjects(ctx, a.db, limit)
 	if err != nil {
-		return nil, err
-	}
-	var candidates []delegationCandidate
-	for rows.Next() {
-		var c delegationCandidate
-		var at time.Time
-		if err := rows.Scan(&c.kind, &c.id, &c.account, &c.status, &at); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		candidates = append(candidates, c)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	out := make([]DelegationExecutionResult, 0, len(candidates))
@@ -606,22 +589,14 @@ func (a delegationAdapter) ExecutePending(ctx context.Context, limit int) ([]Del
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		r := DelegationExecutionResult{Kind: c.kind, ID: c.id, AccountID: c.account, StatusBefore: c.status}
-		switch c.kind {
+		r := DelegationExecutionResult{Kind: c.Kind, ID: c.ID(), AccountID: c.AccountID, StatusBefore: c.Status}
+		switch c.Kind {
 		case delegation.SubjectSwap:
-			sid, perr := delegation.ParseSwapID(c.id)
-			if perr != nil {
-				return nil, errs.Wrap(perr, errs.CodeInternal, "delegation: a stored swap id does not parse")
-			}
-			_, r.Err = a.svc.ExecuteSwap(ctx, sid)
-			err = a.db.QueryRow(ctx, delegationSwapStatusSQL, sid).Scan(&r.Status)
+			_, r.Err = a.svc.ExecuteSwap(ctx, c.SwapID)
+			err = a.db.QueryRow(ctx, delegationSwapStatusSQL, c.SwapID).Scan(&r.Status)
 		default:
-			wid, perr := delegation.ParseWithdrawalID(c.id)
-			if perr != nil {
-				return nil, errs.Wrap(perr, errs.CodeInternal, "delegation: a stored withdrawal id does not parse")
-			}
-			_, r.Err = a.svc.ExecuteWithdrawal(ctx, wid)
-			err = a.db.QueryRow(ctx, delegationWithdrawalStatusSQL, wid).Scan(&r.Status)
+			_, r.Err = a.svc.ExecuteWithdrawal(ctx, c.WithdrawalID)
+			err = a.db.QueryRow(ctx, delegationWithdrawalStatusSQL, c.WithdrawalID).Scan(&r.Status)
 		}
 		if err != nil {
 			return nil, err
@@ -763,15 +738,6 @@ const delegationWithdrawalDecisionsSQL = `SELECT withdrawal_id::text, id::text, 
 
 const delegationWithdrawalTransitionsSQL = `SELECT withdrawal_id::text, from_status, to_status, actor_type, actor_id, reason,
 	occurred_at FROM delegated_withdrawal_transitions WHERE withdrawal_id = ANY($1::text[]::uuid[]) ORDER BY occurred_at, id`
-
-// delegationExecutableSQL is what an execution run takes, oldest first:
-// swaps the service may sign now (ADMITTED needing no approval, or
-// APPROVED) and APPROVED withdrawals. The service decides each one again.
-const delegationExecutableSQL = `SELECT kind, id, account_id, status, created_at FROM (
-	SELECT 'SWAP' AS kind, id::text AS id, account_id, status, created_at FROM delegated_swaps WHERE status IN ('ADMITTED','APPROVED')
-	UNION ALL
-	SELECT 'WITHDRAWAL', id::text, account_id, status, created_at FROM delegated_withdrawals WHERE status = 'APPROVED'
-	) AS ready ORDER BY created_at, id LIMIT $1`
 
 const delegationVenueColumns = `id, name, chain_id, address, house_account_id, spread_bps, created_by_actor_type,
 	created_by_actor_id, created_at`

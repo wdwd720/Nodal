@@ -56,6 +56,9 @@ type Params struct {
 	StepUpMaxAge time.Duration
 	// ApprovalTTL is how long a withdrawal waits for a human decision.
 	ApprovalTTL time.Duration
+	// ExecutablePerAccount is the most subjects of one account one
+	// execution run takes (ExecutableSubjects).
+	ExecutablePerAccount int
 }
 
 func (p Params) withDefaults() Params {
@@ -79,6 +82,9 @@ func (p Params) withDefaults() Params {
 	}
 	if p.ApprovalTTL <= 0 {
 		p.ApprovalTTL = 24 * time.Hour
+	}
+	if p.ExecutablePerAccount <= 0 {
+		p.ExecutablePerAccount = 10
 	}
 	return p
 }

@@ -205,7 +205,11 @@ type DelegatedSwapRequest struct {
 	CapabilityID string
 	// Action is the swap's label, ACQUIRE_EXPOSURE or REDUCE_EXPOSURE. The
 	// runtime gives it no meaning: no bound here is relaxed or tightened by
-	// it, and delegation's admission alone judges it.
+	// it, and delegation's admission alone judges it. It must be what the
+	// swap does -- REDUCE_EXPOSURE only when it pays a token for a USD-pegged
+	// stable unit, ACQUIRE_EXPOSURE otherwise (delegation.SwapAction) --
+	// or delegation refuses the request, recorded, as
+	// DELEGATION_ACTION_MISMATCH; a label never makes a purchase a reduction.
 	Action         string
 	VenueID        string
 	PayAssetID     string
@@ -259,8 +263,10 @@ func swapRequestFor(r DelegatedSwapRequest, tool DelegatedTool, account accounts
 	}
 	// The label is passed through and nothing here interprets it: whether a
 	// label is granted, and whether it matches the direction value actually
-	// moves in, is delegation's admission to decide on every request. The
-	// runtime only refuses what is not a swap label at all.
+	// moves in, is delegation's admission to decide on every request -- it
+	// derives what the swap does from the assets and refuses, recorded, a
+	// label that disagrees. The runtime only refuses what is not a swap label
+	// at all.
 	action := delegation.ActionClass(r.Action)
 	if !action.IsSwap() {
 		p.add("action", "must be ACQUIRE_EXPOSURE or REDUCE_EXPOSURE")

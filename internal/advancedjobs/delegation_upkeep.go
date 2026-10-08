@@ -25,13 +25,17 @@ import (
 // ExpireStaleWithdrawal, each subject in its own transaction): the
 // reservation is released and the intent REJECTED. The ones past their
 // deadline -- a swap's venue quote, a withdrawal's approval window -- are
-// taken first, oldest deadline first; the rest of the batch is a paged sweep
-// over every pending one, which finds those whose capability, account, agent,
-// destination, gate or kill switch no longer stands. A pending subject whose
-// network was never recorded is a candidate too: no service can sign it, so
-// it is ended and its funds released. The job only finds candidates; whether
-// one is stale is the package's own standing check, and one that still stands
-// is left exactly as it is.
+// taken first, oldest deadline first (delegation.Service.DueSwaps /
+// DueWithdrawals); the rest of the batch is a paged sweep over every pending
+// one (PendingSwaps / PendingWithdrawals), which finds those whose capability,
+// account, agent, destination, gate or kill switch no longer stands. A pending
+// subject whose network was never recorded is a candidate too: no service can
+// sign it, so it is ended and its funds released. Which subjects are
+// candidates is the package's selection and whether one is stale its own
+// standing check: the job only pages and drives, and one that still stands is
+// left exactly as it is. Neither selection can be held by subjects that
+// stand: one past its deadline is ended when taken, and the sweep moves past
+// every other.
 //
 // Observation. delegation.Service.ObserveInFlight then observes the SIGNED,
 // SUBMITTED and UNKNOWN swaps and withdrawals by transaction id through the
@@ -75,47 +79,6 @@ func NewDelegationUpkeep(d *db.DB, svc *delegation.Service, clk clock.Clock, s S
 // Spec implements Job.
 func (j *DelegationUpkeep) Spec() Spec { return j.spec }
 
-// The candidate reads. Read-only; delegation exports no lister. The status
-// sets are exactly the ones ExpireStaleSwap / ExpireStaleWithdrawal act on;
-// a subject of another network is never a candidate, and one whose expiry
-// failed is left out while the package's backoff runs (upkeep_failures,
-// operation $4).
-const (
-	// dueSwapsSQL: pending swaps whose quote has expired, oldest deadline
-	// first. $1 now, $2 limit, $3 network, $4 operation.
-	dueSwapsSQL = `SELECT id FROM delegated_swaps
-		WHERE status IN ('ADMITTED','AWAITING_APPROVAL','APPROVED') AND quote_expires_at <= $1
-		  AND (network = $3 OR network IS NULL)
-		  AND NOT EXISTS (SELECT 1 FROM upkeep_failures uf WHERE uf.operation = $4 AND uf.item_id = delegated_swaps.id
-		                    AND uf.cleared_at IS NULL AND uf.retry_after > $1 AND uf.last_failed_at <= $1)
-		ORDER BY quote_expires_at, id LIMIT $2`
-	// pendingSwapsSQL: every pending swap after a paging key, in id order.
-	// $1 paging key, $2 limit, $3 network, $4 operation, $5 now.
-	pendingSwapsSQL = `SELECT id FROM delegated_swaps
-		WHERE status IN ('ADMITTED','AWAITING_APPROVAL','APPROVED') AND id > $1::uuid
-		  AND (network = $3 OR network IS NULL)
-		  AND NOT EXISTS (SELECT 1 FROM upkeep_failures uf WHERE uf.operation = $4 AND uf.item_id = delegated_swaps.id
-		                    AND uf.cleared_at IS NULL AND uf.retry_after > $5 AND uf.last_failed_at <= $5)
-		ORDER BY id LIMIT $2`
-	// dueWithdrawalsSQL: withdrawals still waiting for a person after their
-	// approval deadline, oldest deadline first. $1 now, $2 limit, $3 network,
-	// $4 operation.
-	dueWithdrawalsSQL = `SELECT id FROM delegated_withdrawals
-		WHERE status = 'AWAITING_APPROVAL' AND approval_expires_at <= $1
-		  AND (network = $3 OR network IS NULL)
-		  AND NOT EXISTS (SELECT 1 FROM upkeep_failures uf WHERE uf.operation = $4 AND uf.item_id = delegated_withdrawals.id
-		                    AND uf.cleared_at IS NULL AND uf.retry_after > $1 AND uf.last_failed_at <= $1)
-		ORDER BY approval_expires_at, id LIMIT $2`
-	// pendingWithdrawalsSQL: every pending withdrawal after a paging key, in
-	// id order. $1 paging key, $2 limit, $3 network, $4 operation, $5 now.
-	pendingWithdrawalsSQL = `SELECT id FROM delegated_withdrawals
-		WHERE status IN ('AWAITING_APPROVAL','APPROVED') AND id > $1::uuid
-		  AND (network = $3 OR network IS NULL)
-		  AND NOT EXISTS (SELECT 1 FROM upkeep_failures uf WHERE uf.operation = $4 AND uf.item_id = delegated_withdrawals.id
-		                    AND uf.cleared_at IS NULL AND uf.retry_after > $5 AND uf.last_failed_at <= $5)
-		ORDER BY id LIMIT $2`
-)
-
 type swapUnit struct{ id delegation.SwapID }
 
 func (u swapUnit) cursorKey() string { return u.id.String() }
@@ -124,16 +87,25 @@ type withdrawalUnit struct{ id delegation.WithdrawalID }
 
 func (u withdrawalUnit) cursorKey() string { return u.id.String() }
 
+// pageAfter is the pager's position as a subject id: the start of the walk
+// (nilUUID) is the zero id, which the selection reads as "from the first".
+func pageAfter[K any](after string, parse func(string) (K, error)) (K, error) {
+	var zero K
+	if after == nilUUID {
+		return zero, nil
+	}
+	return parse(after)
+}
+
 // Run expires what is stale, then observes what is in flight.
 func (j *DelegationUpkeep) Run(ctx context.Context) (Report, error) {
 	var rep Report
 	now := j.clk.Now()
-	network := j.svc.Network()
-	swaps, err := j.swapCandidates(ctx, now, network)
+	swaps, err := j.swapCandidates(ctx, now)
 	if err != nil {
 		return rep, err
 	}
-	withdrawals, err := j.withdrawalCandidates(ctx, now, network)
+	withdrawals, err := j.withdrawalCandidates(ctx, now)
 	if err != nil {
 		return rep, err
 	}
@@ -166,11 +138,11 @@ func failPending(rep *Report, failures []delegation.PendingFailure) {
 
 // swapCandidates is the swaps past their deadline, then a page of the rest,
 // each once.
-func (j *DelegationUpkeep) swapCandidates(ctx context.Context, now time.Time, network string) ([]delegation.SwapID, error) {
+func (j *DelegationUpkeep) swapCandidates(ctx context.Context, now time.Time) ([]delegation.SwapID, error) {
 	var due []swapUnit
 	if err := readOnly(ctx, j.db, func(ctx context.Context, tx pgx.Tx) error {
-		var err error
-		due, err = scanSubjects[swapUnit](ctx, tx, dueSwapsSQL, now, j.spec.Batch, network, delegation.UpkeepExpireSwap)
+		ids, err := j.svc.DueSwaps(ctx, tx, now, j.spec.Batch)
+		due = swapUnits(ids)
 		return err
 	}); err != nil {
 		return nil, err
@@ -178,7 +150,12 @@ func (j *DelegationUpkeep) swapCandidates(ctx context.Context, now time.Time, ne
 	units := due
 	if left := j.spec.Batch - len(due); left > 0 {
 		swept, err := readPage(ctx, &j.swaps, j.db, left, func(ctx context.Context, q db.Querier, after string, limit int) ([]swapUnit, error) {
-			return scanSubjects[swapUnit](ctx, q, pendingSwapsSQL, after, limit, network, delegation.UpkeepExpireSwap, now)
+			from, err := pageAfter(after, delegation.ParseSwapID)
+			if err != nil {
+				return nil, err
+			}
+			ids, err := j.svc.PendingSwaps(ctx, q, from, now, limit)
+			return swapUnits(ids), err
 		})
 		if err != nil {
 			return nil, err
@@ -198,11 +175,11 @@ func (j *DelegationUpkeep) swapCandidates(ctx context.Context, now time.Time, ne
 
 // withdrawalCandidates is the withdrawals past their approval deadline, then
 // a page of the rest, each once.
-func (j *DelegationUpkeep) withdrawalCandidates(ctx context.Context, now time.Time, network string) ([]delegation.WithdrawalID, error) {
+func (j *DelegationUpkeep) withdrawalCandidates(ctx context.Context, now time.Time) ([]delegation.WithdrawalID, error) {
 	var due []withdrawalUnit
 	if err := readOnly(ctx, j.db, func(ctx context.Context, tx pgx.Tx) error {
-		var err error
-		due, err = scanSubjects[withdrawalUnit](ctx, tx, dueWithdrawalsSQL, now, j.spec.Batch, network, delegation.UpkeepExpireWithdrawal)
+		ids, err := j.svc.DueWithdrawals(ctx, tx, now, j.spec.Batch)
+		due = withdrawalUnits(ids)
 		return err
 	}); err != nil {
 		return nil, err
@@ -210,7 +187,12 @@ func (j *DelegationUpkeep) withdrawalCandidates(ctx context.Context, now time.Ti
 	units := due
 	if left := j.spec.Batch - len(due); left > 0 {
 		swept, err := readPage(ctx, &j.withdrawals, j.db, left, func(ctx context.Context, q db.Querier, after string, limit int) ([]withdrawalUnit, error) {
-			return scanSubjects[withdrawalUnit](ctx, q, pendingWithdrawalsSQL, after, limit, network, delegation.UpkeepExpireWithdrawal, now)
+			from, err := pageAfter(after, delegation.ParseWithdrawalID)
+			if err != nil {
+				return nil, err
+			}
+			ids, err := j.svc.PendingWithdrawals(ctx, q, from, now, limit)
+			return withdrawalUnits(ids), err
 		})
 		if err != nil {
 			return nil, err
@@ -228,26 +210,20 @@ func (j *DelegationUpkeep) withdrawalCandidates(ctx context.Context, now time.Ti
 	return out, nil
 }
 
-// scanSubjects reads one column of subject ids.
-func scanSubjects[T swapUnit | withdrawalUnit](ctx context.Context, q db.Querier, sql string, args ...any) ([]T, error) {
-	rows, err := q.Query(ctx, sql, args...)
-	if err != nil {
-		return nil, err
+// swapUnits wraps selected swap ids for the pager.
+func swapUnits(ids []delegation.SwapID) []swapUnit {
+	out := make([]swapUnit, 0, len(ids))
+	for _, sid := range ids {
+		out = append(out, swapUnit{id: sid})
 	}
-	defer rows.Close()
-	var out []T
-	for rows.Next() {
-		var u T
-		switch p := any(&u).(type) {
-		case *swapUnit:
-			err = rows.Scan(&p.id)
-		case *withdrawalUnit:
-			err = rows.Scan(&p.id)
-		}
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, u)
+	return out
+}
+
+// withdrawalUnits wraps selected withdrawal ids for the pager.
+func withdrawalUnits(ids []delegation.WithdrawalID) []withdrawalUnit {
+	out := make([]withdrawalUnit, 0, len(ids))
+	for _, wid := range ids {
+		out = append(out, withdrawalUnit{id: wid})
 	}
-	return out, rows.Err()
+	return out
 }

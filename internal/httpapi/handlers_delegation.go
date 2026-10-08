@@ -711,8 +711,9 @@ func (s *Server) PostAdvancedDelegationOpsVenues(ctx context.Context, request ap
 	return api.PostAdvancedDelegationOpsVenues200JSONResponse(res.Value), nil
 }
 
-// PostAdvancedDelegationOpsExecutePending executes every swap and withdrawal
-// that is ready, oldest first, and reports each one's outcome.
+// PostAdvancedDelegationOpsExecutePending executes the swaps and withdrawals
+// that can be signed now, fairly across accounts, and reports each one's
+// outcome.
 func (s *Server) PostAdvancedDelegationOpsExecutePending(ctx context.Context, request api.PostAdvancedDelegationOpsExecutePendingRequestObject) (api.PostAdvancedDelegationOpsExecutePendingResponseObject, error) {
 	port, err := s.delegationPort()
 	if err != nil {

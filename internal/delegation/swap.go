@@ -165,10 +165,17 @@ func (s *Service) RequestSwap(ctx context.Context, tx pgx.Tx, req SwapRequest) (
 		return SwapTicket{}, err
 	}
 	now := dbTime(s.clk.Now())
+	// What the swap does is decided by the direction of its value. The
+	// agent's label is only its claim: the intent records it, and a claim
+	// that disagrees is refused below, recorded.
+	action := SwapAction(pay, recv)
 	kind := econ.KindAcquireExposure
-	exposure := recv
 	if req.Action == ActionReduceExposure {
-		kind, exposure = econ.KindReduceExposure, pay
+		kind = econ.KindReduceExposure
+	}
+	exposure := recv
+	if action == ActionReduceExposure {
+		exposure = pay
 	}
 	terms, err := json.Marshal(swapTerms{Action: string(req.Action), VenueID: venue.ID.String(), ReceiveAssetID: recv.ID.String(),
 		RequestNonce: strconv.FormatUint(req.Nonce, 10), MaxSlippageBPS: strconv.FormatInt(int64(req.MaxSlippageBPS), 10)})
@@ -195,6 +202,10 @@ func (s *Service) RequestSwap(ctx context.Context, tx pgx.Tx, req SwapRequest) (
 		}
 		return SwapTicket{Refusal: rerr}, nil
 	}
+	if req.Action != action {
+		return refuse(errs.CodeForbidden, ReasonActionMismatch, "the swap pays "+pay.Symbol+" for "+recv.Symbol+", which is "+
+			string(action)+", not "+string(req.Action))
+	}
 
 	// Route: the settlement compiler's agent-authority ladder and legal router.
 	rt, err := econ.Route(econ.RouteRequest{
@@ -211,9 +222,11 @@ func (s *Service) RequestSwap(ctx context.Context, tx pgx.Tx, req SwapRequest) (
 	if _, err := s.intents.Transition(ctx, tx, in.ID, econ.StatusRouted, serviceActor, "routed through the settlement compiler", ""); err != nil {
 		return SwapTicket{}, err
 	}
-	// An agent's request is new agent activity: every matching switch stops it.
-	if err := s.kills.Check(ctx, tx, killswitch.Action{Class: killswitch.NewRisk, AccountID: req.AccountID.String(),
-		AgentID: agent.ID, Venue: venue.ID.String(), Chain: string(venue.Chain), Capability: string(gates.AgentSigning)}); err != nil {
+	// An agent's request is new agent activity: every matching switch stops
+	// it, including one on the strategy version the agent runs.
+	kill := agent.killAction(killswitch.NewRisk, req.AccountID, gates.AgentSigning)
+	kill.Venue, kill.Chain = venue.ID.String(), string(venue.Chain)
+	if err := s.kills.Check(ctx, tx, kill); err != nil {
 		if errs.CodeOf(err) == errs.CodeKillSwitchActive {
 			return refuse(errs.CodeKillSwitchActive, RefusalKillSwitch, err.Error())
 		}
@@ -256,14 +269,15 @@ func (s *Service) RequestSwap(ctx context.Context, tx pgx.Tx, req SwapRequest) (
 	if err != nil {
 		return SwapTicket{}, err
 	}
-	check := c.Check(Use{AccountID: req.AccountID, AgentID: agent.ID, StrategyID: agent.StrategyID, Action: req.Action,
+	check := c.Check(Use{AccountID: req.AccountID, AgentID: agent.ID, StrategyID: agent.StrategyID, Action: action,
 		Classes: classes, Chain: venue.Chain, Destination: venue.Address, Notional: quote.NotionalUSD, DayUsed: dayUsed,
 		TotalUsed: totalUsed, Environment: s.env, Mode: c.Terms.Mode, Now: now})
 	if !classified {
 		check.InScope = false
 		check.Codes = sortedCodes(append(check.Codes, ReasonInstrumentNotGranted))
 	}
-	decision, err := s.evaluateSwapRisk(ctx, tx, in, agent, exposure, pay, payPrice, payPar, recvPrice, recvPar, venue, quote, check, now)
+	decision, err := s.evaluateSwapRisk(ctx, tx, in, action, agent, exposure, pay, payPrice, payPar, recvPrice, recvPar, venue, quote,
+		check, now)
 	if err != nil {
 		return SwapTicket{}, err
 	}
@@ -290,7 +304,7 @@ func (s *Service) RequestSwap(ctx context.Context, tx pgx.Tx, req SwapRequest) (
 	}
 	sid := id.New[swapKind]()
 	usage := newUsageID()
-	if err := insertUsage(ctx, tx, usage, c, SubjectSwap, sid.String(), req.Action, quote.NotionalUSD, now); err != nil {
+	if err := insertUsage(ctx, tx, usage, c, SubjectSwap, sid.String(), action, quote.NotionalUSD, now); err != nil {
 		return SwapTicket{}, err
 	}
 	fee, ok := HostFees(s.host)(venue.Chain)
@@ -300,7 +314,7 @@ func (s *Service) RequestSwap(ctx context.Context, tx pgx.Tx, req SwapRequest) (
 	plan := SwapPlan{
 		Version: swapPlanVersion, SwapID: sid.String(), AccountID: req.AccountID.String(), AgentID: agent.ID,
 		CapabilityID: c.ID.String(), CapabilityHash: c.HashHex(), IntentID: in.ID.String(),
-		RequestNonce: strconv.FormatUint(req.Nonce, 10), ActionClass: string(req.Action), Mode: string(c.Terms.Mode),
+		RequestNonce: strconv.FormatUint(req.Nonce, 10), ActionClass: string(action), Mode: string(c.Terms.Mode),
 		Chain: string(venue.Chain), Wallet: wallet.String(), VenueID: venue.ID.String(), VenueAddress: venue.Address.String(),
 		PayAssetID: pay.ID.String(), PayMint: payMint.String(), PayDecimals: strconv.Itoa(int(pay.Decimals)),
 		ReceiveAssetID: recv.ID.String(), ReceiveMint: recvMint.String(), ReceiveDecimals: strconv.Itoa(int(recv.Decimals)),
@@ -325,7 +339,7 @@ func (s *Service) RequestSwap(ctx context.Context, tx pgx.Tx, req SwapRequest) (
 		VALUES ($1,$2,$3,$4::uuid,$5::numeric,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::numeric,$17::numeric,$18::numeric,$19,
 		        $20,$21,$22,$23,$24,'ADMITTED',$25)`,
 		sid, c.ID, req.AccountID, agent.ID, strconv.FormatUint(req.Nonce, 10), in.ID, usage, res.ID, venue.ID, c.Terms.Mode,
-		req.Action, venue.Chain, wallet.String(), pay.ID, recv.ID, amountIn.String(), quote.AmountOut.String(),
+		action, venue.Chain, wallet.String(), pay.ID, recv.ID, amountIn.String(), quote.AmountOut.String(),
 		quote.MinAmountOut.String(), quote.NotionalUSD.Minor(), plan.RequestedAt, plan.QuoteExpiresAt,
 		c.Terms.RequiresHumanApproval, planDoc, planHash[:], s.Network()); err != nil {
 		return SwapTicket{}, dbErr("record swap", err)
@@ -427,10 +441,11 @@ func (s *Service) venueCovers(ctx context.Context, tx pgx.Tx, v Venue, asset ass
 // evaluateSwapRisk runs Risk V2 with every section a swap requires (account,
 // identity, instrument, oracle when risk-increasing, authority, strategy)
 // and the ones that apply (balance, settlement, chain, venue), and persists
-// the decision whatever it says.
-func (s *Service) evaluateSwapRisk(ctx context.Context, tx pgx.Tx, in econ.Intent, agent agentRow, exposure, pay assets.Asset,
-	payPrice money.Price, payPar bool, recvPrice money.Price, recvPar bool, venue Venue, quote Quote, check AuthorityCheck,
-	now time.Time) (risk.AdvancedDecision, error) {
+// the decision whatever it says. Whether the swap increases risk is its
+// action as SwapAction derived it -- never the agent's label.
+func (s *Service) evaluateSwapRisk(ctx context.Context, tx pgx.Tx, in econ.Intent, action ActionClass, agent agentRow,
+	exposure, pay assets.Asset, payPrice money.Price, payPar bool, recvPrice money.Price, recvPar bool, venue Venue, quote Quote,
+	check AuthorityCheck, now time.Time) (risk.AdvancedDecision, error) {
 	acct, err := s.loadAccount(ctx, tx, in.AccountID)
 	if err != nil {
 		return risk.AdvancedDecision{}, err
@@ -477,9 +492,9 @@ func (s *Service) evaluateSwapRisk(ctx context.Context, tx pgx.Tx, in econ.Inten
 	input := risk.AdvancedInput{
 		Stage: risk.StagePreTrade,
 		Intent: risk.AdvancedIntent{ID: in.ID.String(), Kind: string(in.Kind), AccountID: in.AccountID.String(),
-			ActorType: string(in.ActorType), AgentID: agent.ID, StrategyRef: in.StrategyRef, Capability: string(in.Capability),
-			Mode: string(in.Mode), InstrumentKind: string(class), NotionalUSD: quote.NotionalUSD,
-			RiskIncreasing: in.Kind == econ.KindAcquireExposure},
+			ActorType: string(in.ActorType), AgentID: agent.ID, StrategyRef: in.StrategyRef,
+			StrategyVersionID: agent.StrategyVersionID, Capability: string(in.Capability), Mode: string(in.Mode),
+			InstrumentKind: string(class), NotionalUSD: quote.NotionalUSD, RiskIncreasing: action == ActionAcquireExposure},
 		Identity:     &risk.IdentitySnapshot{Verified: verified},
 		Account:      &risk.AdvancedAccountSnapshot{Status: string(acct.Status)},
 		Instrument:   &risk.InstrumentSnapshot{Status: string(exposure.Status), SessionOpen: true, Expired: false},
@@ -620,8 +635,12 @@ func (s *Service) releaseIfActive(ctx context.Context, tx pgx.Tx, rid capital.Re
 }
 
 // swapStanding is whether the swap may still go ahead at all: the gate, the
-// kill switches, the account, the agent and the capability, now. It returns
-// the first reason it may not, or "".
+// kill switches (the agent's and its strategy version's among them), what
+// the swap does, the account, the agent and the capability, now. What the
+// swap does is derived again from its assets (SwapAction): a swap whose label
+// no longer matches it does not go ahead, and the account and the capability
+// are measured against the derived action, never the label. It returns the
+// first reason it may not, or "".
 func (s *Service) swapStanding(ctx context.Context, tx pgx.Tx, sw Swap, now time.Time) (string, string, error) {
 	if err := s.authorizer.Require(ctx, tx, gates.AgentSigning, sw.Mode); err != nil {
 		if e, ok := errs.As(err); ok && (e.Code == errs.CodeCapabilityNotApproved || e.Code == errs.CodeKillSwitchActive) {
@@ -633,23 +652,36 @@ func (s *Service) swapStanding(ctx context.Context, tx pgx.Tx, sw Swap, now time
 	if err != nil {
 		return "", "", err
 	}
-	if err := s.kills.Check(ctx, tx, killswitch.Action{Class: killswitch.NewRisk, AccountID: sw.AccountID.String(),
-		AgentID: sw.AgentID, Venue: venue.ID.String(), Chain: string(sw.Chain), Capability: string(gates.AgentSigning)}); err != nil {
+	agent, found, err := getAgent(ctx, tx, sw.AgentID)
+	if err != nil {
+		return "", "", err
+	}
+	if !found {
+		agent = agentRow{ID: sw.AgentID}
+	}
+	kill := agent.killAction(killswitch.NewRisk, sw.AccountID, gates.AgentSigning)
+	kill.Venue, kill.Chain = venue.ID.String(), string(sw.Chain)
+	if err := s.kills.Check(ctx, tx, kill); err != nil {
 		if errs.CodeOf(err) == errs.CodeKillSwitchActive {
 			return RefusalKillSwitch, err.Error(), nil
 		}
 		return "", "", err
 	}
+	pay, recv, err := swapAssets(ctx, tx, sw)
+	if err != nil {
+		return "", "", err
+	}
+	action := SwapAction(pay, recv)
+	if action != sw.Action {
+		return ReasonActionMismatch, "the swap is labelled " + string(sw.Action) + " but paying " + pay.Symbol + " for " +
+			recv.Symbol + " is " + string(action), nil
+	}
 	acct, err := s.loadAccount(ctx, tx, sw.AccountID)
 	if err != nil {
 		return "", "", err
 	}
-	if (sw.Action == ActionAcquireExposure && !acct.Status.AllowsNewRisk()) || !acct.Status.AllowsRiskReduction() {
+	if (action == ActionAcquireExposure && !acct.Status.AllowsNewRisk()) || !acct.Status.AllowsRiskReduction() {
 		return ReasonAccountNotActive, "the account is " + string(acct.Status), nil
-	}
-	agent, found, err := getAgent(ctx, tx, sw.AgentID)
-	if err != nil {
-		return "", "", err
 	}
 	if !found || !agent.usable() {
 		return ReasonAgentNotActive, "the agent may not act now", nil
@@ -658,16 +690,12 @@ func (s *Service) swapStanding(ctx context.Context, tx pgx.Tx, sw Swap, now time
 	if err != nil {
 		return "", "", err
 	}
-	pay, recv, err := swapAssets(ctx, tx, sw)
-	if err != nil {
-		return "", "", err
-	}
 	classes, _ := swapClasses(pay, recv)
 	dayUsed, totalUsed, err := usageExcluding(ctx, tx, sw.CapabilityID, sw.UsageID, sw.RequestedAt)
 	if err != nil {
 		return "", "", err
 	}
-	if check := c.Check(Use{AccountID: sw.AccountID, AgentID: sw.AgentID, StrategyID: agent.StrategyID, Action: sw.Action,
+	if check := c.Check(Use{AccountID: sw.AccountID, AgentID: sw.AgentID, StrategyID: agent.StrategyID, Action: action,
 		Classes: classes, Chain: sw.Chain, Destination: venue.Address, Notional: sw.NotionalUSD, DayUsed: dayUsed,
 		TotalUsed: totalUsed, Environment: s.env, Mode: sw.Mode, Now: now}); !check.OK() {
 		return check.Codes[0], "the capability no longer covers the swap: " + strings.Join(check.Codes, ","), nil

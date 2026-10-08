@@ -288,6 +288,9 @@ const (
 	ReasonAccountNotActive        = "DELEGATION_ACCOUNT_NOT_ACTIVE"
 	ReasonAgentNotActive          = "DELEGATION_AGENT_NOT_ACTIVE"
 	ReasonBlockedBeforeSubmission = "BLOCKED_BEFORE_SUBMISSION"
+	// ReasonActionMismatch: the swap's action label is not what the swap
+	// does (SwapAction).
+	ReasonActionMismatch = "DELEGATION_ACTION_MISMATCH"
 )
 
 // Use is one use of a capability the caller asks to make, with the usage
@@ -430,6 +433,30 @@ func ClassifyAsset(a assets.Asset) (InstrumentClass, bool) {
 		return "", false
 	}
 	return ClassSpotToken, true
+}
+
+// SwapAction is what a swap paying pay for receive does, decided by the
+// direction of its value and never by the agent's label. A venue quotes
+// every asset in the sandbox dollar, so a USD-pegged stable unit
+// (STABLE_VALUE) is the quote side of any pair it is in: paying a token
+// (SPOT_TOKEN or SPECULATIVE_TOKEN) for it sells that exposure, and only that
+// is REDUCE_EXPOSURE. Everything else acquires exposure -- buying a token
+// with the stable unit, one token for another, one stable unit for another --
+// and so does a swap touching an asset with no instrument class: what cannot
+// be classified is never a reduction. cp_delegation_swap_action (migration
+// 00762) is the same rule in the database.
+func SwapAction(pay, receive assets.Asset) ActionClass {
+	payClass, payOK := ClassifyAsset(pay)
+	receiveClass, receiveOK := ClassifyAsset(receive)
+	return swapActionOf(payClass, payOK, receiveClass, receiveOK)
+}
+
+// swapActionOf is SwapAction over the two assets' instrument classes.
+func swapActionOf(pay InstrumentClass, payOK bool, receive InstrumentClass, receiveOK bool) ActionClass {
+	if payOK && receiveOK && receive == ClassStableValue && pay != ClassStableValue {
+		return ActionReduceExposure
+	}
+	return ActionAcquireExposure
 }
 
 // dbTime is t in UTC at the database's microsecond precision, so a value

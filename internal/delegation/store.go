@@ -20,6 +20,7 @@ import (
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/id"
+	"github.com/nodal/controlplane/internal/killswitch"
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/security"
@@ -126,7 +127,10 @@ type agentRow struct {
 	ID         string
 	AccountID  accounts.AccountID
 	StrategyID string
-	State      string
+	// StrategyVersionID is the strategy version the agent runs now ("" only
+	// for a DRAFT agent, which has none).
+	StrategyVersionID string
+	State             string
 }
 
 // usable reports whether the agent may act at all: not paused, failed,
@@ -139,10 +143,20 @@ func (a agentRow) usable() bool {
 	return true
 }
 
+// killAction is the kill-switch action of the agent's delegated activity on
+// account: scoped to the account, the agent and the strategy version it runs,
+// so an ACCOUNT_FREEZE, an AGENT_PAUSE or a STRATEGY_VERSION_DISABLE of any
+// of them matches it, and to the capability it exercises.
+func (a agentRow) killAction(class killswitch.ActionClass, account accounts.AccountID, capability gates.Capability) killswitch.Action {
+	return killswitch.Action{Class: class, AccountID: account.String(), AgentID: a.ID, StrategyVersionID: a.StrategyVersionID,
+		Capability: string(capability)}
+}
+
 func getAgent(ctx context.Context, q db.Querier, agentID string) (agentRow, bool, error) {
 	var a agentRow
-	err := q.QueryRow(ctx, `SELECT id::text, account_id, strategy_id::text, state FROM agents WHERE id = $1::uuid`, agentID).
-		Scan(&a.ID, &a.AccountID, &a.StrategyID, &a.State)
+	err := q.QueryRow(ctx, `SELECT id::text, account_id, strategy_id::text, coalesce(strategy_version_id::text, ''), state
+		FROM agents WHERE id = $1::uuid`, agentID).
+		Scan(&a.ID, &a.AccountID, &a.StrategyID, &a.StrategyVersionID, &a.State)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return agentRow{}, false, nil
 	}
