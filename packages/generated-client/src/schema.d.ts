@@ -4841,7 +4841,7 @@ export interface components {
             id: components["schemas"]["UUID"];
             is_stablecoin: boolean;
             /** @enum {string} */
-            kind: "NATIVE" | "SPL_TOKEN" | "SPL_TOKEN_2022" | "FIAT";
+            kind: "NATIVE" | "SPL_TOKEN" | "SPL_TOKEN_2022" | "FIAT" | "CREDIT" | "NATIVE_ASSET" | "SIMULATED";
             mint_address: string;
             name: string;
             peg_currency?: string;

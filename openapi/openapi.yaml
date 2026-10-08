@@ -2367,7 +2367,11 @@ components:
         id: { $ref: "#/components/schemas/UUID" }
         chain: { type: string }
         mint_address: { type: string }
-        kind: { type: string, enum: [NATIVE, SPL_TOKEN, SPL_TOKEN_2022, FIAT] }
+        kind:
+          type: string
+          enum: [NATIVE, SPL_TOKEN, SPL_TOKEN_2022, FIAT, CREDIT, NATIVE_ASSET, SIMULATED]
+          # Explicit names: SIMULATED is also a value-domain constant.
+          x-enum-varnames: [AssetKindNative, AssetKindSplToken, AssetKindSplToken2022, AssetKindFiat, AssetKindCredit, AssetKindNativeAsset, AssetKindSimulated]
         symbol: { type: string }
         name: { type: string }
         decimals: { type: integer }
