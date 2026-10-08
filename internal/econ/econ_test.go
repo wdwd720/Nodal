@@ -241,6 +241,37 @@ func TestAuthorizer_KillSwitchAndGate(t *testing.T) {
 	require.Error(t, prod.Require(ctx, nil, gates.Derivatives, gates.ModePaper), "in PROD even paper needs the gate")
 }
 
+// Describe is what the capability table shows; Require is what a request
+// meets. They must never disagree, for any capability, mode, environment, gate
+// or kill switch.
+func TestAuthorizer_DescribeAgreesWithDecideEverywhere(t *testing.T) {
+	ctx := context.Background()
+	kills := []killswitch.Snapshot{
+		{},
+		{Switches: []killswitch.Switch{{Kind: killswitch.CapabilityDisable, ScopeID: string(gates.Derivatives), Active: true}}},
+		{Switches: []killswitch.Switch{{Kind: killswitch.GlobalNewRiskKill, ScopeID: "*", Active: true}}},
+	}
+	for _, env := range []string{"LOCAL", "TEST", "DEV", "STAGING", "PROD"} {
+		for _, snap := range kills {
+			a := NewAuthorizer(fakeGates{env: env, active: map[gates.Capability]bool{gates.Margin: true, gates.Derivatives: true}}, fakeKills{snap: snap})
+			gotEnv, states, err := a.Describe(ctx, nil)
+			require.NoError(t, err)
+			assert.Equal(t, env, gotEnv)
+			require.Len(t, states, len(gates.AdvancedSpecs()))
+			for i, st := range states {
+				assert.Equal(t, gates.AdvancedSpecs()[i].Capability, st.Spec.Capability, "Describe keeps the spec order")
+				require.Len(t, st.Decisions, len(gates.AllModes()))
+				for _, m := range gates.AllModes() {
+					want, err := a.Decide(ctx, nil, st.Spec.Capability, m)
+					require.NoError(t, err)
+					assert.Equal(t, want, st.Decisions[m], "%s %s %s", env, st.Spec.Capability, m)
+				}
+				assert.False(t, st.Decisions[gates.ModeLive].Allowed, "LIVE is never allowed")
+			}
+		}
+	}
+}
+
 func TestEffect_KindPattern(t *testing.T) {
 	for _, ok := range []string{"P2P_TRANSFER", "MINT", "OPTION_SETTLEMENT_2"} {
 		assert.True(t, effectKindPattern(ok), ok)

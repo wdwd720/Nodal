@@ -31,6 +31,7 @@ import (
 	"github.com/nodal/controlplane/internal/config"
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
+	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/event"
 	"github.com/nodal/controlplane/internal/execution"
 	"github.com/nodal/controlplane/internal/funding"
@@ -299,6 +300,23 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// movement at the journal rather than only in a service.
 	ledgerSvc.SetCapabilityResolver(gateCapabilityResolver{checker: gateChecker, q: database})
 
+	// --- advanced financial capabilities (ADR-0020) ----------------------
+	//
+	// Constructed unconditionally and decided per request, like the native
+	// economy above. Every capability here moves only SIMULATED value, LIVE is
+	// unrepresentable in the schema, and in STAGING and PROD even a simulated
+	// mode needs its gate ACTIVE (gates.DecideMode).
+	advancedDeps := httpapi.AdvancedDeps{
+		Authorizer: econ.NewAuthorizer(gateChecker, killChecker),
+		Intents:    econ.NewIntentStore(clk, outbox, auditWriter),
+		Effects:    econ.NewEffectStore(clk, outbox, auditWriter),
+		Risk:       risk.NewStore(),
+		Prices:     valuation.NewPriceStore(clk),
+		// A sandbox mark older than this is stale and buying power V2 refuses
+		// to value the holding rather than use it.
+		MaxPriceAge: 5 * time.Minute,
+	}
+
 	// --- realtime ----------------------------------------------------------
 	// The hub is mounted so the endpoint honors Last-Event-ID, heartbeats and
 	// per-client cleanup. No producer is attached: the event bus adapter lives
@@ -414,6 +432,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 				Credits:       creditSvc,
 			}),
 		),
+		Advanced:       advancedDeps,
 		IdempotencyTTL: httpapi.DefaultIdempotencyTTL,
 	})
 	if err != nil {

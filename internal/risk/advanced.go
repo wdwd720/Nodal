@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/id"
 	"github.com/nodal/controlplane/internal/money"
@@ -934,4 +935,49 @@ func (d AdvancedDecision) RejectionError() error {
 		WithField("reason_codes", d.ReasonCodes).
 		WithField("missing_sections", d.MissingSections).
 		WithField("decision_hash", d.Hash)
+}
+
+// AdvancedDecisionRecord is one persisted V2 decision, as listed.
+type AdvancedDecisionRecord struct {
+	ID               DecisionID
+	IntentID         string
+	AccountID        string
+	IntentKind       string
+	Stage            Stage
+	Verdict          Verdict
+	ReasonCodes      []string
+	InputHash        string
+	PolicyVersion    string
+	PolicyHash       string
+	EvaluatorVersion string
+	DecisionHash     string
+	EvaluatedAt      time.Time
+}
+
+// ListAdvancedDecisions returns an account's most recent V2 decisions.
+func (s *Store) ListAdvancedDecisions(ctx context.Context, q db.Querier, accountID string, limit int) ([]AdvancedDecisionRecord, error) {
+	if _, err := id.ParseAny(accountID); err != nil {
+		return nil, errs.New(errs.CodeValidationFailed, "account_id must be a canonical uuid")
+	}
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	rows, err := q.Query(ctx, `SELECT id, coalesce(intent_id::text,''), coalesce(account_id::text,''), intent_kind, stage, verdict,
+		reason_codes, input_hash, policy_version, policy_hash, evaluator_version, decision_hash, evaluated_at
+		FROM advanced_risk_decisions WHERE account_id = $1 ORDER BY evaluated_at DESC, id DESC LIMIT $2`, accountID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("risk: list advanced decisions: %w", err)
+	}
+	defer rows.Close()
+	var out []AdvancedDecisionRecord
+	for rows.Next() {
+		var r AdvancedDecisionRecord
+		if err := rows.Scan(&r.ID, &r.IntentID, &r.AccountID, &r.IntentKind, &r.Stage, &r.Verdict, &r.ReasonCodes,
+			&r.InputHash, &r.PolicyVersion, &r.PolicyHash, &r.EvaluatorVersion, &r.DecisionHash, &r.EvaluatedAt); err != nil {
+			return nil, fmt.Errorf("risk: scan advanced decision: %w", err)
+		}
+		r.EvaluatedAt = r.EvaluatedAt.UTC()
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }

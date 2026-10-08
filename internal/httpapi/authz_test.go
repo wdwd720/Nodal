@@ -176,6 +176,11 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		"/v1/credits/balance":  "account_id=" + testAccountID.String(),
 		"/v1/payouts":          "account_id=" + testAccountID.String(),
 		"/v1/internal-orders":  "account_id=" + testAccountID.String(),
+
+		"/v1/advanced/intents":        "account_id=" + testAccountID.String(),
+		"/v1/advanced/effects":        "account_id=" + testAccountID.String(),
+		"/v1/advanced/risk/decisions": "account_id=" + testAccountID.String(),
+		"/v1/advanced/buying-power":   "account_id=" + testAccountID.String(),
 	}
 
 	var out []routeProbe

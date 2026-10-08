@@ -63,8 +63,11 @@ type Ports struct {
 	NativeMarkets NativeMarketsPort
 	Payouts       PayoutsPort
 	Commerce      CommercePort
-	Health        HealthPort
-	Idempotency   IdempotencyPort
+	// Advanced serves the foundation of the advanced financial capabilities
+	// (ADR-0020); every figure it returns is value domain SIMULATED.
+	Advanced    AdvancedCorePort
+	Health      HealthPort
+	Idempotency IdempotencyPort
 	// Webhooks is keyed by the provider name in the path.
 	Webhooks map[string]WebhookPort
 	// Stream serves GET /v1/events/stream. It is an http.Handler because

@@ -562,3 +562,49 @@ func dbErr(op string, err error) error {
 	}
 	return errs.Wrap(err, errs.CodeInternal, "econ: "+op)
 }
+
+// ListForAccount pages an account's effects, newest first. The cursor is the
+// id of the last effect of the previous page.
+func (s *EffectStore) ListForAccount(ctx context.Context, q db.Querier, accountID string, cursor string, limit int) ([]Effect, string, error) {
+	if _, err := id.ParseAny(accountID); err != nil {
+		return nil, "", errs.New(errs.CodeValidationFailed, "account_id must be a canonical uuid")
+	}
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	var rows pgx.Rows
+	var err error
+	if cursor == "" {
+		rows, err = q.Query(ctx, `SELECT `+effectColumns+` FROM economic_effects WHERE account_id = $1
+			ORDER BY created_at DESC, id DESC LIMIT $2`, accountID, limit+1)
+	} else {
+		cid, perr := ParseEffectID(cursor)
+		if perr != nil {
+			return nil, "", errs.New(errs.CodeValidationFailed, "invalid cursor")
+		}
+		rows, err = q.Query(ctx, `SELECT `+effectColumns+` FROM economic_effects WHERE account_id = $1
+			AND (created_at, id) < (SELECT created_at, id FROM economic_effects WHERE id = $2)
+			ORDER BY created_at DESC, id DESC LIMIT $3`, accountID, cid, limit+1)
+	}
+	if err != nil {
+		return nil, "", dbErr("list effects", err)
+	}
+	defer rows.Close()
+	var out []Effect
+	for rows.Next() {
+		e, err := scanEffect(rows)
+		if err != nil {
+			return nil, "", dbErr("scan effect", err)
+		}
+		out = append(out, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, "", dbErr("list effects", err)
+	}
+	next := ""
+	if len(out) > limit {
+		out = out[:limit]
+		next = out[len(out)-1].ID.String()
+	}
+	return out, next, nil
+}

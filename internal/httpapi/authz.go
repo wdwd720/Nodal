@@ -160,6 +160,21 @@ var operationPolicies = map[string]operationPolicy{
 	"PostInternalProductsProductIdOrders": {AnyOf: perms(security.PermCommerceBuy), Mutating: true},
 	"GetInternalOrders":                   {AnyOf: perms(security.PermCommerceRead)},
 
+	// --- advanced financial capabilities (ADR-0020) -----------------------
+	//
+	// Reads of simulated state. The capability table and the canonical
+	// instruments are reference data, read under the same permissions as the
+	// instrument catalogue. Everything keyed by an account is tenant-scoped
+	// per request: the owner, or an operator holding account:read_any.
+	"GetAdvancedCapabilities":            {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedInstruments":             {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedInstrumentsInstrumentId": {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedIntents":                 {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedIntentsIntentId":         {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedEffects":                 {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedRiskDecisions":           {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedBuyingPower":             {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+
 	// --- trading ----------------------------------------------------------
 	"PostQuotesPreview":         {AnyOf: perms(security.PermTradeRead)},
 	"PostIntents":               {AnyOf: perms(security.PermTradeCreate), Mutating: true},

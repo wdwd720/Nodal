@@ -708,3 +708,97 @@ func rawJournal(ctx context.Context, f *fixture, tx pgx.Tx, kind ledger.Kind, en
 	}
 	return nil
 }
+
+// The sandbox dollar exists exactly once: provisioning it concurrently
+// converges on the one well-known row, and reading it before it exists says
+// so instead of inventing one.
+func TestIntegration_TheSandboxDollarIsProvisionedExactlyOnce(t *testing.T) {
+	f := newFixture(t)
+	var before int
+	require.NoError(t, testDB.Pool().QueryRow(f.ctx, `SELECT count(*) FROM assets WHERE id = $1`, SandboxDollarID()).Scan(&before))
+	if before == 0 {
+		_, err := SandboxDollar(f.ctx, testDB)
+		require.Error(t, err)
+		assert.Equal(t, errs.CodeNotFound, errs.CodeOf(err))
+	}
+
+	const n = 8
+	var wg sync.WaitGroup
+	got := make([]assets.Asset, n)
+	errsOut := make([]error, n)
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			errsOut[i] = f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+				var err error
+				got[i], err = EnsureSandboxDollar(ctx, tx)
+				return err
+			})
+		}(i)
+	}
+	wg.Wait()
+	for i := 0; i < n; i++ {
+		require.NoError(t, errsOut[i])
+		assert.Equal(t, SandboxDollarID(), got[i].ID)
+		assert.Equal(t, assets.KindSimulated, got[i].Kind)
+		assert.Equal(t, valuedomain.Simulated, got[i].ValueDomain)
+	}
+	var rows int
+	require.NoError(t, testDB.Pool().QueryRow(f.ctx,
+		`SELECT count(*) FROM assets WHERE chain = $1 AND symbol = $2`, assets.SandboxChain, SandboxDollarSymbol).Scan(&rows))
+	assert.Equal(t, 1, rows, "one sandbox dollar, however many callers provisioned it")
+
+	usd, err := SandboxDollar(f.ctx, testDB)
+	require.NoError(t, err)
+	assert.Equal(t, uint8(SandboxDollarDecimals), usd.Decimals)
+}
+
+// An account's effects page newest first, never include another account's,
+// and the cursor walks the whole set exactly once.
+func TestIntegration_EffectsListOnlyTheAccountsOwnAndPageExactly(t *testing.T) {
+	f := newFixture(t)
+	mine, theirs := f.account(), f.account()
+	begin := func(acct accounts.AccountID) EffectID {
+		var e Effect
+		require.NoError(t, f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+			var err error
+			e, _, err = f.effects.Begin(ctx, tx, BeginRequest{
+				Key: "list:" + uuid.NewString(), Subsystem: SubsystemTransfers, Kind: "P2P_TRANSFER",
+				AccountID: acct.String(), Request: map[string]string{"n": uuid.NewString()}, Actor: systemActor,
+			})
+			return err
+		}))
+		return e.ID
+	}
+	want := map[EffectID]bool{}
+	for range 5 {
+		want[begin(mine)] = true
+	}
+	begin(theirs)
+
+	seen := map[EffectID]bool{}
+	cursor := ""
+	pages := 0
+	for {
+		page, next, err := f.effects.ListForAccount(f.ctx, testDB, mine.String(), cursor, 2)
+		require.NoError(t, err)
+		pages++
+		for _, e := range page {
+			assert.Equal(t, mine.String(), e.AccountID)
+			assert.False(t, seen[e.ID], "an effect appears on two pages")
+			seen[e.ID] = true
+		}
+		if next == "" {
+			break
+		}
+		require.Less(t, pages, 10, "the cursor does not terminate")
+		cursor = next
+	}
+	assert.Equal(t, want, seen, "every effect of the account, once")
+	assert.Equal(t, 3, pages)
+
+	_, _, err := f.effects.ListForAccount(f.ctx, testDB, mine.String(), "not-a-cursor", 2)
+	require.Error(t, err)
+	assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(err))
+}

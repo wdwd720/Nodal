@@ -21,6 +21,10 @@ tags:
   - name: activity
   - name: admin
   - name: system
+  - name: advanced
+    description: >-
+      Advanced financial capabilities in PAPER, SANDBOX and DEVNET modes only (ADR-0020). Every figure is
+      value domain SIMULATED; nothing here moves or reports real capital.
 
 security:
   - sessionCookie: []
@@ -953,6 +957,105 @@ paths:
                   build_version: { type: string }
                   config_hash: { type: string }
                   environment: { type: string }
+
+  # ---------------------------------------------------------------------------
+  # Advanced financial capabilities (ADR-0020). Every figure under /advanced is
+  # value domain SIMULATED: paper, sandbox or simulated-chain value with no
+  # economic substance. Nothing under this prefix moves or reports real
+  # capital, and no advanced capability can run LIVE in this build.
+  # ---------------------------------------------------------------------------
+  /advanced/capabilities:
+    get:
+      tags: [advanced]
+      summary: Every advanced capability, its modes, and whether each mode may run in this deployment
+      responses:
+        "200":
+          description: Capability specs with the live decision of each mode
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedCapabilityList" } } }
+  /advanced/instruments:
+    get:
+      tags: [advanced]
+      summary: Instruments of the canonical model with their current terms
+      parameters:
+        - { in: query, name: kind, schema: { $ref: "#/components/schemas/InstrumentKind" } }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Instruments, current terms first
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedInstrumentList" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+  /advanced/instruments/{instrumentId}:
+    get:
+      tags: [advanced]
+      summary: One instrument, its current terms and every version of its terms
+      parameters:
+        - { in: path, name: instrumentId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: Instrument with terms history
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedInstrumentDetail" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/intents:
+    get:
+      tags: [advanced]
+      summary: Economic intents of an account, newest first
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of economic intents
+          content: { application/json: { schema: { $ref: "#/components/schemas/EconomicIntentPage" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/intents/{intentId}:
+    get:
+      tags: [advanced]
+      summary: One economic intent
+      parameters:
+        - { in: path, name: intentId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The intent
+          content: { application/json: { schema: { $ref: "#/components/schemas/EconomicIntent" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/effects:
+    get:
+      tags: [advanced]
+      summary: Economic effects of an account (the exactly-once register), newest first
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of economic effects
+          content: { application/json: { schema: { $ref: "#/components/schemas/EconomicEffectPage" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/risk/decisions:
+    get:
+      tags: [advanced]
+      summary: Risk Kernel V2 decisions about an account's intents, newest first
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Decisions with their stable reason codes and hashes
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedRiskDecisionList" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/buying-power:
+    get:
+      tags: [advanced]
+      summary: Universal buying power V2 for an account's simulated holdings, with an explanation of every number
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: Buying power V2 (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/BuyingPowerV2" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
 
 components:
   securitySchemes:
@@ -2170,3 +2273,237 @@ components:
         p95_ms: { type: integer }
         last_success_at: { $ref: "#/components/schemas/Timestamp" }
         disable_reason: { type: string }
+
+    # --- Advanced financial capabilities (ADR-0020) -------------------------
+    ValueDomainSimulated:
+      type: string
+      enum: [SIMULATED]
+      description: Every figure of the advanced capabilities is simulated value with no economic substance.
+    AdvancedMode:
+      type: string
+      enum: [PAPER, SANDBOX, DEVNET, LIVE]
+    AdvancedModeDecision:
+      type: object
+      required: [mode, allowed, reasons]
+      properties:
+        mode: { $ref: "#/components/schemas/AdvancedMode" }
+        allowed: { type: boolean }
+        reasons: { type: array, items: { type: string } }
+    AdvancedCapability:
+      type: object
+      required: [capability, high_risk, simulated_modes, ungated_environments, live_implemented, live_evidence, min_approvers,
+                 max_live_validity_seconds, max_live_capital, jurisdictions, provider_readiness, gate_active, kill_switched, decisions]
+      properties:
+        capability: { type: string }
+        high_risk: { type: boolean }
+        simulated_modes: { type: array, items: { $ref: "#/components/schemas/AdvancedMode" } }
+        ungated_environments: { type: array, items: { type: string } }
+        live_implemented: { type: boolean }
+        live_evidence: { type: array, items: { type: string } }
+        min_approvers: { type: integer }
+        max_live_validity_seconds: { type: integer, format: int64 }
+        max_live_capital: { $ref: "#/components/schemas/USD" }
+        jurisdictions: { type: array, items: { type: string } }
+        provider_readiness: { type: string }
+        gate_active: { type: boolean }
+        kill_switched: { type: boolean }
+        decisions: { type: array, items: { $ref: "#/components/schemas/AdvancedModeDecision" } }
+    AdvancedCapabilityList:
+      type: object
+      required: [environment, value_domain, items]
+      properties:
+        environment: { type: string }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        items: { type: array, items: { $ref: "#/components/schemas/AdvancedCapability" } }
+    InstrumentKind:
+      type: string
+      enum: [SPOT_PAIR, EVENT_OUTCOME, STABLE_VALUE, EQUITY, ETF, FUTURE, PERPETUAL, OPTION, SYNTHETIC]
+    InstrumentTerms:
+      type: object
+      required: [kind, symbol, venue_code, settlement_asset_id, contract_multiplier, price_scale, tick_size, lot_size, min_quantity,
+                 quantity_decimals, settlement_style, trading_calendar, jurisdiction_tags, oracle_max_age_ms, oracle_sources,
+                 margin_model, corporate_action_behavior, transferability]
+      properties:
+        kind: { $ref: "#/components/schemas/InstrumentKind" }
+        symbol: { type: string }
+        venue_code: { type: string }
+        exchange_mic: { type: string }
+        base_asset_id: { $ref: "#/components/schemas/UUID" }
+        quote_asset_id: { $ref: "#/components/schemas/UUID" }
+        settlement_asset_id: { $ref: "#/components/schemas/UUID" }
+        underlying_instrument_id: { $ref: "#/components/schemas/UUID" }
+        contract_multiplier: { $ref: "#/components/schemas/Quantity" }
+        price_scale: { type: integer }
+        tick_size: { $ref: "#/components/schemas/Quantity" }
+        lot_size: { $ref: "#/components/schemas/Quantity" }
+        min_quantity: { $ref: "#/components/schemas/Quantity" }
+        quantity_decimals: { type: integer }
+        expiry: { $ref: "#/components/schemas/Timestamp" }
+        strike_mantissa: { $ref: "#/components/schemas/Quantity" }
+        option_right: { type: string, enum: [CALL, PUT] }
+        exercise_style: { type: string, enum: [EUROPEAN, AMERICAN] }
+        settlement_style: { type: string, enum: [CASH, PHYSICAL] }
+        funding_interval_ms: { type: integer, format: int64 }
+        trading_calendar: { type: string }
+        jurisdiction_tags: { type: array, items: { type: string } }
+        oracle_max_age_ms: { type: integer, format: int64 }
+        oracle_sources: { type: array, items: { type: string } }
+        margin_model: { type: string, enum: [NONE, SPOT_MARGIN, LINEAR, OPTION, BINARY_OUTCOME] }
+        corporate_action_behavior: { type: string, enum: [NONE, ADJUST] }
+        transferability: { type: string, enum: [TRANSFERABLE, NON_TRANSFERABLE] }
+        outcomes: { type: array, items: { type: string } }
+    AdvancedInstrument:
+      type: object
+      required: [id, kind, canonical_name, status, risk_class, terms_version, terms_hash, terms]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        kind: { $ref: "#/components/schemas/InstrumentKind" }
+        canonical_name: { type: string }
+        status: { type: string }
+        risk_class: { type: string }
+        terms_version: { type: integer }
+        terms_hash: { type: string, description: hex sha256 of the canonical terms }
+        terms: { $ref: "#/components/schemas/InstrumentTerms" }
+    AdvancedInstrumentList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/AdvancedInstrument" } }
+    InstrumentTermsVersion:
+      type: object
+      required: [version, terms_hash, reason, actor_type, created_at]
+      properties:
+        version: { type: integer }
+        terms_hash: { type: string }
+        reason: { type: string }
+        actor_type: { type: string }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+    AdvancedInstrumentDetail:
+      allOf:
+        - { $ref: "#/components/schemas/AdvancedInstrument" }
+        - type: object
+          required: [versions]
+          properties:
+            versions: { type: array, items: { $ref: "#/components/schemas/InstrumentTermsVersion" } }
+    EconomicIntent:
+      type: object
+      required: [id, account_id, kind, mode, capability, actor_type, terms, content_hash, status, created_at, updated_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        kind: { type: string }
+        mode: { $ref: "#/components/schemas/AdvancedMode" }
+        capability: { type: string }
+        actor_type: { type: string }
+        agent_id: { $ref: "#/components/schemas/UUID" }
+        strategy_ref: { type: string }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        notional_usd: { $ref: "#/components/schemas/USD" }
+        terms: { type: object, additionalProperties: true }
+        content_hash: { type: string }
+        status: { type: string }
+        rejection_code: { type: string }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+        terminal_at: { $ref: "#/components/schemas/Timestamp" }
+    EconomicIntentPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/EconomicIntent" } }
+    EconomicEffect:
+      type: object
+      required: [id, effect_key, subsystem, effect_kind, posts_ledger, status, created_at, updated_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        effect_key: { type: string }
+        subsystem: { type: string }
+        effect_kind: { type: string }
+        intent_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        posts_ledger: { type: boolean }
+        status: { type: string, enum: [PENDING, APPLIED, UNKNOWN, FAILED, COMPENSATED] }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        compensation_journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        external_ref: { type: string }
+        evidence_ref: { type: string }
+        evidence_sha256: { type: string }
+        failure_code: { type: string }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+    EconomicEffectPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/EconomicEffect" } }
+    AdvancedRiskDecision:
+      type: object
+      required: [id, intent_kind, stage, verdict, reason_codes, input_hash, policy_version, policy_hash, evaluator_version, decision_hash, evaluated_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        intent_id: { $ref: "#/components/schemas/UUID" }
+        intent_kind: { type: string }
+        stage: { type: string }
+        verdict: { type: string, enum: [ALLOW, REJECT] }
+        reason_codes: { type: array, items: { type: string } }
+        input_hash: { type: string }
+        policy_version: { type: string }
+        policy_hash: { type: string }
+        evaluator_version: { type: string }
+        decision_hash: { type: string }
+        evaluated_at: { $ref: "#/components/schemas/Timestamp" }
+    AdvancedRiskDecisionList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/AdvancedRiskDecision" } }
+    BuyingPowerV2Reason:
+      type: object
+      required: [code, detail, amount]
+      properties:
+        code: { type: string }
+        detail: { type: string }
+        amount: { $ref: "#/components/schemas/USD" }
+    BuyingPowerV2Line:
+      type: object
+      required: [field, component, amount_usd, detail]
+      properties:
+        field: { type: string }
+        component: { type: string }
+        asset_id: { type: string }
+        amount_usd: { $ref: "#/components/schemas/USD" }
+        detail: { type: string }
+    BuyingPowerV2:
+      type: object
+      required: [value_domain, gross_equity, eligible_collateral, haircuts, borrow_liabilities, initial_margin_used,
+                 maintenance_margin, open_order_reservations, pending_transfer_reservations, pending_withdrawal_reservations,
+                 strategy_reservations, pending_bridge_haircut, eligible_equity, margin_available, withdrawable,
+                 trade_buying_power, risk_increasing_buying_power, reasons, lines, policy_version, as_of]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        gross_equity: { $ref: "#/components/schemas/USD" }
+        eligible_collateral: { $ref: "#/components/schemas/USD" }
+        haircuts: { $ref: "#/components/schemas/USD" }
+        borrow_liabilities: { $ref: "#/components/schemas/USD" }
+        initial_margin_used: { $ref: "#/components/schemas/USD" }
+        maintenance_margin: { $ref: "#/components/schemas/USD" }
+        open_order_reservations: { $ref: "#/components/schemas/USD" }
+        pending_transfer_reservations: { $ref: "#/components/schemas/USD" }
+        pending_withdrawal_reservations: { $ref: "#/components/schemas/USD" }
+        strategy_reservations: { $ref: "#/components/schemas/USD" }
+        pending_bridge_haircut: { $ref: "#/components/schemas/USD" }
+        eligible_equity: { $ref: "#/components/schemas/USD" }
+        margin_available: { $ref: "#/components/schemas/USD" }
+        withdrawable: { $ref: "#/components/schemas/USD" }
+        trade_buying_power: { $ref: "#/components/schemas/USD" }
+        risk_increasing_buying_power: { $ref: "#/components/schemas/USD" }
+        reasons: { type: array, items: { $ref: "#/components/schemas/BuyingPowerV2Reason" } }
+        lines: { type: array, items: { $ref: "#/components/schemas/BuyingPowerV2Line" } }
+        policy_version: { type: string }
+        as_of: { $ref: "#/components/schemas/Timestamp" }

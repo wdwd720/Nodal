@@ -81,6 +81,10 @@ type WireDeps struct {
 	// leaves them nil and those routes answer UNSUPPORTED.
 	NativeEconomy NativeEconomyDeps
 
+	// Advanced holds the advanced-capability services (ADR-0020). Leaving
+	// them nil leaves those routes UNSUPPORTED.
+	Advanced AdvancedDeps
+
 	IdempotencyTTL time.Duration
 }
 
@@ -176,6 +180,7 @@ func Wire(d WireDeps) (Ports, error) {
 		p.Idempotency = idempotencyAdapter{store: d.Idempotency, db: d.DB}
 	}
 	wireNativeEconomy(&p, d)
+	wireAdvanced(&p, d)
 	return p, nil
 }
 

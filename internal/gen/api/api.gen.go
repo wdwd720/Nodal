@@ -175,6 +175,48 @@ func (e AdminActionStatus) Valid() bool {
 	}
 }
 
+// Defines values for AdvancedMode.
+const (
+	AdvancedModeDEVNET  AdvancedMode = "DEVNET"
+	AdvancedModeLIVE    AdvancedMode = "LIVE"
+	AdvancedModePAPER   AdvancedMode = "PAPER"
+	AdvancedModeSANDBOX AdvancedMode = "SANDBOX"
+)
+
+// Valid indicates whether the value is a known member of the AdvancedMode enum.
+func (e AdvancedMode) Valid() bool {
+	switch e {
+	case AdvancedModeDEVNET:
+		return true
+	case AdvancedModeLIVE:
+		return true
+	case AdvancedModePAPER:
+		return true
+	case AdvancedModeSANDBOX:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdvancedRiskDecisionVerdict.
+const (
+	ALLOW  AdvancedRiskDecisionVerdict = "ALLOW"
+	REJECT AdvancedRiskDecisionVerdict = "REJECT"
+)
+
+// Valid indicates whether the value is a known member of the AdvancedRiskDecisionVerdict enum.
+func (e AdvancedRiskDecisionVerdict) Valid() bool {
+	switch e {
+	case ALLOW:
+		return true
+	case REJECT:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AssetKind.
 const (
 	FIAT         AssetKind = "FIAT"
@@ -547,6 +589,33 @@ func (e DepositDetailStatus) Valid() bool {
 	}
 }
 
+// Defines values for EconomicEffectStatus.
+const (
+	EconomicEffectStatusAPPLIED     EconomicEffectStatus = "APPLIED"
+	EconomicEffectStatusCOMPENSATED EconomicEffectStatus = "COMPENSATED"
+	EconomicEffectStatusFAILED      EconomicEffectStatus = "FAILED"
+	EconomicEffectStatusPENDING     EconomicEffectStatus = "PENDING"
+	EconomicEffectStatusUNKNOWN     EconomicEffectStatus = "UNKNOWN"
+)
+
+// Valid indicates whether the value is a known member of the EconomicEffectStatus enum.
+func (e EconomicEffectStatus) Valid() bool {
+	switch e {
+	case EconomicEffectStatusAPPLIED:
+		return true
+	case EconomicEffectStatusCOMPENSATED:
+		return true
+	case EconomicEffectStatusFAILED:
+		return true
+	case EconomicEffectStatusPENDING:
+		return true
+	case EconomicEffectStatusUNKNOWN:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for FillFinality.
 const (
 	CONFIRMED FillFinality = "CONFIRMED"
@@ -658,6 +727,162 @@ func (e InstrumentDetailType) Valid() bool {
 	case InstrumentDetailTypeEVENTOUTCOME:
 		return true
 	case InstrumentDetailTypeSPOTPAIR:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for InstrumentKind.
+const (
+	InstrumentKindEQUITY       InstrumentKind = "EQUITY"
+	InstrumentKindETF          InstrumentKind = "ETF"
+	InstrumentKindEVENTOUTCOME InstrumentKind = "EVENT_OUTCOME"
+	InstrumentKindFUTURE       InstrumentKind = "FUTURE"
+	InstrumentKindOPTION       InstrumentKind = "OPTION"
+	InstrumentKindPERPETUAL    InstrumentKind = "PERPETUAL"
+	InstrumentKindSPOTPAIR     InstrumentKind = "SPOT_PAIR"
+	InstrumentKindSTABLEVALUE  InstrumentKind = "STABLE_VALUE"
+	InstrumentKindSYNTHETIC    InstrumentKind = "SYNTHETIC"
+)
+
+// Valid indicates whether the value is a known member of the InstrumentKind enum.
+func (e InstrumentKind) Valid() bool {
+	switch e {
+	case InstrumentKindEQUITY:
+		return true
+	case InstrumentKindETF:
+		return true
+	case InstrumentKindEVENTOUTCOME:
+		return true
+	case InstrumentKindFUTURE:
+		return true
+	case InstrumentKindOPTION:
+		return true
+	case InstrumentKindPERPETUAL:
+		return true
+	case InstrumentKindSPOTPAIR:
+		return true
+	case InstrumentKindSTABLEVALUE:
+		return true
+	case InstrumentKindSYNTHETIC:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for InstrumentTermsCorporateActionBehavior.
+const (
+	InstrumentTermsCorporateActionBehaviorADJUST InstrumentTermsCorporateActionBehavior = "ADJUST"
+	InstrumentTermsCorporateActionBehaviorNONE   InstrumentTermsCorporateActionBehavior = "NONE"
+)
+
+// Valid indicates whether the value is a known member of the InstrumentTermsCorporateActionBehavior enum.
+func (e InstrumentTermsCorporateActionBehavior) Valid() bool {
+	switch e {
+	case InstrumentTermsCorporateActionBehaviorADJUST:
+		return true
+	case InstrumentTermsCorporateActionBehaviorNONE:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for InstrumentTermsExerciseStyle.
+const (
+	AMERICAN InstrumentTermsExerciseStyle = "AMERICAN"
+	EUROPEAN InstrumentTermsExerciseStyle = "EUROPEAN"
+)
+
+// Valid indicates whether the value is a known member of the InstrumentTermsExerciseStyle enum.
+func (e InstrumentTermsExerciseStyle) Valid() bool {
+	switch e {
+	case AMERICAN:
+		return true
+	case EUROPEAN:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for InstrumentTermsMarginModel.
+const (
+	InstrumentTermsMarginModelBINARYOUTCOME InstrumentTermsMarginModel = "BINARY_OUTCOME"
+	InstrumentTermsMarginModelLINEAR        InstrumentTermsMarginModel = "LINEAR"
+	InstrumentTermsMarginModelNONE          InstrumentTermsMarginModel = "NONE"
+	InstrumentTermsMarginModelOPTION        InstrumentTermsMarginModel = "OPTION"
+	InstrumentTermsMarginModelSPOTMARGIN    InstrumentTermsMarginModel = "SPOT_MARGIN"
+)
+
+// Valid indicates whether the value is a known member of the InstrumentTermsMarginModel enum.
+func (e InstrumentTermsMarginModel) Valid() bool {
+	switch e {
+	case InstrumentTermsMarginModelBINARYOUTCOME:
+		return true
+	case InstrumentTermsMarginModelLINEAR:
+		return true
+	case InstrumentTermsMarginModelNONE:
+		return true
+	case InstrumentTermsMarginModelOPTION:
+		return true
+	case InstrumentTermsMarginModelSPOTMARGIN:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for InstrumentTermsOptionRight.
+const (
+	CALL InstrumentTermsOptionRight = "CALL"
+	PUT  InstrumentTermsOptionRight = "PUT"
+)
+
+// Valid indicates whether the value is a known member of the InstrumentTermsOptionRight enum.
+func (e InstrumentTermsOptionRight) Valid() bool {
+	switch e {
+	case CALL:
+		return true
+	case PUT:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for InstrumentTermsSettlementStyle.
+const (
+	CASH     InstrumentTermsSettlementStyle = "CASH"
+	PHYSICAL InstrumentTermsSettlementStyle = "PHYSICAL"
+)
+
+// Valid indicates whether the value is a known member of the InstrumentTermsSettlementStyle enum.
+func (e InstrumentTermsSettlementStyle) Valid() bool {
+	switch e {
+	case CASH:
+		return true
+	case PHYSICAL:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for InstrumentTermsTransferability.
+const (
+	NONTRANSFERABLE InstrumentTermsTransferability = "NON_TRANSFERABLE"
+	TRANSFERABLE    InstrumentTermsTransferability = "TRANSFERABLE"
+)
+
+// Valid indicates whether the value is a known member of the InstrumentTermsTransferability enum.
+func (e InstrumentTermsTransferability) Valid() bool {
+	switch e {
+	case NONTRANSFERABLE:
+		return true
+	case TRANSFERABLE:
 		return true
 	default:
 		return false
@@ -1696,6 +1921,21 @@ func (e TradeIntentDetailStatus) Valid() bool {
 	}
 }
 
+// Defines values for ValueDomainSimulated.
+const (
+	SIMULATED ValueDomainSimulated = "SIMULATED"
+)
+
+// Valid indicates whether the value is a known member of the ValueDomainSimulated enum.
+func (e ValueDomainSimulated) Valid() bool {
+	switch e {
+	case SIMULATED:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for VenueListingStatus.
 const (
 	VenueListingStatusACTIVE   VenueListingStatus = "ACTIVE"
@@ -1956,6 +2196,113 @@ type AdminActionProposal struct {
 	TargetType string                  `json:"target_type"`
 }
 
+// AdvancedCapability defines model for AdvancedCapability.
+type AdvancedCapability struct {
+	Capability      string                 `json:"capability"`
+	Decisions       []AdvancedModeDecision `json:"decisions"`
+	GateActive      bool                   `json:"gate_active"`
+	HighRisk        bool                   `json:"high_risk"`
+	Jurisdictions   []string               `json:"jurisdictions"`
+	KillSwitched    bool                   `json:"kill_switched"`
+	LiveEvidence    []string               `json:"live_evidence"`
+	LiveImplemented bool                   `json:"live_implemented"`
+
+	// MaxLiveCapital USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	MaxLiveCapital         USD            `json:"max_live_capital"`
+	MaxLiveValiditySeconds int64          `json:"max_live_validity_seconds"`
+	MinApprovers           int            `json:"min_approvers"`
+	ProviderReadiness      string         `json:"provider_readiness"`
+	SimulatedModes         []AdvancedMode `json:"simulated_modes"`
+	UngatedEnvironments    []string       `json:"ungated_environments"`
+}
+
+// AdvancedCapabilityList defines model for AdvancedCapabilityList.
+type AdvancedCapabilityList struct {
+	Environment string               `json:"environment"`
+	Items       []AdvancedCapability `json:"items"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// AdvancedInstrument defines model for AdvancedInstrument.
+type AdvancedInstrument struct {
+	CanonicalName string `json:"canonical_name"`
+
+	// Id UUIDv7 in canonical form
+	Id        UUID            `json:"id"`
+	Kind      InstrumentKind  `json:"kind"`
+	RiskClass string          `json:"risk_class"`
+	Status    string          `json:"status"`
+	Terms     InstrumentTerms `json:"terms"`
+
+	// TermsHash hex sha256 of the canonical terms
+	TermsHash    string `json:"terms_hash"`
+	TermsVersion int    `json:"terms_version"`
+}
+
+// AdvancedInstrumentDetail defines model for AdvancedInstrumentDetail.
+type AdvancedInstrumentDetail struct {
+	CanonicalName string `json:"canonical_name"`
+
+	// Id UUIDv7 in canonical form
+	Id        UUID            `json:"id"`
+	Kind      InstrumentKind  `json:"kind"`
+	RiskClass string          `json:"risk_class"`
+	Status    string          `json:"status"`
+	Terms     InstrumentTerms `json:"terms"`
+
+	// TermsHash hex sha256 of the canonical terms
+	TermsHash    string                   `json:"terms_hash"`
+	TermsVersion int                      `json:"terms_version"`
+	Versions     []InstrumentTermsVersion `json:"versions"`
+}
+
+// AdvancedInstrumentList defines model for AdvancedInstrumentList.
+type AdvancedInstrumentList struct {
+	Items []AdvancedInstrument `json:"items"`
+}
+
+// AdvancedMode defines model for AdvancedMode.
+type AdvancedMode string
+
+// AdvancedModeDecision defines model for AdvancedModeDecision.
+type AdvancedModeDecision struct {
+	Allowed bool         `json:"allowed"`
+	Mode    AdvancedMode `json:"mode"`
+	Reasons []string     `json:"reasons"`
+}
+
+// AdvancedRiskDecision defines model for AdvancedRiskDecision.
+type AdvancedRiskDecision struct {
+	DecisionHash     string    `json:"decision_hash"`
+	EvaluatedAt      Timestamp `json:"evaluated_at"`
+	EvaluatorVersion string    `json:"evaluator_version"`
+
+	// Id UUIDv7 in canonical form
+	Id        UUID   `json:"id"`
+	InputHash string `json:"input_hash"`
+
+	// IntentId UUIDv7 in canonical form
+	IntentId      *UUID                       `json:"intent_id,omitempty"`
+	IntentKind    string                      `json:"intent_kind"`
+	PolicyHash    string                      `json:"policy_hash"`
+	PolicyVersion string                      `json:"policy_version"`
+	ReasonCodes   []string                    `json:"reason_codes"`
+	Stage         string                      `json:"stage"`
+	Verdict       AdvancedRiskDecisionVerdict `json:"verdict"`
+}
+
+// AdvancedRiskDecisionVerdict defines model for AdvancedRiskDecision.Verdict.
+type AdvancedRiskDecisionVerdict string
+
+// AdvancedRiskDecisionList defines model for AdvancedRiskDecisionList.
+type AdvancedRiskDecisionList struct {
+	Items []AdvancedRiskDecision `json:"items"`
+}
+
 // Asset defines model for Asset.
 type Asset struct {
 	Chain    string `json:"chain"`
@@ -2059,6 +2406,119 @@ type BuyingPowerPurpose string
 
 // BuyingPowerRestrictionsScope defines model for BuyingPower.Restrictions.Scope.
 type BuyingPowerRestrictionsScope string
+
+// BuyingPowerV2 defines model for BuyingPowerV2.
+type BuyingPowerV2 struct {
+	AsOf Timestamp `json:"as_of"`
+
+	// BorrowLiabilities USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	BorrowLiabilities USD `json:"borrow_liabilities"`
+
+	// EligibleCollateral USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	EligibleCollateral USD `json:"eligible_collateral"`
+
+	// EligibleEquity USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	EligibleEquity USD `json:"eligible_equity"`
+
+	// GrossEquity USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	GrossEquity USD `json:"gross_equity"`
+
+	// Haircuts USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	Haircuts USD `json:"haircuts"`
+
+	// InitialMarginUsed USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	InitialMarginUsed USD                 `json:"initial_margin_used"`
+	Lines             []BuyingPowerV2Line `json:"lines"`
+
+	// MaintenanceMargin USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	MaintenanceMargin USD `json:"maintenance_margin"`
+
+	// MarginAvailable USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	MarginAvailable USD `json:"margin_available"`
+
+	// OpenOrderReservations USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	OpenOrderReservations USD `json:"open_order_reservations"`
+
+	// PendingBridgeHaircut USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	PendingBridgeHaircut USD `json:"pending_bridge_haircut"`
+
+	// PendingTransferReservations USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	PendingTransferReservations USD `json:"pending_transfer_reservations"`
+
+	// PendingWithdrawalReservations USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	PendingWithdrawalReservations USD                   `json:"pending_withdrawal_reservations"`
+	PolicyVersion                 string                `json:"policy_version"`
+	Reasons                       []BuyingPowerV2Reason `json:"reasons"`
+
+	// RiskIncreasingBuyingPower USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	RiskIncreasingBuyingPower USD `json:"risk_increasing_buying_power"`
+
+	// StrategyReservations USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	StrategyReservations USD `json:"strategy_reservations"`
+
+	// TradeBuyingPower USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	TradeBuyingPower USD `json:"trade_buying_power"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+
+	// Withdrawable USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	Withdrawable USD `json:"withdrawable"`
+}
+
+// BuyingPowerV2Line defines model for BuyingPowerV2Line.
+type BuyingPowerV2Line struct {
+	// AmountUsd USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	AmountUsd USD     `json:"amount_usd"`
+	AssetId   *string `json:"asset_id,omitempty"`
+	Component string  `json:"component"`
+	Detail    string  `json:"detail"`
+	Field     string  `json:"field"`
+}
+
+// BuyingPowerV2Reason defines model for BuyingPowerV2Reason.
+type BuyingPowerV2Reason struct {
+	// Amount USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	Amount USD    `json:"amount"`
+	Code   string `json:"code"`
+	Detail string `json:"detail"`
+}
 
 // Capability defines model for Capability.
 type Capability string
@@ -2338,6 +2798,90 @@ type DepositPage struct {
 	NextCursor nullable.Nullable[string] `json:"next_cursor"`
 }
 
+// EconomicEffect defines model for EconomicEffect.
+type EconomicEffect struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId *UUID `json:"account_id,omitempty"`
+
+	// CompensationJournalTransactionId UUIDv7 in canonical form
+	CompensationJournalTransactionId *UUID     `json:"compensation_journal_transaction_id,omitempty"`
+	CreatedAt                        Timestamp `json:"created_at"`
+	EffectKey                        string    `json:"effect_key"`
+	EffectKind                       string    `json:"effect_kind"`
+	EvidenceRef                      *string   `json:"evidence_ref,omitempty"`
+	EvidenceSha256                   *string   `json:"evidence_sha256,omitempty"`
+	ExternalRef                      *string   `json:"external_ref,omitempty"`
+	FailureCode                      *string   `json:"failure_code,omitempty"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// IntentId UUIDv7 in canonical form
+	IntentId *UUID `json:"intent_id,omitempty"`
+
+	// JournalTransactionId UUIDv7 in canonical form
+	JournalTransactionId *UUID                `json:"journal_transaction_id,omitempty"`
+	PostsLedger          bool                 `json:"posts_ledger"`
+	Status               EconomicEffectStatus `json:"status"`
+	Subsystem            string               `json:"subsystem"`
+	UpdatedAt            Timestamp            `json:"updated_at"`
+}
+
+// EconomicEffectStatus defines model for EconomicEffect.Status.
+type EconomicEffectStatus string
+
+// EconomicEffectPage defines model for EconomicEffectPage.
+type EconomicEffectPage struct {
+	Items      []EconomicEffect          `json:"items"`
+	NextCursor nullable.Nullable[string] `json:"next_cursor"`
+}
+
+// EconomicIntent defines model for EconomicIntent.
+type EconomicIntent struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID   `json:"account_id"`
+	ActorType string `json:"actor_type"`
+
+	// AgentId UUIDv7 in canonical form
+	AgentId *UUID `json:"agent_id,omitempty"`
+
+	// AssetId UUIDv7 in canonical form
+	AssetId     *UUID     `json:"asset_id,omitempty"`
+	Capability  string    `json:"capability"`
+	ContentHash string    `json:"content_hash"`
+	CreatedAt   Timestamp `json:"created_at"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// InstrumentId UUIDv7 in canonical form
+	InstrumentId *UUID        `json:"instrument_id,omitempty"`
+	Kind         string       `json:"kind"`
+	Mode         AdvancedMode `json:"mode"`
+
+	// NotionalUsd USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	NotionalUsd *USD `json:"notional_usd,omitempty"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity      *Quantity              `json:"quantity,omitempty"`
+	RejectionCode *string                `json:"rejection_code,omitempty"`
+	Status        string                 `json:"status"`
+	StrategyRef   *string                `json:"strategy_ref,omitempty"`
+	TerminalAt    *Timestamp             `json:"terminal_at,omitempty"`
+	Terms         map[string]interface{} `json:"terms"`
+	UpdatedAt     Timestamp              `json:"updated_at"`
+}
+
+// EconomicIntentPage defines model for EconomicIntentPage.
+type EconomicIntentPage struct {
+	Items      []EconomicIntent          `json:"items"`
+	NextCursor nullable.Nullable[string] `json:"next_cursor"`
+}
+
 // Fill defines model for Fill.
 type Fill struct {
 	ExternalFillId string       `json:"external_fill_id"`
@@ -2495,6 +3039,95 @@ type InstrumentDetailStatus string
 
 // InstrumentDetailType defines model for InstrumentDetail.Type.
 type InstrumentDetailType string
+
+// InstrumentKind defines model for InstrumentKind.
+type InstrumentKind string
+
+// InstrumentTerms defines model for InstrumentTerms.
+type InstrumentTerms struct {
+	// BaseAssetId UUIDv7 in canonical form
+	BaseAssetId *UUID `json:"base_asset_id,omitempty"`
+
+	// ContractMultiplier Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	ContractMultiplier      Quantity                               `json:"contract_multiplier"`
+	CorporateActionBehavior InstrumentTermsCorporateActionBehavior `json:"corporate_action_behavior"`
+	ExchangeMic             *string                                `json:"exchange_mic,omitempty"`
+	ExerciseStyle           *InstrumentTermsExerciseStyle          `json:"exercise_style,omitempty"`
+	Expiry                  *Timestamp                             `json:"expiry,omitempty"`
+	FundingIntervalMs       *int64                                 `json:"funding_interval_ms,omitempty"`
+	JurisdictionTags        []string                               `json:"jurisdiction_tags"`
+	Kind                    InstrumentKind                         `json:"kind"`
+
+	// LotSize Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	LotSize     Quantity                   `json:"lot_size"`
+	MarginModel InstrumentTermsMarginModel `json:"margin_model"`
+
+	// MinQuantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	MinQuantity      Quantity                    `json:"min_quantity"`
+	OptionRight      *InstrumentTermsOptionRight `json:"option_right,omitempty"`
+	OracleMaxAgeMs   int64                       `json:"oracle_max_age_ms"`
+	OracleSources    []string                    `json:"oracle_sources"`
+	Outcomes         *[]string                   `json:"outcomes,omitempty"`
+	PriceScale       int                         `json:"price_scale"`
+	QuantityDecimals int                         `json:"quantity_decimals"`
+
+	// QuoteAssetId UUIDv7 in canonical form
+	QuoteAssetId *UUID `json:"quote_asset_id,omitempty"`
+
+	// SettlementAssetId UUIDv7 in canonical form
+	SettlementAssetId UUID                           `json:"settlement_asset_id"`
+	SettlementStyle   InstrumentTermsSettlementStyle `json:"settlement_style"`
+
+	// StrikeMantissa Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	StrikeMantissa *Quantity `json:"strike_mantissa,omitempty"`
+	Symbol         string    `json:"symbol"`
+
+	// TickSize Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	TickSize        Quantity                       `json:"tick_size"`
+	TradingCalendar string                         `json:"trading_calendar"`
+	Transferability InstrumentTermsTransferability `json:"transferability"`
+
+	// UnderlyingInstrumentId UUIDv7 in canonical form
+	UnderlyingInstrumentId *UUID  `json:"underlying_instrument_id,omitempty"`
+	VenueCode              string `json:"venue_code"`
+}
+
+// InstrumentTermsCorporateActionBehavior defines model for InstrumentTerms.CorporateActionBehavior.
+type InstrumentTermsCorporateActionBehavior string
+
+// InstrumentTermsExerciseStyle defines model for InstrumentTerms.ExerciseStyle.
+type InstrumentTermsExerciseStyle string
+
+// InstrumentTermsMarginModel defines model for InstrumentTerms.MarginModel.
+type InstrumentTermsMarginModel string
+
+// InstrumentTermsOptionRight defines model for InstrumentTerms.OptionRight.
+type InstrumentTermsOptionRight string
+
+// InstrumentTermsSettlementStyle defines model for InstrumentTerms.SettlementStyle.
+type InstrumentTermsSettlementStyle string
+
+// InstrumentTermsTransferability defines model for InstrumentTerms.Transferability.
+type InstrumentTermsTransferability string
+
+// InstrumentTermsVersion defines model for InstrumentTermsVersion.
+type InstrumentTermsVersion struct {
+	ActorType string    `json:"actor_type"`
+	CreatedAt Timestamp `json:"created_at"`
+	Reason    string    `json:"reason"`
+	TermsHash string    `json:"terms_hash"`
+	Version   int       `json:"version"`
+}
 
 // IntentAction defines model for IntentAction.
 type IntentAction string
@@ -3648,6 +4281,9 @@ type USD = string
 // UUID UUIDv7 in canonical form
 type UUID = openapi_types.UUID
 
+// ValueDomainSimulated Every figure of the advanced capabilities is simulated value with no economic substance.
+type ValueDomainSimulated string
+
 // VenueListing defines model for VenueListing.
 type VenueListing struct {
 	BaseMint      *string `json:"base_mint,omitempty"`
@@ -3860,6 +4496,37 @@ type GetAdminReconciliationRecordsParams struct {
 type PostAdminReconciliationRecordsRecordIdResolveParams struct {
 	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetAdvancedBuyingPowerParams defines parameters for GetAdvancedBuyingPower.
+type GetAdvancedBuyingPowerParams struct {
+	AccountId UUID `form:"account_id" json:"account_id"`
+}
+
+// GetAdvancedEffectsParams defines parameters for GetAdvancedEffects.
+type GetAdvancedEffectsParams struct {
+	AccountId UUID    `form:"account_id" json:"account_id"`
+	Cursor    *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit     *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetAdvancedInstrumentsParams defines parameters for GetAdvancedInstruments.
+type GetAdvancedInstrumentsParams struct {
+	Kind  *InstrumentKind `form:"kind,omitempty" json:"kind,omitempty"`
+	Limit *Limit          `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetAdvancedIntentsParams defines parameters for GetAdvancedIntents.
+type GetAdvancedIntentsParams struct {
+	AccountId UUID    `form:"account_id" json:"account_id"`
+	Cursor    *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit     *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetAdvancedRiskDecisionsParams defines parameters for GetAdvancedRiskDecisions.
+type GetAdvancedRiskDecisionsParams struct {
+	AccountId UUID   `form:"account_id" json:"account_id"`
+	Limit     *Limit `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // GetAuthCallbackParams defines parameters for GetAuthCallback.
@@ -4175,6 +4842,30 @@ type ServerInterface interface {
 	// PostAdminReconciliationRecordsRecordIdResolve Resolve a mismatch (reason + evidence; material resolutions require an approved admin action; corrections post a compensating journal transaction)
 	// (POST /admin/reconciliation/records/{recordId}/resolve)
 	PostAdminReconciliationRecordsRecordIdResolve(w http.ResponseWriter, r *http.Request, recordId UUID, params PostAdminReconciliationRecordsRecordIdResolveParams)
+	// GetAdvancedBuyingPower Universal buying power V2 for an account's simulated holdings, with an explanation of every number
+	// (GET /advanced/buying-power)
+	GetAdvancedBuyingPower(w http.ResponseWriter, r *http.Request, params GetAdvancedBuyingPowerParams)
+	// GetAdvancedCapabilities Every advanced capability, its modes, and whether each mode may run in this deployment
+	// (GET /advanced/capabilities)
+	GetAdvancedCapabilities(w http.ResponseWriter, r *http.Request)
+	// GetAdvancedEffects Economic effects of an account (the exactly-once register), newest first
+	// (GET /advanced/effects)
+	GetAdvancedEffects(w http.ResponseWriter, r *http.Request, params GetAdvancedEffectsParams)
+	// GetAdvancedInstruments Instruments of the canonical model with their current terms
+	// (GET /advanced/instruments)
+	GetAdvancedInstruments(w http.ResponseWriter, r *http.Request, params GetAdvancedInstrumentsParams)
+	// GetAdvancedInstrumentsInstrumentId One instrument, its current terms and every version of its terms
+	// (GET /advanced/instruments/{instrumentId})
+	GetAdvancedInstrumentsInstrumentId(w http.ResponseWriter, r *http.Request, instrumentId UUID)
+	// GetAdvancedIntents Economic intents of an account, newest first
+	// (GET /advanced/intents)
+	GetAdvancedIntents(w http.ResponseWriter, r *http.Request, params GetAdvancedIntentsParams)
+	// GetAdvancedIntentsIntentId One economic intent
+	// (GET /advanced/intents/{intentId})
+	GetAdvancedIntentsIntentId(w http.ResponseWriter, r *http.Request, intentId UUID)
+	// GetAdvancedRiskDecisions Risk Kernel V2 decisions about an account's intents, newest first
+	// (GET /advanced/risk/decisions)
+	GetAdvancedRiskDecisions(w http.ResponseWriter, r *http.Request, params GetAdvancedRiskDecisionsParams)
 	// GetAssets Registered assets with chain, mint, decimals and safety status
 	// (GET /assets)
 	GetAssets(w http.ResponseWriter, r *http.Request)
@@ -4436,6 +5127,54 @@ func (_ Unimplemented) GetAdminReconciliationRecords(w http.ResponseWriter, r *h
 // PostAdminReconciliationRecordsRecordIdResolve Resolve a mismatch (reason + evidence; material resolutions require an approved admin action; corrections post a compensating journal transaction)
 // (POST /admin/reconciliation/records/{recordId}/resolve)
 func (_ Unimplemented) PostAdminReconciliationRecordsRecordIdResolve(w http.ResponseWriter, r *http.Request, recordId UUID, params PostAdminReconciliationRecordsRecordIdResolveParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedBuyingPower Universal buying power V2 for an account's simulated holdings, with an explanation of every number
+// (GET /advanced/buying-power)
+func (_ Unimplemented) GetAdvancedBuyingPower(w http.ResponseWriter, r *http.Request, params GetAdvancedBuyingPowerParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedCapabilities Every advanced capability, its modes, and whether each mode may run in this deployment
+// (GET /advanced/capabilities)
+func (_ Unimplemented) GetAdvancedCapabilities(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedEffects Economic effects of an account (the exactly-once register), newest first
+// (GET /advanced/effects)
+func (_ Unimplemented) GetAdvancedEffects(w http.ResponseWriter, r *http.Request, params GetAdvancedEffectsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedInstruments Instruments of the canonical model with their current terms
+// (GET /advanced/instruments)
+func (_ Unimplemented) GetAdvancedInstruments(w http.ResponseWriter, r *http.Request, params GetAdvancedInstrumentsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedInstrumentsInstrumentId One instrument, its current terms and every version of its terms
+// (GET /advanced/instruments/{instrumentId})
+func (_ Unimplemented) GetAdvancedInstrumentsInstrumentId(w http.ResponseWriter, r *http.Request, instrumentId UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedIntents Economic intents of an account, newest first
+// (GET /advanced/intents)
+func (_ Unimplemented) GetAdvancedIntents(w http.ResponseWriter, r *http.Request, params GetAdvancedIntentsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedIntentsIntentId One economic intent
+// (GET /advanced/intents/{intentId})
+func (_ Unimplemented) GetAdvancedIntentsIntentId(w http.ResponseWriter, r *http.Request, intentId UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedRiskDecisions Risk Kernel V2 decisions about an account's intents, newest first
+// (GET /advanced/risk/decisions)
+func (_ Unimplemented) GetAdvancedRiskDecisions(w http.ResponseWriter, r *http.Request, params GetAdvancedRiskDecisionsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -5606,6 +6345,315 @@ func (siw *ServerInterfaceWrapper) PostAdminReconciliationRecordsRecordIdResolve
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PostAdminReconciliationRecordsRecordIdResolve(w, r, recordId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedBuyingPower operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedBuyingPower(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedBuyingPowerParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedBuyingPower(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedCapabilities operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedCapabilities(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedCapabilities(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedEffects operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedEffects(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedEffectsParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedEffects(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedInstruments operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedInstruments(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedInstrumentsParams
+
+	// ------------- Optional query parameter "kind" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "kind", r.URL.Query(), &params.Kind, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "kind"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedInstruments(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedInstrumentsInstrumentId operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedInstrumentsInstrumentId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "instrumentId" -------------
+	var instrumentId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "instrumentId", chi.URLParam(r, "instrumentId"), &instrumentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "instrumentId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedInstrumentsInstrumentId(w, r, instrumentId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedIntents operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedIntents(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedIntentsParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedIntents(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedIntentsIntentId operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedIntentsIntentId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "intentId" -------------
+	var intentId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "intentId", chi.URLParam(r, "intentId"), &intentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "intentId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedIntentsIntentId(w, r, intentId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedRiskDecisions operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedRiskDecisions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedRiskDecisionsParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedRiskDecisions(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -7607,6 +8655,30 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/version", wrapper.GetVersion)
 	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/capabilities", wrapper.GetAdvancedCapabilities)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/instruments", wrapper.GetAdvancedInstruments)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/instruments/{instrumentId}", wrapper.GetAdvancedInstrumentsInstrumentId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/intents", wrapper.GetAdvancedIntents)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/intents/{intentId}", wrapper.GetAdvancedIntentsIntentId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/effects", wrapper.GetAdvancedEffects)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/risk/decisions", wrapper.GetAdvancedRiskDecisions)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/buying-power", wrapper.GetAdvancedBuyingPower)
+	})
 
 	return r
 }
@@ -8281,6 +9353,307 @@ func (response PostAdminReconciliationRecordsRecordIdResolve422ApplicationProble
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedBuyingPowerRequestObject struct {
+	Params GetAdvancedBuyingPowerParams
+}
+
+type GetAdvancedBuyingPowerResponseObject interface {
+	VisitGetAdvancedBuyingPowerResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedBuyingPower200JSONResponse BuyingPowerV2
+
+func (response GetAdvancedBuyingPower200JSONResponse) VisitGetAdvancedBuyingPowerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedBuyingPower403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedBuyingPower403ApplicationProblemPlusJSONResponse) VisitGetAdvancedBuyingPowerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedBuyingPower422ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedBuyingPower422ApplicationProblemPlusJSONResponse) VisitGetAdvancedBuyingPowerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedCapabilitiesRequestObject struct {
+}
+
+type GetAdvancedCapabilitiesResponseObject interface {
+	VisitGetAdvancedCapabilitiesResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedCapabilities200JSONResponse AdvancedCapabilityList
+
+func (response GetAdvancedCapabilities200JSONResponse) VisitGetAdvancedCapabilitiesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedEffectsRequestObject struct {
+	Params GetAdvancedEffectsParams
+}
+
+type GetAdvancedEffectsResponseObject interface {
+	VisitGetAdvancedEffectsResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedEffects200JSONResponse EconomicEffectPage
+
+func (response GetAdvancedEffects200JSONResponse) VisitGetAdvancedEffectsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedEffects403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedEffects403ApplicationProblemPlusJSONResponse) VisitGetAdvancedEffectsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedInstrumentsRequestObject struct {
+	Params GetAdvancedInstrumentsParams
+}
+
+type GetAdvancedInstrumentsResponseObject interface {
+	VisitGetAdvancedInstrumentsResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedInstruments200JSONResponse AdvancedInstrumentList
+
+func (response GetAdvancedInstruments200JSONResponse) VisitGetAdvancedInstrumentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedInstruments400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedInstruments400ApplicationProblemPlusJSONResponse) VisitGetAdvancedInstrumentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedInstrumentsInstrumentIdRequestObject struct {
+	InstrumentId UUID `json:"instrumentId"`
+}
+
+type GetAdvancedInstrumentsInstrumentIdResponseObject interface {
+	VisitGetAdvancedInstrumentsInstrumentIdResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedInstrumentsInstrumentId200JSONResponse AdvancedInstrumentDetail
+
+func (response GetAdvancedInstrumentsInstrumentId200JSONResponse) VisitGetAdvancedInstrumentsInstrumentIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedInstrumentsInstrumentId404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedInstrumentsInstrumentId404ApplicationProblemPlusJSONResponse) VisitGetAdvancedInstrumentsInstrumentIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedIntentsRequestObject struct {
+	Params GetAdvancedIntentsParams
+}
+
+type GetAdvancedIntentsResponseObject interface {
+	VisitGetAdvancedIntentsResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedIntents200JSONResponse EconomicIntentPage
+
+func (response GetAdvancedIntents200JSONResponse) VisitGetAdvancedIntentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedIntents403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedIntents403ApplicationProblemPlusJSONResponse) VisitGetAdvancedIntentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedIntentsIntentIdRequestObject struct {
+	IntentId UUID `json:"intentId"`
+}
+
+type GetAdvancedIntentsIntentIdResponseObject interface {
+	VisitGetAdvancedIntentsIntentIdResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedIntentsIntentId200JSONResponse EconomicIntent
+
+func (response GetAdvancedIntentsIntentId200JSONResponse) VisitGetAdvancedIntentsIntentIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedIntentsIntentId404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedIntentsIntentId404ApplicationProblemPlusJSONResponse) VisitGetAdvancedIntentsIntentIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedRiskDecisionsRequestObject struct {
+	Params GetAdvancedRiskDecisionsParams
+}
+
+type GetAdvancedRiskDecisionsResponseObject interface {
+	VisitGetAdvancedRiskDecisionsResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedRiskDecisions200JSONResponse AdvancedRiskDecisionList
+
+func (response GetAdvancedRiskDecisions200JSONResponse) VisitGetAdvancedRiskDecisionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedRiskDecisions403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedRiskDecisions403ApplicationProblemPlusJSONResponse) VisitGetAdvancedRiskDecisionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -10259,6 +11632,30 @@ type StrictServerInterface interface {
 	// PostAdminReconciliationRecordsRecordIdResolve Resolve a mismatch (reason + evidence; material resolutions require an approved admin action; corrections post a compensating journal transaction)
 	// (POST /admin/reconciliation/records/{recordId}/resolve)
 	PostAdminReconciliationRecordsRecordIdResolve(ctx context.Context, request PostAdminReconciliationRecordsRecordIdResolveRequestObject) (PostAdminReconciliationRecordsRecordIdResolveResponseObject, error)
+	// GetAdvancedBuyingPower Universal buying power V2 for an account's simulated holdings, with an explanation of every number
+	// (GET /advanced/buying-power)
+	GetAdvancedBuyingPower(ctx context.Context, request GetAdvancedBuyingPowerRequestObject) (GetAdvancedBuyingPowerResponseObject, error)
+	// GetAdvancedCapabilities Every advanced capability, its modes, and whether each mode may run in this deployment
+	// (GET /advanced/capabilities)
+	GetAdvancedCapabilities(ctx context.Context, request GetAdvancedCapabilitiesRequestObject) (GetAdvancedCapabilitiesResponseObject, error)
+	// GetAdvancedEffects Economic effects of an account (the exactly-once register), newest first
+	// (GET /advanced/effects)
+	GetAdvancedEffects(ctx context.Context, request GetAdvancedEffectsRequestObject) (GetAdvancedEffectsResponseObject, error)
+	// GetAdvancedInstruments Instruments of the canonical model with their current terms
+	// (GET /advanced/instruments)
+	GetAdvancedInstruments(ctx context.Context, request GetAdvancedInstrumentsRequestObject) (GetAdvancedInstrumentsResponseObject, error)
+	// GetAdvancedInstrumentsInstrumentId One instrument, its current terms and every version of its terms
+	// (GET /advanced/instruments/{instrumentId})
+	GetAdvancedInstrumentsInstrumentId(ctx context.Context, request GetAdvancedInstrumentsInstrumentIdRequestObject) (GetAdvancedInstrumentsInstrumentIdResponseObject, error)
+	// GetAdvancedIntents Economic intents of an account, newest first
+	// (GET /advanced/intents)
+	GetAdvancedIntents(ctx context.Context, request GetAdvancedIntentsRequestObject) (GetAdvancedIntentsResponseObject, error)
+	// GetAdvancedIntentsIntentId One economic intent
+	// (GET /advanced/intents/{intentId})
+	GetAdvancedIntentsIntentId(ctx context.Context, request GetAdvancedIntentsIntentIdRequestObject) (GetAdvancedIntentsIntentIdResponseObject, error)
+	// GetAdvancedRiskDecisions Risk Kernel V2 decisions about an account's intents, newest first
+	// (GET /advanced/risk/decisions)
+	GetAdvancedRiskDecisions(ctx context.Context, request GetAdvancedRiskDecisionsRequestObject) (GetAdvancedRiskDecisionsResponseObject, error)
 	// GetAssets Registered assets with chain, mint, decimals and safety status
 	// (GET /assets)
 	GetAssets(ctx context.Context, request GetAssetsRequestObject) (GetAssetsResponseObject, error)
@@ -11012,6 +12409,212 @@ func (sh *strictHandler) PostAdminReconciliationRecordsRecordIdResolve(w http.Re
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(PostAdminReconciliationRecordsRecordIdResolveResponseObject); ok {
 		if err := validResponse.VisitPostAdminReconciliationRecordsRecordIdResolveResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedBuyingPower operation middleware
+func (sh *strictHandler) GetAdvancedBuyingPower(w http.ResponseWriter, r *http.Request, params GetAdvancedBuyingPowerParams) {
+	var request GetAdvancedBuyingPowerRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedBuyingPower(ctx, request.(GetAdvancedBuyingPowerRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedBuyingPower")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedBuyingPowerResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedBuyingPowerResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedCapabilities operation middleware
+func (sh *strictHandler) GetAdvancedCapabilities(w http.ResponseWriter, r *http.Request) {
+	var request GetAdvancedCapabilitiesRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedCapabilities(ctx, request.(GetAdvancedCapabilitiesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedCapabilities")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedCapabilitiesResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedCapabilitiesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedEffects operation middleware
+func (sh *strictHandler) GetAdvancedEffects(w http.ResponseWriter, r *http.Request, params GetAdvancedEffectsParams) {
+	var request GetAdvancedEffectsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedEffects(ctx, request.(GetAdvancedEffectsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedEffects")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedEffectsResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedEffectsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedInstruments operation middleware
+func (sh *strictHandler) GetAdvancedInstruments(w http.ResponseWriter, r *http.Request, params GetAdvancedInstrumentsParams) {
+	var request GetAdvancedInstrumentsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedInstruments(ctx, request.(GetAdvancedInstrumentsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedInstruments")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedInstrumentsResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedInstrumentsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedInstrumentsInstrumentId operation middleware
+func (sh *strictHandler) GetAdvancedInstrumentsInstrumentId(w http.ResponseWriter, r *http.Request, instrumentId UUID) {
+	var request GetAdvancedInstrumentsInstrumentIdRequestObject
+
+	request.InstrumentId = instrumentId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedInstrumentsInstrumentId(ctx, request.(GetAdvancedInstrumentsInstrumentIdRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedInstrumentsInstrumentId")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedInstrumentsInstrumentIdResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedInstrumentsInstrumentIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedIntents operation middleware
+func (sh *strictHandler) GetAdvancedIntents(w http.ResponseWriter, r *http.Request, params GetAdvancedIntentsParams) {
+	var request GetAdvancedIntentsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedIntents(ctx, request.(GetAdvancedIntentsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedIntents")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedIntentsResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedIntentsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedIntentsIntentId operation middleware
+func (sh *strictHandler) GetAdvancedIntentsIntentId(w http.ResponseWriter, r *http.Request, intentId UUID) {
+	var request GetAdvancedIntentsIntentIdRequestObject
+
+	request.IntentId = intentId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedIntentsIntentId(ctx, request.(GetAdvancedIntentsIntentIdRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedIntentsIntentId")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedIntentsIntentIdResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedIntentsIntentIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedRiskDecisions operation middleware
+func (sh *strictHandler) GetAdvancedRiskDecisions(w http.ResponseWriter, r *http.Request, params GetAdvancedRiskDecisionsParams) {
+	var request GetAdvancedRiskDecisionsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedRiskDecisions(ctx, request.(GetAdvancedRiskDecisionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedRiskDecisions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedRiskDecisionsResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedRiskDecisionsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -12345,271 +13948,308 @@ func (sh *strictHandler) PostWithdrawals(w http.ResponseWriter, r *http.Request,
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
-	"afsZlsCxHpgr/eX9l/9vAA==",
+	"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",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

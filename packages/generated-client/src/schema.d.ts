@@ -804,6 +804,322 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/advanced/buying-power": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Universal buying power V2 for an account's simulated holdings, with an explanation of every number */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Buying power V2 (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BuyingPowerV2"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every advanced capability, its modes, and whether each mode may run in this deployment */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Capability specs with the live decision of each mode */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedCapabilityList"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/effects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Economic effects of an account (the exactly-once register), newest first */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of economic effects */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EconomicEffectPage"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/instruments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Instruments of the canonical model with their current terms */
+        get: {
+            parameters: {
+                query?: {
+                    kind?: components["schemas"]["InstrumentKind"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Instruments, current terms first */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedInstrumentList"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/instruments/{instrumentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One instrument, its current terms and every version of its terms */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    instrumentId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Instrument with terms history */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedInstrumentDetail"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/intents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Economic intents of an account, newest first */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of economic intents */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EconomicIntentPage"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/intents/{intentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One economic intent */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    intentId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The intent */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EconomicIntent"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/risk/decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Risk Kernel V2 decisions about an account's intents, newest first */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Decisions with their stable reason codes and hashes */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedRiskDecisionList"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/assets": {
         parameters: {
             query?: never;
@@ -984,6 +1300,45 @@ export interface paths {
                 };
                 403: components["responses"]["Problem"];
                 422: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/credits/pricing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The rate at which money buys Credits, and the bounds on one purchase
+         * @description Exists so a funding page can show the rate without deriving it. A second implementation of this arithmetic in the browser would eventually disagree with the server, and the server is the one that issues.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The pricing policy in force */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CreditPricing"];
+                    };
+                };
             };
         };
         put?: never;
@@ -2172,6 +2527,106 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a payment that buys Credits (PART XI, pgf Sections 5-7)
+         * @description The request says how much MONEY the customer will pay. It cannot say how many Credits to issue, because there is no such field: the quantity is derived server-side from the named pricing policy version. The response carries a provider client secret exactly once, on creation, and never on an idempotent replay -- a second browser must not be able to resume somebody else's payment form.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateCreditPurchaseRequest"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay. No client_secret is returned */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CreditPurchase"];
+                    };
+                };
+                /** @description Purchase started; complete the payment with the provider using client_secret */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CreditPurchase"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/payments/{paymentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The state of one Credit purchase
+         * @description A funding page polls this rather than trusting a redirect. A provider redirect says the customer came back, not that the money arrived.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    paymentId: components["parameters"]["PaymentId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Purchase state */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CreditPurchase"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/payouts": {
         parameters: {
             query?: never;
@@ -2715,6 +3170,70 @@ export interface components {
             target_id: string;
             target_type: string;
         };
+        AdvancedCapability: {
+            capability: string;
+            decisions: components["schemas"]["AdvancedModeDecision"][];
+            gate_active: boolean;
+            high_risk: boolean;
+            jurisdictions: string[];
+            kill_switched: boolean;
+            live_evidence: string[];
+            live_implemented: boolean;
+            max_live_capital: components["schemas"]["USD"];
+            /** Format: int64 */
+            max_live_validity_seconds: number;
+            min_approvers: number;
+            provider_readiness: string;
+            simulated_modes: components["schemas"]["AdvancedMode"][];
+            ungated_environments: string[];
+        };
+        AdvancedCapabilityList: {
+            environment: string;
+            items: components["schemas"]["AdvancedCapability"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        AdvancedInstrument: {
+            canonical_name: string;
+            id: components["schemas"]["UUID"];
+            kind: components["schemas"]["InstrumentKind"];
+            risk_class: string;
+            status: string;
+            terms: components["schemas"]["InstrumentTerms"];
+            /** @description hex sha256 of the canonical terms */
+            terms_hash: string;
+            terms_version: number;
+        };
+        AdvancedInstrumentDetail: components["schemas"]["AdvancedInstrument"] & {
+            versions: components["schemas"]["InstrumentTermsVersion"][];
+        };
+        AdvancedInstrumentList: {
+            items: components["schemas"]["AdvancedInstrument"][];
+        };
+        /** @enum {string} */
+        AdvancedMode: "PAPER" | "SANDBOX" | "DEVNET" | "LIVE";
+        AdvancedModeDecision: {
+            allowed: boolean;
+            mode: components["schemas"]["AdvancedMode"];
+            reasons: string[];
+        };
+        AdvancedRiskDecision: {
+            decision_hash: string;
+            evaluated_at: components["schemas"]["Timestamp"];
+            evaluator_version: string;
+            id: components["schemas"]["UUID"];
+            input_hash: string;
+            intent_id?: components["schemas"]["UUID"];
+            intent_kind: string;
+            policy_hash: string;
+            policy_version: string;
+            reason_codes: string[];
+            stage: string;
+            /** @enum {string} */
+            verdict: "ALLOW" | "REJECT";
+        };
+        AdvancedRiskDecisionList: {
+            items: components["schemas"]["AdvancedRiskDecision"][];
+        };
         Asset: {
             chain: string;
             decimals: number;
@@ -2767,6 +3286,41 @@ export interface components {
             }[];
             withdrawable: components["schemas"]["USD"];
         };
+        BuyingPowerV2: {
+            as_of: components["schemas"]["Timestamp"];
+            borrow_liabilities: components["schemas"]["USD"];
+            eligible_collateral: components["schemas"]["USD"];
+            eligible_equity: components["schemas"]["USD"];
+            gross_equity: components["schemas"]["USD"];
+            haircuts: components["schemas"]["USD"];
+            initial_margin_used: components["schemas"]["USD"];
+            lines: components["schemas"]["BuyingPowerV2Line"][];
+            maintenance_margin: components["schemas"]["USD"];
+            margin_available: components["schemas"]["USD"];
+            open_order_reservations: components["schemas"]["USD"];
+            pending_bridge_haircut: components["schemas"]["USD"];
+            pending_transfer_reservations: components["schemas"]["USD"];
+            pending_withdrawal_reservations: components["schemas"]["USD"];
+            policy_version: string;
+            reasons: components["schemas"]["BuyingPowerV2Reason"][];
+            risk_increasing_buying_power: components["schemas"]["USD"];
+            strategy_reservations: components["schemas"]["USD"];
+            trade_buying_power: components["schemas"]["USD"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            withdrawable: components["schemas"]["USD"];
+        };
+        BuyingPowerV2Line: {
+            amount_usd: components["schemas"]["USD"];
+            asset_id?: string;
+            component: string;
+            detail: string;
+            field: string;
+        };
+        BuyingPowerV2Reason: {
+            amount: components["schemas"]["USD"];
+            code: string;
+            detail: string;
+        };
         /** @enum {string} */
         Capability: "LIVE_FUNDING" | "LIVE_MANUAL_TRADING" | "LIVE_AGENT_TRADING" | "WITHDRAWALS" | "SOCIAL_DATA_PERSISTENCE" | "MARKETPLACE" | "CROSS_CHAIN" | "PREDICTION_MARKETS" | "SECURITIES" | "CEX_TRADING";
         CapabilityGate: {
@@ -2787,6 +3341,18 @@ export interface components {
             security_approval_ref?: string;
             /** @enum {string} */
             state: "DISABLED" | "PENDING_APPROVAL" | "APPROVED" | "ACTIVE" | "SUSPENDED" | "REVOKED" | "EXPIRED";
+        };
+        /** @description Note the absence of a Credit quantity. A client that could state one could state nine million, and the only thing between that request and a ledger issuance would be a validation somebody remembered to write. */
+        CreateCreditPurchaseRequest: {
+            account_id: components["schemas"]["UUID"];
+            /**
+             * Format: int64
+             * @description What the customer will pay, in minor units of the pricing currency.
+             * @example 10000
+             */
+            amount_minor: number;
+            /** @example USD */
+            currency?: string;
         };
         CreateInternalProductRequest: {
             account_id: components["schemas"]["UUID"];
@@ -2838,6 +3404,55 @@ export interface components {
          * @enum {string}
          */
         CreditOrigin: "PURCHASED" | "PROMOTIONAL" | "REFUND" | "CREATOR_EARNING" | "DATA_SALE_EARNING" | "AGENT_SERVICE_EARNING" | "MARKET_CREATOR_EARNING" | "MARKET_TRADING_PROCEEDS" | "COMPETITION_REWARD" | "ADMIN_ADJUSTMENT" | "PROVIDER_SETTLEMENT";
+        /** @description The versioned policy that converts money into Credits. version is recorded on every purchase, so a purchase made under one rate is still explicable after two more have replaced it. */
+        CreditPricing: {
+            /**
+             * Format: int64
+             * @example 100
+             */
+            credits_per_major_unit: number;
+            /** @example USD */
+            currency: string;
+            /**
+             * Format: int64
+             * @example 1000000
+             */
+            max_amount_minor: number;
+            /**
+             * Format: int64
+             * @example 100
+             */
+            min_amount_minor: number;
+            /** @example credit-pricing-v1 */
+            version: string;
+        };
+        CreditPurchase: {
+            account_id: components["schemas"]["UUID"];
+            /** Format: int64 */
+            amount_minor: number;
+            /** @description The provider secret that drives the payment UI. Returned exactly once, on creation. It is never persisted, never logged, and never returned on a replay or a read. */
+            client_secret?: string;
+            /** Format: date-time */
+            created_at?: string;
+            credit_quantity: components["schemas"]["Quantity"];
+            currency: string;
+            failure_reason?: string;
+            pricing_version: string;
+            provider: string;
+            purchase_id: components["schemas"]["UUID"];
+            /**
+             * Format: date-time
+             * @description When the reversibility window opened. The settlement window is measured from here.
+             */
+            reversible_at?: string;
+            /** Format: date-time */
+            settled_at?: string;
+            /**
+             * @description The funding lifecycle state. CAPTURED is not SETTLED and REVERSIBLE is not payout-eligible; the difference is a card dispute window that can run for months.
+             * @enum {string}
+             */
+            state: "CREATED" | "AUTHORIZATION_PENDING" | "AUTHORIZED" | "CAPTURE_PENDING" | "CAPTURED" | "REVERSIBLE" | "SETTLED" | "REVERSED" | "REFUNDED" | "DISPUTED" | "FAILED" | "CANCELED" | "MANUAL_REVIEW";
+        };
         Decision: {
             decision: string;
             evaluated_at: components["schemas"]["Timestamp"];
@@ -2877,6 +3492,54 @@ export interface components {
         };
         DepositPage: components["schemas"]["Page"] & {
             items: components["schemas"]["Deposit"][];
+        };
+        EconomicEffect: {
+            account_id?: components["schemas"]["UUID"];
+            compensation_journal_transaction_id?: components["schemas"]["UUID"];
+            created_at: components["schemas"]["Timestamp"];
+            effect_key: string;
+            effect_kind: string;
+            evidence_ref?: string;
+            evidence_sha256?: string;
+            external_ref?: string;
+            failure_code?: string;
+            id: components["schemas"]["UUID"];
+            intent_id?: components["schemas"]["UUID"];
+            journal_transaction_id?: components["schemas"]["UUID"];
+            posts_ledger: boolean;
+            /** @enum {string} */
+            status: "PENDING" | "APPLIED" | "UNKNOWN" | "FAILED" | "COMPENSATED";
+            subsystem: string;
+            updated_at: components["schemas"]["Timestamp"];
+        };
+        EconomicEffectPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["EconomicEffect"][];
+        };
+        EconomicIntent: {
+            account_id: components["schemas"]["UUID"];
+            actor_type: string;
+            agent_id?: components["schemas"]["UUID"];
+            asset_id?: components["schemas"]["UUID"];
+            capability: string;
+            content_hash: string;
+            created_at: components["schemas"]["Timestamp"];
+            id: components["schemas"]["UUID"];
+            instrument_id?: components["schemas"]["UUID"];
+            kind: string;
+            mode: components["schemas"]["AdvancedMode"];
+            notional_usd?: components["schemas"]["USD"];
+            quantity?: components["schemas"]["Quantity"];
+            rejection_code?: string;
+            status: string;
+            strategy_ref?: string;
+            terminal_at?: components["schemas"]["Timestamp"];
+            terms: {
+                [key: string]: unknown;
+            };
+            updated_at: components["schemas"]["Timestamp"];
+        };
+        EconomicIntentPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["EconomicIntent"][];
         };
         Fill: {
             external_fill_id: string;
@@ -2941,6 +3604,53 @@ export interface components {
             base: components["schemas"]["Asset"];
             listings: components["schemas"]["VenueListing"][];
             quote: components["schemas"]["Asset"];
+        };
+        /** @enum {string} */
+        InstrumentKind: "SPOT_PAIR" | "EVENT_OUTCOME" | "STABLE_VALUE" | "EQUITY" | "ETF" | "FUTURE" | "PERPETUAL" | "OPTION" | "SYNTHETIC";
+        InstrumentTerms: {
+            base_asset_id?: components["schemas"]["UUID"];
+            contract_multiplier: components["schemas"]["Quantity"];
+            /** @enum {string} */
+            corporate_action_behavior: "NONE" | "ADJUST";
+            exchange_mic?: string;
+            /** @enum {string} */
+            exercise_style?: "EUROPEAN" | "AMERICAN";
+            expiry?: components["schemas"]["Timestamp"];
+            /** Format: int64 */
+            funding_interval_ms?: number;
+            jurisdiction_tags: string[];
+            kind: components["schemas"]["InstrumentKind"];
+            lot_size: components["schemas"]["Quantity"];
+            /** @enum {string} */
+            margin_model: "NONE" | "SPOT_MARGIN" | "LINEAR" | "OPTION" | "BINARY_OUTCOME";
+            min_quantity: components["schemas"]["Quantity"];
+            /** @enum {string} */
+            option_right?: "CALL" | "PUT";
+            /** Format: int64 */
+            oracle_max_age_ms: number;
+            oracle_sources: string[];
+            outcomes?: string[];
+            price_scale: number;
+            quantity_decimals: number;
+            quote_asset_id?: components["schemas"]["UUID"];
+            settlement_asset_id: components["schemas"]["UUID"];
+            /** @enum {string} */
+            settlement_style: "CASH" | "PHYSICAL";
+            strike_mantissa?: components["schemas"]["Quantity"];
+            symbol: string;
+            tick_size: components["schemas"]["Quantity"];
+            trading_calendar: string;
+            /** @enum {string} */
+            transferability: "TRANSFERABLE" | "NON_TRANSFERABLE";
+            underlying_instrument_id?: components["schemas"]["UUID"];
+            venue_code: string;
+        };
+        InstrumentTermsVersion: {
+            actor_type: string;
+            created_at: components["schemas"]["Timestamp"];
+            reason: string;
+            terms_hash: string;
+            version: number;
         };
         /** @enum {string} */
         IntentAction: "ACQUIRE_NOTIONAL" | "REDUCE_NOTIONAL" | "CLOSE_POSITION" | "TARGET_EXPOSURE";
@@ -3491,6 +4201,11 @@ export interface components {
          * @description UUIDv7 in canonical form
          */
         UUID: string;
+        /**
+         * @description Every figure of the advanced capabilities is simulated value with no economic substance.
+         * @enum {string}
+         */
+        ValueDomainSimulated: "SIMULATED";
         VenueListing: {
             base_mint?: string;
             base_precision: number;
@@ -3545,6 +4260,7 @@ export interface components {
         Limit: number;
         MarketId: components["schemas"]["UUID"];
         OrderId: components["schemas"]["UUID"];
+        PaymentId: components["schemas"]["UUID"];
         PayoutId: components["schemas"]["UUID"];
         ProductId: components["schemas"]["UUID"];
         SessionId: components["schemas"]["UUID"];

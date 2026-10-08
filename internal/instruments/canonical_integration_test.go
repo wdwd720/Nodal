@@ -143,3 +143,61 @@ func createSpot(ctx context.Context, t *testing.T, d *db.DB, repo *instruments.R
 	})
 	return ins, err
 }
+
+// ListWithTerms returns each instrument with its CURRENT terms in one read,
+// filters by kind, and leaves out instruments that carry no canonical terms.
+func TestIntegration_ListWithTermsReturnsCurrentTermsAndFiltersByKind(t *testing.T) {
+	d := openDB(t)
+	ctx := context.Background()
+	repo := instruments.NewRepository()
+	usd := simAsset(t, d, "SBXUSDL")
+	eth := simAsset(t, d, "SBXETHL")
+	tag := strings.ToUpper(uuid.NewString()[:8])
+	spot, err := createSpot(ctx, t, d, repo, eth.ID, usd.ID, "SBXETH/SBXUSD-"+tag)
+	require.NoError(t, err)
+
+	var perp instruments.Instrument
+	var v1 instruments.Version
+	require.NoError(t, d.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
+		var err error
+		perp, v1, err = repo.CreateAdvanced(ctx, tx, instruments.AdvancedSpec{
+			Terms: perpTerms(usd.ID, spot.ID, "SBXETH-PERP-"+tag), CanonicalName: "ETH perpetual " + tag,
+			RiskClass: assets.RiskSpeculative, Status: assets.StatusActive, ActiveFrom: time.Now(),
+			ActorType: "OPERATOR", ActorID: "op-1",
+		})
+		return err
+	}))
+	next := v1.Terms
+	next.OracleMaxAgeMS = 10_000
+	require.NoError(t, d.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
+		_, err := repo.AmendTerms(ctx, tx, perp.ID, next, "tighter oracle bound", "OPERATOR", "op-1")
+		return err
+	}))
+
+	find := func(list []instruments.Listed, id instruments.InstrumentID) (instruments.Listed, bool) {
+		for _, l := range list {
+			if l.Instrument.ID == id {
+				return l, true
+			}
+		}
+		return instruments.Listed{}, false
+	}
+
+	all, err := repo.ListWithTerms(ctx, d.Pool(), "", 1000)
+	require.NoError(t, err)
+	got, ok := find(all, perp.ID)
+	require.True(t, ok, "the perpetual is listed")
+	assert.Equal(t, 2, got.Current.Version, "the current version, not the first")
+	assert.Equal(t, int64(10_000), got.Current.Terms.OracleMaxAgeMS)
+	_, ok = find(all, spot.ID)
+	assert.False(t, ok, "a spot pair created without canonical terms is not an advanced listing")
+
+	perps, err := repo.ListWithTerms(ctx, d.Pool(), instruments.TypePerpetual, 1000)
+	require.NoError(t, err)
+	_, ok = find(perps, perp.ID)
+	assert.True(t, ok)
+	futures, err := repo.ListWithTerms(ctx, d.Pool(), instruments.TypeFuture, 1000)
+	require.NoError(t, err)
+	_, ok = find(futures, perp.ID)
+	assert.False(t, ok, "the kind filter applies")
+}

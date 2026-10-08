@@ -331,6 +331,45 @@ func (r *Repository) Create(ctx context.Context, q db.Querier, a Asset) (Asset, 
 	return created, nil
 }
 
+// CreateIfAbsent inserts an asset whose id the caller fixed, or does nothing
+// when a row with that id (or that chain and mint) already exists. It never
+// aborts the caller's transaction on the race, which Create's unique violation
+// would. The returned bool reports whether this call inserted the row; the
+// asset returned is the stored one either way.
+func (r *Repository) CreateIfAbsent(ctx context.Context, q db.Querier, a Asset) (Asset, bool, error) {
+	if a.ID.IsZero() {
+		return Asset{}, false, errs.New(errs.CodeValidationFailed, "CreateIfAbsent needs the asset id fixed by the caller")
+	}
+	if err := a.Validate(); err != nil {
+		return Asset{}, false, err
+	}
+	ext, err := encodeExtensions(a.TokenExtensions)
+	if err != nil {
+		return Asset{}, false, err
+	}
+	created, err := scanAsset(q.QueryRow(ctx, `INSERT INTO assets (id, chain, mint_address, kind, symbol, name, decimals, is_stablecoin, peg_currency, value_domain, risk_class, status, metadata_version, policy_ref, token_extensions)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NULLIF($9,''),NULLIF($10,''),$11,$12,GREATEST($13,1),NULLIF($14,''),$15)
+		ON CONFLICT DO NOTHING
+		RETURNING `+assetColumns,
+		a.ID, a.Chain, a.MintAddress, a.Kind, a.Symbol, a.Name, int16(a.Decimals), a.IsStablecoin, a.PegCurrency, string(a.ValueDomain), a.RiskClass, a.Status, a.MetadataVersion, a.PolicyRef, ext))
+	if err == nil {
+		return created, true, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return Asset{}, false, fmt.Errorf("assets: create if absent: %w", err)
+	}
+	existing, err := r.Get(ctx, q, a.ID)
+	if err != nil {
+		if errs.HasCode(err, errs.CodeNotFound) {
+			// The conflict was on (chain, mint) with a different id.
+			return Asset{}, false, errs.New(errs.CodeConflict, "another asset is registered for this chain and mint").
+				WithField("chain", a.Chain).WithField("mint", a.MintAddress)
+		}
+		return Asset{}, false, err
+	}
+	return existing, false, nil
+}
+
 // Get returns an asset by id.
 func (r *Repository) Get(ctx context.Context, q db.Querier, assetID AssetID) (Asset, error) {
 	a, err := scanAsset(q.QueryRow(ctx, `SELECT `+assetColumns+` FROM assets WHERE id = $1`, assetID))

@@ -50,14 +50,59 @@ func (a *Authorizer) Decide(ctx context.Context, q db.Querier, c gates.Capabilit
 	if err != nil {
 		return gates.ModeDecision{}, err
 	}
-	killed := snap.Has(killswitch.CapabilityDisable, string(c)) || snap.Global()
+	return a.decide(c, m, verdict.Active, killedBy(snap, c)), nil
+}
+
+// CapabilityState is one advanced capability's standing in this deployment:
+// its spec, its gate and kill switch, and the decision for every mode.
+type CapabilityState struct {
+	Spec         gates.AdvancedSpec
+	GateActive   bool
+	KillSwitched bool
+	Decisions    map[gates.Mode]gates.ModeDecision
+}
+
+// Describe reports every advanced capability's standing, in the order of
+// gates.AdvancedSpecs, with the environment the decisions were made for. The
+// decisions are the ones Require would make: both call the same function.
+func (a *Authorizer) Describe(ctx context.Context, q db.Querier) (string, []CapabilityState, error) {
+	snap, err := a.kills.Snapshot(ctx, q)
+	if err != nil {
+		return "", nil, err
+	}
+	specs := gates.AdvancedSpecs()
+	out := make([]CapabilityState, 0, len(specs))
+	for _, sp := range specs {
+		verdict, err := a.gates.IsActive(ctx, q, sp.Capability)
+		if err != nil {
+			return "", nil, err
+		}
+		st := CapabilityState{
+			Spec: sp, GateActive: verdict.Active, KillSwitched: killedBy(snap, sp.Capability),
+			Decisions: make(map[gates.Mode]gates.ModeDecision, len(gates.AllModes())),
+		}
+		for _, m := range gates.AllModes() {
+			st.Decisions[m] = a.decide(sp.Capability, m, st.GateActive, st.KillSwitched)
+		}
+		out = append(out, st)
+	}
+	return a.gates.Environment(), out, nil
+}
+
+func (a *Authorizer) decide(c gates.Capability, m gates.Mode, active, killed bool) gates.ModeDecision {
 	return gates.DecideMode(gates.ModeRequest{
 		Capability:   c,
 		Environment:  a.gates.Environment(),
 		Mode:         m,
-		GateActive:   verdict.Active,
+		GateActive:   active,
 		KillSwitched: killed,
-	}), nil
+	})
+}
+
+// killedBy reports whether the snapshot stops capability c: a
+// CAPABILITY_DISABLE switch scoped to it, or the global switch.
+func killedBy(snap killswitch.Snapshot, c gates.Capability) bool {
+	return snap.Has(killswitch.CapabilityDisable, string(c)) || snap.Global()
 }
 
 // Require returns nil when the capability may be exercised, and otherwise

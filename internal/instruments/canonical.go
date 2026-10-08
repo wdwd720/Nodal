@@ -581,6 +581,78 @@ func (r *Repository) ListByType(ctx context.Context, q db.Querier, t InstrumentT
 	return out, rows.Err()
 }
 
+// Listed is an instrument with its current canonical terms.
+type Listed struct {
+	Instrument Instrument
+	Current    Version
+}
+
+// ListWithTerms returns the instruments that carry canonical terms, each with
+// its current version, ordered by canonical name. An empty type lists every
+// type. Run it in a REPEATABLE READ transaction for one consistent snapshot.
+func (r *Repository) ListWithTerms(ctx context.Context, q db.Querier, t InstrumentType, limit int) ([]Listed, error) {
+	if limit <= 0 || limit > 1000 {
+		limit = 1000
+	}
+	rows, err := q.Query(ctx, `SELECT `+instrumentColumns+` FROM instruments
+		WHERE id IN (SELECT instrument_id FROM instrument_terms) AND ($1 = '' OR type = $1)
+		ORDER BY canonical_name, id LIMIT $2`, string(t), limit)
+	if err != nil {
+		return nil, fmt.Errorf("instruments: list with terms: %w", err)
+	}
+	var list []Instrument
+	for rows.Next() {
+		i, err := scanInstrument(rows)
+		if err != nil {
+			rows.Close()
+			return nil, err
+		}
+		list = append(list, i)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("instruments: list with terms: %w", err)
+	}
+	if len(list) == 0 {
+		return nil, nil
+	}
+	ids := make([]InstrumentID, len(list))
+	for i, in := range list {
+		ids[i] = in.ID
+	}
+	vrows, err := q.Query(ctx, `SELECT v.instrument_id, v.version, v.terms, v.content_hash, v.reason, v.actor_type, v.actor_id, v.created_at
+		FROM instrument_terms t JOIN instrument_versions v ON v.instrument_id = t.instrument_id AND v.version = t.version
+		WHERE t.instrument_id = ANY($1)`, ids)
+	if err != nil {
+		return nil, fmt.Errorf("instruments: list with terms: %w", err)
+	}
+	defer vrows.Close()
+	current := make(map[InstrumentID]Version, len(list))
+	for vrows.Next() {
+		v, err := scanVersion(vrows)
+		if err != nil {
+			return nil, err
+		}
+		current[v.InstrumentID] = v
+	}
+	if err := vrows.Err(); err != nil {
+		return nil, fmt.Errorf("instruments: list with terms: %w", err)
+	}
+	out := make([]Listed, 0, len(list))
+	for _, in := range list {
+		v, ok := current[in.ID]
+		if !ok {
+			// The terms row was there when the instruments were listed; only a
+			// read outside one snapshot can miss it. Refuse rather than return
+			// an instrument without terms.
+			return nil, errs.New(errs.CodeConflict, "instrument terms changed during the read; retry").
+				WithField("instrument_id", in.ID.String())
+		}
+		out = append(out, Listed{Instrument: in, Current: v})
+	}
+	return out, nil
+}
+
 func (r *Repository) lockCurrentVersion(ctx context.Context, tx pgx.Tx, instrumentID InstrumentID) (Version, error) {
 	return r.version(ctx, tx, `SELECT v.instrument_id, v.version, v.terms, v.content_hash, v.reason, v.actor_type, v.actor_id, v.created_at
 		FROM instrument_terms t JOIN instrument_versions v ON v.instrument_id = t.instrument_id AND v.version = t.version

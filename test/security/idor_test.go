@@ -244,7 +244,10 @@ func TestIDOR_QueryParameterSmuggling(t *testing.T) {
 		foreign = own
 	}
 
-	for _, path := range []string{"/v1/intents", "/v1/orders", "/v1/funding/deposits"} {
+	for _, path := range []string{
+		"/v1/intents", "/v1/orders", "/v1/funding/deposits",
+		"/v1/advanced/intents", "/v1/advanced/effects", "/v1/advanced/risk/decisions",
+	} {
 		t.Run(strings.TrimPrefix(path, "/v1/"), func(t *testing.T) {
 			okOwn := getAs(t, tn.a.Token, path+"?account_id="+own)
 			require.Equal(t, http.StatusOK, okOwn.Status, "own account must list: %s", okOwn.text())
