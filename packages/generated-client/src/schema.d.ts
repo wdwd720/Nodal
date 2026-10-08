@@ -1120,6 +1120,1077 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/advanced/strategies/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Approved strategy listings (an APPROVED, CLEARED version each), newest first */
+        get: {
+            parameters: {
+                query?: {
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of listings with the newest installable version of each */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyListingPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/follows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** An account's paper-follow runs, newest first, with the intents each produced and their Risk V2 decisions */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    install_id?: components["schemas"]["UUID"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of follow runs (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyFollowRunPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/installs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** An account's installs, newest first, each with its latest paper performance snapshot */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of installs (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyInstallPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /**
+         * Install an APPROVED, CLEARED version for one of your accounts, in PAPER mode only
+         * @description PAPER is the only mode an install can have; the service refuses any other explicitly (FORBIDDEN) rather than rewriting it, and the database refuses it too. Installing a version that is already installed returns the existing install.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StrategyInstallRequest"];
+                };
+            };
+            responses: {
+                /** @description The version was already installed, or an idempotent replay */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyInstall"];
+                    };
+                };
+                /** @description The install (PAPER) */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyInstall"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/installs/{installId}/follows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Paper-follow one of your installs on one market snapshot
+         * @description The installed version runs in the sandbox on the snapshot you supply. Every proposal its manifest permits becomes an economic intent (PAPER, STRATEGY_MARKETPLACE) that faces routing and Risk Kernel V2 with sections read from the database, never from the snapshot; only an ALLOW reaches paper execution, exactly once. The snapshot must be no older than five minutes and not in the future, and the manifest's execution frequency bounds how often an install runs. The same snapshot time with the same snapshot returns the recorded run; with a different snapshot it is INVALID_IDEMPOTENCY_REUSE. Equity and turnover come from the snapshot you supplied and are paper figures.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    installId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StrategyFollowRequest"];
+                };
+            };
+            responses: {
+                /** @description The run recorded earlier for this snapshot, or an idempotent replay */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyFollowRun"];
+                    };
+                };
+                /** @description The follow run with what became of every intent (value domain SIMULATED) */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyFollowRun"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+                429: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/installs/{installId}/performance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Compute and record the paper performance of one of your installs from its follow history */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    installId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StrategyAccountRequest"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay of the original answer */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyPerformanceSnapshot"];
+                    };
+                };
+                /** @description The recorded snapshot (paper results) */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyPerformanceSnapshot"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/installs/{installId}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Remove one of your ACTIVE installs */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    installId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StrategyInstallRemoveRequest"];
+                };
+            };
+            responses: {
+                /** @description The install, REMOVED */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyInstall"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/listings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The listings an account created, in every status, newest first */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of listings with the newest version of each */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyListingPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /**
+         * Create a listing with its first version, in DRAFT
+         * @description The version is immutable from here on apart from its lifecycle: its manifest, source and configuration can never change. Source is text, at most 32 files of at most 65536 bytes each and 262144 bytes in all. Nothing is built until an operator validates the submitted version.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StrategyListingCreateRequest"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay of the original answer */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyListingDetail"];
+                    };
+                };
+                /** @description The listing and its DRAFT version (value domain SIMULATED) */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyListingDetail"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/listings/{listingId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One listing with its versions, validations, reviews, provenance, evaluations and paper performance
+         * @description The creator's account and operators see every version; anyone else sees only the public versions, and a listing with none is NOT_FOUND. Evaluations and performance snapshots are simulated and PAPER results: computed from snapshots supplied by whoever ran them, never from real capital.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    listingId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The listing (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyListingDetail"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/listings/{listingId}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Publish the next version of one of your listings, in DRAFT */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    listingId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StrategyVersionCreateRequest"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay of the original answer */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyVersion"];
+                    };
+                };
+                /** @description The new DRAFT version */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyVersion"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/review-queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Versions awaiting validation or review, oldest first (operator) */
+        get: {
+            parameters: {
+                query?: {
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                    /** @description One status to list; by default SUBMITTED, VALIDATED and IN_REVIEW. */
+                    status?: components["schemas"]["StrategyVersionStatus"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of versions with their listings */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyReviewQueuePage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** An account's sandbox runs (its follows, and simulations of its own listings), newest first, with termination and violations */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of sandbox runs */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategySandboxRunPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/versions/{versionId}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve a version IN_REVIEW and clear it for installs (operator other than the creator; requires step-up) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    versionId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StrategyReviewRequest"];
+                };
+            };
+            responses: {
+                /** @description The version, APPROVED and CLEARED */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyVersion"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/versions/{versionId}/deprecate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retire an APPROVED version; no new installs, and existing installs can no longer be followed (operator; requires step-up) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    versionId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StrategyDeprecateRequest"];
+                };
+            };
+            responses: {
+                /** @description The version, DEPRECATED */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyVersion"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/versions/{versionId}/forks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Fork an APPROVED or DEPRECATED version into a new listing of your own
+         * @description The fork starts at DRAFT and goes through the whole lifecycle again; its provenance names the parent. Leaving out source or manifest takes the parent's as a starting point.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    versionId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StrategyForkRequest"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay of the original answer */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyListingDetail"];
+                    };
+                };
+                /** @description The new listing with its DRAFT version */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyListingDetail"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/versions/{versionId}/moderation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Flag, take down or re-clear a version (operator; requires step-up) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    versionId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StrategyModerationRequest"];
+                };
+            };
+            responses: {
+                /** @description The version with its new moderation state */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyVersion"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/versions/{versionId}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject a SUBMITTED, VALIDATED or IN_REVIEW version (operator other than the creator; requires step-up) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    versionId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StrategyReviewRequest"];
+                };
+            };
+            responses: {
+                /** @description The version, REJECTED with the reason code */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyVersion"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/versions/{versionId}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Take a VALIDATED version into review (operator other than the creator; requires step-up) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    versionId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The version, IN_REVIEW */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyVersion"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/versions/{versionId}/simulations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run one of your built versions against a fixed set of snapshots and record the evaluation
+         * @description A simulation proposes nothing: every run's proposals are counted and kept in the run log, never submitted. At most 20 snapshots per request; the evaluation is reproducible from the dataset version and digests.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    versionId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StrategySimulationRequest"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay of the original answer */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyEvaluation"];
+                    };
+                };
+                /** @description The recorded evaluation (simulated results) */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyEvaluation"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/versions/{versionId}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit one of your DRAFT versions for validation and review */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    versionId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StrategyAccountRequest"];
+                };
+            };
+            responses: {
+                /** @description The version, SUBMITTED */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyVersion"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/versions/{versionId}/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Scan and build a SUBMITTED version (operator; requires step-up)
+         * @description A clean scan and a successful build record the artifact and move the version to VALIDATED; a refused scan, a compile error or a build timeout moves it to REJECTED with the reason. The build holds the version's lock and is bounded by the request's time limit: one that does not finish in time records nothing and leaves the version SUBMITTED. A deployment with no Go toolchain answers UNSUPPORTED.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    versionId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The version and its validation */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyValidationResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+                503: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/assets": {
         parameters: {
             query?: never;
@@ -4121,6 +5192,429 @@ export interface components {
             policy_version?: string;
             reason: string;
             to: string;
+        };
+        StrategyAccountRequest: {
+            account_id: components["schemas"]["UUID"];
+        };
+        /** @enum {string} */
+        StrategyBuildFailure: "SCAN_REJECTED" | "COMPILE_FAILED" | "BUILD_TIMEOUT";
+        /**
+         * @description An exact decimal string with as many fraction digits as its scale (a price or an amount in simulated dollars). Never a JSON number, never rounded.
+         * @example 150.25
+         */
+        StrategyDecimal: string;
+        StrategyDeprecateRequest: {
+            reason: string;
+        };
+        /** @description A simulation against a fixed snapshot set. Simulated results; nothing was proposed or executed. */
+        StrategyEvaluation: {
+            accepted_count: number;
+            created_at?: components["schemas"]["Timestamp"];
+            dataset_version: string;
+            evidence_ref: string;
+            evidence_sha256: string;
+            id: components["schemas"]["UUID"];
+            kind: components["schemas"]["StrategyEvaluationKind"];
+            proposals_count: number;
+            results_digest: string;
+            runs?: components["schemas"]["StrategyEvaluationRun"][];
+            runs_ok: number;
+            snapshots_count: number;
+            snapshots_digest: string;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            version_id: components["schemas"]["UUID"];
+            violations_count: number;
+        };
+        /** @enum {string} */
+        StrategyEvaluationKind: "SIMULATION";
+        StrategyEvaluationRun: {
+            accepted: number;
+            as_of: components["schemas"]["Timestamp"];
+            input_digest: string;
+            proposals: number;
+            run_digest: string;
+            sandbox_run_id: components["schemas"]["UUID"];
+            seq: number;
+            termination: components["schemas"]["StrategyRunTermination"];
+            violations: number;
+        };
+        /** @description Fee METADATA the creator states. Nothing in the marketplace charges a fee. */
+        StrategyFees: {
+            high_water_mark: boolean;
+            management_fee_bps: components["schemas"]["BPS"];
+            performance_fee_bps: components["schemas"]["BPS"];
+        };
+        StrategyFollowIntent: {
+            decision_hash?: string;
+            effect_failure_code?: string;
+            effect_id?: components["schemas"]["UUID"];
+            effect_status?: string;
+            external_ref?: string;
+            intent_id: components["schemas"]["UUID"];
+            kind: string;
+            notional: components["schemas"]["StrategyDecimal"];
+            outcome: components["schemas"]["StrategyFollowOutcome"];
+            proposal_seq: number;
+            risk_decision?: components["schemas"]["AdvancedRiskDecision"];
+        };
+        /** @enum {string} */
+        StrategyFollowOutcome: "DISPATCHED" | "RISK_REJECTED" | "ROUTE_REFUSED" | "DISPATCH_FAILED" | "DISPATCH_UNKNOWN";
+        StrategyFollowRequest: {
+            account_id: components["schemas"]["UUID"];
+            snapshot: components["schemas"]["StrategySnapshot"];
+        };
+        StrategyFollowRun: {
+            accepted_count: number;
+            account_id: components["schemas"]["UUID"];
+            as_of: components["schemas"]["Timestamp"];
+            created_at: components["schemas"]["Timestamp"];
+            equity: components["schemas"]["StrategyDecimal"];
+            evidence_ref: string;
+            evidence_sha256: string;
+            id: components["schemas"]["UUID"];
+            input_digest: string;
+            install_id: components["schemas"]["UUID"];
+            intents: components["schemas"]["StrategyFollowIntent"][];
+            intents_dispatched: number;
+            intents_failed: number;
+            intents_risk_rejected: number;
+            intents_submitted: number;
+            proposals_count: number;
+            /** @description True when this snapshot time was already followed: nothing ran again */
+            replayed?: boolean;
+            run_digest: string;
+            sandbox_run_id: components["schemas"]["UUID"];
+            termination: components["schemas"]["StrategyRunTermination"];
+            trigger: components["schemas"]["StrategyFollowTrigger"];
+            turnover: components["schemas"]["StrategyDecimal"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            version_id: components["schemas"]["UUID"];
+            violations_count: number;
+        };
+        StrategyFollowRunPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["StrategyFollowRun"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @enum {string} */
+        StrategyFollowTrigger: "EXPLICIT" | "SCHEDULED";
+        StrategyForkAncestor: {
+            listing_id: components["schemas"]["UUID"];
+            manifest_hash: string;
+            number: number;
+            source_digest: string;
+            version_id: components["schemas"]["UUID"];
+        };
+        StrategyForkRequest: {
+            account_id: components["schemas"]["UUID"];
+            title: string;
+            version: components["schemas"]["StrategyVersionInput"];
+        };
+        StrategyInstall: {
+            account_id: components["schemas"]["UUID"];
+            created_at: components["schemas"]["Timestamp"];
+            id: components["schemas"]["UUID"];
+            installed_by_actor_type: string;
+            latest_performance?: components["schemas"]["StrategyPerformanceSnapshot"];
+            listing_id: components["schemas"]["UUID"];
+            listing_title: string;
+            mode: components["schemas"]["AdvancedMode"];
+            status: components["schemas"]["StrategyInstallStatus"];
+            strategy_ref: string;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            version_id: components["schemas"]["UUID"];
+            version_moderation: components["schemas"]["StrategyModeration"];
+            version_number: number;
+            version_status: components["schemas"]["StrategyVersionStatus"];
+        };
+        StrategyInstallPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["StrategyInstall"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        StrategyInstallRemoveRequest: {
+            account_id: components["schemas"]["UUID"];
+            reason?: string;
+        };
+        StrategyInstallRequest: {
+            account_id: components["schemas"]["UUID"];
+            mode: components["schemas"]["AdvancedMode"];
+            version_id: components["schemas"]["UUID"];
+        };
+        /** @enum {string} */
+        StrategyInstallStatus: "ACTIVE" | "REMOVED";
+        /**
+         * @description The only intent kinds a strategy may propose: taking and reducing exposure. Moving value out of an account is not a proposable kind.
+         * @enum {string}
+         */
+        StrategyIntentKind: "ACQUIRE_EXPOSURE" | "CLOSE_POSITION" | "OPEN_POSITION" | "REDUCE_EXPOSURE";
+        StrategyListing: {
+            created_at: components["schemas"]["Timestamp"];
+            creator_account_id?: components["schemas"]["UUID"];
+            forked_from_version_id?: components["schemas"]["UUID"];
+            id: components["schemas"]["UUID"];
+            latest_version: components["schemas"]["StrategyVersionSummary"];
+            title: string;
+        };
+        StrategyListingCreateRequest: {
+            account_id: components["schemas"]["UUID"];
+            title: string;
+            version: components["schemas"]["StrategyVersionInput"];
+        };
+        StrategyListingDetail: {
+            created_at: components["schemas"]["Timestamp"];
+            creator_account_id?: components["schemas"]["UUID"];
+            forked_from_version_id?: components["schemas"]["UUID"];
+            id: components["schemas"]["UUID"];
+            title: string;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            /** @description Newest first */
+            versions: components["schemas"]["StrategyVersionDetail"][];
+        };
+        StrategyListingPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["StrategyListing"][];
+        };
+        StrategyManifest: {
+            allowed_instrument_ids: components["schemas"]["UUID"][];
+            allowed_instrument_kinds: components["schemas"]["InstrumentKind"][];
+            allowed_intent_kinds: components["schemas"]["StrategyIntentKind"][];
+            max_intents_per_run: number;
+            max_notional_per_intent: components["schemas"]["StrategyDecimal"];
+            /** Format: int64 */
+            min_interval_seconds: number;
+            schema: string;
+        };
+        /** @description The permissions a version is held to at run time. The server sorts and de-duplicates the lists; the manifest is then hashed and can never change. */
+        StrategyManifestInput: {
+            allowed_instrument_ids?: components["schemas"]["UUID"][];
+            allowed_instrument_kinds?: components["schemas"]["InstrumentKind"][];
+            allowed_intent_kinds: components["schemas"]["StrategyIntentKind"][];
+            max_intents_per_run: number;
+            max_notional_per_intent: components["schemas"]["StrategyDecimal"];
+            /** Format: int64 */
+            min_interval_seconds: number;
+            /** @description nodal.strategy.manifest/v1 when left out */
+            schema?: string;
+        };
+        /** @enum {string} */
+        StrategyModeration: "UNREVIEWED" | "CLEARED" | "FLAGGED" | "TAKEN_DOWN";
+        StrategyModerationRequest: {
+            reason: string;
+            to: components["schemas"]["StrategyModeration"];
+        };
+        /** @description Paper performance computed exactly from a follow history, in basis points. A paper result from caller-supplied snapshots, never a record of money earned or lost. */
+        StrategyPerformanceSnapshot: {
+            computed_at: components["schemas"]["Timestamp"];
+            first_as_of: components["schemas"]["Timestamp"];
+            follow_runs_count: number;
+            history_digest: string;
+            install_id?: components["schemas"]["UUID"];
+            last_as_of: components["schemas"]["Timestamp"];
+            /** Format: int64 */
+            max_drawdown_bps: number;
+            /** Format: int64 */
+            return_bps: number;
+            /** Format: int64 */
+            turnover_bps: number;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            version_id: components["schemas"]["UUID"];
+            /** Format: int64 */
+            volatility_bps: number;
+        };
+        StrategyProvenance: {
+            artifact_digest?: string;
+            dataset_version?: string;
+            evaluation_id?: components["schemas"]["UUID"];
+            /** @description The fork chain, nearest parent first */
+            forked_from: components["schemas"]["StrategyForkAncestor"][];
+            manifest_hash: string;
+            runtime_version?: string;
+            sdk_version?: string;
+            source_commit: string;
+            source_digest: string;
+            strategy_ref: string;
+            toolchain_version?: string;
+        };
+        StrategyReview: {
+            decision: components["schemas"]["StrategyReviewDecision"];
+            note: string;
+            reason_code: string;
+            reviewed_at: components["schemas"]["Timestamp"];
+            /** @description Shown to the creator's account and to operators only */
+            reviewer_actor_id?: string;
+            reviewer_actor_type: string;
+        };
+        /** @enum {string} */
+        StrategyReviewDecision: "APPROVE" | "REJECT";
+        StrategyReviewQueueItem: {
+            creator_account_id: components["schemas"]["UUID"];
+            listing_id: components["schemas"]["UUID"];
+            listing_title: string;
+            version: components["schemas"]["StrategyVersionSummary"];
+        };
+        StrategyReviewQueuePage: components["schemas"]["Page"] & {
+            items: components["schemas"]["StrategyReviewQueueItem"][];
+        };
+        StrategyReviewRequest: {
+            note?: string;
+            reason_code: string;
+        };
+        /** @enum {string} */
+        StrategyRiskClass: "CONSERVATIVE" | "MODERATE" | "AGGRESSIVE" | "SPECULATIVE";
+        /** @enum {string} */
+        StrategyRunSource: "FOLLOW" | "SIMULATION";
+        /** @enum {string} */
+        StrategyRunTermination: "OK" | "TIMEOUT" | "MEMORY_LIMIT" | "OUTPUT_LIMIT" | "TRAP" | "INVALID_OUTPUT" | "KILLED_BY_SWITCH" | "INVALID_MODULE";
+        StrategyRunViolation: {
+            code: string;
+            detail: string;
+            /** @description The output record it concerns; 0 when it concerns no single record */
+            record_seq: number;
+        };
+        StrategySandboxRun: {
+            accepted_count: number;
+            artifact_digest: string;
+            artifact_verified: boolean;
+            created_at: components["schemas"]["Timestamp"];
+            evaluation_id?: components["schemas"]["UUID"];
+            /** Format: int64 */
+            exit_code: number;
+            follow_run_id?: components["schemas"]["UUID"];
+            id: components["schemas"]["UUID"];
+            input_digest: string;
+            limits_version: string;
+            /** Format: int64 */
+            output_bytes: number;
+            output_digest: string;
+            proposals_count: number;
+            run_digest: string;
+            source: components["schemas"]["StrategyRunSource"];
+            strategy_ref: string;
+            termination: components["schemas"]["StrategyRunTermination"];
+            violations: components["schemas"]["StrategyRunViolation"][];
+            violations_count: number;
+            /** Format: int64 */
+            wall_ms: number;
+        };
+        StrategySandboxRunPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["StrategySandboxRun"][];
+        };
+        StrategySimulationRequest: {
+            account_id: components["schemas"]["UUID"];
+            dataset_version: string;
+            snapshots: components["schemas"]["StrategySnapshot"][];
+        };
+        /** @description The market and portfolio snapshot a strategy runs on, supplied by the caller. Prices are simulated dollars per whole base unit; positions are base units; balance is the portfolio's uninvested simulated dollars. It is strategy input only: the risk kernel's sections are read from the database, never from it. */
+        StrategySnapshot: {
+            as_of: components["schemas"]["Timestamp"];
+            instruments: components["schemas"]["StrategySnapshotInstrument"][];
+            portfolio: components["schemas"]["StrategySnapshotPortfolio"];
+        };
+        StrategySnapshotInstrument: {
+            base_decimals: number;
+            best_ask?: components["schemas"]["StrategyDecimal"];
+            best_bid?: components["schemas"]["StrategyDecimal"];
+            closes?: components["schemas"]["StrategyDecimal"][];
+            instrument_id: components["schemas"]["UUID"];
+            kind: components["schemas"]["InstrumentKind"];
+            mark: components["schemas"]["StrategyDecimal"];
+            quote_decimals: number;
+        };
+        StrategySnapshotPortfolio: {
+            balance: components["schemas"]["StrategyDecimal"];
+            positions: components["schemas"]["StrategySnapshotPosition"][];
+        };
+        StrategySnapshotPosition: {
+            instrument_id: components["schemas"]["UUID"];
+            quantity: components["schemas"]["Quantity"];
+        };
+        /** @description A strategy's source: plain file name to file text, one `package main` directory. At most 32 files of at most 65536 bytes each and 262144 bytes in all; every file is scanned before anything is built. */
+        StrategySource: {
+            [key: string]: string;
+        };
+        StrategyValidation: {
+            artifact_digest?: string;
+            failure_reason?: components["schemas"]["StrategyBuildFailure"];
+            outcome: components["schemas"]["StrategyValidationOutcome"];
+            runtime_version: string;
+            scan_codes: string[];
+            sdk_version: string;
+            toolchain_version: string;
+        };
+        /** @enum {string} */
+        StrategyValidationOutcome: "PASSED" | "FAILED";
+        StrategyValidationResult: {
+            validation: components["schemas"]["StrategyValidation"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            version: components["schemas"]["StrategyVersion"];
+        };
+        StrategyVersion: {
+            backtest_evidence_ref: string;
+            config: {
+                [key: string]: string;
+            };
+            created_at: components["schemas"]["Timestamp"];
+            /** @description Shown to the creator's account and to operators only */
+            created_by_actor_id?: string;
+            created_by_actor_type: string;
+            data_dependencies: string[];
+            description: string;
+            fees: components["schemas"]["StrategyFees"];
+            id: components["schemas"]["UUID"];
+            listing_id: components["schemas"]["UUID"];
+            manifest: components["schemas"]["StrategyManifest"];
+            manifest_hash: string;
+            moderation: components["schemas"]["StrategyModeration"];
+            number: number;
+            rejection_code?: string;
+            risk_class: components["schemas"]["StrategyRiskClass"];
+            source_commit: string;
+            source_digest: string;
+            status: components["schemas"]["StrategyVersionStatus"];
+            strategy_ref: string;
+            supported_instrument_ids: components["schemas"]["UUID"][];
+            updated_at: components["schemas"]["Timestamp"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        StrategyVersionCreateRequest: {
+            account_id: components["schemas"]["UUID"];
+            version: components["schemas"]["StrategyVersionInput"];
+        };
+        StrategyVersionDetail: components["schemas"]["StrategyVersion"] & {
+            evaluations: components["schemas"]["StrategyEvaluation"][];
+            performance: components["schemas"]["StrategyPerformanceSnapshot"][];
+            provenance: components["schemas"]["StrategyProvenance"];
+            reviews: components["schemas"]["StrategyReview"][];
+            validation?: components["schemas"]["StrategyValidation"];
+        };
+        /** @description The content of a version. A new listing and a new version need a manifest and source; a fork without them takes the parent's. */
+        StrategyVersionInput: {
+            backtest_evidence_ref?: string;
+            config?: {
+                [key: string]: string;
+            };
+            data_dependencies?: string[];
+            description: string;
+            fees?: components["schemas"]["StrategyFees"];
+            manifest?: components["schemas"]["StrategyManifestInput"];
+            risk_class: components["schemas"]["StrategyRiskClass"];
+            source?: components["schemas"]["StrategySource"];
+            source_commit: string;
+            supported_instrument_ids?: components["schemas"]["UUID"][];
+        };
+        /** @enum {string} */
+        StrategyVersionStatus: "DRAFT" | "SUBMITTED" | "VALIDATED" | "IN_REVIEW" | "APPROVED" | "REJECTED" | "DEPRECATED";
+        StrategyVersionSummary: {
+            created_at: components["schemas"]["Timestamp"];
+            description: string;
+            id: components["schemas"]["UUID"];
+            listing_id: components["schemas"]["UUID"];
+            moderation: components["schemas"]["StrategyModeration"];
+            number: number;
+            rejection_code?: string;
+            risk_class: components["schemas"]["StrategyRiskClass"];
+            status: components["schemas"]["StrategyVersionStatus"];
+            /** @description <listing id>@<version>, how intents name the version */
+            strategy_ref: string;
+            updated_at: components["schemas"]["Timestamp"];
         };
         StreamEvent: {
             data?: {

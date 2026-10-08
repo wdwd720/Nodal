@@ -187,6 +187,9 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		// >>> advanced:predmarket path parameters
 
 		// >>> advanced:marketplace path parameters
+		"{listingId}": testSessionID,
+		"{versionId}": testSessionID,
+		"{installId}": testSessionID,
 
 		// >>> advanced:delegation path parameters
 
@@ -225,6 +228,10 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		// >>> advanced:predmarket required query
 
 		// >>> advanced:marketplace required query
+		"/v1/advanced/strategies/listings": "account_id=" + testAccountID.String(),
+		"/v1/advanced/strategies/installs": "account_id=" + testAccountID.String(),
+		"/v1/advanced/strategies/follows":  "account_id=" + testAccountID.String(),
+		"/v1/advanced/strategies/runs":     "account_id=" + testAccountID.String(),
 
 		// >>> advanced:delegation required query
 

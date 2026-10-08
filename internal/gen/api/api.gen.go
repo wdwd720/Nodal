@@ -1705,6 +1705,300 @@ func (e StartDepositRequestFiatCurrency) Valid() bool {
 	}
 }
 
+// Defines values for StrategyBuildFailure.
+const (
+	StrategyBuildCompileFailed StrategyBuildFailure = "COMPILE_FAILED"
+	StrategyBuildScanRejected  StrategyBuildFailure = "SCAN_REJECTED"
+	StrategyBuildTimeout       StrategyBuildFailure = "BUILD_TIMEOUT"
+)
+
+// Valid indicates whether the value is a known member of the StrategyBuildFailure enum.
+func (e StrategyBuildFailure) Valid() bool {
+	switch e {
+	case StrategyBuildCompileFailed:
+		return true
+	case StrategyBuildScanRejected:
+		return true
+	case StrategyBuildTimeout:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StrategyEvaluationKind.
+const (
+	StrategyEvaluationSimulation StrategyEvaluationKind = "SIMULATION"
+)
+
+// Valid indicates whether the value is a known member of the StrategyEvaluationKind enum.
+func (e StrategyEvaluationKind) Valid() bool {
+	switch e {
+	case StrategyEvaluationSimulation:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StrategyFollowOutcome.
+const (
+	StrategyOutcomeDispatchFailed  StrategyFollowOutcome = "DISPATCH_FAILED"
+	StrategyOutcomeDispatchUnknown StrategyFollowOutcome = "DISPATCH_UNKNOWN"
+	StrategyOutcomeDispatched      StrategyFollowOutcome = "DISPATCHED"
+	StrategyOutcomeRiskRejected    StrategyFollowOutcome = "RISK_REJECTED"
+	StrategyOutcomeRouteRefused    StrategyFollowOutcome = "ROUTE_REFUSED"
+)
+
+// Valid indicates whether the value is a known member of the StrategyFollowOutcome enum.
+func (e StrategyFollowOutcome) Valid() bool {
+	switch e {
+	case StrategyOutcomeDispatchFailed:
+		return true
+	case StrategyOutcomeDispatchUnknown:
+		return true
+	case StrategyOutcomeDispatched:
+		return true
+	case StrategyOutcomeRiskRejected:
+		return true
+	case StrategyOutcomeRouteRefused:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StrategyFollowTrigger.
+const (
+	StrategyFollowExplicit  StrategyFollowTrigger = "EXPLICIT"
+	StrategyFollowScheduled StrategyFollowTrigger = "SCHEDULED"
+)
+
+// Valid indicates whether the value is a known member of the StrategyFollowTrigger enum.
+func (e StrategyFollowTrigger) Valid() bool {
+	switch e {
+	case StrategyFollowExplicit:
+		return true
+	case StrategyFollowScheduled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StrategyInstallStatus.
+const (
+	StrategyInstallActive  StrategyInstallStatus = "ACTIVE"
+	StrategyInstallRemoved StrategyInstallStatus = "REMOVED"
+)
+
+// Valid indicates whether the value is a known member of the StrategyInstallStatus enum.
+func (e StrategyInstallStatus) Valid() bool {
+	switch e {
+	case StrategyInstallActive:
+		return true
+	case StrategyInstallRemoved:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StrategyIntentKind.
+const (
+	StrategyKindAcquireExposure StrategyIntentKind = "ACQUIRE_EXPOSURE"
+	StrategyKindClosePosition   StrategyIntentKind = "CLOSE_POSITION"
+	StrategyKindOpenPosition    StrategyIntentKind = "OPEN_POSITION"
+	StrategyKindReduceExposure  StrategyIntentKind = "REDUCE_EXPOSURE"
+)
+
+// Valid indicates whether the value is a known member of the StrategyIntentKind enum.
+func (e StrategyIntentKind) Valid() bool {
+	switch e {
+	case StrategyKindAcquireExposure:
+		return true
+	case StrategyKindClosePosition:
+		return true
+	case StrategyKindOpenPosition:
+		return true
+	case StrategyKindReduceExposure:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StrategyModeration.
+const (
+	StrategyModerationCleared    StrategyModeration = "CLEARED"
+	StrategyModerationFlagged    StrategyModeration = "FLAGGED"
+	StrategyModerationTakenDown  StrategyModeration = "TAKEN_DOWN"
+	StrategyModerationUnreviewed StrategyModeration = "UNREVIEWED"
+)
+
+// Valid indicates whether the value is a known member of the StrategyModeration enum.
+func (e StrategyModeration) Valid() bool {
+	switch e {
+	case StrategyModerationCleared:
+		return true
+	case StrategyModerationFlagged:
+		return true
+	case StrategyModerationTakenDown:
+		return true
+	case StrategyModerationUnreviewed:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StrategyReviewDecision.
+const (
+	StrategyReviewApprove StrategyReviewDecision = "APPROVE"
+	StrategyReviewReject  StrategyReviewDecision = "REJECT"
+)
+
+// Valid indicates whether the value is a known member of the StrategyReviewDecision enum.
+func (e StrategyReviewDecision) Valid() bool {
+	switch e {
+	case StrategyReviewApprove:
+		return true
+	case StrategyReviewReject:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StrategyRiskClass.
+const (
+	StrategyRiskAggressive   StrategyRiskClass = "AGGRESSIVE"
+	StrategyRiskConservative StrategyRiskClass = "CONSERVATIVE"
+	StrategyRiskModerate     StrategyRiskClass = "MODERATE"
+	StrategyRiskSpeculative  StrategyRiskClass = "SPECULATIVE"
+)
+
+// Valid indicates whether the value is a known member of the StrategyRiskClass enum.
+func (e StrategyRiskClass) Valid() bool {
+	switch e {
+	case StrategyRiskAggressive:
+		return true
+	case StrategyRiskConservative:
+		return true
+	case StrategyRiskModerate:
+		return true
+	case StrategyRiskSpeculative:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StrategyRunSource.
+const (
+	StrategyRunSourceFollow     StrategyRunSource = "FOLLOW"
+	StrategyRunSourceSimulation StrategyRunSource = "SIMULATION"
+)
+
+// Valid indicates whether the value is a known member of the StrategyRunSource enum.
+func (e StrategyRunSource) Valid() bool {
+	switch e {
+	case StrategyRunSourceFollow:
+		return true
+	case StrategyRunSourceSimulation:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StrategyRunTermination.
+const (
+	StrategyRunInvalidModule  StrategyRunTermination = "INVALID_MODULE"
+	StrategyRunInvalidOutput  StrategyRunTermination = "INVALID_OUTPUT"
+	StrategyRunKilledBySwitch StrategyRunTermination = "KILLED_BY_SWITCH"
+	StrategyRunMemoryLimit    StrategyRunTermination = "MEMORY_LIMIT"
+	StrategyRunOk             StrategyRunTermination = "OK"
+	StrategyRunOutputLimit    StrategyRunTermination = "OUTPUT_LIMIT"
+	StrategyRunTimeout        StrategyRunTermination = "TIMEOUT"
+	StrategyRunTrap           StrategyRunTermination = "TRAP"
+)
+
+// Valid indicates whether the value is a known member of the StrategyRunTermination enum.
+func (e StrategyRunTermination) Valid() bool {
+	switch e {
+	case StrategyRunInvalidModule:
+		return true
+	case StrategyRunInvalidOutput:
+		return true
+	case StrategyRunKilledBySwitch:
+		return true
+	case StrategyRunMemoryLimit:
+		return true
+	case StrategyRunOk:
+		return true
+	case StrategyRunOutputLimit:
+		return true
+	case StrategyRunTimeout:
+		return true
+	case StrategyRunTrap:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StrategyValidationOutcome.
+const (
+	StrategyValidationFailed StrategyValidationOutcome = "FAILED"
+	StrategyValidationPassed StrategyValidationOutcome = "PASSED"
+)
+
+// Valid indicates whether the value is a known member of the StrategyValidationOutcome enum.
+func (e StrategyValidationOutcome) Valid() bool {
+	switch e {
+	case StrategyValidationFailed:
+		return true
+	case StrategyValidationPassed:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StrategyVersionStatus.
+const (
+	StrategyStatusApproved   StrategyVersionStatus = "APPROVED"
+	StrategyStatusDeprecated StrategyVersionStatus = "DEPRECATED"
+	StrategyStatusDraft      StrategyVersionStatus = "DRAFT"
+	StrategyStatusInReview   StrategyVersionStatus = "IN_REVIEW"
+	StrategyStatusRejected   StrategyVersionStatus = "REJECTED"
+	StrategyStatusSubmitted  StrategyVersionStatus = "SUBMITTED"
+	StrategyStatusValidated  StrategyVersionStatus = "VALIDATED"
+)
+
+// Valid indicates whether the value is a known member of the StrategyVersionStatus enum.
+func (e StrategyVersionStatus) Valid() bool {
+	switch e {
+	case StrategyStatusApproved:
+		return true
+	case StrategyStatusDeprecated:
+		return true
+	case StrategyStatusDraft:
+		return true
+	case StrategyStatusInReview:
+		return true
+	case StrategyStatusRejected:
+		return true
+	case StrategyStatusSubmitted:
+		return true
+	case StrategyStatusValidated:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SubmitIntentRequestMode.
 const (
 	SubmitIntentRequestModeLIVE  SubmitIntentRequestMode = "LIVE"
@@ -4116,6 +4410,708 @@ type StatusChange struct {
 	To            string  `json:"to"`
 }
 
+// StrategyAccountRequest defines model for StrategyAccountRequest.
+type StrategyAccountRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+}
+
+// StrategyBuildFailure defines model for StrategyBuildFailure.
+type StrategyBuildFailure string
+
+// StrategyDecimal An exact decimal string with as many fraction digits as its scale (a price or an amount in simulated dollars). Never a JSON number, never rounded.
+//
+// Examples: 150.25
+type StrategyDecimal = string
+
+// StrategyDeprecateRequest defines model for StrategyDeprecateRequest.
+type StrategyDeprecateRequest struct {
+	Reason string `json:"reason"`
+}
+
+// StrategyEvaluation A simulation against a fixed snapshot set. Simulated results; nothing was proposed or executed.
+type StrategyEvaluation struct {
+	AcceptedCount  int        `json:"accepted_count"`
+	CreatedAt      *Timestamp `json:"created_at,omitempty"`
+	DatasetVersion string     `json:"dataset_version"`
+	EvidenceRef    string     `json:"evidence_ref"`
+	EvidenceSha256 string     `json:"evidence_sha256"`
+
+	// Id UUIDv7 in canonical form
+	Id              UUID                     `json:"id"`
+	Kind            StrategyEvaluationKind   `json:"kind"`
+	ProposalsCount  int                      `json:"proposals_count"`
+	ResultsDigest   string                   `json:"results_digest"`
+	Runs            *[]StrategyEvaluationRun `json:"runs,omitempty"`
+	RunsOk          int                      `json:"runs_ok"`
+	SnapshotsCount  int                      `json:"snapshots_count"`
+	SnapshotsDigest string                   `json:"snapshots_digest"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+
+	// VersionId UUIDv7 in canonical form
+	VersionId       UUID `json:"version_id"`
+	ViolationsCount int  `json:"violations_count"`
+}
+
+// StrategyEvaluationKind defines model for StrategyEvaluationKind.
+type StrategyEvaluationKind string
+
+// StrategyEvaluationRun defines model for StrategyEvaluationRun.
+type StrategyEvaluationRun struct {
+	Accepted    int       `json:"accepted"`
+	AsOf        Timestamp `json:"as_of"`
+	InputDigest string    `json:"input_digest"`
+	Proposals   int       `json:"proposals"`
+	RunDigest   string    `json:"run_digest"`
+
+	// SandboxRunId UUIDv7 in canonical form
+	SandboxRunId UUID                   `json:"sandbox_run_id"`
+	Seq          int                    `json:"seq"`
+	Termination  StrategyRunTermination `json:"termination"`
+	Violations   int                    `json:"violations"`
+}
+
+// StrategyFees Fee METADATA the creator states. Nothing in the marketplace charges a fee.
+type StrategyFees struct {
+	HighWaterMark bool `json:"high_water_mark"`
+
+	// ManagementFeeBps Basis points; 10000 == 100%
+	ManagementFeeBps BPS `json:"management_fee_bps"`
+
+	// PerformanceFeeBps Basis points; 10000 == 100%
+	PerformanceFeeBps BPS `json:"performance_fee_bps"`
+}
+
+// StrategyFollowIntent defines model for StrategyFollowIntent.
+type StrategyFollowIntent struct {
+	DecisionHash      *string `json:"decision_hash,omitempty"`
+	EffectFailureCode *string `json:"effect_failure_code,omitempty"`
+
+	// EffectId UUIDv7 in canonical form
+	EffectId     *UUID   `json:"effect_id,omitempty"`
+	EffectStatus *string `json:"effect_status,omitempty"`
+	ExternalRef  *string `json:"external_ref,omitempty"`
+
+	// IntentId UUIDv7 in canonical form
+	IntentId UUID   `json:"intent_id"`
+	Kind     string `json:"kind"`
+
+	// Notional An exact decimal string with as many fraction digits as its scale (a price or an amount in simulated dollars). Never a JSON number, never rounded.
+	//
+	// Examples: 150.25
+	Notional     StrategyDecimal       `json:"notional"`
+	Outcome      StrategyFollowOutcome `json:"outcome"`
+	ProposalSeq  int                   `json:"proposal_seq"`
+	RiskDecision *AdvancedRiskDecision `json:"risk_decision,omitempty"`
+}
+
+// StrategyFollowOutcome defines model for StrategyFollowOutcome.
+type StrategyFollowOutcome string
+
+// StrategyFollowRequest defines model for StrategyFollowRequest.
+type StrategyFollowRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// Snapshot The market and portfolio snapshot a strategy runs on, supplied by the caller. Prices are simulated dollars per whole base unit; positions are base units; balance is the portfolio's uninvested simulated dollars. It is strategy input only: the risk kernel's sections are read from the database, never from it.
+	Snapshot StrategySnapshot `json:"snapshot"`
+}
+
+// StrategyFollowRun defines model for StrategyFollowRun.
+type StrategyFollowRun struct {
+	AcceptedCount int `json:"accepted_count"`
+
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID      `json:"account_id"`
+	AsOf      Timestamp `json:"as_of"`
+	CreatedAt Timestamp `json:"created_at"`
+
+	// Equity An exact decimal string with as many fraction digits as its scale (a price or an amount in simulated dollars). Never a JSON number, never rounded.
+	//
+	// Examples: 150.25
+	Equity         StrategyDecimal `json:"equity"`
+	EvidenceRef    string          `json:"evidence_ref"`
+	EvidenceSha256 string          `json:"evidence_sha256"`
+
+	// Id UUIDv7 in canonical form
+	Id          UUID   `json:"id"`
+	InputDigest string `json:"input_digest"`
+
+	// InstallId UUIDv7 in canonical form
+	InstallId           UUID                   `json:"install_id"`
+	Intents             []StrategyFollowIntent `json:"intents"`
+	IntentsDispatched   int                    `json:"intents_dispatched"`
+	IntentsFailed       int                    `json:"intents_failed"`
+	IntentsRiskRejected int                    `json:"intents_risk_rejected"`
+	IntentsSubmitted    int                    `json:"intents_submitted"`
+	ProposalsCount      int                    `json:"proposals_count"`
+
+	// Replayed True when this snapshot time was already followed: nothing ran again
+	Replayed  *bool  `json:"replayed,omitempty"`
+	RunDigest string `json:"run_digest"`
+
+	// SandboxRunId UUIDv7 in canonical form
+	SandboxRunId UUID                   `json:"sandbox_run_id"`
+	Termination  StrategyRunTermination `json:"termination"`
+	Trigger      StrategyFollowTrigger  `json:"trigger"`
+
+	// Turnover An exact decimal string with as many fraction digits as its scale (a price or an amount in simulated dollars). Never a JSON number, never rounded.
+	//
+	// Examples: 150.25
+	Turnover StrategyDecimal `json:"turnover"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+
+	// VersionId UUIDv7 in canonical form
+	VersionId       UUID `json:"version_id"`
+	ViolationsCount int  `json:"violations_count"`
+}
+
+// StrategyFollowRunPage defines model for StrategyFollowRunPage.
+type StrategyFollowRunPage struct {
+	Items      []StrategyFollowRun       `json:"items"`
+	NextCursor nullable.Nullable[string] `json:"next_cursor"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// StrategyFollowTrigger defines model for StrategyFollowTrigger.
+type StrategyFollowTrigger string
+
+// StrategyForkAncestor defines model for StrategyForkAncestor.
+type StrategyForkAncestor struct {
+	// ListingId UUIDv7 in canonical form
+	ListingId    UUID   `json:"listing_id"`
+	ManifestHash string `json:"manifest_hash"`
+	Number       int    `json:"number"`
+	SourceDigest string `json:"source_digest"`
+
+	// VersionId UUIDv7 in canonical form
+	VersionId UUID `json:"version_id"`
+}
+
+// StrategyForkRequest defines model for StrategyForkRequest.
+type StrategyForkRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID   `json:"account_id"`
+	Title     string `json:"title"`
+
+	// Version The content of a version. A new listing and a new version need a manifest and source; a fork without them takes the parent's.
+	Version StrategyVersionInput `json:"version"`
+}
+
+// StrategyInstall defines model for StrategyInstall.
+type StrategyInstall struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID      `json:"account_id"`
+	CreatedAt Timestamp `json:"created_at"`
+
+	// Id UUIDv7 in canonical form
+	Id                   UUID   `json:"id"`
+	InstalledByActorType string `json:"installed_by_actor_type"`
+
+	// LatestPerformance Paper performance computed exactly from a follow history, in basis points. A paper result from caller-supplied snapshots, never a record of money earned or lost.
+	LatestPerformance *StrategyPerformanceSnapshot `json:"latest_performance,omitempty"`
+
+	// ListingId UUIDv7 in canonical form
+	ListingId    UUID                  `json:"listing_id"`
+	ListingTitle string                `json:"listing_title"`
+	Mode         AdvancedMode          `json:"mode"`
+	Status       StrategyInstallStatus `json:"status"`
+	StrategyRef  string                `json:"strategy_ref"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+
+	// VersionId UUIDv7 in canonical form
+	VersionId         UUID                  `json:"version_id"`
+	VersionModeration StrategyModeration    `json:"version_moderation"`
+	VersionNumber     int                   `json:"version_number"`
+	VersionStatus     StrategyVersionStatus `json:"version_status"`
+}
+
+// StrategyInstallPage defines model for StrategyInstallPage.
+type StrategyInstallPage struct {
+	Items      []StrategyInstall         `json:"items"`
+	NextCursor nullable.Nullable[string] `json:"next_cursor"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// StrategyInstallRemoveRequest defines model for StrategyInstallRemoveRequest.
+type StrategyInstallRemoveRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID    `json:"account_id"`
+	Reason    *string `json:"reason,omitempty"`
+}
+
+// StrategyInstallRequest defines model for StrategyInstallRequest.
+type StrategyInstallRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID         `json:"account_id"`
+	Mode      AdvancedMode `json:"mode"`
+
+	// VersionId UUIDv7 in canonical form
+	VersionId UUID `json:"version_id"`
+}
+
+// StrategyInstallStatus defines model for StrategyInstallStatus.
+type StrategyInstallStatus string
+
+// StrategyIntentKind The only intent kinds a strategy may propose: taking and reducing exposure. Moving value out of an account is not a proposable kind.
+type StrategyIntentKind string
+
+// StrategyListing defines model for StrategyListing.
+type StrategyListing struct {
+	CreatedAt Timestamp `json:"created_at"`
+
+	// CreatorAccountId UUIDv7 in canonical form
+	CreatorAccountId *UUID `json:"creator_account_id,omitempty"`
+
+	// ForkedFromVersionId UUIDv7 in canonical form
+	ForkedFromVersionId *UUID `json:"forked_from_version_id,omitempty"`
+
+	// Id UUIDv7 in canonical form
+	Id            UUID                   `json:"id"`
+	LatestVersion StrategyVersionSummary `json:"latest_version"`
+	Title         string                 `json:"title"`
+}
+
+// StrategyListingCreateRequest defines model for StrategyListingCreateRequest.
+type StrategyListingCreateRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID   `json:"account_id"`
+	Title     string `json:"title"`
+
+	// Version The content of a version. A new listing and a new version need a manifest and source; a fork without them takes the parent's.
+	Version StrategyVersionInput `json:"version"`
+}
+
+// StrategyListingDetail defines model for StrategyListingDetail.
+type StrategyListingDetail struct {
+	CreatedAt Timestamp `json:"created_at"`
+
+	// CreatorAccountId UUIDv7 in canonical form
+	CreatorAccountId *UUID `json:"creator_account_id,omitempty"`
+
+	// ForkedFromVersionId UUIDv7 in canonical form
+	ForkedFromVersionId *UUID `json:"forked_from_version_id,omitempty"`
+
+	// Id UUIDv7 in canonical form
+	Id    UUID   `json:"id"`
+	Title string `json:"title"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+
+	// Versions Newest first
+	Versions []StrategyVersionDetail `json:"versions"`
+}
+
+// StrategyListingPage defines model for StrategyListingPage.
+type StrategyListingPage struct {
+	Items      []StrategyListing         `json:"items"`
+	NextCursor nullable.Nullable[string] `json:"next_cursor"`
+}
+
+// StrategyManifest defines model for StrategyManifest.
+type StrategyManifest struct {
+	AllowedInstrumentIds   []UUID               `json:"allowed_instrument_ids"`
+	AllowedInstrumentKinds []InstrumentKind     `json:"allowed_instrument_kinds"`
+	AllowedIntentKinds     []StrategyIntentKind `json:"allowed_intent_kinds"`
+	MaxIntentsPerRun       int                  `json:"max_intents_per_run"`
+
+	// MaxNotionalPerIntent An exact decimal string with as many fraction digits as its scale (a price or an amount in simulated dollars). Never a JSON number, never rounded.
+	//
+	// Examples: 150.25
+	MaxNotionalPerIntent StrategyDecimal `json:"max_notional_per_intent"`
+	MinIntervalSeconds   int64           `json:"min_interval_seconds"`
+	Schema               string          `json:"schema"`
+}
+
+// StrategyManifestInput The permissions a version is held to at run time. The server sorts and de-duplicates the lists; the manifest is then hashed and can never change.
+type StrategyManifestInput struct {
+	AllowedInstrumentIds   *[]UUID              `json:"allowed_instrument_ids,omitempty"`
+	AllowedInstrumentKinds *[]InstrumentKind    `json:"allowed_instrument_kinds,omitempty"`
+	AllowedIntentKinds     []StrategyIntentKind `json:"allowed_intent_kinds"`
+	MaxIntentsPerRun       int                  `json:"max_intents_per_run"`
+
+	// MaxNotionalPerIntent An exact decimal string with as many fraction digits as its scale (a price or an amount in simulated dollars). Never a JSON number, never rounded.
+	//
+	// Examples: 150.25
+	MaxNotionalPerIntent StrategyDecimal `json:"max_notional_per_intent"`
+	MinIntervalSeconds   int64           `json:"min_interval_seconds"`
+
+	// Schema nodal.strategy.manifest/v1 when left out
+	Schema *string `json:"schema,omitempty"`
+}
+
+// StrategyModeration defines model for StrategyModeration.
+type StrategyModeration string
+
+// StrategyModerationRequest defines model for StrategyModerationRequest.
+type StrategyModerationRequest struct {
+	Reason string             `json:"reason"`
+	To     StrategyModeration `json:"to"`
+}
+
+// StrategyPerformanceSnapshot Paper performance computed exactly from a follow history, in basis points. A paper result from caller-supplied snapshots, never a record of money earned or lost.
+type StrategyPerformanceSnapshot struct {
+	ComputedAt      Timestamp `json:"computed_at"`
+	FirstAsOf       Timestamp `json:"first_as_of"`
+	FollowRunsCount int       `json:"follow_runs_count"`
+	HistoryDigest   string    `json:"history_digest"`
+
+	// InstallId UUIDv7 in canonical form
+	InstallId      *UUID     `json:"install_id,omitempty"`
+	LastAsOf       Timestamp `json:"last_as_of"`
+	MaxDrawdownBps int64     `json:"max_drawdown_bps"`
+	ReturnBps      int64     `json:"return_bps"`
+	TurnoverBps    int64     `json:"turnover_bps"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+
+	// VersionId UUIDv7 in canonical form
+	VersionId     UUID  `json:"version_id"`
+	VolatilityBps int64 `json:"volatility_bps"`
+}
+
+// StrategyProvenance defines model for StrategyProvenance.
+type StrategyProvenance struct {
+	ArtifactDigest *string `json:"artifact_digest,omitempty"`
+	DatasetVersion *string `json:"dataset_version,omitempty"`
+
+	// EvaluationId UUIDv7 in canonical form
+	EvaluationId *UUID `json:"evaluation_id,omitempty"`
+
+	// ForkedFrom The fork chain, nearest parent first
+	ForkedFrom       []StrategyForkAncestor `json:"forked_from"`
+	ManifestHash     string                 `json:"manifest_hash"`
+	RuntimeVersion   *string                `json:"runtime_version,omitempty"`
+	SdkVersion       *string                `json:"sdk_version,omitempty"`
+	SourceCommit     string                 `json:"source_commit"`
+	SourceDigest     string                 `json:"source_digest"`
+	StrategyRef      string                 `json:"strategy_ref"`
+	ToolchainVersion *string                `json:"toolchain_version,omitempty"`
+}
+
+// StrategyReview defines model for StrategyReview.
+type StrategyReview struct {
+	Decision   StrategyReviewDecision `json:"decision"`
+	Note       string                 `json:"note"`
+	ReasonCode string                 `json:"reason_code"`
+	ReviewedAt Timestamp              `json:"reviewed_at"`
+
+	// ReviewerActorId Shown to the creator's account and to operators only
+	ReviewerActorId   *string `json:"reviewer_actor_id,omitempty"`
+	ReviewerActorType string  `json:"reviewer_actor_type"`
+}
+
+// StrategyReviewDecision defines model for StrategyReviewDecision.
+type StrategyReviewDecision string
+
+// StrategyReviewQueueItem defines model for StrategyReviewQueueItem.
+type StrategyReviewQueueItem struct {
+	// CreatorAccountId UUIDv7 in canonical form
+	CreatorAccountId UUID `json:"creator_account_id"`
+
+	// ListingId UUIDv7 in canonical form
+	ListingId    UUID                   `json:"listing_id"`
+	ListingTitle string                 `json:"listing_title"`
+	Version      StrategyVersionSummary `json:"version"`
+}
+
+// StrategyReviewQueuePage defines model for StrategyReviewQueuePage.
+type StrategyReviewQueuePage struct {
+	Items      []StrategyReviewQueueItem `json:"items"`
+	NextCursor nullable.Nullable[string] `json:"next_cursor"`
+}
+
+// StrategyReviewRequest defines model for StrategyReviewRequest.
+type StrategyReviewRequest struct {
+	Note       *string `json:"note,omitempty"`
+	ReasonCode string  `json:"reason_code"`
+}
+
+// StrategyRiskClass defines model for StrategyRiskClass.
+type StrategyRiskClass string
+
+// StrategyRunSource defines model for StrategyRunSource.
+type StrategyRunSource string
+
+// StrategyRunTermination defines model for StrategyRunTermination.
+type StrategyRunTermination string
+
+// StrategyRunViolation defines model for StrategyRunViolation.
+type StrategyRunViolation struct {
+	Code   string `json:"code"`
+	Detail string `json:"detail"`
+
+	// RecordSeq The output record it concerns; 0 when it concerns no single record
+	RecordSeq int `json:"record_seq"`
+}
+
+// StrategySandboxRun defines model for StrategySandboxRun.
+type StrategySandboxRun struct {
+	AcceptedCount    int       `json:"accepted_count"`
+	ArtifactDigest   string    `json:"artifact_digest"`
+	ArtifactVerified bool      `json:"artifact_verified"`
+	CreatedAt        Timestamp `json:"created_at"`
+
+	// EvaluationId UUIDv7 in canonical form
+	EvaluationId *UUID `json:"evaluation_id,omitempty"`
+	ExitCode     int64 `json:"exit_code"`
+
+	// FollowRunId UUIDv7 in canonical form
+	FollowRunId *UUID `json:"follow_run_id,omitempty"`
+
+	// Id UUIDv7 in canonical form
+	Id              UUID                   `json:"id"`
+	InputDigest     string                 `json:"input_digest"`
+	LimitsVersion   string                 `json:"limits_version"`
+	OutputBytes     int64                  `json:"output_bytes"`
+	OutputDigest    string                 `json:"output_digest"`
+	ProposalsCount  int                    `json:"proposals_count"`
+	RunDigest       string                 `json:"run_digest"`
+	Source          StrategyRunSource      `json:"source"`
+	StrategyRef     string                 `json:"strategy_ref"`
+	Termination     StrategyRunTermination `json:"termination"`
+	Violations      []StrategyRunViolation `json:"violations"`
+	ViolationsCount int                    `json:"violations_count"`
+	WallMs          int64                  `json:"wall_ms"`
+}
+
+// StrategySandboxRunPage defines model for StrategySandboxRunPage.
+type StrategySandboxRunPage struct {
+	Items      []StrategySandboxRun      `json:"items"`
+	NextCursor nullable.Nullable[string] `json:"next_cursor"`
+}
+
+// StrategySimulationRequest defines model for StrategySimulationRequest.
+type StrategySimulationRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId      UUID               `json:"account_id"`
+	DatasetVersion string             `json:"dataset_version"`
+	Snapshots      []StrategySnapshot `json:"snapshots"`
+}
+
+// StrategySnapshot The market and portfolio snapshot a strategy runs on, supplied by the caller. Prices are simulated dollars per whole base unit; positions are base units; balance is the portfolio's uninvested simulated dollars. It is strategy input only: the risk kernel's sections are read from the database, never from it.
+type StrategySnapshot struct {
+	AsOf        Timestamp                    `json:"as_of"`
+	Instruments []StrategySnapshotInstrument `json:"instruments"`
+	Portfolio   StrategySnapshotPortfolio    `json:"portfolio"`
+}
+
+// StrategySnapshotInstrument defines model for StrategySnapshotInstrument.
+type StrategySnapshotInstrument struct {
+	BaseDecimals int `json:"base_decimals"`
+
+	// BestAsk An exact decimal string with as many fraction digits as its scale (a price or an amount in simulated dollars). Never a JSON number, never rounded.
+	//
+	// Examples: 150.25
+	BestAsk *StrategyDecimal `json:"best_ask,omitempty"`
+
+	// BestBid An exact decimal string with as many fraction digits as its scale (a price or an amount in simulated dollars). Never a JSON number, never rounded.
+	//
+	// Examples: 150.25
+	BestBid *StrategyDecimal   `json:"best_bid,omitempty"`
+	Closes  *[]StrategyDecimal `json:"closes,omitempty"`
+
+	// InstrumentId UUIDv7 in canonical form
+	InstrumentId UUID           `json:"instrument_id"`
+	Kind         InstrumentKind `json:"kind"`
+
+	// Mark An exact decimal string with as many fraction digits as its scale (a price or an amount in simulated dollars). Never a JSON number, never rounded.
+	//
+	// Examples: 150.25
+	Mark          StrategyDecimal `json:"mark"`
+	QuoteDecimals int             `json:"quote_decimals"`
+}
+
+// StrategySnapshotPortfolio defines model for StrategySnapshotPortfolio.
+type StrategySnapshotPortfolio struct {
+	// Balance An exact decimal string with as many fraction digits as its scale (a price or an amount in simulated dollars). Never a JSON number, never rounded.
+	//
+	// Examples: 150.25
+	Balance   StrategyDecimal            `json:"balance"`
+	Positions []StrategySnapshotPosition `json:"positions"`
+}
+
+// StrategySnapshotPosition defines model for StrategySnapshotPosition.
+type StrategySnapshotPosition struct {
+	// InstrumentId UUIDv7 in canonical form
+	InstrumentId UUID `json:"instrument_id"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity Quantity `json:"quantity"`
+}
+
+// StrategySource A strategy's source: plain file name to file text, one `package main` directory. At most 32 files of at most 65536 bytes each and 262144 bytes in all; every file is scanned before anything is built.
+type StrategySource map[string]string
+
+// StrategyValidation defines model for StrategyValidation.
+type StrategyValidation struct {
+	ArtifactDigest   *string                   `json:"artifact_digest,omitempty"`
+	FailureReason    *StrategyBuildFailure     `json:"failure_reason,omitempty"`
+	Outcome          StrategyValidationOutcome `json:"outcome"`
+	RuntimeVersion   string                    `json:"runtime_version"`
+	ScanCodes        []string                  `json:"scan_codes"`
+	SdkVersion       string                    `json:"sdk_version"`
+	ToolchainVersion string                    `json:"toolchain_version"`
+}
+
+// StrategyValidationOutcome defines model for StrategyValidationOutcome.
+type StrategyValidationOutcome string
+
+// StrategyValidationResult defines model for StrategyValidationResult.
+type StrategyValidationResult struct {
+	Validation StrategyValidation `json:"validation"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+	Version     StrategyVersion      `json:"version"`
+}
+
+// StrategyVersion defines model for StrategyVersion.
+type StrategyVersion struct {
+	BacktestEvidenceRef string            `json:"backtest_evidence_ref"`
+	Config              map[string]string `json:"config"`
+	CreatedAt           Timestamp         `json:"created_at"`
+
+	// CreatedByActorId Shown to the creator's account and to operators only
+	CreatedByActorId   *string  `json:"created_by_actor_id,omitempty"`
+	CreatedByActorType string   `json:"created_by_actor_type"`
+	DataDependencies   []string `json:"data_dependencies"`
+	Description        string   `json:"description"`
+
+	// Fees Fee METADATA the creator states. Nothing in the marketplace charges a fee.
+	Fees StrategyFees `json:"fees"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// ListingId UUIDv7 in canonical form
+	ListingId              UUID                  `json:"listing_id"`
+	Manifest               StrategyManifest      `json:"manifest"`
+	ManifestHash           string                `json:"manifest_hash"`
+	Moderation             StrategyModeration    `json:"moderation"`
+	Number                 int                   `json:"number"`
+	RejectionCode          *string               `json:"rejection_code,omitempty"`
+	RiskClass              StrategyRiskClass     `json:"risk_class"`
+	SourceCommit           string                `json:"source_commit"`
+	SourceDigest           string                `json:"source_digest"`
+	Status                 StrategyVersionStatus `json:"status"`
+	StrategyRef            string                `json:"strategy_ref"`
+	SupportedInstrumentIds []UUID                `json:"supported_instrument_ids"`
+	UpdatedAt              Timestamp             `json:"updated_at"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// StrategyVersionCreateRequest defines model for StrategyVersionCreateRequest.
+type StrategyVersionCreateRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// Version The content of a version. A new listing and a new version need a manifest and source; a fork without them takes the parent's.
+	Version StrategyVersionInput `json:"version"`
+}
+
+// StrategyVersionDetail defines model for StrategyVersionDetail.
+type StrategyVersionDetail struct {
+	BacktestEvidenceRef string            `json:"backtest_evidence_ref"`
+	Config              map[string]string `json:"config"`
+	CreatedAt           Timestamp         `json:"created_at"`
+
+	// CreatedByActorId Shown to the creator's account and to operators only
+	CreatedByActorId   *string              `json:"created_by_actor_id,omitempty"`
+	CreatedByActorType string               `json:"created_by_actor_type"`
+	DataDependencies   []string             `json:"data_dependencies"`
+	Description        string               `json:"description"`
+	Evaluations        []StrategyEvaluation `json:"evaluations"`
+
+	// Fees Fee METADATA the creator states. Nothing in the marketplace charges a fee.
+	Fees StrategyFees `json:"fees"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// ListingId UUIDv7 in canonical form
+	ListingId              UUID                          `json:"listing_id"`
+	Manifest               StrategyManifest              `json:"manifest"`
+	ManifestHash           string                        `json:"manifest_hash"`
+	Moderation             StrategyModeration            `json:"moderation"`
+	Number                 int                           `json:"number"`
+	Performance            []StrategyPerformanceSnapshot `json:"performance"`
+	Provenance             StrategyProvenance            `json:"provenance"`
+	RejectionCode          *string                       `json:"rejection_code,omitempty"`
+	Reviews                []StrategyReview              `json:"reviews"`
+	RiskClass              StrategyRiskClass             `json:"risk_class"`
+	SourceCommit           string                        `json:"source_commit"`
+	SourceDigest           string                        `json:"source_digest"`
+	Status                 StrategyVersionStatus         `json:"status"`
+	StrategyRef            string                        `json:"strategy_ref"`
+	SupportedInstrumentIds []UUID                        `json:"supported_instrument_ids"`
+	UpdatedAt              Timestamp                     `json:"updated_at"`
+	Validation             *StrategyValidation           `json:"validation,omitempty"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// StrategyVersionInput The content of a version. A new listing and a new version need a manifest and source; a fork without them takes the parent's.
+type StrategyVersionInput struct {
+	BacktestEvidenceRef *string            `json:"backtest_evidence_ref,omitempty"`
+	Config              *map[string]string `json:"config,omitempty"`
+	DataDependencies    *[]string          `json:"data_dependencies,omitempty"`
+	Description         string             `json:"description"`
+
+	// Fees Fee METADATA the creator states. Nothing in the marketplace charges a fee.
+	Fees *StrategyFees `json:"fees,omitempty"`
+
+	// Manifest The permissions a version is held to at run time. The server sorts and de-duplicates the lists; the manifest is then hashed and can never change.
+	Manifest  *StrategyManifestInput `json:"manifest,omitempty"`
+	RiskClass StrategyRiskClass      `json:"risk_class"`
+
+	// Source A strategy's source: plain file name to file text, one `package main` directory. At most 32 files of at most 65536 bytes each and 262144 bytes in all; every file is scanned before anything is built.
+	Source                 *StrategySource `json:"source,omitempty"`
+	SourceCommit           string          `json:"source_commit"`
+	SupportedInstrumentIds *[]UUID         `json:"supported_instrument_ids,omitempty"`
+}
+
+// StrategyVersionStatus defines model for StrategyVersionStatus.
+type StrategyVersionStatus string
+
+// StrategyVersionSummary defines model for StrategyVersionSummary.
+type StrategyVersionSummary struct {
+	CreatedAt   Timestamp `json:"created_at"`
+	Description string    `json:"description"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// ListingId UUIDv7 in canonical form
+	ListingId     UUID                  `json:"listing_id"`
+	Moderation    StrategyModeration    `json:"moderation"`
+	Number        int                   `json:"number"`
+	RejectionCode *string               `json:"rejection_code,omitempty"`
+	RiskClass     StrategyRiskClass     `json:"risk_class"`
+	Status        StrategyVersionStatus `json:"status"`
+
+	// StrategyRef <listing id>@<version>, how intents name the version
+	StrategyRef string    `json:"strategy_ref"`
+	UpdatedAt   Timestamp `json:"updated_at"`
+}
+
 // SubmitIntentRequest defines model for SubmitIntentRequest.
 type SubmitIntentRequest struct {
 	// AccountId UUIDv7 in canonical form
@@ -4540,6 +5536,139 @@ type GetAdvancedRiskDecisionsParams struct {
 	Limit     *Limit `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// GetAdvancedStrategiesCatalogParams defines parameters for GetAdvancedStrategiesCatalog.
+type GetAdvancedStrategiesCatalogParams struct {
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetAdvancedStrategiesFollowsParams defines parameters for GetAdvancedStrategiesFollows.
+type GetAdvancedStrategiesFollowsParams struct {
+	AccountId UUID    `form:"account_id" json:"account_id"`
+	InstallId *UUID   `form:"install_id,omitempty" json:"install_id,omitempty"`
+	Cursor    *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit     *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetAdvancedStrategiesInstallsParams defines parameters for GetAdvancedStrategiesInstalls.
+type GetAdvancedStrategiesInstallsParams struct {
+	AccountId UUID    `form:"account_id" json:"account_id"`
+	Cursor    *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit     *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PostAdvancedStrategiesInstallsParams defines parameters for PostAdvancedStrategiesInstalls.
+type PostAdvancedStrategiesInstallsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedStrategiesInstallsInstallIdFollowsParams defines parameters for PostAdvancedStrategiesInstallsInstallIdFollows.
+type PostAdvancedStrategiesInstallsInstallIdFollowsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedStrategiesInstallsInstallIdPerformanceParams defines parameters for PostAdvancedStrategiesInstallsInstallIdPerformance.
+type PostAdvancedStrategiesInstallsInstallIdPerformanceParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedStrategiesInstallsInstallIdRemoveParams defines parameters for PostAdvancedStrategiesInstallsInstallIdRemove.
+type PostAdvancedStrategiesInstallsInstallIdRemoveParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetAdvancedStrategiesListingsParams defines parameters for GetAdvancedStrategiesListings.
+type GetAdvancedStrategiesListingsParams struct {
+	AccountId UUID    `form:"account_id" json:"account_id"`
+	Cursor    *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit     *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PostAdvancedStrategiesListingsParams defines parameters for PostAdvancedStrategiesListings.
+type PostAdvancedStrategiesListingsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedStrategiesListingsListingIdVersionsParams defines parameters for PostAdvancedStrategiesListingsListingIdVersions.
+type PostAdvancedStrategiesListingsListingIdVersionsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetAdvancedStrategiesReviewQueueParams defines parameters for GetAdvancedStrategiesReviewQueue.
+type GetAdvancedStrategiesReviewQueueParams struct {
+	// Status One status to list; by default SUBMITTED, VALIDATED and IN_REVIEW.
+	Status *StrategyVersionStatus `form:"status,omitempty" json:"status,omitempty"`
+	Cursor *Cursor                `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit                 `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetAdvancedStrategiesRunsParams defines parameters for GetAdvancedStrategiesRuns.
+type GetAdvancedStrategiesRunsParams struct {
+	AccountId UUID    `form:"account_id" json:"account_id"`
+	Cursor    *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit     *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PostAdvancedStrategiesVersionsVersionIdApproveParams defines parameters for PostAdvancedStrategiesVersionsVersionIdApprove.
+type PostAdvancedStrategiesVersionsVersionIdApproveParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedStrategiesVersionsVersionIdDeprecateParams defines parameters for PostAdvancedStrategiesVersionsVersionIdDeprecate.
+type PostAdvancedStrategiesVersionsVersionIdDeprecateParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedStrategiesVersionsVersionIdForksParams defines parameters for PostAdvancedStrategiesVersionsVersionIdForks.
+type PostAdvancedStrategiesVersionsVersionIdForksParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedStrategiesVersionsVersionIdModerationParams defines parameters for PostAdvancedStrategiesVersionsVersionIdModeration.
+type PostAdvancedStrategiesVersionsVersionIdModerationParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedStrategiesVersionsVersionIdRejectParams defines parameters for PostAdvancedStrategiesVersionsVersionIdReject.
+type PostAdvancedStrategiesVersionsVersionIdRejectParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedStrategiesVersionsVersionIdReviewParams defines parameters for PostAdvancedStrategiesVersionsVersionIdReview.
+type PostAdvancedStrategiesVersionsVersionIdReviewParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedStrategiesVersionsVersionIdSimulationsParams defines parameters for PostAdvancedStrategiesVersionsVersionIdSimulations.
+type PostAdvancedStrategiesVersionsVersionIdSimulationsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedStrategiesVersionsVersionIdSubmitParams defines parameters for PostAdvancedStrategiesVersionsVersionIdSubmit.
+type PostAdvancedStrategiesVersionsVersionIdSubmitParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedStrategiesVersionsVersionIdValidateParams defines parameters for PostAdvancedStrategiesVersionsVersionIdValidate.
+type PostAdvancedStrategiesVersionsVersionIdValidateParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // GetAuthCallbackParams defines parameters for GetAuthCallback.
 type GetAuthCallbackParams struct {
 	Code  string `form:"code" json:"code"`
@@ -4743,6 +5872,45 @@ type PostAdminKillSwitchesJSONRequestBody = KillSwitchRequest
 // PostAdminReconciliationRecordsRecordIdResolveJSONRequestBody defines body for PostAdminReconciliationRecordsRecordIdResolve for application/json ContentType.
 type PostAdminReconciliationRecordsRecordIdResolveJSONRequestBody = ReconciliationResolution
 
+// PostAdvancedStrategiesInstallsJSONRequestBody defines body for PostAdvancedStrategiesInstalls for application/json ContentType.
+type PostAdvancedStrategiesInstallsJSONRequestBody = StrategyInstallRequest
+
+// PostAdvancedStrategiesInstallsInstallIdFollowsJSONRequestBody defines body for PostAdvancedStrategiesInstallsInstallIdFollows for application/json ContentType.
+type PostAdvancedStrategiesInstallsInstallIdFollowsJSONRequestBody = StrategyFollowRequest
+
+// PostAdvancedStrategiesInstallsInstallIdPerformanceJSONRequestBody defines body for PostAdvancedStrategiesInstallsInstallIdPerformance for application/json ContentType.
+type PostAdvancedStrategiesInstallsInstallIdPerformanceJSONRequestBody = StrategyAccountRequest
+
+// PostAdvancedStrategiesInstallsInstallIdRemoveJSONRequestBody defines body for PostAdvancedStrategiesInstallsInstallIdRemove for application/json ContentType.
+type PostAdvancedStrategiesInstallsInstallIdRemoveJSONRequestBody = StrategyInstallRemoveRequest
+
+// PostAdvancedStrategiesListingsJSONRequestBody defines body for PostAdvancedStrategiesListings for application/json ContentType.
+type PostAdvancedStrategiesListingsJSONRequestBody = StrategyListingCreateRequest
+
+// PostAdvancedStrategiesListingsListingIdVersionsJSONRequestBody defines body for PostAdvancedStrategiesListingsListingIdVersions for application/json ContentType.
+type PostAdvancedStrategiesListingsListingIdVersionsJSONRequestBody = StrategyVersionCreateRequest
+
+// PostAdvancedStrategiesVersionsVersionIdApproveJSONRequestBody defines body for PostAdvancedStrategiesVersionsVersionIdApprove for application/json ContentType.
+type PostAdvancedStrategiesVersionsVersionIdApproveJSONRequestBody = StrategyReviewRequest
+
+// PostAdvancedStrategiesVersionsVersionIdDeprecateJSONRequestBody defines body for PostAdvancedStrategiesVersionsVersionIdDeprecate for application/json ContentType.
+type PostAdvancedStrategiesVersionsVersionIdDeprecateJSONRequestBody = StrategyDeprecateRequest
+
+// PostAdvancedStrategiesVersionsVersionIdForksJSONRequestBody defines body for PostAdvancedStrategiesVersionsVersionIdForks for application/json ContentType.
+type PostAdvancedStrategiesVersionsVersionIdForksJSONRequestBody = StrategyForkRequest
+
+// PostAdvancedStrategiesVersionsVersionIdModerationJSONRequestBody defines body for PostAdvancedStrategiesVersionsVersionIdModeration for application/json ContentType.
+type PostAdvancedStrategiesVersionsVersionIdModerationJSONRequestBody = StrategyModerationRequest
+
+// PostAdvancedStrategiesVersionsVersionIdRejectJSONRequestBody defines body for PostAdvancedStrategiesVersionsVersionIdReject for application/json ContentType.
+type PostAdvancedStrategiesVersionsVersionIdRejectJSONRequestBody = StrategyReviewRequest
+
+// PostAdvancedStrategiesVersionsVersionIdSimulationsJSONRequestBody defines body for PostAdvancedStrategiesVersionsVersionIdSimulations for application/json ContentType.
+type PostAdvancedStrategiesVersionsVersionIdSimulationsJSONRequestBody = StrategySimulationRequest
+
+// PostAdvancedStrategiesVersionsVersionIdSubmitJSONRequestBody defines body for PostAdvancedStrategiesVersionsVersionIdSubmit for application/json ContentType.
+type PostAdvancedStrategiesVersionsVersionIdSubmitJSONRequestBody = StrategyAccountRequest
+
 // PostFundingDepositsJSONRequestBody defines body for PostFundingDeposits for application/json ContentType.
 type PostFundingDepositsJSONRequestBody = StartDepositRequest
 
@@ -4877,6 +6045,72 @@ type ServerInterface interface {
 	// GetAdvancedRiskDecisions Risk Kernel V2 decisions about an account's intents, newest first
 	// (GET /advanced/risk/decisions)
 	GetAdvancedRiskDecisions(w http.ResponseWriter, r *http.Request, params GetAdvancedRiskDecisionsParams)
+	// GetAdvancedStrategiesCatalog Approved strategy listings (an APPROVED, CLEARED version each), newest first
+	// (GET /advanced/strategies/catalog)
+	GetAdvancedStrategiesCatalog(w http.ResponseWriter, r *http.Request, params GetAdvancedStrategiesCatalogParams)
+	// GetAdvancedStrategiesFollows An account's paper-follow runs, newest first, with the intents each produced and their Risk V2 decisions
+	// (GET /advanced/strategies/follows)
+	GetAdvancedStrategiesFollows(w http.ResponseWriter, r *http.Request, params GetAdvancedStrategiesFollowsParams)
+	// GetAdvancedStrategiesInstalls An account's installs, newest first, each with its latest paper performance snapshot
+	// (GET /advanced/strategies/installs)
+	GetAdvancedStrategiesInstalls(w http.ResponseWriter, r *http.Request, params GetAdvancedStrategiesInstallsParams)
+	// PostAdvancedStrategiesInstalls Install an APPROVED, CLEARED version for one of your accounts, in PAPER mode only
+	// (POST /advanced/strategies/installs)
+	PostAdvancedStrategiesInstalls(w http.ResponseWriter, r *http.Request, params PostAdvancedStrategiesInstallsParams)
+	// PostAdvancedStrategiesInstallsInstallIdFollows Paper-follow one of your installs on one market snapshot
+	// (POST /advanced/strategies/installs/{installId}/follows)
+	PostAdvancedStrategiesInstallsInstallIdFollows(w http.ResponseWriter, r *http.Request, installId UUID, params PostAdvancedStrategiesInstallsInstallIdFollowsParams)
+	// PostAdvancedStrategiesInstallsInstallIdPerformance Compute and record the paper performance of one of your installs from its follow history
+	// (POST /advanced/strategies/installs/{installId}/performance)
+	PostAdvancedStrategiesInstallsInstallIdPerformance(w http.ResponseWriter, r *http.Request, installId UUID, params PostAdvancedStrategiesInstallsInstallIdPerformanceParams)
+	// PostAdvancedStrategiesInstallsInstallIdRemove Remove one of your ACTIVE installs
+	// (POST /advanced/strategies/installs/{installId}/remove)
+	PostAdvancedStrategiesInstallsInstallIdRemove(w http.ResponseWriter, r *http.Request, installId UUID, params PostAdvancedStrategiesInstallsInstallIdRemoveParams)
+	// GetAdvancedStrategiesListings The listings an account created, in every status, newest first
+	// (GET /advanced/strategies/listings)
+	GetAdvancedStrategiesListings(w http.ResponseWriter, r *http.Request, params GetAdvancedStrategiesListingsParams)
+	// PostAdvancedStrategiesListings Create a listing with its first version, in DRAFT
+	// (POST /advanced/strategies/listings)
+	PostAdvancedStrategiesListings(w http.ResponseWriter, r *http.Request, params PostAdvancedStrategiesListingsParams)
+	// GetAdvancedStrategiesListingsListingId One listing with its versions, validations, reviews, provenance, evaluations and paper performance
+	// (GET /advanced/strategies/listings/{listingId})
+	GetAdvancedStrategiesListingsListingId(w http.ResponseWriter, r *http.Request, listingId UUID)
+	// PostAdvancedStrategiesListingsListingIdVersions Publish the next version of one of your listings, in DRAFT
+	// (POST /advanced/strategies/listings/{listingId}/versions)
+	PostAdvancedStrategiesListingsListingIdVersions(w http.ResponseWriter, r *http.Request, listingId UUID, params PostAdvancedStrategiesListingsListingIdVersionsParams)
+	// GetAdvancedStrategiesReviewQueue Versions awaiting validation or review, oldest first (operator)
+	// (GET /advanced/strategies/review-queue)
+	GetAdvancedStrategiesReviewQueue(w http.ResponseWriter, r *http.Request, params GetAdvancedStrategiesReviewQueueParams)
+	// GetAdvancedStrategiesRuns An account's sandbox runs (its follows, and simulations of its own listings), newest first, with termination and violations
+	// (GET /advanced/strategies/runs)
+	GetAdvancedStrategiesRuns(w http.ResponseWriter, r *http.Request, params GetAdvancedStrategiesRunsParams)
+	// PostAdvancedStrategiesVersionsVersionIdApprove Approve a version IN_REVIEW and clear it for installs (operator other than the creator; requires step-up)
+	// (POST /advanced/strategies/versions/{versionId}/approve)
+	PostAdvancedStrategiesVersionsVersionIdApprove(w http.ResponseWriter, r *http.Request, versionId UUID, params PostAdvancedStrategiesVersionsVersionIdApproveParams)
+	// PostAdvancedStrategiesVersionsVersionIdDeprecate Retire an APPROVED version; no new installs, and existing installs can no longer be followed (operator; requires step-up)
+	// (POST /advanced/strategies/versions/{versionId}/deprecate)
+	PostAdvancedStrategiesVersionsVersionIdDeprecate(w http.ResponseWriter, r *http.Request, versionId UUID, params PostAdvancedStrategiesVersionsVersionIdDeprecateParams)
+	// PostAdvancedStrategiesVersionsVersionIdForks Fork an APPROVED or DEPRECATED version into a new listing of your own
+	// (POST /advanced/strategies/versions/{versionId}/forks)
+	PostAdvancedStrategiesVersionsVersionIdForks(w http.ResponseWriter, r *http.Request, versionId UUID, params PostAdvancedStrategiesVersionsVersionIdForksParams)
+	// PostAdvancedStrategiesVersionsVersionIdModeration Flag, take down or re-clear a version (operator; requires step-up)
+	// (POST /advanced/strategies/versions/{versionId}/moderation)
+	PostAdvancedStrategiesVersionsVersionIdModeration(w http.ResponseWriter, r *http.Request, versionId UUID, params PostAdvancedStrategiesVersionsVersionIdModerationParams)
+	// PostAdvancedStrategiesVersionsVersionIdReject Reject a SUBMITTED, VALIDATED or IN_REVIEW version (operator other than the creator; requires step-up)
+	// (POST /advanced/strategies/versions/{versionId}/reject)
+	PostAdvancedStrategiesVersionsVersionIdReject(w http.ResponseWriter, r *http.Request, versionId UUID, params PostAdvancedStrategiesVersionsVersionIdRejectParams)
+	// PostAdvancedStrategiesVersionsVersionIdReview Take a VALIDATED version into review (operator other than the creator; requires step-up)
+	// (POST /advanced/strategies/versions/{versionId}/review)
+	PostAdvancedStrategiesVersionsVersionIdReview(w http.ResponseWriter, r *http.Request, versionId UUID, params PostAdvancedStrategiesVersionsVersionIdReviewParams)
+	// PostAdvancedStrategiesVersionsVersionIdSimulations Run one of your built versions against a fixed set of snapshots and record the evaluation
+	// (POST /advanced/strategies/versions/{versionId}/simulations)
+	PostAdvancedStrategiesVersionsVersionIdSimulations(w http.ResponseWriter, r *http.Request, versionId UUID, params PostAdvancedStrategiesVersionsVersionIdSimulationsParams)
+	// PostAdvancedStrategiesVersionsVersionIdSubmit Submit one of your DRAFT versions for validation and review
+	// (POST /advanced/strategies/versions/{versionId}/submit)
+	PostAdvancedStrategiesVersionsVersionIdSubmit(w http.ResponseWriter, r *http.Request, versionId UUID, params PostAdvancedStrategiesVersionsVersionIdSubmitParams)
+	// PostAdvancedStrategiesVersionsVersionIdValidate Scan and build a SUBMITTED version (operator; requires step-up)
+	// (POST /advanced/strategies/versions/{versionId}/validate)
+	PostAdvancedStrategiesVersionsVersionIdValidate(w http.ResponseWriter, r *http.Request, versionId UUID, params PostAdvancedStrategiesVersionsVersionIdValidateParams)
 	// GetAssets Registered assets with chain, mint, decimals and safety status
 	// (GET /assets)
 	GetAssets(w http.ResponseWriter, r *http.Request)
@@ -5186,6 +6420,138 @@ func (_ Unimplemented) GetAdvancedIntentsIntentId(w http.ResponseWriter, r *http
 // GetAdvancedRiskDecisions Risk Kernel V2 decisions about an account's intents, newest first
 // (GET /advanced/risk/decisions)
 func (_ Unimplemented) GetAdvancedRiskDecisions(w http.ResponseWriter, r *http.Request, params GetAdvancedRiskDecisionsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedStrategiesCatalog Approved strategy listings (an APPROVED, CLEARED version each), newest first
+// (GET /advanced/strategies/catalog)
+func (_ Unimplemented) GetAdvancedStrategiesCatalog(w http.ResponseWriter, r *http.Request, params GetAdvancedStrategiesCatalogParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedStrategiesFollows An account's paper-follow runs, newest first, with the intents each produced and their Risk V2 decisions
+// (GET /advanced/strategies/follows)
+func (_ Unimplemented) GetAdvancedStrategiesFollows(w http.ResponseWriter, r *http.Request, params GetAdvancedStrategiesFollowsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedStrategiesInstalls An account's installs, newest first, each with its latest paper performance snapshot
+// (GET /advanced/strategies/installs)
+func (_ Unimplemented) GetAdvancedStrategiesInstalls(w http.ResponseWriter, r *http.Request, params GetAdvancedStrategiesInstallsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedStrategiesInstalls Install an APPROVED, CLEARED version for one of your accounts, in PAPER mode only
+// (POST /advanced/strategies/installs)
+func (_ Unimplemented) PostAdvancedStrategiesInstalls(w http.ResponseWriter, r *http.Request, params PostAdvancedStrategiesInstallsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedStrategiesInstallsInstallIdFollows Paper-follow one of your installs on one market snapshot
+// (POST /advanced/strategies/installs/{installId}/follows)
+func (_ Unimplemented) PostAdvancedStrategiesInstallsInstallIdFollows(w http.ResponseWriter, r *http.Request, installId UUID, params PostAdvancedStrategiesInstallsInstallIdFollowsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedStrategiesInstallsInstallIdPerformance Compute and record the paper performance of one of your installs from its follow history
+// (POST /advanced/strategies/installs/{installId}/performance)
+func (_ Unimplemented) PostAdvancedStrategiesInstallsInstallIdPerformance(w http.ResponseWriter, r *http.Request, installId UUID, params PostAdvancedStrategiesInstallsInstallIdPerformanceParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedStrategiesInstallsInstallIdRemove Remove one of your ACTIVE installs
+// (POST /advanced/strategies/installs/{installId}/remove)
+func (_ Unimplemented) PostAdvancedStrategiesInstallsInstallIdRemove(w http.ResponseWriter, r *http.Request, installId UUID, params PostAdvancedStrategiesInstallsInstallIdRemoveParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedStrategiesListings The listings an account created, in every status, newest first
+// (GET /advanced/strategies/listings)
+func (_ Unimplemented) GetAdvancedStrategiesListings(w http.ResponseWriter, r *http.Request, params GetAdvancedStrategiesListingsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedStrategiesListings Create a listing with its first version, in DRAFT
+// (POST /advanced/strategies/listings)
+func (_ Unimplemented) PostAdvancedStrategiesListings(w http.ResponseWriter, r *http.Request, params PostAdvancedStrategiesListingsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedStrategiesListingsListingId One listing with its versions, validations, reviews, provenance, evaluations and paper performance
+// (GET /advanced/strategies/listings/{listingId})
+func (_ Unimplemented) GetAdvancedStrategiesListingsListingId(w http.ResponseWriter, r *http.Request, listingId UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedStrategiesListingsListingIdVersions Publish the next version of one of your listings, in DRAFT
+// (POST /advanced/strategies/listings/{listingId}/versions)
+func (_ Unimplemented) PostAdvancedStrategiesListingsListingIdVersions(w http.ResponseWriter, r *http.Request, listingId UUID, params PostAdvancedStrategiesListingsListingIdVersionsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedStrategiesReviewQueue Versions awaiting validation or review, oldest first (operator)
+// (GET /advanced/strategies/review-queue)
+func (_ Unimplemented) GetAdvancedStrategiesReviewQueue(w http.ResponseWriter, r *http.Request, params GetAdvancedStrategiesReviewQueueParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedStrategiesRuns An account's sandbox runs (its follows, and simulations of its own listings), newest first, with termination and violations
+// (GET /advanced/strategies/runs)
+func (_ Unimplemented) GetAdvancedStrategiesRuns(w http.ResponseWriter, r *http.Request, params GetAdvancedStrategiesRunsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedStrategiesVersionsVersionIdApprove Approve a version IN_REVIEW and clear it for installs (operator other than the creator; requires step-up)
+// (POST /advanced/strategies/versions/{versionId}/approve)
+func (_ Unimplemented) PostAdvancedStrategiesVersionsVersionIdApprove(w http.ResponseWriter, r *http.Request, versionId UUID, params PostAdvancedStrategiesVersionsVersionIdApproveParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedStrategiesVersionsVersionIdDeprecate Retire an APPROVED version; no new installs, and existing installs can no longer be followed (operator; requires step-up)
+// (POST /advanced/strategies/versions/{versionId}/deprecate)
+func (_ Unimplemented) PostAdvancedStrategiesVersionsVersionIdDeprecate(w http.ResponseWriter, r *http.Request, versionId UUID, params PostAdvancedStrategiesVersionsVersionIdDeprecateParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedStrategiesVersionsVersionIdForks Fork an APPROVED or DEPRECATED version into a new listing of your own
+// (POST /advanced/strategies/versions/{versionId}/forks)
+func (_ Unimplemented) PostAdvancedStrategiesVersionsVersionIdForks(w http.ResponseWriter, r *http.Request, versionId UUID, params PostAdvancedStrategiesVersionsVersionIdForksParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedStrategiesVersionsVersionIdModeration Flag, take down or re-clear a version (operator; requires step-up)
+// (POST /advanced/strategies/versions/{versionId}/moderation)
+func (_ Unimplemented) PostAdvancedStrategiesVersionsVersionIdModeration(w http.ResponseWriter, r *http.Request, versionId UUID, params PostAdvancedStrategiesVersionsVersionIdModerationParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedStrategiesVersionsVersionIdReject Reject a SUBMITTED, VALIDATED or IN_REVIEW version (operator other than the creator; requires step-up)
+// (POST /advanced/strategies/versions/{versionId}/reject)
+func (_ Unimplemented) PostAdvancedStrategiesVersionsVersionIdReject(w http.ResponseWriter, r *http.Request, versionId UUID, params PostAdvancedStrategiesVersionsVersionIdRejectParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedStrategiesVersionsVersionIdReview Take a VALIDATED version into review (operator other than the creator; requires step-up)
+// (POST /advanced/strategies/versions/{versionId}/review)
+func (_ Unimplemented) PostAdvancedStrategiesVersionsVersionIdReview(w http.ResponseWriter, r *http.Request, versionId UUID, params PostAdvancedStrategiesVersionsVersionIdReviewParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedStrategiesVersionsVersionIdSimulations Run one of your built versions against a fixed set of snapshots and record the evaluation
+// (POST /advanced/strategies/versions/{versionId}/simulations)
+func (_ Unimplemented) PostAdvancedStrategiesVersionsVersionIdSimulations(w http.ResponseWriter, r *http.Request, versionId UUID, params PostAdvancedStrategiesVersionsVersionIdSimulationsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedStrategiesVersionsVersionIdSubmit Submit one of your DRAFT versions for validation and review
+// (POST /advanced/strategies/versions/{versionId}/submit)
+func (_ Unimplemented) PostAdvancedStrategiesVersionsVersionIdSubmit(w http.ResponseWriter, r *http.Request, versionId UUID, params PostAdvancedStrategiesVersionsVersionIdSubmitParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedStrategiesVersionsVersionIdValidate Scan and build a SUBMITTED version (operator; requires step-up)
+// (POST /advanced/strategies/versions/{versionId}/validate)
+func (_ Unimplemented) PostAdvancedStrategiesVersionsVersionIdValidate(w http.ResponseWriter, r *http.Request, versionId UUID, params PostAdvancedStrategiesVersionsVersionIdValidateParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -6665,6 +8031,1178 @@ func (siw *ServerInterfaceWrapper) GetAdvancedRiskDecisions(w http.ResponseWrite
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetAdvancedRiskDecisions(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedStrategiesCatalog operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedStrategiesCatalog(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedStrategiesCatalogParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedStrategiesCatalog(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedStrategiesFollows operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedStrategiesFollows(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedStrategiesFollowsParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "install_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "install_id", r.URL.Query(), &params.InstallId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "install_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "install_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedStrategiesFollows(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedStrategiesInstalls operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedStrategiesInstalls(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedStrategiesInstallsParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedStrategiesInstalls(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedStrategiesInstalls operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedStrategiesInstalls(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedStrategiesInstallsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedStrategiesInstalls(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedStrategiesInstallsInstallIdFollows operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedStrategiesInstallsInstallIdFollows(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "installId" -------------
+	var installId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "installId", chi.URLParam(r, "installId"), &installId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "installId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedStrategiesInstallsInstallIdFollowsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedStrategiesInstallsInstallIdFollows(w, r, installId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedStrategiesInstallsInstallIdPerformance operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedStrategiesInstallsInstallIdPerformance(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "installId" -------------
+	var installId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "installId", chi.URLParam(r, "installId"), &installId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "installId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedStrategiesInstallsInstallIdPerformanceParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedStrategiesInstallsInstallIdPerformance(w, r, installId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedStrategiesInstallsInstallIdRemove operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedStrategiesInstallsInstallIdRemove(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "installId" -------------
+	var installId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "installId", chi.URLParam(r, "installId"), &installId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "installId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedStrategiesInstallsInstallIdRemoveParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedStrategiesInstallsInstallIdRemove(w, r, installId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedStrategiesListings operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedStrategiesListings(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedStrategiesListingsParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedStrategiesListings(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedStrategiesListings operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedStrategiesListings(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedStrategiesListingsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedStrategiesListings(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedStrategiesListingsListingId operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedStrategiesListingsListingId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "listingId" -------------
+	var listingId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "listingId", chi.URLParam(r, "listingId"), &listingId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "listingId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedStrategiesListingsListingId(w, r, listingId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedStrategiesListingsListingIdVersions operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedStrategiesListingsListingIdVersions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "listingId" -------------
+	var listingId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "listingId", chi.URLParam(r, "listingId"), &listingId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "listingId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedStrategiesListingsListingIdVersionsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedStrategiesListingsListingIdVersions(w, r, listingId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedStrategiesReviewQueue operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedStrategiesReviewQueue(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedStrategiesReviewQueueParams
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedStrategiesReviewQueue(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedStrategiesRuns operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedStrategiesRuns(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedStrategiesRunsParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedStrategiesRuns(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedStrategiesVersionsVersionIdApprove operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedStrategiesVersionsVersionIdApprove(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "versionId" -------------
+	var versionId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "versionId", chi.URLParam(r, "versionId"), &versionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "versionId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedStrategiesVersionsVersionIdApproveParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedStrategiesVersionsVersionIdApprove(w, r, versionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedStrategiesVersionsVersionIdDeprecate operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedStrategiesVersionsVersionIdDeprecate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "versionId" -------------
+	var versionId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "versionId", chi.URLParam(r, "versionId"), &versionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "versionId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedStrategiesVersionsVersionIdDeprecateParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedStrategiesVersionsVersionIdDeprecate(w, r, versionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedStrategiesVersionsVersionIdForks operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedStrategiesVersionsVersionIdForks(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "versionId" -------------
+	var versionId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "versionId", chi.URLParam(r, "versionId"), &versionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "versionId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedStrategiesVersionsVersionIdForksParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedStrategiesVersionsVersionIdForks(w, r, versionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedStrategiesVersionsVersionIdModeration operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedStrategiesVersionsVersionIdModeration(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "versionId" -------------
+	var versionId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "versionId", chi.URLParam(r, "versionId"), &versionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "versionId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedStrategiesVersionsVersionIdModerationParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedStrategiesVersionsVersionIdModeration(w, r, versionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedStrategiesVersionsVersionIdReject operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedStrategiesVersionsVersionIdReject(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "versionId" -------------
+	var versionId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "versionId", chi.URLParam(r, "versionId"), &versionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "versionId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedStrategiesVersionsVersionIdRejectParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedStrategiesVersionsVersionIdReject(w, r, versionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedStrategiesVersionsVersionIdReview operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedStrategiesVersionsVersionIdReview(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "versionId" -------------
+	var versionId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "versionId", chi.URLParam(r, "versionId"), &versionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "versionId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedStrategiesVersionsVersionIdReviewParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedStrategiesVersionsVersionIdReview(w, r, versionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedStrategiesVersionsVersionIdSimulations operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedStrategiesVersionsVersionIdSimulations(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "versionId" -------------
+	var versionId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "versionId", chi.URLParam(r, "versionId"), &versionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "versionId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedStrategiesVersionsVersionIdSimulationsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedStrategiesVersionsVersionIdSimulations(w, r, versionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedStrategiesVersionsVersionIdSubmit operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedStrategiesVersionsVersionIdSubmit(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "versionId" -------------
+	var versionId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "versionId", chi.URLParam(r, "versionId"), &versionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "versionId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedStrategiesVersionsVersionIdSubmitParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedStrategiesVersionsVersionIdSubmit(w, r, versionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedStrategiesVersionsVersionIdValidate operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedStrategiesVersionsVersionIdValidate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "versionId" -------------
+	var versionId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "versionId", chi.URLParam(r, "versionId"), &versionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "versionId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedStrategiesVersionsVersionIdValidateParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedStrategiesVersionsVersionIdValidate(w, r, versionId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -8690,6 +11228,72 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/advanced/buying-power", wrapper.GetAdvancedBuyingPower)
 	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/strategies/catalog", wrapper.GetAdvancedStrategiesCatalog)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/strategies/listings", wrapper.GetAdvancedStrategiesListings)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/strategies/listings", wrapper.PostAdvancedStrategiesListings)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/strategies/listings/{listingId}", wrapper.GetAdvancedStrategiesListingsListingId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/strategies/listings/{listingId}/versions", wrapper.PostAdvancedStrategiesListingsListingIdVersions)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/strategies/versions/{versionId}/forks", wrapper.PostAdvancedStrategiesVersionsVersionIdForks)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/strategies/versions/{versionId}/submit", wrapper.PostAdvancedStrategiesVersionsVersionIdSubmit)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/strategies/versions/{versionId}/simulations", wrapper.PostAdvancedStrategiesVersionsVersionIdSimulations)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/strategies/versions/{versionId}/validate", wrapper.PostAdvancedStrategiesVersionsVersionIdValidate)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/strategies/versions/{versionId}/review", wrapper.PostAdvancedStrategiesVersionsVersionIdReview)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/strategies/versions/{versionId}/approve", wrapper.PostAdvancedStrategiesVersionsVersionIdApprove)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/strategies/versions/{versionId}/reject", wrapper.PostAdvancedStrategiesVersionsVersionIdReject)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/strategies/versions/{versionId}/moderation", wrapper.PostAdvancedStrategiesVersionsVersionIdModeration)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/strategies/versions/{versionId}/deprecate", wrapper.PostAdvancedStrategiesVersionsVersionIdDeprecate)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/strategies/review-queue", wrapper.GetAdvancedStrategiesReviewQueue)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/strategies/installs", wrapper.GetAdvancedStrategiesInstalls)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/strategies/installs", wrapper.PostAdvancedStrategiesInstalls)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/strategies/installs/{installId}/remove", wrapper.PostAdvancedStrategiesInstallsInstallIdRemove)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/strategies/installs/{installId}/follows", wrapper.PostAdvancedStrategiesInstallsInstallIdFollows)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/strategies/installs/{installId}/performance", wrapper.PostAdvancedStrategiesInstallsInstallIdPerformance)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/strategies/follows", wrapper.GetAdvancedStrategiesFollows)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/strategies/runs", wrapper.GetAdvancedStrategiesRuns)
+	})
 
 	return r
 }
@@ -9665,6 +12269,1736 @@ func (response GetAdvancedRiskDecisions403ApplicationProblemPlusJSONResponse) Vi
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedStrategiesCatalogRequestObject struct {
+	Params GetAdvancedStrategiesCatalogParams
+}
+
+type GetAdvancedStrategiesCatalogResponseObject interface {
+	VisitGetAdvancedStrategiesCatalogResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedStrategiesCatalog200JSONResponse StrategyListingPage
+
+func (response GetAdvancedStrategiesCatalog200JSONResponse) VisitGetAdvancedStrategiesCatalogResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedStrategiesCatalog400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedStrategiesCatalog400ApplicationProblemPlusJSONResponse) VisitGetAdvancedStrategiesCatalogResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedStrategiesFollowsRequestObject struct {
+	Params GetAdvancedStrategiesFollowsParams
+}
+
+type GetAdvancedStrategiesFollowsResponseObject interface {
+	VisitGetAdvancedStrategiesFollowsResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedStrategiesFollows200JSONResponse StrategyFollowRunPage
+
+func (response GetAdvancedStrategiesFollows200JSONResponse) VisitGetAdvancedStrategiesFollowsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedStrategiesFollows400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedStrategiesFollows400ApplicationProblemPlusJSONResponse) VisitGetAdvancedStrategiesFollowsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedStrategiesFollows403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedStrategiesFollows403ApplicationProblemPlusJSONResponse) VisitGetAdvancedStrategiesFollowsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedStrategiesInstallsRequestObject struct {
+	Params GetAdvancedStrategiesInstallsParams
+}
+
+type GetAdvancedStrategiesInstallsResponseObject interface {
+	VisitGetAdvancedStrategiesInstallsResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedStrategiesInstalls200JSONResponse StrategyInstallPage
+
+func (response GetAdvancedStrategiesInstalls200JSONResponse) VisitGetAdvancedStrategiesInstallsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedStrategiesInstalls400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedStrategiesInstalls400ApplicationProblemPlusJSONResponse) VisitGetAdvancedStrategiesInstallsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedStrategiesInstalls403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedStrategiesInstalls403ApplicationProblemPlusJSONResponse) VisitGetAdvancedStrategiesInstallsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesInstallsRequestObject struct {
+	Params PostAdvancedStrategiesInstallsParams
+	Body   *PostAdvancedStrategiesInstallsJSONRequestBody
+}
+
+type PostAdvancedStrategiesInstallsResponseObject interface {
+	VisitPostAdvancedStrategiesInstallsResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedStrategiesInstalls200JSONResponse StrategyInstall
+
+func (response PostAdvancedStrategiesInstalls200JSONResponse) VisitPostAdvancedStrategiesInstallsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesInstalls201JSONResponse StrategyInstall
+
+func (response PostAdvancedStrategiesInstalls201JSONResponse) VisitPostAdvancedStrategiesInstallsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesInstalls400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedStrategiesInstalls400ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesInstallsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesInstalls403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesInstalls403ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesInstallsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesInstalls404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesInstalls404ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesInstallsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesInstalls422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesInstalls422ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesInstallsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesInstallsInstallIdFollowsRequestObject struct {
+	InstallId UUID `json:"installId"`
+	Params    PostAdvancedStrategiesInstallsInstallIdFollowsParams
+	Body      *PostAdvancedStrategiesInstallsInstallIdFollowsJSONRequestBody
+}
+
+type PostAdvancedStrategiesInstallsInstallIdFollowsResponseObject interface {
+	VisitPostAdvancedStrategiesInstallsInstallIdFollowsResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedStrategiesInstallsInstallIdFollows200JSONResponse StrategyFollowRun
+
+func (response PostAdvancedStrategiesInstallsInstallIdFollows200JSONResponse) VisitPostAdvancedStrategiesInstallsInstallIdFollowsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesInstallsInstallIdFollows201JSONResponse StrategyFollowRun
+
+func (response PostAdvancedStrategiesInstallsInstallIdFollows201JSONResponse) VisitPostAdvancedStrategiesInstallsInstallIdFollowsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesInstallsInstallIdFollows400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedStrategiesInstallsInstallIdFollows400ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesInstallsInstallIdFollowsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesInstallsInstallIdFollows403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesInstallsInstallIdFollows403ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesInstallsInstallIdFollowsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesInstallsInstallIdFollows404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesInstallsInstallIdFollows404ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesInstallsInstallIdFollowsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesInstallsInstallIdFollows409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesInstallsInstallIdFollows409ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesInstallsInstallIdFollowsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesInstallsInstallIdFollows422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesInstallsInstallIdFollows422ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesInstallsInstallIdFollowsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesInstallsInstallIdFollows429ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesInstallsInstallIdFollows429ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesInstallsInstallIdFollowsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesInstallsInstallIdPerformanceRequestObject struct {
+	InstallId UUID `json:"installId"`
+	Params    PostAdvancedStrategiesInstallsInstallIdPerformanceParams
+	Body      *PostAdvancedStrategiesInstallsInstallIdPerformanceJSONRequestBody
+}
+
+type PostAdvancedStrategiesInstallsInstallIdPerformanceResponseObject interface {
+	VisitPostAdvancedStrategiesInstallsInstallIdPerformanceResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedStrategiesInstallsInstallIdPerformance200JSONResponse StrategyPerformanceSnapshot
+
+func (response PostAdvancedStrategiesInstallsInstallIdPerformance200JSONResponse) VisitPostAdvancedStrategiesInstallsInstallIdPerformanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesInstallsInstallIdPerformance201JSONResponse StrategyPerformanceSnapshot
+
+func (response PostAdvancedStrategiesInstallsInstallIdPerformance201JSONResponse) VisitPostAdvancedStrategiesInstallsInstallIdPerformanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesInstallsInstallIdPerformance400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedStrategiesInstallsInstallIdPerformance400ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesInstallsInstallIdPerformanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesInstallsInstallIdPerformance403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesInstallsInstallIdPerformance403ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesInstallsInstallIdPerformanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesInstallsInstallIdPerformance404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesInstallsInstallIdPerformance404ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesInstallsInstallIdPerformanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesInstallsInstallIdRemoveRequestObject struct {
+	InstallId UUID `json:"installId"`
+	Params    PostAdvancedStrategiesInstallsInstallIdRemoveParams
+	Body      *PostAdvancedStrategiesInstallsInstallIdRemoveJSONRequestBody
+}
+
+type PostAdvancedStrategiesInstallsInstallIdRemoveResponseObject interface {
+	VisitPostAdvancedStrategiesInstallsInstallIdRemoveResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedStrategiesInstallsInstallIdRemove200JSONResponse StrategyInstall
+
+func (response PostAdvancedStrategiesInstallsInstallIdRemove200JSONResponse) VisitPostAdvancedStrategiesInstallsInstallIdRemoveResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesInstallsInstallIdRemove400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedStrategiesInstallsInstallIdRemove400ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesInstallsInstallIdRemoveResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesInstallsInstallIdRemove403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesInstallsInstallIdRemove403ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesInstallsInstallIdRemoveResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesInstallsInstallIdRemove404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesInstallsInstallIdRemove404ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesInstallsInstallIdRemoveResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesInstallsInstallIdRemove409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesInstallsInstallIdRemove409ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesInstallsInstallIdRemoveResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedStrategiesListingsRequestObject struct {
+	Params GetAdvancedStrategiesListingsParams
+}
+
+type GetAdvancedStrategiesListingsResponseObject interface {
+	VisitGetAdvancedStrategiesListingsResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedStrategiesListings200JSONResponse StrategyListingPage
+
+func (response GetAdvancedStrategiesListings200JSONResponse) VisitGetAdvancedStrategiesListingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedStrategiesListings400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedStrategiesListings400ApplicationProblemPlusJSONResponse) VisitGetAdvancedStrategiesListingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedStrategiesListings403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedStrategiesListings403ApplicationProblemPlusJSONResponse) VisitGetAdvancedStrategiesListingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesListingsRequestObject struct {
+	Params PostAdvancedStrategiesListingsParams
+	Body   *PostAdvancedStrategiesListingsJSONRequestBody
+}
+
+type PostAdvancedStrategiesListingsResponseObject interface {
+	VisitPostAdvancedStrategiesListingsResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedStrategiesListings200JSONResponse StrategyListingDetail
+
+func (response PostAdvancedStrategiesListings200JSONResponse) VisitPostAdvancedStrategiesListingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesListings201JSONResponse StrategyListingDetail
+
+func (response PostAdvancedStrategiesListings201JSONResponse) VisitPostAdvancedStrategiesListingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesListings400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedStrategiesListings400ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesListingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesListings403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesListings403ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesListingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesListings409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesListings409ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesListingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesListings422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesListings422ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesListingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedStrategiesListingsListingIdRequestObject struct {
+	ListingId UUID `json:"listingId"`
+}
+
+type GetAdvancedStrategiesListingsListingIdResponseObject interface {
+	VisitGetAdvancedStrategiesListingsListingIdResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedStrategiesListingsListingId200JSONResponse StrategyListingDetail
+
+func (response GetAdvancedStrategiesListingsListingId200JSONResponse) VisitGetAdvancedStrategiesListingsListingIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedStrategiesListingsListingId400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedStrategiesListingsListingId400ApplicationProblemPlusJSONResponse) VisitGetAdvancedStrategiesListingsListingIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedStrategiesListingsListingId404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedStrategiesListingsListingId404ApplicationProblemPlusJSONResponse) VisitGetAdvancedStrategiesListingsListingIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesListingsListingIdVersionsRequestObject struct {
+	ListingId UUID `json:"listingId"`
+	Params    PostAdvancedStrategiesListingsListingIdVersionsParams
+	Body      *PostAdvancedStrategiesListingsListingIdVersionsJSONRequestBody
+}
+
+type PostAdvancedStrategiesListingsListingIdVersionsResponseObject interface {
+	VisitPostAdvancedStrategiesListingsListingIdVersionsResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedStrategiesListingsListingIdVersions200JSONResponse StrategyVersion
+
+func (response PostAdvancedStrategiesListingsListingIdVersions200JSONResponse) VisitPostAdvancedStrategiesListingsListingIdVersionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesListingsListingIdVersions201JSONResponse StrategyVersion
+
+func (response PostAdvancedStrategiesListingsListingIdVersions201JSONResponse) VisitPostAdvancedStrategiesListingsListingIdVersionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesListingsListingIdVersions400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedStrategiesListingsListingIdVersions400ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesListingsListingIdVersionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesListingsListingIdVersions403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesListingsListingIdVersions403ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesListingsListingIdVersionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesListingsListingIdVersions404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesListingsListingIdVersions404ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesListingsListingIdVersionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesListingsListingIdVersions409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesListingsListingIdVersions409ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesListingsListingIdVersionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesListingsListingIdVersions422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesListingsListingIdVersions422ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesListingsListingIdVersionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedStrategiesReviewQueueRequestObject struct {
+	Params GetAdvancedStrategiesReviewQueueParams
+}
+
+type GetAdvancedStrategiesReviewQueueResponseObject interface {
+	VisitGetAdvancedStrategiesReviewQueueResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedStrategiesReviewQueue200JSONResponse StrategyReviewQueuePage
+
+func (response GetAdvancedStrategiesReviewQueue200JSONResponse) VisitGetAdvancedStrategiesReviewQueueResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedStrategiesReviewQueue400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedStrategiesReviewQueue400ApplicationProblemPlusJSONResponse) VisitGetAdvancedStrategiesReviewQueueResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedStrategiesRunsRequestObject struct {
+	Params GetAdvancedStrategiesRunsParams
+}
+
+type GetAdvancedStrategiesRunsResponseObject interface {
+	VisitGetAdvancedStrategiesRunsResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedStrategiesRuns200JSONResponse StrategySandboxRunPage
+
+func (response GetAdvancedStrategiesRuns200JSONResponse) VisitGetAdvancedStrategiesRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedStrategiesRuns400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedStrategiesRuns400ApplicationProblemPlusJSONResponse) VisitGetAdvancedStrategiesRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedStrategiesRuns403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedStrategiesRuns403ApplicationProblemPlusJSONResponse) VisitGetAdvancedStrategiesRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdApproveRequestObject struct {
+	VersionId UUID `json:"versionId"`
+	Params    PostAdvancedStrategiesVersionsVersionIdApproveParams
+	Body      *PostAdvancedStrategiesVersionsVersionIdApproveJSONRequestBody
+}
+
+type PostAdvancedStrategiesVersionsVersionIdApproveResponseObject interface {
+	VisitPostAdvancedStrategiesVersionsVersionIdApproveResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedStrategiesVersionsVersionIdApprove200JSONResponse StrategyVersion
+
+func (response PostAdvancedStrategiesVersionsVersionIdApprove200JSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdApproveResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdApprove400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedStrategiesVersionsVersionIdApprove400ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdApproveResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdApprove403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesVersionsVersionIdApprove403ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdApproveResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdApprove404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesVersionsVersionIdApprove404ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdApproveResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdApprove409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesVersionsVersionIdApprove409ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdApproveResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdDeprecateRequestObject struct {
+	VersionId UUID `json:"versionId"`
+	Params    PostAdvancedStrategiesVersionsVersionIdDeprecateParams
+	Body      *PostAdvancedStrategiesVersionsVersionIdDeprecateJSONRequestBody
+}
+
+type PostAdvancedStrategiesVersionsVersionIdDeprecateResponseObject interface {
+	VisitPostAdvancedStrategiesVersionsVersionIdDeprecateResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedStrategiesVersionsVersionIdDeprecate200JSONResponse StrategyVersion
+
+func (response PostAdvancedStrategiesVersionsVersionIdDeprecate200JSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdDeprecateResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdDeprecate400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedStrategiesVersionsVersionIdDeprecate400ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdDeprecateResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdDeprecate403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesVersionsVersionIdDeprecate403ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdDeprecateResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdDeprecate404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesVersionsVersionIdDeprecate404ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdDeprecateResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdDeprecate409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesVersionsVersionIdDeprecate409ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdDeprecateResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdForksRequestObject struct {
+	VersionId UUID `json:"versionId"`
+	Params    PostAdvancedStrategiesVersionsVersionIdForksParams
+	Body      *PostAdvancedStrategiesVersionsVersionIdForksJSONRequestBody
+}
+
+type PostAdvancedStrategiesVersionsVersionIdForksResponseObject interface {
+	VisitPostAdvancedStrategiesVersionsVersionIdForksResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedStrategiesVersionsVersionIdForks200JSONResponse StrategyListingDetail
+
+func (response PostAdvancedStrategiesVersionsVersionIdForks200JSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdForksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdForks201JSONResponse StrategyListingDetail
+
+func (response PostAdvancedStrategiesVersionsVersionIdForks201JSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdForksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdForks400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedStrategiesVersionsVersionIdForks400ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdForksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdForks403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesVersionsVersionIdForks403ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdForksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdForks404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesVersionsVersionIdForks404ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdForksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdForks422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesVersionsVersionIdForks422ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdForksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdModerationRequestObject struct {
+	VersionId UUID `json:"versionId"`
+	Params    PostAdvancedStrategiesVersionsVersionIdModerationParams
+	Body      *PostAdvancedStrategiesVersionsVersionIdModerationJSONRequestBody
+}
+
+type PostAdvancedStrategiesVersionsVersionIdModerationResponseObject interface {
+	VisitPostAdvancedStrategiesVersionsVersionIdModerationResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedStrategiesVersionsVersionIdModeration200JSONResponse StrategyVersion
+
+func (response PostAdvancedStrategiesVersionsVersionIdModeration200JSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdModerationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdModeration400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedStrategiesVersionsVersionIdModeration400ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdModerationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdModeration403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesVersionsVersionIdModeration403ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdModerationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdModeration404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesVersionsVersionIdModeration404ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdModerationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdModeration409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesVersionsVersionIdModeration409ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdModerationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdRejectRequestObject struct {
+	VersionId UUID `json:"versionId"`
+	Params    PostAdvancedStrategiesVersionsVersionIdRejectParams
+	Body      *PostAdvancedStrategiesVersionsVersionIdRejectJSONRequestBody
+}
+
+type PostAdvancedStrategiesVersionsVersionIdRejectResponseObject interface {
+	VisitPostAdvancedStrategiesVersionsVersionIdRejectResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedStrategiesVersionsVersionIdReject200JSONResponse StrategyVersion
+
+func (response PostAdvancedStrategiesVersionsVersionIdReject200JSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdRejectResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdReject400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedStrategiesVersionsVersionIdReject400ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdRejectResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdReject403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesVersionsVersionIdReject403ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdRejectResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdReject404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesVersionsVersionIdReject404ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdRejectResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdReject409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesVersionsVersionIdReject409ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdRejectResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdReviewRequestObject struct {
+	VersionId UUID `json:"versionId"`
+	Params    PostAdvancedStrategiesVersionsVersionIdReviewParams
+}
+
+type PostAdvancedStrategiesVersionsVersionIdReviewResponseObject interface {
+	VisitPostAdvancedStrategiesVersionsVersionIdReviewResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedStrategiesVersionsVersionIdReview200JSONResponse StrategyVersion
+
+func (response PostAdvancedStrategiesVersionsVersionIdReview200JSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdReviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdReview400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedStrategiesVersionsVersionIdReview400ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdReviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdReview403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesVersionsVersionIdReview403ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdReviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdReview404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesVersionsVersionIdReview404ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdReviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdReview409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesVersionsVersionIdReview409ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdReviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdSimulationsRequestObject struct {
+	VersionId UUID `json:"versionId"`
+	Params    PostAdvancedStrategiesVersionsVersionIdSimulationsParams
+	Body      *PostAdvancedStrategiesVersionsVersionIdSimulationsJSONRequestBody
+}
+
+type PostAdvancedStrategiesVersionsVersionIdSimulationsResponseObject interface {
+	VisitPostAdvancedStrategiesVersionsVersionIdSimulationsResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedStrategiesVersionsVersionIdSimulations200JSONResponse StrategyEvaluation
+
+func (response PostAdvancedStrategiesVersionsVersionIdSimulations200JSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdSimulationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdSimulations201JSONResponse StrategyEvaluation
+
+func (response PostAdvancedStrategiesVersionsVersionIdSimulations201JSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdSimulationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdSimulations400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedStrategiesVersionsVersionIdSimulations400ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdSimulationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdSimulations403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesVersionsVersionIdSimulations403ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdSimulationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdSimulations404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesVersionsVersionIdSimulations404ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdSimulationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdSimulations409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesVersionsVersionIdSimulations409ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdSimulationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdSimulations422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesVersionsVersionIdSimulations422ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdSimulationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdSubmitRequestObject struct {
+	VersionId UUID `json:"versionId"`
+	Params    PostAdvancedStrategiesVersionsVersionIdSubmitParams
+	Body      *PostAdvancedStrategiesVersionsVersionIdSubmitJSONRequestBody
+}
+
+type PostAdvancedStrategiesVersionsVersionIdSubmitResponseObject interface {
+	VisitPostAdvancedStrategiesVersionsVersionIdSubmitResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedStrategiesVersionsVersionIdSubmit200JSONResponse StrategyVersion
+
+func (response PostAdvancedStrategiesVersionsVersionIdSubmit200JSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdSubmitResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdSubmit400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedStrategiesVersionsVersionIdSubmit400ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdSubmitResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdSubmit403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesVersionsVersionIdSubmit403ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdSubmitResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdSubmit404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesVersionsVersionIdSubmit404ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdSubmitResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdSubmit409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesVersionsVersionIdSubmit409ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdSubmitResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdValidateRequestObject struct {
+	VersionId UUID `json:"versionId"`
+	Params    PostAdvancedStrategiesVersionsVersionIdValidateParams
+}
+
+type PostAdvancedStrategiesVersionsVersionIdValidateResponseObject interface {
+	VisitPostAdvancedStrategiesVersionsVersionIdValidateResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedStrategiesVersionsVersionIdValidate200JSONResponse StrategyValidationResult
+
+func (response PostAdvancedStrategiesVersionsVersionIdValidate200JSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdValidateResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdValidate400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedStrategiesVersionsVersionIdValidate400ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdValidateResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdValidate403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesVersionsVersionIdValidate403ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdValidateResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdValidate404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesVersionsVersionIdValidate404ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdValidateResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdValidate409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesVersionsVersionIdValidate409ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdValidateResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdValidate422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesVersionsVersionIdValidate422ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdValidateResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedStrategiesVersionsVersionIdValidate503ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedStrategiesVersionsVersionIdValidate503ApplicationProblemPlusJSONResponse) VisitPostAdvancedStrategiesVersionsVersionIdValidateResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -11667,6 +16001,72 @@ type StrictServerInterface interface {
 	// GetAdvancedRiskDecisions Risk Kernel V2 decisions about an account's intents, newest first
 	// (GET /advanced/risk/decisions)
 	GetAdvancedRiskDecisions(ctx context.Context, request GetAdvancedRiskDecisionsRequestObject) (GetAdvancedRiskDecisionsResponseObject, error)
+	// GetAdvancedStrategiesCatalog Approved strategy listings (an APPROVED, CLEARED version each), newest first
+	// (GET /advanced/strategies/catalog)
+	GetAdvancedStrategiesCatalog(ctx context.Context, request GetAdvancedStrategiesCatalogRequestObject) (GetAdvancedStrategiesCatalogResponseObject, error)
+	// GetAdvancedStrategiesFollows An account's paper-follow runs, newest first, with the intents each produced and their Risk V2 decisions
+	// (GET /advanced/strategies/follows)
+	GetAdvancedStrategiesFollows(ctx context.Context, request GetAdvancedStrategiesFollowsRequestObject) (GetAdvancedStrategiesFollowsResponseObject, error)
+	// GetAdvancedStrategiesInstalls An account's installs, newest first, each with its latest paper performance snapshot
+	// (GET /advanced/strategies/installs)
+	GetAdvancedStrategiesInstalls(ctx context.Context, request GetAdvancedStrategiesInstallsRequestObject) (GetAdvancedStrategiesInstallsResponseObject, error)
+	// PostAdvancedStrategiesInstalls Install an APPROVED, CLEARED version for one of your accounts, in PAPER mode only
+	// (POST /advanced/strategies/installs)
+	PostAdvancedStrategiesInstalls(ctx context.Context, request PostAdvancedStrategiesInstallsRequestObject) (PostAdvancedStrategiesInstallsResponseObject, error)
+	// PostAdvancedStrategiesInstallsInstallIdFollows Paper-follow one of your installs on one market snapshot
+	// (POST /advanced/strategies/installs/{installId}/follows)
+	PostAdvancedStrategiesInstallsInstallIdFollows(ctx context.Context, request PostAdvancedStrategiesInstallsInstallIdFollowsRequestObject) (PostAdvancedStrategiesInstallsInstallIdFollowsResponseObject, error)
+	// PostAdvancedStrategiesInstallsInstallIdPerformance Compute and record the paper performance of one of your installs from its follow history
+	// (POST /advanced/strategies/installs/{installId}/performance)
+	PostAdvancedStrategiesInstallsInstallIdPerformance(ctx context.Context, request PostAdvancedStrategiesInstallsInstallIdPerformanceRequestObject) (PostAdvancedStrategiesInstallsInstallIdPerformanceResponseObject, error)
+	// PostAdvancedStrategiesInstallsInstallIdRemove Remove one of your ACTIVE installs
+	// (POST /advanced/strategies/installs/{installId}/remove)
+	PostAdvancedStrategiesInstallsInstallIdRemove(ctx context.Context, request PostAdvancedStrategiesInstallsInstallIdRemoveRequestObject) (PostAdvancedStrategiesInstallsInstallIdRemoveResponseObject, error)
+	// GetAdvancedStrategiesListings The listings an account created, in every status, newest first
+	// (GET /advanced/strategies/listings)
+	GetAdvancedStrategiesListings(ctx context.Context, request GetAdvancedStrategiesListingsRequestObject) (GetAdvancedStrategiesListingsResponseObject, error)
+	// PostAdvancedStrategiesListings Create a listing with its first version, in DRAFT
+	// (POST /advanced/strategies/listings)
+	PostAdvancedStrategiesListings(ctx context.Context, request PostAdvancedStrategiesListingsRequestObject) (PostAdvancedStrategiesListingsResponseObject, error)
+	// GetAdvancedStrategiesListingsListingId One listing with its versions, validations, reviews, provenance, evaluations and paper performance
+	// (GET /advanced/strategies/listings/{listingId})
+	GetAdvancedStrategiesListingsListingId(ctx context.Context, request GetAdvancedStrategiesListingsListingIdRequestObject) (GetAdvancedStrategiesListingsListingIdResponseObject, error)
+	// PostAdvancedStrategiesListingsListingIdVersions Publish the next version of one of your listings, in DRAFT
+	// (POST /advanced/strategies/listings/{listingId}/versions)
+	PostAdvancedStrategiesListingsListingIdVersions(ctx context.Context, request PostAdvancedStrategiesListingsListingIdVersionsRequestObject) (PostAdvancedStrategiesListingsListingIdVersionsResponseObject, error)
+	// GetAdvancedStrategiesReviewQueue Versions awaiting validation or review, oldest first (operator)
+	// (GET /advanced/strategies/review-queue)
+	GetAdvancedStrategiesReviewQueue(ctx context.Context, request GetAdvancedStrategiesReviewQueueRequestObject) (GetAdvancedStrategiesReviewQueueResponseObject, error)
+	// GetAdvancedStrategiesRuns An account's sandbox runs (its follows, and simulations of its own listings), newest first, with termination and violations
+	// (GET /advanced/strategies/runs)
+	GetAdvancedStrategiesRuns(ctx context.Context, request GetAdvancedStrategiesRunsRequestObject) (GetAdvancedStrategiesRunsResponseObject, error)
+	// PostAdvancedStrategiesVersionsVersionIdApprove Approve a version IN_REVIEW and clear it for installs (operator other than the creator; requires step-up)
+	// (POST /advanced/strategies/versions/{versionId}/approve)
+	PostAdvancedStrategiesVersionsVersionIdApprove(ctx context.Context, request PostAdvancedStrategiesVersionsVersionIdApproveRequestObject) (PostAdvancedStrategiesVersionsVersionIdApproveResponseObject, error)
+	// PostAdvancedStrategiesVersionsVersionIdDeprecate Retire an APPROVED version; no new installs, and existing installs can no longer be followed (operator; requires step-up)
+	// (POST /advanced/strategies/versions/{versionId}/deprecate)
+	PostAdvancedStrategiesVersionsVersionIdDeprecate(ctx context.Context, request PostAdvancedStrategiesVersionsVersionIdDeprecateRequestObject) (PostAdvancedStrategiesVersionsVersionIdDeprecateResponseObject, error)
+	// PostAdvancedStrategiesVersionsVersionIdForks Fork an APPROVED or DEPRECATED version into a new listing of your own
+	// (POST /advanced/strategies/versions/{versionId}/forks)
+	PostAdvancedStrategiesVersionsVersionIdForks(ctx context.Context, request PostAdvancedStrategiesVersionsVersionIdForksRequestObject) (PostAdvancedStrategiesVersionsVersionIdForksResponseObject, error)
+	// PostAdvancedStrategiesVersionsVersionIdModeration Flag, take down or re-clear a version (operator; requires step-up)
+	// (POST /advanced/strategies/versions/{versionId}/moderation)
+	PostAdvancedStrategiesVersionsVersionIdModeration(ctx context.Context, request PostAdvancedStrategiesVersionsVersionIdModerationRequestObject) (PostAdvancedStrategiesVersionsVersionIdModerationResponseObject, error)
+	// PostAdvancedStrategiesVersionsVersionIdReject Reject a SUBMITTED, VALIDATED or IN_REVIEW version (operator other than the creator; requires step-up)
+	// (POST /advanced/strategies/versions/{versionId}/reject)
+	PostAdvancedStrategiesVersionsVersionIdReject(ctx context.Context, request PostAdvancedStrategiesVersionsVersionIdRejectRequestObject) (PostAdvancedStrategiesVersionsVersionIdRejectResponseObject, error)
+	// PostAdvancedStrategiesVersionsVersionIdReview Take a VALIDATED version into review (operator other than the creator; requires step-up)
+	// (POST /advanced/strategies/versions/{versionId}/review)
+	PostAdvancedStrategiesVersionsVersionIdReview(ctx context.Context, request PostAdvancedStrategiesVersionsVersionIdReviewRequestObject) (PostAdvancedStrategiesVersionsVersionIdReviewResponseObject, error)
+	// PostAdvancedStrategiesVersionsVersionIdSimulations Run one of your built versions against a fixed set of snapshots and record the evaluation
+	// (POST /advanced/strategies/versions/{versionId}/simulations)
+	PostAdvancedStrategiesVersionsVersionIdSimulations(ctx context.Context, request PostAdvancedStrategiesVersionsVersionIdSimulationsRequestObject) (PostAdvancedStrategiesVersionsVersionIdSimulationsResponseObject, error)
+	// PostAdvancedStrategiesVersionsVersionIdSubmit Submit one of your DRAFT versions for validation and review
+	// (POST /advanced/strategies/versions/{versionId}/submit)
+	PostAdvancedStrategiesVersionsVersionIdSubmit(ctx context.Context, request PostAdvancedStrategiesVersionsVersionIdSubmitRequestObject) (PostAdvancedStrategiesVersionsVersionIdSubmitResponseObject, error)
+	// PostAdvancedStrategiesVersionsVersionIdValidate Scan and build a SUBMITTED version (operator; requires step-up)
+	// (POST /advanced/strategies/versions/{versionId}/validate)
+	PostAdvancedStrategiesVersionsVersionIdValidate(ctx context.Context, request PostAdvancedStrategiesVersionsVersionIdValidateRequestObject) (PostAdvancedStrategiesVersionsVersionIdValidateResponseObject, error)
 	// GetAssets Registered assets with chain, mint, decimals and safety status
 	// (GET /assets)
 	GetAssets(ctx context.Context, request GetAssetsRequestObject) (GetAssetsResponseObject, error)
@@ -12626,6 +17026,682 @@ func (sh *strictHandler) GetAdvancedRiskDecisions(w http.ResponseWriter, r *http
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetAdvancedRiskDecisionsResponseObject); ok {
 		if err := validResponse.VisitGetAdvancedRiskDecisionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedStrategiesCatalog operation middleware
+func (sh *strictHandler) GetAdvancedStrategiesCatalog(w http.ResponseWriter, r *http.Request, params GetAdvancedStrategiesCatalogParams) {
+	var request GetAdvancedStrategiesCatalogRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedStrategiesCatalog(ctx, request.(GetAdvancedStrategiesCatalogRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedStrategiesCatalog")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedStrategiesCatalogResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedStrategiesCatalogResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedStrategiesFollows operation middleware
+func (sh *strictHandler) GetAdvancedStrategiesFollows(w http.ResponseWriter, r *http.Request, params GetAdvancedStrategiesFollowsParams) {
+	var request GetAdvancedStrategiesFollowsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedStrategiesFollows(ctx, request.(GetAdvancedStrategiesFollowsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedStrategiesFollows")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedStrategiesFollowsResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedStrategiesFollowsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedStrategiesInstalls operation middleware
+func (sh *strictHandler) GetAdvancedStrategiesInstalls(w http.ResponseWriter, r *http.Request, params GetAdvancedStrategiesInstallsParams) {
+	var request GetAdvancedStrategiesInstallsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedStrategiesInstalls(ctx, request.(GetAdvancedStrategiesInstallsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedStrategiesInstalls")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedStrategiesInstallsResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedStrategiesInstallsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedStrategiesInstalls operation middleware
+func (sh *strictHandler) PostAdvancedStrategiesInstalls(w http.ResponseWriter, r *http.Request, params PostAdvancedStrategiesInstallsParams) {
+	var request PostAdvancedStrategiesInstallsRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedStrategiesInstallsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedStrategiesInstalls(ctx, request.(PostAdvancedStrategiesInstallsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedStrategiesInstalls")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedStrategiesInstallsResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedStrategiesInstallsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedStrategiesInstallsInstallIdFollows operation middleware
+func (sh *strictHandler) PostAdvancedStrategiesInstallsInstallIdFollows(w http.ResponseWriter, r *http.Request, installId UUID, params PostAdvancedStrategiesInstallsInstallIdFollowsParams) {
+	var request PostAdvancedStrategiesInstallsInstallIdFollowsRequestObject
+
+	request.InstallId = installId
+	request.Params = params
+
+	var body PostAdvancedStrategiesInstallsInstallIdFollowsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedStrategiesInstallsInstallIdFollows(ctx, request.(PostAdvancedStrategiesInstallsInstallIdFollowsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedStrategiesInstallsInstallIdFollows")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedStrategiesInstallsInstallIdFollowsResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedStrategiesInstallsInstallIdFollowsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedStrategiesInstallsInstallIdPerformance operation middleware
+func (sh *strictHandler) PostAdvancedStrategiesInstallsInstallIdPerformance(w http.ResponseWriter, r *http.Request, installId UUID, params PostAdvancedStrategiesInstallsInstallIdPerformanceParams) {
+	var request PostAdvancedStrategiesInstallsInstallIdPerformanceRequestObject
+
+	request.InstallId = installId
+	request.Params = params
+
+	var body PostAdvancedStrategiesInstallsInstallIdPerformanceJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedStrategiesInstallsInstallIdPerformance(ctx, request.(PostAdvancedStrategiesInstallsInstallIdPerformanceRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedStrategiesInstallsInstallIdPerformance")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedStrategiesInstallsInstallIdPerformanceResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedStrategiesInstallsInstallIdPerformanceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedStrategiesInstallsInstallIdRemove operation middleware
+func (sh *strictHandler) PostAdvancedStrategiesInstallsInstallIdRemove(w http.ResponseWriter, r *http.Request, installId UUID, params PostAdvancedStrategiesInstallsInstallIdRemoveParams) {
+	var request PostAdvancedStrategiesInstallsInstallIdRemoveRequestObject
+
+	request.InstallId = installId
+	request.Params = params
+
+	var body PostAdvancedStrategiesInstallsInstallIdRemoveJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedStrategiesInstallsInstallIdRemove(ctx, request.(PostAdvancedStrategiesInstallsInstallIdRemoveRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedStrategiesInstallsInstallIdRemove")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedStrategiesInstallsInstallIdRemoveResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedStrategiesInstallsInstallIdRemoveResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedStrategiesListings operation middleware
+func (sh *strictHandler) GetAdvancedStrategiesListings(w http.ResponseWriter, r *http.Request, params GetAdvancedStrategiesListingsParams) {
+	var request GetAdvancedStrategiesListingsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedStrategiesListings(ctx, request.(GetAdvancedStrategiesListingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedStrategiesListings")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedStrategiesListingsResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedStrategiesListingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedStrategiesListings operation middleware
+func (sh *strictHandler) PostAdvancedStrategiesListings(w http.ResponseWriter, r *http.Request, params PostAdvancedStrategiesListingsParams) {
+	var request PostAdvancedStrategiesListingsRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedStrategiesListingsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedStrategiesListings(ctx, request.(PostAdvancedStrategiesListingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedStrategiesListings")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedStrategiesListingsResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedStrategiesListingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedStrategiesListingsListingId operation middleware
+func (sh *strictHandler) GetAdvancedStrategiesListingsListingId(w http.ResponseWriter, r *http.Request, listingId UUID) {
+	var request GetAdvancedStrategiesListingsListingIdRequestObject
+
+	request.ListingId = listingId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedStrategiesListingsListingId(ctx, request.(GetAdvancedStrategiesListingsListingIdRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedStrategiesListingsListingId")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedStrategiesListingsListingIdResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedStrategiesListingsListingIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedStrategiesListingsListingIdVersions operation middleware
+func (sh *strictHandler) PostAdvancedStrategiesListingsListingIdVersions(w http.ResponseWriter, r *http.Request, listingId UUID, params PostAdvancedStrategiesListingsListingIdVersionsParams) {
+	var request PostAdvancedStrategiesListingsListingIdVersionsRequestObject
+
+	request.ListingId = listingId
+	request.Params = params
+
+	var body PostAdvancedStrategiesListingsListingIdVersionsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedStrategiesListingsListingIdVersions(ctx, request.(PostAdvancedStrategiesListingsListingIdVersionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedStrategiesListingsListingIdVersions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedStrategiesListingsListingIdVersionsResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedStrategiesListingsListingIdVersionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedStrategiesReviewQueue operation middleware
+func (sh *strictHandler) GetAdvancedStrategiesReviewQueue(w http.ResponseWriter, r *http.Request, params GetAdvancedStrategiesReviewQueueParams) {
+	var request GetAdvancedStrategiesReviewQueueRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedStrategiesReviewQueue(ctx, request.(GetAdvancedStrategiesReviewQueueRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedStrategiesReviewQueue")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedStrategiesReviewQueueResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedStrategiesReviewQueueResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedStrategiesRuns operation middleware
+func (sh *strictHandler) GetAdvancedStrategiesRuns(w http.ResponseWriter, r *http.Request, params GetAdvancedStrategiesRunsParams) {
+	var request GetAdvancedStrategiesRunsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedStrategiesRuns(ctx, request.(GetAdvancedStrategiesRunsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedStrategiesRuns")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedStrategiesRunsResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedStrategiesRunsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedStrategiesVersionsVersionIdApprove operation middleware
+func (sh *strictHandler) PostAdvancedStrategiesVersionsVersionIdApprove(w http.ResponseWriter, r *http.Request, versionId UUID, params PostAdvancedStrategiesVersionsVersionIdApproveParams) {
+	var request PostAdvancedStrategiesVersionsVersionIdApproveRequestObject
+
+	request.VersionId = versionId
+	request.Params = params
+
+	var body PostAdvancedStrategiesVersionsVersionIdApproveJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedStrategiesVersionsVersionIdApprove(ctx, request.(PostAdvancedStrategiesVersionsVersionIdApproveRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedStrategiesVersionsVersionIdApprove")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedStrategiesVersionsVersionIdApproveResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedStrategiesVersionsVersionIdApproveResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedStrategiesVersionsVersionIdDeprecate operation middleware
+func (sh *strictHandler) PostAdvancedStrategiesVersionsVersionIdDeprecate(w http.ResponseWriter, r *http.Request, versionId UUID, params PostAdvancedStrategiesVersionsVersionIdDeprecateParams) {
+	var request PostAdvancedStrategiesVersionsVersionIdDeprecateRequestObject
+
+	request.VersionId = versionId
+	request.Params = params
+
+	var body PostAdvancedStrategiesVersionsVersionIdDeprecateJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedStrategiesVersionsVersionIdDeprecate(ctx, request.(PostAdvancedStrategiesVersionsVersionIdDeprecateRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedStrategiesVersionsVersionIdDeprecate")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedStrategiesVersionsVersionIdDeprecateResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedStrategiesVersionsVersionIdDeprecateResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedStrategiesVersionsVersionIdForks operation middleware
+func (sh *strictHandler) PostAdvancedStrategiesVersionsVersionIdForks(w http.ResponseWriter, r *http.Request, versionId UUID, params PostAdvancedStrategiesVersionsVersionIdForksParams) {
+	var request PostAdvancedStrategiesVersionsVersionIdForksRequestObject
+
+	request.VersionId = versionId
+	request.Params = params
+
+	var body PostAdvancedStrategiesVersionsVersionIdForksJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedStrategiesVersionsVersionIdForks(ctx, request.(PostAdvancedStrategiesVersionsVersionIdForksRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedStrategiesVersionsVersionIdForks")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedStrategiesVersionsVersionIdForksResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedStrategiesVersionsVersionIdForksResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedStrategiesVersionsVersionIdModeration operation middleware
+func (sh *strictHandler) PostAdvancedStrategiesVersionsVersionIdModeration(w http.ResponseWriter, r *http.Request, versionId UUID, params PostAdvancedStrategiesVersionsVersionIdModerationParams) {
+	var request PostAdvancedStrategiesVersionsVersionIdModerationRequestObject
+
+	request.VersionId = versionId
+	request.Params = params
+
+	var body PostAdvancedStrategiesVersionsVersionIdModerationJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedStrategiesVersionsVersionIdModeration(ctx, request.(PostAdvancedStrategiesVersionsVersionIdModerationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedStrategiesVersionsVersionIdModeration")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedStrategiesVersionsVersionIdModerationResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedStrategiesVersionsVersionIdModerationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedStrategiesVersionsVersionIdReject operation middleware
+func (sh *strictHandler) PostAdvancedStrategiesVersionsVersionIdReject(w http.ResponseWriter, r *http.Request, versionId UUID, params PostAdvancedStrategiesVersionsVersionIdRejectParams) {
+	var request PostAdvancedStrategiesVersionsVersionIdRejectRequestObject
+
+	request.VersionId = versionId
+	request.Params = params
+
+	var body PostAdvancedStrategiesVersionsVersionIdRejectJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedStrategiesVersionsVersionIdReject(ctx, request.(PostAdvancedStrategiesVersionsVersionIdRejectRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedStrategiesVersionsVersionIdReject")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedStrategiesVersionsVersionIdRejectResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedStrategiesVersionsVersionIdRejectResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedStrategiesVersionsVersionIdReview operation middleware
+func (sh *strictHandler) PostAdvancedStrategiesVersionsVersionIdReview(w http.ResponseWriter, r *http.Request, versionId UUID, params PostAdvancedStrategiesVersionsVersionIdReviewParams) {
+	var request PostAdvancedStrategiesVersionsVersionIdReviewRequestObject
+
+	request.VersionId = versionId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedStrategiesVersionsVersionIdReview(ctx, request.(PostAdvancedStrategiesVersionsVersionIdReviewRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedStrategiesVersionsVersionIdReview")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedStrategiesVersionsVersionIdReviewResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedStrategiesVersionsVersionIdReviewResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedStrategiesVersionsVersionIdSimulations operation middleware
+func (sh *strictHandler) PostAdvancedStrategiesVersionsVersionIdSimulations(w http.ResponseWriter, r *http.Request, versionId UUID, params PostAdvancedStrategiesVersionsVersionIdSimulationsParams) {
+	var request PostAdvancedStrategiesVersionsVersionIdSimulationsRequestObject
+
+	request.VersionId = versionId
+	request.Params = params
+
+	var body PostAdvancedStrategiesVersionsVersionIdSimulationsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedStrategiesVersionsVersionIdSimulations(ctx, request.(PostAdvancedStrategiesVersionsVersionIdSimulationsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedStrategiesVersionsVersionIdSimulations")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedStrategiesVersionsVersionIdSimulationsResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedStrategiesVersionsVersionIdSimulationsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedStrategiesVersionsVersionIdSubmit operation middleware
+func (sh *strictHandler) PostAdvancedStrategiesVersionsVersionIdSubmit(w http.ResponseWriter, r *http.Request, versionId UUID, params PostAdvancedStrategiesVersionsVersionIdSubmitParams) {
+	var request PostAdvancedStrategiesVersionsVersionIdSubmitRequestObject
+
+	request.VersionId = versionId
+	request.Params = params
+
+	var body PostAdvancedStrategiesVersionsVersionIdSubmitJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedStrategiesVersionsVersionIdSubmit(ctx, request.(PostAdvancedStrategiesVersionsVersionIdSubmitRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedStrategiesVersionsVersionIdSubmit")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedStrategiesVersionsVersionIdSubmitResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedStrategiesVersionsVersionIdSubmitResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedStrategiesVersionsVersionIdValidate operation middleware
+func (sh *strictHandler) PostAdvancedStrategiesVersionsVersionIdValidate(w http.ResponseWriter, r *http.Request, versionId UUID, params PostAdvancedStrategiesVersionsVersionIdValidateParams) {
+	var request PostAdvancedStrategiesVersionsVersionIdValidateRequestObject
+
+	request.VersionId = versionId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedStrategiesVersionsVersionIdValidate(ctx, request.(PostAdvancedStrategiesVersionsVersionIdValidateRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedStrategiesVersionsVersionIdValidate")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedStrategiesVersionsVersionIdValidateResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedStrategiesVersionsVersionIdValidateResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -13959,310 +19035,422 @@ func (sh *strictHandler) PostWithdrawals(w http.ResponseWriter, r *http.Request,
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
-	"HnFQ4RHLdVhO9FioxPG543gwA259/uXz/x4A",
+	"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",
+	"dz7+/PH/GwA=",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,
