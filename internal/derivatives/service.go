@@ -34,8 +34,9 @@ const DefaultClearingHouseName = "derivatives clearing house"
 // only matters if that transaction outlives it.
 const DefaultReservationTTL = 5 * time.Minute
 
-// Config wires a Service. Every dependency is required: a service that could
-// not see the gates, the kill switches, the risk kernel or the reconciliation
+// Config wires a Service. Every dependency is required -- Execution aside,
+// whose default is the only adapter there is: a service that could not see
+// the gates, the kill switches, the risk kernel or the reconciliation
 // register would act without them.
 type Config struct {
 	Clock          clock.Clock
@@ -63,6 +64,13 @@ type Config struct {
 	// ReservationTTL bounds a trade's capital reservation (default
 	// DefaultReservationTTL).
 	ReservationTTL time.Duration
+	// Execution is where orders execute (DerivativesExecutionAdapter). The
+	// binaries build it with NewExecutionAdapter. It is the one dependency
+	// with a default: nil is the paper venue under DefaultPaperVenueName --
+	// the only adapter this build has, and exactly what NewExecutionAdapter
+	// builds in every environment -- so a caller that wires none executes
+	// where every deployment does. An adapter in mode live is refused.
+	Execution DerivativesExecutionAdapter
 }
 
 // Service is the derivatives subsystem: futures, perpetuals and options in
@@ -89,6 +97,7 @@ type Service struct {
 	clearingName   string
 	reservationTTL time.Duration
 	actor          econ.Actor
+	execution      DerivativesExecutionAdapter
 }
 
 // NewService validates the wiring.
@@ -125,17 +134,31 @@ func NewService(cfg Config) (*Service, error) {
 	if ttl > capital.MaxReservationTTL {
 		return nil, errs.New(errs.CodeInternal, "derivatives: reservation TTL exceeds the capital maximum")
 	}
+	execution := cfg.Execution
+	if execution == nil {
+		venue, err := newPaperVenue(PaperVenueConfig{Name: DefaultPaperVenueName})
+		if err != nil {
+			return nil, err
+		}
+		execution = venue
+	}
+	if err := checkAdapter(execution); err != nil {
+		return nil, err
+	}
 	return &Service{
 		clk: cfg.Clock, intents: cfg.Intents, effects: cfg.Effects, authorizer: cfg.Authorizer, registry: cfg.Registry,
 		ledger: cfg.Ledger, capital: cfg.Capital, riskStore: cfg.RiskStore, riskPolicy: cfg.RiskPolicy, policy: cfg.Policy,
 		prices: cfg.Prices, instruments: cfg.Instruments, router: cfg.Router, kills: cfg.KillSwitches,
 		recon: cfg.Reconciliation, usdAsset: cfg.USDAssetID, clearingName: name, reservationTTL: ttl,
-		actor: econ.Actor{Type: security.ActorSystem, ID: ActorName},
+		actor: econ.Actor{Type: security.ActorSystem, ID: ActorName}, execution: execution,
 	}, nil
 }
 
 // Policy returns the service's margin, funding and paper-fill policy.
 func (s *Service) Policy() Policy { return s.policy }
+
+// Execution returns the adapter orders execute on.
+func (s *Service) Execution() DerivativesExecutionAdapter { return s.execution }
 
 // clearingHouse returns the CLEARING_HOUSE facility, creating it ACTIVE on
 // first use, and refuses one that is not ACTIVE. Only this package's

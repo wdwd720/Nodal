@@ -196,10 +196,14 @@ func (s *Service) OpenPosition(ctx context.Context, tx pgx.Tx, r OpenRequest) (O
 	hasMark = hasMark && markPriceable(spec, mark)
 	tr := tradeRisk{spec: spec, mark: mark, hasMark: hasMark, riskIncreasing: true}
 	var price, im, premium money.Quantity
+	var ex Execution
 	if hasMark {
-		if price, err = paperPrice(spec, mark.MarkMantissa, side, s.policy.PaperSlippageBPS); err != nil {
+		// The execution venue answers the price once; the kernel judges the
+		// order at it and the fill applies it.
+		if ex, err = s.executeOrder(ctx, spec, side, qty, mark, now); err != nil {
 			return Outcome{}, err
 		}
+		price = ex.Price
 		im, err = initialMarginForFill(s.policy, spec, side, qty, markInputOf(mark), now)
 		switch {
 		case err == nil:
@@ -267,7 +271,7 @@ func (s *Service) OpenPosition(ctx context.Context, tx pgx.Tx, r OpenRequest) (O
 			return Outcome{}, err
 		}
 	}
-	if in, err = s.advance(ctx, tx, in, econ.StatusExecuting, "paper fill"); err != nil {
+	if in, err = s.advance(ctx, tx, in, econ.StatusExecuting, ex.fillReason()); err != nil {
 		return Outcome{}, err
 	}
 	iid := in.ID
@@ -275,7 +279,7 @@ func (s *Service) OpenPosition(ctx context.Context, tx pgx.Tx, r OpenRequest) (O
 	// it takes, and refuses to take anything else.
 	fr, err := s.executeFill(ctx, tx, Fill{
 		Key: "intent:" + in.ID.String(), AccountID: r.AccountID, InstrumentID: r.InstrumentID, Side: side, Quantity: qty,
-		Price: price, Source: SourcePaper, MarkID: mark.ID, SlippageBPS: s.policy.PaperSlippageBPS, Direction: FillOpens,
+		Price: price, Source: ex.Source, MarkID: mark.ID, SlippageBPS: ex.SlippageBPS, Direction: FillOpens,
 		IntentID: &iid, DecisionID: did, OccurredAt: now, CorrelationID: r.CorrelationID, reservation: reservation,
 	})
 	if err != nil {
@@ -359,10 +363,11 @@ func (s *Service) ClosePosition(ctx context.Context, tx pgx.Tx, r CloseRequest) 
 	if pos.Quantity.IsNegative() {
 		side, d = Buy, n
 	}
-	price, err := paperPrice(spec, mark.MarkMantissa, side, s.policy.PaperSlippageBPS)
+	ex, err := s.executeOrder(ctx, spec, side, n, mark, now)
 	if err != nil {
 		return Outcome{}, err
 	}
+	price := ex.Price
 	tr := tradeRisk{spec: spec, mark: mark, hasMark: true}
 	if req, err := RequirementFor(s.policy, spec, d, markInputOf(mark), now); err == nil {
 		tr.notional = req.Notional
@@ -384,13 +389,13 @@ func (s *Service) ClosePosition(ctx context.Context, tx pgx.Tx, r CloseRequest) 
 	if in, err = s.advance(ctx, tx, in, econ.StatusRiskApproved, "risk approved: "+decision.Hash); err != nil {
 		return Outcome{}, err
 	}
-	if in, err = s.advance(ctx, tx, in, econ.StatusExecuting, "paper fill"); err != nil {
+	if in, err = s.advance(ctx, tx, in, econ.StatusExecuting, ex.fillReason()); err != nil {
 		return Outcome{}, err
 	}
 	iid := in.ID
 	fr, err := s.executeFill(ctx, tx, Fill{
 		Key: "intent:" + in.ID.String(), AccountID: r.AccountID, InstrumentID: r.InstrumentID, Side: side, Quantity: n,
-		Price: price, Source: SourcePaper, MarkID: mark.ID, SlippageBPS: s.policy.PaperSlippageBPS, Direction: FillReduces,
+		Price: price, Source: ex.Source, MarkID: mark.ID, SlippageBPS: ex.SlippageBPS, Direction: FillReduces,
 		IntentID: &iid, DecisionID: did, OccurredAt: now, CorrelationID: r.CorrelationID,
 	})
 	if err != nil {
