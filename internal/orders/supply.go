@@ -47,16 +47,20 @@ import (
 // refuseSupplyControlledPaper refuses a paper-venue fill of an instrument
 // whose base or quote asset is supply-controlled.
 func refuseSupplyControlledPaper(ctx context.Context, q db.Querier, base, quote assets.AssetID) error {
+	controlled, err := econ.SupplyControllers(ctx, q, []assets.AssetID{base, quote})
+	if err != nil {
+		return err
+	}
 	for _, a := range []struct {
 		id   assets.AssetID
 		role string
 	}{{base, "base"}, {quote, "quote"}} {
-		if err := econ.RefuseSupplyControlled(ctx, q, a.id, "orders: a paper-venue fill of an instrument whose "+a.role+" asset it is",
-			"the venue's side of a fill is external and never booked, so the fill would create or destroy units of it against "+
-				"no counterparty, a SIM_TRADE the database refuses for such an asset (SU002, migration 00763), and the venue "+
-				"could hold it only through funding the database refuses too (HOUSE_FUNDING, FACILITY_FUNDING); it trades "+
-				"on the internal book instead"); err != nil {
-			return err
+		if controller, ok := controlled[a.id]; ok {
+			return econ.SupplyControlledRefusal(a.id, controller, "orders: a paper-venue fill of an instrument whose "+a.role+" asset it is",
+				"the venue's side of a fill is external and never booked, so the fill would create or destroy units of it against "+
+					"no counterparty, a SIM_TRADE the database refuses for such an asset (SU002, migration 00763), and the venue "+
+					"could hold it only through funding the database refuses too (HOUSE_FUNDING, FACILITY_FUNDING); it trades "+
+					"on the internal book instead")
 		}
 	}
 	return nil

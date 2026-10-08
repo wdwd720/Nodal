@@ -36,7 +36,9 @@ func (f *fixture) approvedWith(strategy string, mutate func(*VersionRequest)) Ve
 	}))
 	f.step(func(ctx context.Context, tx pgx.Tx) (Version, error) { return f.svc.Submit(ctx, tx, v.ID, f.creator) })
 	f.validate(v.ID)
-	f.step(func(ctx context.Context, tx pgx.Tx) (Version, error) { return f.svc.StartReview(ctx, tx, v.ID, f.operator) })
+	f.step(func(ctx context.Context, tx pgx.Tx) (Version, error) {
+		return f.svc.StartReview(ctx, tx, v.ID, f.operator)
+	})
 	v = f.step(func(ctx context.Context, tx pgx.Tx) (Version, error) {
 		return f.svc.Approve(ctx, tx, v.ID, f.operator, "MEETS_POLICY", "looked at it")
 	})

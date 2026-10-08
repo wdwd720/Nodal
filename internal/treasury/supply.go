@@ -46,15 +46,19 @@ func (s *Service) refuseSupplyControlledPaper(ctx context.Context, q db.Querier,
 	if err != nil {
 		return err
 	}
+	controlled, err := econ.SupplyControllers(ctx, q, []assets.AssetID{asset, book.ValuationAsset})
+	if err != nil {
+		return err
+	}
 	for _, a := range []struct {
 		id   assets.AssetID
 		role string
 	}{{asset, "the asset"}, {book.ValuationAsset, "the quote (the book's valuation asset)"}} {
-		if err := econ.RefuseSupplyControlled(ctx, q, a.id, "treasury: a house paper-venue fill in which it is "+a.role,
-			"the paper venue's side of a fill is external and never booked, so the fill would create or destroy units of it "+
-				"against no counterparty, a SIM_TRADE the database refuses for such an asset (SU002, migration 00763); the "+
-				"house book trades it on the internal book instead"); err != nil {
-			return err
+		if controller, ok := controlled[a.id]; ok {
+			return econ.SupplyControlledRefusal(a.id, controller, "treasury: a house paper-venue fill in which it is "+a.role,
+				"the paper venue's side of a fill is external and never booked, so the fill would create or destroy units of it "+
+					"against no counterparty, a SIM_TRADE the database refuses for such an asset (SU002, migration 00763); the "+
+					"house book trades it on the internal book instead")
 		}
 	}
 	return nil

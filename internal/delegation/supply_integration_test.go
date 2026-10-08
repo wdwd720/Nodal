@@ -74,7 +74,9 @@ func (f *fixture) issueStable(s econtest.Stable, acct accounts.AccountID, q mone
 // of give to the house and receives getQty of get from it.
 func (f *fixture) exchange(acct accounts.AccountID, give assets.AssetID, giveQty money.Quantity, get assets.AssetID, getQty money.Quantity) {
 	f.t.Helper()
-	c := func(code ledger.Code, a assets.AssetID) ledger.AccountRef { return ledger.CustomerAccount(acct, code, a) }
+	c := func(code ledger.Code, a assets.AssetID) ledger.AccountRef {
+		return ledger.CustomerAccount(acct, code, a)
+	}
 	require.NoError(f.t, f.inTx(func(ctx context.Context, tx pgx.Tx) error {
 		ref := uuid.NewString()
 		_, err := f.ledger.Post(ctx, tx, ledger.Posting{
@@ -145,7 +147,9 @@ func TestIntegration_AVenueHoldingNoneOfASupplyControlledAssetNeverDeliversIt(t 
 			VenueID: f.venue.ID, PayAssetID: f.tok.ID, ReceiveAssetID: stable.Asset.ID, AmountIn: money.QuantityFromInt64(1_000_000_000),
 			MaxSlippageBPS: 100, Jurisdiction: "US-CA", CorrelationID: "corr-" + uuid.NewString()}
 	}
-	intentKey := func(nonce uint64) string { return "delegation:swap:" + capability.ID.String() + ":" + strconv.FormatUint(nonce, 10) }
+	intentKey := func(nonce uint64) string {
+		return "delegation:swap:" + capability.ID.String() + ":" + strconv.FormatUint(nonce, 10)
+	}
 
 	_, err := f.requestSwap(f.agent(c), request(1))
 	econtest.RequireRefusal(t, err, stable.Asset.ID, econ.ControllerStableIssuer)

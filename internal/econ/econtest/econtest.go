@@ -117,7 +117,9 @@ func RegisterStable(ctx context.Context, tx pgx.Tx, reserve assets.AssetID) (Sta
 // par: the account pays q of the reserve into the issuer's reserve and
 // receives q units, which the issuer issues.
 func (s Stable) Issuance(account accounts.AccountID, q money.Quantity, key string, at time.Time) ledger.Posting {
-	c := func(code ledger.Code, a assets.AssetID) ledger.AccountRef { return ledger.CustomerAccount(account, code, a) }
+	c := func(code ledger.Code, a assets.AssetID) ledger.AccountRef {
+		return ledger.CustomerAccount(account, code, a)
+	}
 	return ledger.Posting{
 		Kind: ledger.KindStableIssuance, IdempotencyKey: "econtest-issue:" + key,
 		Reference:   ledger.FinancialEventReference{Type: "econtest_issuance", ID: key},

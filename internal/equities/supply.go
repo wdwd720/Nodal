@@ -48,13 +48,17 @@ func refuseSupplyControlledCash(ctx context.Context, q db.Querier, cash assets.A
 // listing that books a supply-controlled asset, as its cash or as its
 // shares.
 func refuseSupplyControlledListing(ctx context.Context, q db.Querier, l Listing, what string) error {
+	controlled, err := econ.SupplyControllers(ctx, q, []assets.AssetID{l.CashAsset.ID, l.ShareAsset.ID})
+	if err != nil {
+		return err
+	}
 	for _, a := range []struct {
 		id   assets.AssetID
 		role string
 	}{{l.CashAsset.ID, "settlement (cash) asset"}, {l.ShareAsset.ID, "share asset"}} {
-		if err := econ.RefuseSupplyControlled(ctx, q, a.id,
-			"equities: "+what+" of "+l.Terms.Terms.Symbol+", whose "+a.role+" it is,", whySupplyListing); err != nil {
-			return err
+		if controller, ok := controlled[a.id]; ok {
+			return econ.SupplyControlledRefusal(a.id, controller,
+				"equities: "+what+" of "+l.Terms.Terms.Symbol+", whose "+a.role+" it is,", whySupplyListing)
 		}
 	}
 	return nil
