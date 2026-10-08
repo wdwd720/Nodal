@@ -7,7 +7,6 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/nodal/controlplane/internal/devnet"
-	"github.com/nodal/controlplane/internal/devnethost"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/id"
@@ -113,7 +112,7 @@ func (s *Service) reconcileLocked(ctx context.Context, tx pgx.Tx, a *PlatformSta
 	}
 	// One View, read through this transaction: the supply and the statuses
 	// that explain it, at one instant.
-	err = s.host.ViewIn(ctx, tx, func(v devnethost.View) error {
+	err = s.provider.ViewIn(ctx, tx, func(v ChainView) error {
 		supply, err := v.Supply(a.Chain, a.Mint)
 		if err != nil {
 			return err

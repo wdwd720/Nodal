@@ -54,10 +54,20 @@ func (p Params) withDefaults() Params {
 	return p
 }
 
-// Deps are the Service's collaborators. Every one is required.
+// Deps are the Service's collaborators. Every one is required; the provider
+// is given once, as Provider or as its four parts.
 type Deps struct {
-	DB             *db.DB
-	Clock          clock.Clock
+	DB    *db.DB
+	Clock clock.Clock
+	// Provider is the chain the stable asset is minted and burned on and the
+	// custody of the keys that sign there (StableAssetProvider). The
+	// binaries build it with NewProvider.
+	Provider StableAssetProvider
+	// Host, Issuer, Custody and Snapshots are the sandbox provider's parts,
+	// for a caller that holds them rather than a provider: New wraps them
+	// exactly as NewProvider does in sandbox mode -- the mode every
+	// environment builds -- so they are never a way around its refusals. Set
+	// Provider or all four, never both.
 	Host           *devnethost.Host
 	Intents        *econ.IntentStore
 	Effects        *econ.EffectStore
@@ -88,7 +98,7 @@ type Deps struct {
 type Service struct {
 	db         *db.DB
 	clk        clock.Clock
-	host       *devnethost.Host
+	provider   StableAssetProvider
 	intents    *econ.IntentStore
 	effects    *econ.EffectStore
 	authorizer *econ.Authorizer
@@ -104,9 +114,6 @@ type Service struct {
 	audit      audit.Writer
 	accounts   *accounts.Repository
 	assets     *assets.Repository
-	issuer     *IssuerSigner
-	custody    *CustodialWalletSigner
-	snapshots  *SnapshotSigner
 	params     Params
 }
 
@@ -124,7 +131,13 @@ func New(d Deps) (*Service, error) {
 	}
 	check(d.DB != nil, "DB")
 	check(d.Clock != nil, "Clock")
-	check(d.Host != nil, "Host")
+	parts := ProviderConfig{Host: d.Host, Issuer: d.Issuer, Custody: d.Custody, Snapshots: d.Snapshots}
+	switch {
+	case d.Provider != nil && !parts.isZero():
+		return nil, errs.New(errs.CodeInternal, "stableasset: the provider is given twice, as Provider and as parts")
+	case d.Provider == nil:
+		missing = append(missing, parts.missing()...)
+	}
 	check(d.Intents != nil, "Intents")
 	check(d.Effects != nil, "Effects")
 	check(d.Authorizer != nil, "Authorizer")
@@ -140,24 +153,34 @@ func New(d Deps) (*Service, error) {
 	check(d.Audit != nil, "Audit")
 	check(d.Accounts != nil, "Accounts")
 	check(d.Assets != nil, "Assets")
-	check(d.Issuer != nil, "Issuer")
-	check(d.Custody != nil, "Custody")
-	check(d.Snapshots != nil, "Snapshots")
 	if len(missing) > 0 {
 		return nil, errs.New(errs.CodeInternal, "stableasset: missing dependencies").WithField("missing", missing)
 	}
+	provider := d.Provider
+	if provider == nil {
+		p, err := newSandboxProvider(parts)
+		if err != nil {
+			return nil, err
+		}
+		provider = p
+	}
+	if err := checkProvider(provider); err != nil {
+		return nil, err
+	}
 	return &Service{
-		db: d.DB, clk: d.Clock, host: d.Host, intents: d.Intents, effects: d.Effects, authorizer: d.Authorizer,
+		db: d.DB, clk: d.Clock, provider: provider, intents: d.Intents, effects: d.Effects, authorizer: d.Authorizer,
 		facilities: d.Facilities, ledger: d.Ledger, capital: d.Capital, risk: d.Risk, policy: d.RiskPolicy,
 		router: d.Router, prices: d.Prices, kills: d.Kills, recon: d.Reconciliation, audit: d.Audit,
-		accounts: d.Accounts, assets: d.Assets, issuer: d.Issuer, custody: d.Custody, snapshots: d.Snapshots,
-		params: d.Params.withDefaults(),
+		accounts: d.Accounts, assets: d.Assets, params: d.Params.withDefaults(),
 	}, nil
 }
 
+// Provider returns the chain and custody the service issues through.
+func (s *Service) Provider() StableAssetProvider { return s.provider }
+
 // Network is the devnet network this service's host carries: the one its
 // stable assets are minted, burned, observed and reconciled on.
-func (s *Service) Network() string { return s.host.Config().Network }
+func (s *Service) Network() string { return s.provider.Network() }
 
 // onHost refuses, without changing anything, a stable asset of another
 // network: this host would read its mints and burns as never seen, and could

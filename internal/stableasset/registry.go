@@ -228,9 +228,9 @@ func (s *Service) Register(ctx context.Context, def Definition, actor econ.Actor
 	if err := requireActor(actor); err != nil {
 		return PlatformStableAsset{}, err
 	}
-	mint := MintAddress(s.host.Config().Network, def.Name)
-	if err := s.host.EnsureMint(ctx, devnethost.ChainSolana, devnet.MintConfig{
-		Address: mint, Decimals: def.Decimals, Authority: s.issuer.PublicKey(),
+	mint := MintAddress(s.provider.Network(), def.Name)
+	if err := s.provider.EnsureMint(ctx, devnethost.ChainSolana, devnet.MintConfig{
+		Address: mint, Decimals: def.Decimals, Authority: s.provider.MintAuthority(),
 	}); err != nil {
 		return PlatformStableAsset{}, err
 	}
@@ -273,8 +273,8 @@ func (s *Service) registerInTx(ctx context.Context, tx pgx.Tx, def Definition, m
 		 peg_scale, oracle_source, max_price_age_ms, peg_deviation_threshold_bps, attestable,
 		 created_by_actor_type, created_by_actor_id)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'ACTIVE',$9::numeric,$10,$11,$12,$13,$14,$15::numeric,$16,$17,$18,$19,$20,$21,$22)`,
-		sid, def.Name, asset.ID, facility.ID, s.host.Config().Network, string(devnethost.ChainSolana), mint.String(),
-		int16(def.Decimals), def.IssuanceCap.String(), MintAuthorityPlatformSigner, s.issuer.PublicKey().String(),
+		sid, def.Name, asset.ID, facility.ID, s.provider.Network(), string(devnethost.ChainSolana), mint.String(),
+		int16(def.Decimals), def.IssuanceCap.String(), MintAuthorityPlatformSigner, s.provider.MintAuthority().String(),
 		BurnAuthorityHolderSigned, def.RedemptionMode, def.PegQuoteAssetID, def.PegMantissa.String(), def.PegScale,
 		def.OracleSource, def.MaxPriceAge.Milliseconds(), int(def.PegDeviationThreshold), def.Attestable,
 		actor.Type, actor.ID); err != nil {

@@ -11,7 +11,6 @@ import (
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/capital"
 	"github.com/nodal/controlplane/internal/devnet"
-	"github.com/nodal/controlplane/internal/devnethost"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/gates"
@@ -94,8 +93,8 @@ func (s *Service) Burn(ctx context.Context, req BurnRequest) (BurnResult, error)
 	if err := s.onHost(a); err != nil {
 		return BurnResult{}, err
 	}
-	holder := s.custody.HolderAddress(req.AccountID)
-	if err := s.host.EnsureNativeBalance(ctx, a.Chain, holder, s.params.GasMinimum, s.params.GasTopUp); err != nil {
+	holder := s.provider.HolderAddress(req.AccountID)
+	if err := s.provider.EnsureNativeBalance(ctx, a.Chain, holder, s.params.GasMinimum, s.params.GasTopUp); err != nil {
 		return BurnResult{}, err
 	}
 	var ticket BurnTicket
@@ -133,12 +132,12 @@ func (s *Service) PrepareBurn(ctx context.Context, tx pgx.Tx, req BurnRequest) (
 	if err := s.onHost(a); err != nil {
 		return BurnTicket{}, err
 	}
-	holder := s.custody.HolderAddress(req.AccountID)
+	holder := s.provider.HolderAddress(req.AccountID)
 	// One read of the chain through this transaction: the tip the plan will
 	// reference and the holder's balance, at the same instant.
 	var tip devnet.BlockInfo
 	var onChain uint64
-	chainErr := s.host.ViewIn(ctx, tx, func(v devnethost.View) error {
+	chainErr := s.provider.ViewIn(ctx, tx, func(v ChainView) error {
 		var err error
 		if tip, err = v.Tip(a.Chain); err != nil {
 			return err
@@ -285,7 +284,7 @@ func (s *Service) PrepareBurn(ctx context.Context, tx pgx.Tx, req BurnRequest) (
 	if err != nil {
 		return BurnTicket{}, err
 	}
-	signed, err := s.custody.SignHolderBurn(req.AccountID, plan, msg)
+	signed, err := s.provider.SignHolderBurn(req.AccountID, plan, msg)
 	if err != nil {
 		return BurnTicket{}, err
 	}

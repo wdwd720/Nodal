@@ -116,7 +116,7 @@ func (s *Service) Mint(ctx context.Context, req MintRequest) (MintResult, error)
 	if err := s.onHost(a); err != nil {
 		return MintResult{}, err
 	}
-	if err := s.host.EnsureNativeBalance(ctx, a.Chain, s.issuer.PublicKey(), s.params.GasMinimum, s.params.GasTopUp); err != nil {
+	if err := s.provider.EnsureNativeBalance(ctx, a.Chain, s.provider.MintAuthority(), s.params.GasMinimum, s.params.GasTopUp); err != nil {
 		return MintResult{}, err
 	}
 	var ticket MintTicket
@@ -280,7 +280,7 @@ func (s *Service) PrepareMint(ctx context.Context, tx pgx.Tx, req MintRequest) (
 	rid := id.New[mintRequestKind]()
 	plan := MintPlan{
 		Version: mintPlanVersion, RequestID: rid.String(), StableAssetID: a.ID.String(), AccountID: req.AccountID.String(),
-		Chain: string(a.Chain), Mint: a.Mint.String(), Recipient: s.custody.HolderAddress(req.AccountID).String(),
+		Chain: string(a.Chain), Mint: a.Mint.String(), Recipient: s.provider.HolderAddress(req.AccountID).String(),
 		Amount: q.String(), MintAuthority: a.MintAuthority.String(), FeePayer: a.MintAuthority.String(),
 		RecentBlockhash: blockhash.String(), BlockhashHeight: strconv.FormatUint(tip.Height, 10),
 		ReserveAssetID: reserve.AssetID.String(), ReserveQuantity: rq.String(),
@@ -298,14 +298,14 @@ func (s *Service) PrepareMint(ctx context.Context, tx pgx.Tx, req MintRequest) (
 	if err != nil {
 		return MintTicket{}, err
 	}
-	signed, err := s.issuer.SignMint(plan, msg)
+	signed, err := s.provider.SignMint(plan, msg)
 	if err != nil {
 		return MintTicket{}, err
 	}
 	rec := MintRecord{
 		ID: rid, StableAssetID: a.ID, AccountID: req.AccountID, IntentID: in.ID, EffectID: effect.ID, Mode: req.Mode,
 		Quantity: q, ReserveAssetID: reserve.AssetID, ReserveQuantity: rq, ReservationID: res.ID,
-		Recipient: s.custody.HolderAddress(req.AccountID), Plan: plan, PlanHash: planHash, SigningPlan: signing,
+		Recipient: s.provider.HolderAddress(req.AccountID), Plan: plan, PlanHash: planHash, SigningPlan: signing,
 		Chain: a.Chain, TxID: signed.TxID, SignedTx: signed.Raw, RecentBlockhash: blockhash, Status: MintSubmitting,
 		CreatedAt: now,
 	}

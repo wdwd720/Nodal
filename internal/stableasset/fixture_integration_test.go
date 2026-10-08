@@ -133,14 +133,18 @@ func newFixture(t *testing.T) *fixture {
 		issuer: NewIssuerSigner(seed("issuer-" + tag)), custody: NewCustodialWalletSigner(seed("custody-" + tag)),
 		snaps: NewSnapshotSigner(seed("snapshots-" + tag)),
 	}
+	// The provider the binaries build: the devnet host and the signers, in
+	// the mode this environment runs it in.
+	provider, err := NewProvider(config.EnvTest, ProviderModeFor(config.EnvTest),
+		ProviderConfig{Host: host, Issuer: f.issuer, Custody: f.custody, Snapshots: f.snaps})
+	require.NoError(t, err)
 	f.svc, err = New(Deps{
-		DB: testDB, Clock: clk, Host: host, Intents: f.intents, Effects: f.effects,
+		DB: testDB, Clock: clk, Provider: provider, Intents: f.intents, Effects: f.effects,
 		Authorizer: econ.NewAuthorizer(checker, killswitch.NewChecker(killswitch.Policy{})),
 		Facilities: econ.NewRegistry(), Ledger: f.ledger, Capital: f.capital, Risk: risk.NewStore(),
 		RiskPolicy: risk.DefaultAdvancedPolicy(), Router: router, Prices: f.prices,
 		Kills: killswitch.NewChecker(killswitch.Policy{}), Reconciliation: f.recon, Audit: aw,
 		Accounts: accounts.NewRepository(), Assets: assets.NewRepository(),
-		Issuer: f.issuer, Custody: f.custody, Snapshots: f.snaps,
 	})
 	require.NoError(t, err)
 	f.quote = f.simAsset("UREF"+tag[:4], 6)

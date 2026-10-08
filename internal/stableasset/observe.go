@@ -47,7 +47,7 @@ func (o ChainObservation) Landed() bool {
 
 // observeIn reads a transaction's status, its blockhash's validity and the
 // finalized height in one View.
-func observeIn(v devnethost.View, chain devnet.ChainID, txID devnet.TxID, blockhash devnet.Hash, bhHeight, window uint64) (ChainObservation, error) {
+func observeIn(v ChainView, chain devnet.ChainID, txID devnet.TxID, blockhash devnet.Hash, bhHeight, window uint64) (ChainObservation, error) {
 	st, err := v.Status(chain, txID)
 	if err != nil {
 		return ChainObservation{}, err
@@ -68,9 +68,9 @@ func observeIn(v devnethost.View, chain devnet.ChainID, txID devnet.TxID, blockh
 }
 
 func (s *Service) window(chain devnet.ChainID) (devnethost.ChainParams, error) {
-	p, ok := s.host.Config().Params(chain)
+	p, ok := s.provider.ChainParams(chain)
 	if !ok {
-		return devnethost.ChainParams{}, errs.New(errs.CodeValidationFailed, "stableasset: the host does not run chain "+string(chain))
+		return devnethost.ChainParams{}, errs.New(errs.CodeValidationFailed, "stableasset: the provider does not run chain "+string(chain))
 	}
 	return p, nil
 }
@@ -83,7 +83,7 @@ func (s *Service) observe(ctx context.Context, q db.Querier, chain devnet.ChainI
 		return ChainObservation{}, err
 	}
 	var obs ChainObservation
-	err = s.host.ViewIn(ctx, q, func(v devnethost.View) error {
+	err = s.provider.ViewIn(ctx, q, func(v ChainView) error {
 		var err error
 		obs, err = observeIn(v, chain, txID, blockhash, bhHeight, params.BlockhashWindow)
 		return err
@@ -112,7 +112,7 @@ func (s *Service) awaitFinal(ctx context.Context, chain devnet.ChainID, txID dev
 		n := uint64(1)
 		switch obs.Status.State {
 		case devnet.TxConfirmed, devnet.TxFailed:
-			tip, err := s.host.Tip(ctx, chain)
+			tip, err := s.provider.Tip(ctx, chain)
 			if err != nil {
 				return obs, err
 			}
@@ -122,7 +122,7 @@ func (s *Service) awaitFinal(ctx context.Context, chain devnet.ChainID, txID dev
 		case devnet.TxNotFound:
 			n = max(1, params.BlockhashWindow/4)
 		}
-		if _, err := s.host.ProduceBlocks(ctx, chain, min(n, devnethost.MaxBlocksPerCall)); err != nil {
+		if _, err := s.provider.ProduceBlocks(ctx, chain, min(n, devnethost.MaxBlocksPerCall)); err != nil {
 			return obs, err
 		}
 	}
@@ -132,7 +132,7 @@ func (s *Service) awaitFinal(ctx context.Context, chain devnet.ChainID, txID dev
 // references, and whether the host can serve the chain at all.
 func (s *Service) chainTip(ctx context.Context, q db.Querier, chain devnet.ChainID) (devnet.BlockInfo, error) {
 	var tip devnet.BlockInfo
-	err := s.host.ViewIn(ctx, q, func(v devnethost.View) error {
+	err := s.provider.ViewIn(ctx, q, func(v ChainView) error {
 		var err error
 		tip, err = v.Tip(chain)
 		return err
@@ -174,7 +174,7 @@ var definiteRefusals = map[devnet.ErrorCode]bool{
 // that is not a definite acceptance or a definite refusal is unknown: the
 // caller records it as such and never retries it.
 func (s *Service) submit(ctx context.Context, chain devnet.ChainID, raw []byte) (submission, error) {
-	_, err := s.host.Submit(ctx, chain, raw)
+	_, err := s.provider.Submit(ctx, chain, raw)
 	switch {
 	case err == nil:
 		return submitted, nil

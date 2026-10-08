@@ -18,7 +18,6 @@ import (
 	"github.com/nodal/controlplane/internal/audit"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/devnet"
-	"github.com/nodal/controlplane/internal/devnethost"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/id"
@@ -113,7 +112,7 @@ func (s *Service) TakeSnapshot(ctx context.Context, tx pgx.Tx, sid StableAssetID
 		return SignedSnapshot{}, err
 	}
 	var supply uint64
-	if err := s.host.ViewIn(ctx, tx, func(v devnethost.View) error {
+	if err := s.provider.ViewIn(ctx, tx, func(v ChainView) error {
 		var err error
 		supply, err = v.Supply(a.Chain, a.Mint)
 		return err
@@ -141,10 +140,11 @@ func (s *Service) TakeSnapshot(ctx context.Context, tx pgx.Tx, sid StableAssetID
 		return SignedSnapshot{}, errs.Wrap(err, errs.CodeInternal, "stableasset: snapshot is not canonically encodable")
 	}
 	hash := sha256.Sum256(canonical)
-	sig := s.snapshots.sign(snapshotSigningMessage(hash))
+	sig := s.provider.SignSnapshot(hash)
+	key := s.provider.SnapshotKey()
 	ev, err := econ.RecordEvidence(ctx, tx, econ.Evidence{
 		Key:      "stableasset/snapshots/" + a.ID.String() + "/" + body.Seq,
-		Document: map[string]any{"snapshot": json.RawMessage(canonical), "hash": hex.EncodeToString(hash[:]), "signature": hex.EncodeToString(sig), "public_key": hex.EncodeToString(s.snapshots.public)},
+		Document: map[string]any{"snapshot": json.RawMessage(canonical), "hash": hex.EncodeToString(hash[:]), "signature": hex.EncodeToString(sig), "public_key": hex.EncodeToString(key)},
 	})
 	if err != nil {
 		return SignedSnapshot{}, err
@@ -156,10 +156,10 @@ func (s *Service) TakeSnapshot(ctx context.Context, tx pgx.Tx, sid StableAssetID
 	if _, err := tx.Exec(ctx, `INSERT INTO stable_reserve_snapshots
 		(id, stable_asset_id, seq, body, body_hash, prev_hash, signature, signer_public_key, evidence_ref, taken_at)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, id.New[id.Any](), a.ID, lastSeq+1, string(canonical), hash[:], prev, sig,
-		[]byte(s.snapshots.public), ev.URI, now); err != nil {
+		[]byte(key), ev.URI, now); err != nil {
 		return SignedSnapshot{}, dbErr("record snapshot", err)
 	}
-	return SignedSnapshot{Snapshot: body, Body: canonical, Hash: hash, Signature: sig, PublicKey: s.snapshots.PublicKey(), EvidenceRef: ev.URI}, nil
+	return SignedSnapshot{Snapshot: body, Body: canonical, Hash: hash, Signature: sig, PublicKey: key, EvidenceRef: ev.URI}, nil
 }
 
 func snapshotReserves(rl ReserveLedger) []SnapshotReserve {
