@@ -20,7 +20,6 @@ package econtest
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
 	"strings"
 	"testing"
 	"time"
@@ -32,6 +31,7 @@ import (
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/db"
+	"github.com/nodal/controlplane/internal/devnet"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/ledger"
@@ -48,10 +48,10 @@ const Decimals = 6
 // actor registers what this package registers.
 var actor = econ.SystemActor("econtest")
 
-// devnetMint is a fresh mint address of the length the registries accept.
+// devnetMint is a fresh devnet address (a base58 public key), the form a
+// mint and an authority take on the simulated chains.
 func devnetMint() string {
-	sum := sha256.Sum256([]byte(uuid.NewString()))
-	return hex.EncodeToString(sum[:])[:40]
+	return devnet.NewKeypairFromSeed(sha256.Sum256([]byte(uuid.NewString()))).PublicKey().String()
 }
 
 // label is a fresh registry name.
@@ -166,16 +166,23 @@ type Twin struct {
 	Source  assets.AssetID
 }
 
-// RegisterTwin opens a bridge route from source -- a SIMULATED asset on a
-// simulated chain (sbx-*) other than sbx-ethereum -- to a fresh twin on
-// sbx-ethereum, through a new BRIDGE facility: the rows bridge.CreateRoute
+// RegisterTwin opens a bridge route from source -- a SIMULATED asset of
+// Decimals on sbx-solana or sbx-ethereum -- to a fresh twin on the other of
+// the two chains, through a new BRIDGE facility: the rows bridge.CreateRoute
 // writes. The twin is USD-pegged when its source is, and supply-controlled
 // from its first moment.
 func RegisterTwin(ctx context.Context, tx pgx.Tx, source assets.Asset) (Twin, error) {
-	if source.Chain == "sbx-ethereum" || source.Decimals != Decimals {
-		return Twin{}, errs.New(errs.CodeValidationFailed, "econtest: a twin's source is an asset of 6 decimals on a chain other than sbx-ethereum")
+	var chain string
+	switch source.Chain {
+	case "sbx-solana":
+		chain = "sbx-ethereum"
+	case "sbx-ethereum":
+		chain = "sbx-solana"
 	}
-	twin, err := simulatedAsset(ctx, tx, "sbx-ethereum", "TW")
+	if chain == "" || source.Decimals != Decimals {
+		return Twin{}, errs.New(errs.CodeValidationFailed, "econtest: a twin's source is an asset of 6 decimals on sbx-solana or sbx-ethereum")
+	}
+	twin, err := simulatedAsset(ctx, tx, chain, "TW")
 	if err != nil {
 		return Twin{}, err
 	}
@@ -199,7 +206,12 @@ func RegisterTwin(ctx context.Context, tx pgx.Tx, source assets.Asset) (Twin, er
 // SourceAsset creates a SIMULATED, USD-pegged asset on sbx-solana that is no
 // controller's: a route's source asset.
 func SourceAsset(ctx context.Context, tx pgx.Tx) (assets.Asset, error) {
-	return simulatedAsset(ctx, tx, "sbx-solana", "SRC")
+	return SourceAssetOn(ctx, tx, "sbx-solana")
+}
+
+// SourceAssetOn is SourceAsset on another simulated chain.
+func SourceAssetOn(ctx context.Context, tx pgx.Tx, chain string) (assets.Asset, error) {
+	return simulatedAsset(ctx, tx, chain, "SRC")
 }
 
 // Supply is the usual pair of supply-controlled assets of a test: a platform
