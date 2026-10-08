@@ -113,6 +113,9 @@ func (s *Service) Mint(ctx context.Context, req MintRequest) (MintResult, error)
 	if err != nil {
 		return MintResult{}, err
 	}
+	if err := s.onHost(a); err != nil {
+		return MintResult{}, err
+	}
 	if err := s.host.EnsureNativeBalance(ctx, a.Chain, s.issuer.PublicKey(), s.params.GasMinimum, s.params.GasTopUp); err != nil {
 		return MintResult{}, err
 	}

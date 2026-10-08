@@ -101,6 +101,9 @@ func (s *Service) TakeSnapshot(ctx context.Context, tx pgx.Tx, sid StableAssetID
 	if err != nil {
 		return SignedSnapshot{}, err
 	}
+	if err := s.onHost(a); err != nil {
+		return SignedSnapshot{}, err
+	}
 	if !a.Attestable {
 		return SignedSnapshot{}, errs.New(errs.CodeValidationFailed, "stableasset: this stable asset does not publish reserve snapshots")
 	}

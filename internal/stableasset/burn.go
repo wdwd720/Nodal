@@ -91,6 +91,9 @@ func (s *Service) Burn(ctx context.Context, req BurnRequest) (BurnResult, error)
 	if err != nil {
 		return BurnResult{}, err
 	}
+	if err := s.onHost(a); err != nil {
+		return BurnResult{}, err
+	}
 	holder := s.custody.HolderAddress(req.AccountID)
 	if err := s.host.EnsureNativeBalance(ctx, a.Chain, holder, s.params.GasMinimum, s.params.GasTopUp); err != nil {
 		return BurnResult{}, err

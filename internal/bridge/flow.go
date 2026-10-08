@@ -157,6 +157,9 @@ func (s *Service) Bridge(ctx context.Context, req BridgeRequest) (LegResult, err
 	if err != nil {
 		return LegResult{}, err
 	}
+	if err := s.onHost(r); err != nil {
+		return LegResult{}, err
+	}
 	holder := s.holder.HolderAddress(req.AccountID)
 	if err := s.host.EnsureNativeBalance(ctx, r.SourceChain, holder, s.params.GasMinimum, s.params.GasTopUp); err != nil {
 		return LegResult{}, err

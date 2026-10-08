@@ -209,6 +209,34 @@ func TestIntegration_TheUpkeepFailureLedgerCannotBeRewritten(t *testing.T) {
 	assert.Equal(t, 1, countRows(t, `SELECT count(*) FROM upkeep_failures WHERE operation = $1 AND item_id = $2`, UpkeepExpireDue, item))
 }
 
+// TestIntegration_EveryDeferrableConstraintStartsDeferred pins the assumption
+// cp_upkeep_check_deferred (00760) rests on: after it runs an item's deferred
+// checks it sets every deferrable constraint DEFERRED again, which is exactly
+// how each one started only while none is DEFERRABLE INITIALLY IMMEDIATE. A
+// constraint that is would be checked later than declared -- never skipped
+// -- after a batch item; this test makes adding one a decision, not an
+// accident.
+func TestIntegration_EveryDeferrableConstraintStartsDeferred(t *testing.T) {
+	requireEnv(t)
+	var names []string
+	rows, err := testDB.Query(context.Background(), `
+		SELECT conrelid::regclass::text || '.' || conname FROM pg_constraint
+		 WHERE connamespace = 'public'::regnamespace AND condeferrable AND NOT condeferred
+		UNION ALL
+		SELECT tgrelid::regclass::text || '.' || tgname FROM pg_trigger
+		 WHERE tgconstraint <> 0 AND tgdeferrable AND NOT tginitdeferred
+		   AND tgrelid IN (SELECT oid FROM pg_class WHERE relnamespace = 'public'::regnamespace)`)
+	require.NoError(t, err)
+	for rows.Next() {
+		var n string
+		require.NoError(t, rows.Scan(&n))
+		names = append(names, n)
+	}
+	rows.Close()
+	require.NoError(t, rows.Err())
+	assert.Empty(t, names, "a DEFERRABLE INITIALLY IMMEDIATE constraint: revisit cp_upkeep_check_deferred (00760)")
+}
+
 func countRows(t *testing.T, sql string, args ...any) int {
 	t.Helper()
 	var n int

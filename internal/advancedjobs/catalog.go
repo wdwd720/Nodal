@@ -145,8 +145,9 @@ func Catalog() []Descriptor {
 			Calls:      "stableasset.Service.ProcessRedemptions per stable asset with queued redemptions; a payout that cannot be made is backed off and reported",
 			KillSwitch: ksNone, Needs: NeedsDevnet},
 		{Name: NameBridgeLegs, Default: Settings{Interval: time.Minute, Batch: 100}, MaxBatch: 500,
-			Calls: "bridge.Service.ObservePending over the configured network's in-flight legs, each driven on its own " +
-				"(ReconcileLeg for a DESTINATION_FINALIZED leg, Observe's drive for an earlier one); one that cannot be advanced is backed off and reported",
+			Calls: "bridge.Service.ReconcileLeg per DESTINATION_FINALIZED leg of the configured network, one per transaction; " +
+				"then bridge.Service.ObservePending over the network's other in-flight legs (Observe's drive, each on its own); " +
+				"a leg that cannot be advanced is backed off and reported",
 			KillSwitch: ksBridge, Needs: NeedsDevnet},
 		{Name: NameBridgeRoutes, Default: Settings{Interval: time.Hour, Batch: 50},
 			Calls:      "bridge.Service.ReconcileRoute (PERIODIC) per route on the configured network",
