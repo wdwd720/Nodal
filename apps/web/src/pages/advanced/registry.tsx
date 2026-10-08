@@ -34,6 +34,7 @@ import { Overview } from "./core/Overview.tsx";
 // >>> advanced:orders import
 
 // >>> advanced:transfers import
+import { TransfersSection } from "./transfers/Transfers.tsx";
 
 // >>> advanced:treasury import
 
@@ -102,6 +103,13 @@ export const ADVANCED_SECTIONS: readonly AdvancedSection[] = [
   // >>> advanced:orders section
 
   // >>> advanced:transfers section
+  {
+    path: "transfers",
+    title: "Transfers",
+    description:
+      "Simulated value sent between customers by handle, every transfer the account sent or received with its status and evidence, and sandbox dollars from the faucet.",
+    element: <TransfersSection />,
+  },
 
   // >>> advanced:treasury section
 
