@@ -68,6 +68,27 @@ function hex(bytes: number): string {
   return randomBytes(bytes).toString("hex");
 }
 
+/**
+ * A well-formed UUIDv7 nobody recorded: the version nibble of a random v4 set
+ * to 7. The contract's UUID is "UUIDv7 in canonical form", so a bare v4 from
+ * randomUUID() is a malformed id the backend refuses with VALIDATION_FAILED
+ * before it looks anything up -- it can never stand for "an id nobody holds".
+ */
+function unknownId(): string {
+  const v4 = randomUUID();
+  return `${v4.slice(0, 14)}7${v4.slice(15)}`;
+}
+
+/**
+ * An instant as a datetime-local control holds it: local time to the minute.
+ * The browser normalises the control's value and drops seconds that are zero,
+ * so a value written with ":00" would not be the value the control holds.
+ */
+function localMinute(at: Date): string {
+  const two = (n: number): string => String(n).padStart(2, "0");
+  return `${String(at.getFullYear())}-${two(at.getMonth() + 1)}-${two(at.getDate())}T${two(at.getHours())}:${two(at.getMinutes())}`;
+}
+
 /** Waits until a page has its answer on screen and nothing says it is still loading. */
 async function settle(page: Page): Promise<void> {
   await expect(page.locator("h1")).toHaveCount(1);
@@ -159,9 +180,9 @@ test.describe("the operator console", () => {
     expect(overview.status(), "a customer holds no sandbox:operate").toBe(403);
     const problem = (await overview.json()) as Problem;
     expect(problem.code).toBe("FORBIDDEN");
-    const marks = await page.request.get(`${MARKS_PATH}?asset_id=${randomUUID()}`);
+    const marks = await page.request.get(`${MARKS_PATH}?asset_id=${unknownId()}`);
     expect(marks.status()).toBe(403);
-    const posted = await command(page, MARKS_PATH, { asset_id: randomUUID(), price: "1.5", source: "e2e-customer" });
+    const posted = await command(page, MARKS_PATH, { asset_id: unknownId(), price: "1.5", source: "e2e-customer" });
     expect(posted.status, "a customer may not record a reference mark").toBe(403);
     expect((posted.body as Problem).code).toBe("FORBIDDEN");
 
@@ -245,7 +266,7 @@ test.describe("the operator console", () => {
       expect(overview.chains_configured).toBe(false);
       await expectCode(venue, "UNSUPPORTED");
     }
-    await expect(venue).toContainText("the paper venue fills at the latest fresh reference mark");
+    await expect(venue).toContainText("The paper venue fills at the latest fresh reference mark");
 
     // Every subsystem's operator page is linked at a route that exists.
     const links = admin.page.getByRole("region", { name: "Operator pages", exact: true }).locator("a[href]");
@@ -296,8 +317,7 @@ test.describe("the operator console", () => {
     // An observation in the future is refused, through the same form, and nothing is recorded.
     await form.getByRole("button", { name: "Done", exact: true }).click();
     const future = new Date(Date.now() + 2 * 60 * 60 * 1000);
-    const local = `${String(future.getFullYear())}-${String(future.getMonth() + 1).padStart(2, "0")}-${String(future.getDate()).padStart(2, "0")}T${String(future.getHours()).padStart(2, "0")}:${String(future.getMinutes()).padStart(2, "0")}:00`;
-    await form.getByLabel("Observed at (optional)", { exact: true }).fill(local);
+    await form.getByLabel("Observed at (optional)", { exact: true }).fill(localMinute(future));
     await form.getByRole("button", { name: "Review: Record the mark", exact: true }).click();
     const [refused] = await Promise.all([
       admin.page.waitForResponse((r) => new URL(r.url()).pathname === MARKS_PATH && r.request().method() === "POST"),
@@ -328,8 +348,13 @@ test.describe("the operator console", () => {
     });
     expect(refused.status, "only SIMULATED assets take a sandbox reference mark").toBe(403);
     expect((refused.body as Problem).code).toBe("FORBIDDEN");
-    const unknown = await command(admin.page, MARKS_PATH, { asset_id: randomUUID(), price: "1.25", source: "e2e" });
+    const unknown = await command(admin.page, MARKS_PATH, { asset_id: unknownId(), price: "1.25", source: "e2e" });
     expect(unknown.status, "an asset the registry does not hold").toBe(404);
+    expect((unknown.body as Problem).code).toBe("NOT_FOUND");
+    // A malformed id is refused as such before anything is looked up.
+    const malformed = await command(admin.page, MARKS_PATH, { asset_id: randomUUID(), price: "1.25", source: "e2e" });
+    expect(malformed.status, "an id that is not a UUIDv7").toBe(400);
+    expect((malformed.body as Problem).code).toBe("VALIDATION_FAILED");
     await admin.context.close();
   });
 
@@ -337,7 +362,7 @@ test.describe("the operator console", () => {
     page,
     browser,
   }) => {
-    const unknown = randomUUID();
+    const unknown = unknownId();
     const actions = ["resume-relay", "resolve-review", "refund"] as const;
     for (const action of actions) {
       const refused = await command(page, `/v1/advanced/bridge/legs/${unknown}/${action}`, { reason: "a customer may not act on a leg" });

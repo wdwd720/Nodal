@@ -203,6 +203,9 @@ test("the margin account is the engine's evaluation figure for figure, its absen
 
 test("opening a margin account: the key is created at confirmation and a retry reuses it", async ({ page }) => {
   const id = await accountId(page);
+  // A margin account is denominated in the sandbox dollar; make sure it
+  // exists here rather than relying on another spec's faucet grant.
+  await ensureSandboxDollar(page);
   const before = await page.request.get(`/v1/advanced/margin/account?account_id=${id}`);
   await page.goto("/advanced/margin");
   await settle(page);
@@ -237,23 +240,26 @@ test("opening a margin account: the key is created at confirmation and a retry r
   await form.getByRole("button", { name: "Confirm: Open the margin account", exact: true }).click();
   const key = keyOf(await firstRequest);
   const answer = await firstResponse;
-  await expect(form.getByText(`idempotency key ${key}`, { exact: true })).toBeVisible();
 
   if (answer.ok()) {
     // Opened: the page reads the account again and now shows the margin
-    // account the backend answered with, in place of the open form.
+    // account the backend answered with, in place of the open form. The form
+    // -- and the attempt's key with it -- goes as soon as that read lands, so
+    // the key is asserted on the request that carried it, not on the page.
     const opened = (await answer.json()) as { id: string; status: string };
     await expect(page.getByText(`margin account ${opened.id}`, { exact: true })).toBeVisible();
     await expect(page.locator('[data-field="status"]')).toHaveText(opened.status);
+    await expect(page.getByRole("region", { name: "Open a margin account", exact: true })).toHaveCount(0);
     expect(sent, "confirming sent exactly one request").toBe(1);
     page.off("request", counter);
     return;
   }
 
   // The backend refused (for instance UNSUPPORTED while the sandbox dollar is
-  // not provisioned). The refusal is shown with its code, and trying again
-  // sends the same request with the same key, which the backend answers the
-  // same way.
+  // not provisioned). The form stays, showing the attempt's key and the
+  // refusal with its code, and trying again sends the same request with the
+  // same key, which the backend answers the same way.
+  await expect(form.getByText(`idempotency key ${key}`, { exact: true })).toBeVisible();
   const problem = (await answer.json()) as Problem;
   await expect(form.locator(".explain-meta")).toContainText(`code ${problem.code}`);
   const retryRequest = page.waitForRequest(
@@ -275,6 +281,16 @@ test("opening a margin account: the key is created at confirmation and a retry r
 
 test("a borrow the backend refuses is shown with its code, and retried with the same key", async ({ page }) => {
   const id = await accountId(page);
+  // A borrow needs a margin account. This test opens one through the API when
+  // the account has none, rather than relying on the test above to have done
+  // it; a deployment that refuses to open one says so with its code.
+  await ensureSandboxDollar(page);
+  if ((await page.request.get(`/v1/advanced/margin/account?account_id=${id}`)).status() === 404) {
+    const opened = await command(page, "/v1/advanced/margin/account", { account_id: id, margin_mode: "CROSS", mode: "PAPER" });
+    if (opened.status !== 201 && opened.status !== 200) {
+      expect(isProblem(opened.body), `an open the backend refuses is a problem document: ${JSON.stringify(opened.body)}`).toBe(true);
+    }
+  }
   const read = await page.request.get(`/v1/advanced/margin/account?account_id=${id}`);
   await page.goto("/advanced/margin");
   await settle(page);
@@ -448,6 +464,16 @@ async function command(page: Page, path: string, body: unknown): Promise<{ reado
     data: JSON.stringify(body),
   });
   return { status: response.status(), body: (await response.json().catch(() => undefined)) as unknown };
+}
+
+/**
+ * Makes sure the deployment's one sandbox dollar exists: the faucet creates it
+ * on its first grant. A grant beyond the faucet's rolling cap is RATE_LIMITED,
+ * which also means the dollar exists.
+ */
+async function ensureSandboxDollar(page: Page): Promise<void> {
+  const grant = await command(page, "/v1/advanced/transfers/faucet/grants", { account_id: await accountId(page), amount: "1" });
+  expect([201, 429], `the faucet runs in this deployment: ${JSON.stringify(grant.body)}`).toContain(grant.status);
 }
 
 /** Signs a development identity in, in a fresh context, through the real OIDC flow. */
