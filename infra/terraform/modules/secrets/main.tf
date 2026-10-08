@@ -10,7 +10,7 @@ locals {
   matrix = {
     # Database URLs (PART 101). readonly goes only to the audit-worker; api
     # readers fall back to the app URL by design.
-    "database/app-url"      = ["api", "relay-worker", "execution-worker", "reconciliation-worker", "market-ingest-worker", "agent-worker", "workflow-worker"]
+    "database/app-url"      = ["api", "relay-worker", "execution-worker", "reconciliation-worker", "market-ingest-worker", "agent-worker", "workflow-worker", "advanced-worker"]
     "database/migrate-url"  = ["migrate"]
     "database/readonly-url" = ["audit-worker"]
 
@@ -92,6 +92,10 @@ check "least_privilege_matrix" {
       "database/app-url", "redpanda/sasl-username", "redpanda/sasl-password",
     ]))) == 0
     error_message = "The relay-worker drains the outbox to the bus: app DB and Redpanda only, never Redis, ClickHouse, KMS or any provider credential."
+  }
+  assert {
+    condition     = tolist(local.secrets_of["advanced-worker"]) == tolist(["database/app-url"])
+    error_message = "The advanced-worker holds the app database URL and nothing else: no provider, signing, wallet or bus credential."
   }
   assert {
     condition     = !contains(local.matrix["provider/signing/api-key"], "reconciliation-worker") && !contains(local.matrix["provider/signing/api-key"], "workflow-worker")
