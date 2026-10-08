@@ -25,8 +25,10 @@ import {
 import { api } from "../client.ts";
 import { ContractViolation, oneOf, validated, type Spec } from "../contract.ts";
 import { advancedKeys, buyingPowerV2Spec, economicEffectSpec, retryTransient, riskDecisionSpec } from "./core.ts";
+import { capabilityPageSpec, swapPageSpec, withdrawalPageSpec } from "./delegation.ts";
 import { checkPositionPage } from "./derivatives.ts";
 import { checkSettlement, equityListingSpec, equitySettlementPageSpec } from "./equities.ts";
+import { periodPageSpec } from "./fees.ts";
 import { marginAccountDetailSpec } from "./margin.ts";
 import { bookOrderPageSpec } from "./orders.ts";
 import { positionListSpec, predictionMarketSpec } from "./predmarket.ts";
@@ -40,6 +42,8 @@ export type PortfolioRisk = Schemas["AdvancedPortfolioRisk"];
 export type PortfolioReconciliationRecord = Schemas["AdvancedPortfolioReconciliationRecord"];
 export type PortfolioPredictionHolding = Schemas["AdvancedPortfolioPredictionHolding"];
 export type PortfolioEquityHolding = Schemas["AdvancedPortfolioEquityHolding"];
+export type PortfolioDelegation = Schemas["AdvancedPortfolioDelegation"];
+export type PortfolioPerformanceFees = Schemas["AdvancedPortfolioPerformanceFees"];
 
 export const portfolioKeys = {
   /** The portfolio sits with the account's other rows, so anything that invalidates the account refreshes it. */
@@ -180,6 +184,15 @@ export const portfolioSpec: Spec = {
         },
       },
     },
+    delegation: {
+      required: true,
+      spec: sectionSpec({
+        capabilities: { spec: capabilityPageSpec },
+        swaps_awaiting_approval: { spec: swapPageSpec },
+        withdrawals_awaiting_approval: { spec: withdrawalPageSpec },
+      }),
+    },
+    performance_fees: { required: true, spec: sectionSpec({ periods: { spec: periodPageSpec } }) },
     risk: {
       required: true,
       spec: {
@@ -285,6 +298,17 @@ export function checkPortfolio(value: unknown, path = "/advanced/portfolio"): Po
   });
 
   checkSectionShape(pos.order_books, pos.order_books.orders !== undefined, `${at}.order_books`, false);
+
+  // The delegated authority carries all three of its pages or none of them:
+  // half of what waits for the owner is never shown as if it were all of it.
+  const d = p.delegation;
+  const pages = [d.capabilities, d.swaps_awaiting_approval, d.withdrawals_awaiting_approval];
+  const all = pages.every((page) => page !== undefined);
+  if (all !== pages.some((page) => page !== undefined)) {
+    throw new ContractViolation(`${path}.delegation`, "the section carries some of its pages but not all of them");
+  }
+  checkSectionShape(d, all, `${path}.delegation`, false);
+  checkSectionShape(p.performance_fees, p.performance_fees.periods !== undefined, `${path}.performance_fees`, false);
 
   const decisions = p.risk.decisions;
   checkSectionShape(decisions, decisions.state === "PRESENT", `${path}.risk.decisions`, false);

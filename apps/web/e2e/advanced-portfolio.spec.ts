@@ -74,6 +74,8 @@ interface Portfolio {
     readonly equities: Section;
     readonly order_books: Section;
   };
+  readonly delegation: Section;
+  readonly performance_fees: Section;
   readonly risk: { readonly decisions: Section };
 }
 
@@ -85,6 +87,8 @@ const SECTIONS: ReadonlyArray<{ readonly title: string; readonly subsystem: stri
   { title: "Prediction market shares", subsystem: "Prediction markets", pick: (p) => p.positions.prediction_markets },
   { title: "Equities", subsystem: "Equities", pick: (p) => p.positions.equities },
   { title: "Resting orders", subsystem: "Order books", pick: (p) => p.positions.order_books },
+  { title: "Delegated authority", subsystem: "Agent authority", pick: (p) => p.delegation },
+  { title: "Performance fees", subsystem: "Performance fees", pick: (p) => p.performance_fees },
 ];
 
 /** The buying power figures the summary shows, each rendered with data-field. */
@@ -108,6 +112,8 @@ const SUMMARISED_PAGES = [
   "/advanced/prediction-markets",
   "/advanced/equities/settlements",
   "/advanced/order-books/orders",
+  "/advanced/agent-authority",
+  "/advanced/fees/periods",
   "/advanced/activity",
 ] as const;
 

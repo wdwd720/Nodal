@@ -22,6 +22,7 @@ import { AsOf, Field, FieldGrid, Page, Panel, Pill } from "../../../components/L
 import { Qty, Usd } from "../../../components/Money.tsx";
 import { SimulatedNotice } from "../../../components/SimulatedNotice.tsx";
 import { componentLabel, formatMillis } from "../../../lib/advanced.ts";
+import { formatInstant } from "../../../lib/time.ts";
 import { useAdvancedAccount } from "../area.ts";
 import { Codes, NoAccount, ScrollTable, ValueDomainPill } from "../shared.tsx";
 import {
@@ -108,8 +109,151 @@ function PortfolioView(props: { readonly portfolio: Portfolio }): ReactNode {
       <PredictionMarketsPanel portfolio={p} />
       <EquitiesPanel portfolio={p} />
       <OrderBooksPanel portfolio={p} />
+      <DelegationPanel portfolio={p} />
+      <PerformanceFeesPanel portfolio={p} />
       <RiskPanel portfolio={p} />
     </>
+  );
+}
+
+/* --------------------------------------------------------------------------
+ * Delegated authority and performance fees: the account's own
+ * ------------------------------------------------------------------------ */
+
+function DelegationPanel(props: { readonly portfolio: Portfolio }): ReactNode {
+  const section = props.portfolio.delegation;
+  const capabilities = section.capabilities;
+  const swaps = section.swaps_awaiting_approval;
+  const withdrawals = section.withdrawals_awaiting_approval;
+  return (
+    <Panel
+      title="Delegated authority"
+      description="What this account's own agents may do on it -- each capability's limits, use and expiry -- and the requests of theirs that wait for the owner's decision, as the agent authority pages answer them."
+      actions={<StatePill state={section.state} />}
+    >
+      {capabilities === undefined || swaps === undefined || withdrawals === undefined ? (
+        <SectionAbsent section={section} subsystem="Agent authority" />
+      ) : (
+        <>
+          {capabilities.items.length === 0 ? (
+            <EmptyState title="No delegated capabilities" body="This account has granted its agents no capability." />
+          ) : (
+            <ScrollTable
+              caption="Delegated capabilities"
+              headers={["Agent", "Standing", "Limit", "Used in all", "Remaining today", "Expires"]}
+            >
+              {capabilities.items.map((c) => (
+                <tr key={c.id} data-capability={c.id}>
+                  <th scope="row">
+                    <Link to={routeHref(["agent-authority", "capabilities", c.id])}>{c.agent_name ?? c.agent_id}</Link>
+                  </th>
+                  <td>
+                    <Pill tone={c.standing === "ACTIVE" ? "good" : "neutral"}>{c.standing}</Pill>
+                  </td>
+                  <td>
+                    <Usd value={c.max_notional_usd} />
+                  </td>
+                  <td>
+                    <Usd value={c.usage.used_total_usd} />
+                  </td>
+                  <td>
+                    <Usd value={c.usage.remaining_today_usd} />
+                  </td>
+                  <td>
+                    <time dateTime={c.expires_at}>{formatInstant(c.expires_at)}</time>
+                  </td>
+                </tr>
+              ))}
+            </ScrollTable>
+          )}
+          {capabilities.next_cursor !== null && <p className="note">More capabilities exist than are listed here.</p>}
+          <h3>Waiting for the owner&apos;s decision</h3>
+          {swaps.items.length === 0 && withdrawals.items.length === 0 ? (
+            <EmptyState title="Nothing waits for a decision" body="No signing request and no withdrawal of the account's agents is awaiting approval." />
+          ) : (
+            <ScrollTable caption="Requests awaiting the owner's approval" headers={["Request", "Amount", "Notional", "Requested"]}>
+              {swaps.items.map((s) => (
+                <tr key={s.id} data-swap={s.id}>
+                  <th scope="row">
+                    <Link to={routeHref(["agent-authority", "swaps", s.id])}>Swap</Link>
+                  </th>
+                  <td>
+                    <Qty value={s.amount_in} decimals={s.pay_asset.decimals} symbol={s.pay_asset.symbol} />
+                  </td>
+                  <td>
+                    <Usd value={s.notional_usd} />
+                  </td>
+                  <td>
+                    <time dateTime={s.requested_at}>{formatInstant(s.requested_at)}</time>
+                  </td>
+                </tr>
+              ))}
+              {withdrawals.items.map((w) => (
+                <tr key={w.id} data-withdrawal={w.id}>
+                  <th scope="row">
+                    <Link to={routeHref(["agent-authority", "withdrawals", w.id])}>Withdrawal</Link>
+                  </th>
+                  <td>
+                    <Qty value={w.amount} decimals={w.asset.decimals} symbol={w.asset.symbol} />
+                  </td>
+                  <td>
+                    <Usd value={w.notional_usd} />
+                  </td>
+                  <td>
+                    <time dateTime={w.proposed_at}>{formatInstant(w.proposed_at)}</time>
+                  </td>
+                </tr>
+              ))}
+            </ScrollTable>
+          )}
+        </>
+      )}
+      <SeeAlso route={["agent-authority"]}>Every capability, destination and request on the agent authority page</SeeAlso>
+    </Panel>
+  );
+}
+
+function PerformanceFeesPanel(props: { readonly portfolio: Portfolio }): ReactNode {
+  const section = props.portfolio.performance_fees;
+  const periods = section.periods;
+  return (
+    <Panel
+      title="Performance fees"
+      description="This account's performance-fee periods, as the fees page answers them. An OPEN period's accrued fee is a running figure; nothing is charged until the period crystallizes."
+      actions={<StatePill state={section.state} />}
+    >
+      {periods === undefined ? (
+        <SectionAbsent section={section} subsystem="Performance fees" />
+      ) : periods.items.length === 0 ? (
+        <EmptyState title="No performance-fee periods" body="No performance-fee period has been opened for this account." />
+      ) : (
+        <>
+          <ScrollTable caption="Performance-fee periods" headers={["Strategy", "Status", "High-water mark", "Accrued", "Period ends"]}>
+            {periods.items.map((period) => (
+              <tr key={period.id} data-period={period.id}>
+                <th scope="row">
+                  <Link to={routeHref(["fees", "periods", period.id])}>{period.strategy_ref}</Link>
+                </th>
+                <td>
+                  <Pill tone={period.status === "OPEN" ? "info" : "neutral"}>{period.status}</Pill>
+                </td>
+                <td>
+                  <Usd value={period.terms.prior_hwm} />
+                </td>
+                <td>
+                  <Usd value={period.accrued} />
+                </td>
+                <td>
+                  <time dateTime={period.terms.period_end}>{formatInstant(period.terms.period_end)}</time>
+                </td>
+              </tr>
+            ))}
+          </ScrollTable>
+          {periods.next_cursor !== null && <p className="note">More periods exist than are listed here.</p>}
+        </>
+      )}
+      <SeeAlso route={["fees", "periods"]}>Every period, its flows and its statement on the fees page</SeeAlso>
+    </Panel>
   );
 }
 

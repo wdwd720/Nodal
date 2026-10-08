@@ -317,6 +317,9 @@ const ANSWER = {
       state: "PRESENT", truncated: false, value_domain: "SIMULATED",
     },
   },
+  // The world the answer was captured in runs no agent authority service and no fee ledger.
+  delegation: { state: "NOT_CONFIGURED", value_domain: "SIMULATED" },
+  performance_fees: { state: "NOT_CONFIGURED", value_domain: "SIMULATED" },
   quote_asset_id: "01920000-0000-7000-8000-5342582d5553", quote_decimals: 6, quote_provisioned: true,
   quote_symbol: "SBX-USD",
   risk: {
@@ -462,6 +465,45 @@ test("a section carries its answer exactly when PRESENT and its problem exactly 
         delete d.positions;
       }),
     ),
+  );
+});
+
+test("the delegated authority carries all of its pages or none, and performance fees their periods exactly when PRESENT", () => {
+  const empty = { items: [], next_cursor: null, value_domain: "SIMULATED" };
+  const present = (p: Mutable): void => {
+    Object.assign(at(p, "delegation"), {
+      state: "PRESENT", capabilities: empty, swaps_awaiting_approval: empty, withdrawals_awaiting_approval: empty,
+    });
+  };
+  assert.doesNotThrow(() => checkPortfolio(broken(present)), "PRESENT with every page");
+  refuses(broken((p) => { at(p, "delegation").state = "PRESENT"; }), /\.delegation\.state$/);
+  refuses(
+    broken((p) => {
+      present(p);
+      delete at(p, "delegation").withdrawals_awaiting_approval;
+    }),
+    /\.delegation$/,
+  );
+  refuses(broken((p) => { at(p, "delegation").capabilities = empty; }), /\.delegation$/);
+  // An embedded page is held to the agent authority section's own spec.
+  refuses(
+    broken((p) => {
+      present(p);
+      at(p, "delegation").capabilities = { items: [], value_domain: "SIMULATED" };
+    }),
+    /\.delegation\.capabilities\.next_cursor$/,
+  );
+
+  refuses(broken((p) => { at(p, "performance_fees").state = "UNAVAILABLE"; }), /\.performance_fees\.state$/);
+  assert.doesNotThrow(() =>
+    checkPortfolio(
+      broken((p) => {
+        Object.assign(at(p, "performance_fees"), { state: "UNAVAILABLE", problem: { code: "UNSUPPORTED", detail: "no fee ledger" } });
+      }),
+    ),
+  );
+  assert.doesNotThrow(() =>
+    checkPortfolio(broken((p) => { Object.assign(at(p, "performance_fees"), { state: "PRESENT", periods: empty }); })),
   );
 });
 
