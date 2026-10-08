@@ -266,9 +266,6 @@ type sendState struct {
 // returns the original transfer (and, for a refusal, the original error) with
 // Replayed set; a different request under the same key is
 // INVALID_IDEMPOTENCY_REUSE.
-//
-// Send changes tx's constraint mode for the economic-intent transition
-// binding to IMMEDIATE (see immediateIntentBinding).
 func (s *Service) Send(ctx context.Context, tx pgx.Tx, p security.Principal, req SendRequest) (Result, error) {
 	if tx == nil {
 		return Result{}, errs.New(errs.CodeInternal, "transfers: Send requires a transaction")
@@ -393,9 +390,6 @@ func (s *Service) Send(ctx context.Context, tx pgx.Tx, p security.Principal, req
 			WithField("intent_id", intent.ID.String())
 	}
 	st.intent = intent
-	if err := immediateIntentBinding(ctx, tx); err != nil {
-		return Result{}, err
-	}
 	st.t, err = insertTransfer(ctx, tx, Transfer{
 		ID: NewTransferID(), IntentID: intent.ID, SenderAccountID: st.sender.ID, SenderUserID: userID,
 		RecipientAccountID: st.recipient.ID, RecipientHandle: req.RecipientHandle, AssetID: st.asset.ID,
@@ -460,11 +454,10 @@ func (s *Service) Send(ctx context.Context, tx pgx.Tx, p security.Principal, req
 	// under the (account, asset) totals lock every spender of this wallet
 	// takes.
 	rsv, err := s.capital.Reserve(ctx, tx, capital.ReserveRequest{
-		// IntentID stays empty: asset_reservations.intent_id references
-		// trade_intents, not economic_intents. The reservation is tied to the
-		// transfer by its idempotency key and by the effect and the transfer
-		// row, which both name it.
-		AccountID: st.sender.ID.String(), AssetID: st.asset.ID, Quantity: req.Quantity,
+		// The reservation names the economic intent it serves (00733); the
+		// transfer row and the effect name the reservation in turn.
+		EconomicIntentID: st.t.IntentID.String(),
+		AccountID:        st.sender.ID.String(), AssetID: st.asset.ID, Quantity: req.Quantity,
 		ActorType: security.ActorUser, ActorID: p.SubjectID, IdempotencyKey: "p2p:" + st.t.ID.String(),
 		TTL: ReservationTTL, Reason: "simulated transfer " + st.t.ID.String(),
 	})

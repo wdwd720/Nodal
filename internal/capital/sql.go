@@ -22,14 +22,14 @@ import (
 // them exactly; nullable uuid/text columns are coalesced to "" so the Go
 // structs stay pointer-free where absence is not meaningful.
 
-const reservationColumns = `id, account_id, asset_id, envelope_id, coalesce(intent_id::text, ''), coalesce(locked_by_order_id::text, ''),
+const reservationColumns = `id, account_id, asset_id, envelope_id, coalesce(intent_id::text, ''), coalesce(economic_intent_id::text, ''), coalesce(locked_by_order_id::text, ''),
 	actor_type, actor_id, quantity::text, consumed_quantity::text, usd_minor, consumed_usd_minor, status, reason,
 	coalesce(release_reason, ''), idempotency_key, coalesce(correlation_id, ''), created_at, expires_at, consumed_at, released_at`
 
 func scanReservation(row pgx.Row) (Reservation, error) {
 	var r Reservation
 	var env EnvelopeID
-	if err := row.Scan(&r.ID, &r.AccountID, &r.AssetID, &env, &r.IntentID, &r.LockedByOrderID,
+	if err := row.Scan(&r.ID, &r.AccountID, &r.AssetID, &env, &r.IntentID, &r.EconomicIntentID, &r.LockedByOrderID,
 		&r.ActorType, &r.ActorID, &r.Quantity, &r.ConsumedQuantity, &r.USD, &r.ConsumedUSD, &r.Status, &r.Reason,
 		&r.ReleaseReason, &r.IdempotencyKey, &r.CorrelationID, &r.CreatedAt, &r.ExpiresAt, &r.ConsumedAt, &r.ReleasedAt); err != nil {
 		return Reservation{}, err

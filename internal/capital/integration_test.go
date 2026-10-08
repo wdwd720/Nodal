@@ -718,6 +718,50 @@ func TestIntegration_IntentLink(t *testing.T) {
 	f.assertNoDrift()
 }
 
+// TestIntegration_EconomicIntentLink: a reservation can name the economic
+// intent it serves (00733), the link is frozen once written (RV001), and a
+// reservation names at most one kind of intent.
+func TestIntegration_EconomicIntentLink(t *testing.T) {
+	requireEnv(t)
+	f := newFixture(t)
+	f.seedWallet(f.accountID, qty(1_000*oneUSDC))
+	intentID := id.New[id.Any]()
+	_, err := testDB.Exec(f.ctx, `INSERT INTO economic_intents (id, account_id, kind, mode, capability, actor_type, actor_id,
+		content_hash, idempotency_key, status)
+		VALUES ($1, $2, 'TRANSFER_VALUE', 'SANDBOX', 'P2P_TRANSFERS', 'USER', $3, sha256('link'::bytea), $4, 'RECEIVED')`,
+		intentID, f.accountID, f.user.String(), "link-"+uuid.NewString())
+	require.NoError(t, err)
+
+	req := f.request(f.accountID, 10*oneUSDC, 10_00, nil)
+	req.EconomicIntentID = intentID.String()
+	r, err := f.reserve(req)
+	require.NoError(t, err)
+	assert.Equal(t, intentID.String(), r.EconomicIntentID)
+	assert.Equal(t, intentID.String(), f.get(r.ID).EconomicIntentID)
+	assert.Empty(t, r.IntentID)
+
+	// Replaying the key for a different intent is a reuse, not the same hold.
+	other := req
+	other.EconomicIntentID = id.New[id.Any]().String()
+	_, err = f.reserve(other)
+	require.Error(t, err)
+	assert.Equal(t, errs.CodeInvalidIdempotencyReuse, errs.CodeOf(err))
+
+	// The link is identity: the database refuses to move it.
+	_, err = testDB.Exec(f.ctx, `UPDATE asset_reservations SET economic_intent_id = NULL WHERE id = $1`, r.ID)
+	require.Error(t, err)
+	assert.Equal(t, "RV001", db.SQLState(err), "got %v", err)
+
+	// A request naming both kinds of intent is refused before any SQL.
+	both := f.request(f.accountID, oneUSDC, 0, nil)
+	both.EconomicIntentID = intentID.String()
+	both.IntentID = id.New[id.Any]().String()
+	_, err = f.reserve(both)
+	require.Error(t, err)
+	assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(err))
+	f.assertNoDrift()
+}
+
 func TestIntegration_InsufficientBuyingPower(t *testing.T) {
 	requireEnv(t)
 	f := newFixture(t)

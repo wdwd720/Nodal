@@ -35,11 +35,9 @@ type Notifier interface {
 }
 
 // NotificationNotifier writes in-app notifications through
-// internal/notification. That package has no transfer kind; until one exists
-// a received transfer is FUNDING_AVAILABLE and a reversed one
-// FUNDING_REVERSED, and the data payload names the transfer event
-// precisely ("p2p_transfer_received" / "p2p_transfer_reversed"). The dedup
-// key makes a replay notify exactly once.
+// internal/notification, as TRANSFER_RECEIVED and TRANSFER_REVERSED (00733).
+// The data payload names the transfer event and marks the value simulated;
+// the dedup key makes a replay notify exactly once.
 type NotificationNotifier struct {
 	repo *notification.Repository
 }
@@ -54,7 +52,7 @@ func NewNotificationNotifier(repo *notification.Repository) *NotificationNotifie
 
 // TransferReceived implements Notifier.
 func (n *NotificationNotifier) TransferReceived(ctx context.Context, tx pgx.Tx, nt Notice) error {
-	return n.write(ctx, tx, nt, notification.KindFundingAvailable, "p2p_transfer_received", "p2p-received:",
+	return n.write(ctx, tx, nt, notification.KindTransferReceived, "p2p_transfer_received", "p2p-received:",
 		"Simulated transfer received",
 		"You received "+nt.Quantity.ToDecimalString(nt.AssetDecimals)+" "+nt.AssetSymbol+
 			" of simulated value from another customer. Simulated value only: nothing real moved.")
@@ -62,7 +60,7 @@ func (n *NotificationNotifier) TransferReceived(ctx context.Context, tx pgx.Tx, 
 
 // TransferReversed implements Notifier.
 func (n *NotificationNotifier) TransferReversed(ctx context.Context, tx pgx.Tx, nt Notice) error {
-	return n.write(ctx, tx, nt, notification.KindFundingReversed, "p2p_transfer_reversed", "p2p-reversed:",
+	return n.write(ctx, tx, nt, notification.KindTransferReversed, "p2p_transfer_reversed", "p2p-reversed:",
 		"Simulated transfer reversed",
 		"A simulated transfer of "+nt.Quantity.ToDecimalString(nt.AssetDecimals)+" "+nt.AssetSymbol+
 			" you received was reversed by an operator. Simulated value only: nothing real moved.")

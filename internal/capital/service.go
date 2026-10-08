@@ -180,13 +180,13 @@ func (s *Service) Reserve(ctx context.Context, tx pgx.Tx, r ReserveRequest) (Res
 
 func (s *Service) insertReservation(ctx context.Context, tx pgx.Tx, r ReserveRequest, account accounts.AccountID, usd money.USD, now time.Time) (Reservation, bool, error) {
 	res, err := scanReservation(tx.QueryRow(ctx, `INSERT INTO asset_reservations
-			(id, account_id, asset_id, envelope_id, intent_id, actor_type, actor_id, quantity, consumed_quantity, usd_minor, consumed_usd_minor,
+			(id, account_id, asset_id, envelope_id, intent_id, economic_intent_id, actor_type, actor_id, quantity, consumed_quantity, usd_minor, consumed_usd_minor,
 			 status, reason, idempotency_key, correlation_id, created_at, expires_at)
-		VALUES ($1, $2, $3, $4, NULLIF($5, '')::uuid, $6, $7, $8::numeric, 0, $9, 0, 'ACTIVE', $10, $11, NULLIF($12, ''), $13, $14)
+		VALUES ($1, $2, $3, $4, NULLIF($5, '')::uuid, NULLIF($15, '')::uuid, $6, $7, $8::numeric, 0, $9, 0, 'ACTIVE', $10, $11, NULLIF($12, ''), $13, $14)
 		ON CONFLICT (idempotency_key) DO NOTHING
 		RETURNING `+reservationColumns,
 		NewReservationID(), account, r.AssetID, r.EnvelopeID, r.IntentID, string(r.ActorType), r.ActorID, r.Quantity, usd,
-		r.Reason, r.IdempotencyKey, observability.CorrelationID(ctx), now, now.Add(r.TTL)))
+		r.Reason, r.IdempotencyKey, observability.CorrelationID(ctx), now, now.Add(r.TTL), r.EconomicIntentID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return Reservation{}, false, nil
@@ -203,7 +203,8 @@ func replayReservation(existing Reservation, r ReserveRequest, account accounts.
 		existing.AssetID == r.AssetID &&
 		existing.Quantity.Equal(r.Quantity) &&
 		existing.USD.Equal(usd) &&
-		sameEnvelope(existing.EnvelopeID, r.EnvelopeID)
+		sameEnvelope(existing.EnvelopeID, r.EnvelopeID) &&
+		existing.EconomicIntentID == r.EconomicIntentID
 	if !same {
 		return Reservation{}, errs.New(errs.CodeInvalidIdempotencyReuse, "idempotency key was already used for a different reservation").
 			WithField("idempotency_key", r.IdempotencyKey).

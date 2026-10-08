@@ -44,11 +44,14 @@ func (s ReservationStatus) Final() bool { return s.Valid() && s != ReservationAc
 // asset set aside for an intent, and (optionally) the USD budget it holds
 // against a capital envelope.
 type Reservation struct {
-	ID               ReservationID
-	AccountID        accounts.AccountID
-	AssetID          assets.AssetID
-	EnvelopeID       *EnvelopeID
-	IntentID         string // uuid text; "" when not attached to an intent
+	ID         ReservationID
+	AccountID  accounts.AccountID
+	AssetID    assets.AssetID
+	EnvelopeID *EnvelopeID
+	IntentID   string // uuid text; "" when not attached to a trade intent
+	// EconomicIntentID is the economic intent (internal/econ) the reservation
+	// serves; "" when none. A reservation names at most one kind of intent.
+	EconomicIntentID string
 	LockedByOrderID  string // uuid text; "" when no order holds the reservation
 	ActorType        security.ActorType
 	ActorID          string
@@ -392,17 +395,20 @@ func (p EnvelopeAuthorityPatch) Validate() error {
 // ReserveRequest is the fixed input contract of Reserver.Reserve
 // (FINANCIAL_MODEL §7).
 type ReserveRequest struct {
-	AccountID      string
-	AssetID        assets.AssetID
-	Quantity       money.Quantity
-	USDMinor       int64
-	EnvelopeID     *EnvelopeID
-	IntentID       string
-	ActorType      security.ActorType
-	ActorID        string
-	IdempotencyKey string
-	TTL            time.Duration
-	Reason         string
+	AccountID  string
+	AssetID    assets.AssetID
+	Quantity   money.Quantity
+	USDMinor   int64
+	EnvelopeID *EnvelopeID
+	IntentID   string
+	// EconomicIntentID names the economic intent the reservation serves.
+	// Mutually exclusive with IntentID, which names a trade intent.
+	EconomicIntentID string
+	ActorType        security.ActorType
+	ActorID          string
+	IdempotencyKey   string
+	TTL              time.Duration
+	Reason           string
 }
 
 // Validate checks the request before any database work.
@@ -419,6 +425,14 @@ func (r ReserveRequest) Validate() error {
 	}
 	if r.USDMinor < 0 {
 		problems = append(problems, "usd_minor must not be negative")
+	}
+	if r.EconomicIntentID != "" {
+		if _, err := id.ParseAny(r.EconomicIntentID); err != nil {
+			problems = append(problems, "economic_intent_id must be a canonical uuid")
+		}
+		if r.IntentID != "" {
+			problems = append(problems, "a reservation serves a trade intent or an economic intent, not both")
+		}
 	}
 	if r.EnvelopeID != nil && r.EnvelopeID.IsZero() {
 		problems = append(problems, "envelope_id must be set when present")

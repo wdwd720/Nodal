@@ -9,13 +9,15 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/nodal/controlplane/internal/assets"
+	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/valuation"
 	"github.com/nodal/controlplane/internal/valuedomain"
 )
 
-// SandboxDollarSymbol is the symbol of the standard sandbox dollar.
-const SandboxDollarSymbol = "SBX-USD"
+// SandboxDollarSymbol is the symbol of the standard sandbox dollar, owned by
+// internal/econ.
+const SandboxDollarSymbol = econ.SandboxDollarSymbol
 
 // AssetSpec describes a standard sandbox asset. The symbol is how
 // EnsureSandboxAsset finds an existing one; it is never the asset's identity
@@ -33,7 +35,7 @@ type AssetSpec struct {
 // SandboxDollarSpec is the standard sandbox dollar: SBX-USD, 6 decimals,
 // SIMULATED, on chain nodal-sandbox, valued at par.
 func SandboxDollarSpec() AssetSpec {
-	return AssetSpec{Symbol: SandboxDollarSymbol, Name: "Sandbox US Dollar (simulated)", Decimals: 6, USDPegged: true}
+	return AssetSpec{Symbol: SandboxDollarSymbol, Name: econ.SandboxDollarName, Decimals: econ.SandboxDollarDecimals, USDPegged: true}
 }
 
 var symbolRE = regexp.MustCompile(`^[A-Z0-9][A-Z0-9.-]{1,31}$`)
@@ -57,9 +59,12 @@ func (s AssetSpec) Validate() error {
 }
 
 // EnsureSandboxDollar returns the standard sandbox dollar, creating it on
-// first use. Idempotent and safe under concurrency (see EnsureSandboxAsset).
+// first use. It is econ's: one well-known asset every subsystem shares.
 func EnsureSandboxDollar(ctx context.Context, tx pgx.Tx) (assets.Asset, error) {
-	return EnsureSandboxAsset(ctx, tx, SandboxDollarSpec())
+	if tx == nil {
+		return assets.Asset{}, errs.New(errs.CodeInternal, "sandboxfund: EnsureSandboxDollar requires a transaction")
+	}
+	return econ.EnsureSandboxDollar(ctx, tx)
 }
 
 // EnsureSandboxAsset returns the SIMULATED asset on chain nodal-sandbox with
@@ -73,6 +78,16 @@ func EnsureSandboxAsset(ctx context.Context, tx pgx.Tx, spec AssetSpec) (assets.
 	}
 	if err := spec.Validate(); err != nil {
 		return assets.Asset{}, err
+	}
+	// The sandbox dollar is never created here under a random id: it has one
+	// well-known identity (econ). A spec that disagrees with it is a CONFLICT.
+	if spec.Symbol == SandboxDollarSymbol {
+		if spec.Decimals != econ.SandboxDollarDecimals || !spec.USDPegged {
+			return assets.Asset{}, errs.Newf(errs.CodeConflict,
+				"sandbox asset %s is the sandbox dollar (%d decimals, USD peg), not %d decimals and USD peg %t",
+				spec.Symbol, econ.SandboxDollarDecimals, spec.Decimals, spec.USDPegged)
+		}
+		return econ.EnsureSandboxDollar(ctx, tx)
 	}
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`,
 		"sandboxfund.asset:"+assets.SandboxChain+":"+spec.Symbol); err != nil {

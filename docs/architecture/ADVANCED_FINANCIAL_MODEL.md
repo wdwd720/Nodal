@@ -34,6 +34,7 @@ schema version. Enabling any of it is a code change, a migration and a gate cere
 | Risk Kernel V2 | `internal/risk` (`advanced.go`) | 00731 | — |
 | Ledger V2 chart | `internal/ledger` (`advanced.go`) | 00731 | — |
 | Canonical instrument model | `internal/instruments` | 00732 | — |
+| Kernel amendments: multi-step transition binding, reservation ↔ economic intent, transfer notifications | `internal/econ`, `internal/capital`, `internal/notification` | 00733 | — |
 | Matching engine (pure) | `internal/matching` | — | — |
 | Fixed-point options analytics (pure) | `internal/quant` | — | — |
 | Spread / fee / performance-fee engines (pure) | `internal/fees` | — | — |
@@ -52,7 +53,7 @@ schema version. Enabling any of it is a code change, a migration and a gate cere
 | Sandboxed strategy runtime | `internal/sandboxrt` | 00751 | `SANDBOX_RUNTIME` |
 | Delegated agent signing | `internal/delegation` | 00752 | `AGENT_AUTHORITY` |
 | Delegated agent withdrawals | `internal/delegation` | 00753 | `WITHDRAWALS` |
-| Sandbox funding (faucet) | `internal/econ` / `internal/sandboxfund` | — | `SANDBOX_FUNDING` |
+| Sandbox funding (faucet) and the sandbox dollar | `internal/sandboxfund` (faucet), `internal/econ` (`SandboxDollar`) | 00744 | `SANDBOX_FUNDING` |
 | Buying power V2 | `internal/capital/buyingpower` | — | — |
 
 `internal/prediction` (the agent forecast ledger) and `internal/commerce` (the creator marketplace) are
@@ -169,7 +170,8 @@ key is `INVALID_IDEMPOTENCY_REUSE`; a ledger-posting effect cannot be APPLIED wi
 transaction (`economic_effects_applied_has_journal`); a journal transaction can back only one effect
 (`economic_effects_journal_once`); the status machine (PENDING→APPLIED|UNKNOWN|FAILED, UNKNOWN→APPLIED|FAILED,
 APPLIED→COMPENSATED) is enforced in SQL (EF001) and every change needs a transition row naming both
-endpoints (AU001); identity is frozen (EF002). The ledger's own idempotency key makes the posting itself
+endpoints (AU001) — several steps may be taken in one transaction, each licensed by its own row (00733);
+identity is frozen (EF002). The ledger's own idempotency key makes the posting itself
 idempotent as well.
 
 ## 8. Risk Kernel V2

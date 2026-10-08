@@ -78,7 +78,7 @@ func TestIntegration_AReversalCompensatesAndNeverEditsHistory(t *testing.T) {
 	assert.Equal(t, econ.EffectCompensated, eff.Status)
 	assert.Equal(t, *rev.ReversalJournalTransactionID, *eff.CompensationJournalTransactionID)
 	assert.Equal(t, 1, f.count(`SELECT count(*) FROM internal_transfer_transitions WHERE transfer_id = $1 AND from_status = 'COMPLETED' AND to_status = 'REVERSED' AND actor_type = 'OPERATOR'`, tr.ID))
-	assert.Equal(t, 1, f.count(`SELECT count(*) FROM notifications WHERE user_id = $1 AND resource_id = $2 AND kind = 'FUNDING_REVERSED'`, bob.user, tr.ID.String()))
+	assert.Equal(t, 1, f.count(`SELECT count(*) FROM notifications WHERE user_id = $1 AND resource_id = $2 AND kind = 'TRANSFER_REVERSED'`, bob.user, tr.ID.String()))
 	assert.Equal(t, 1, f.count(`SELECT count(*) FROM provider_evidence WHERE key = $1`, "advanced/p2p/"+tr.ID.String()+"/reversal.json"))
 
 	// Again: the same fact, nothing new.

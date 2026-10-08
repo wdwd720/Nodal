@@ -63,7 +63,9 @@ func TestIntegration_V2ComposesEverySimulatedComponentAndIgnoresRealCapital(t *t
 	real := seedAssetRow(t, d, "USDC", 6, true, assets.RiskSettlement)
 	seedWalletBalance(t, d, acct, real.ID, q6(9_999_000_000)) // real capital: must not appear
 
-	cust := func(code ledger.Code, a assets.AssetID) ledger.AccountRef { return ledger.CustomerAccount(acct, code, a) }
+	cust := func(code ledger.Code, a assets.AssetID) ledger.AccountRef {
+		return ledger.CustomerAccount(acct, code, a)
+	}
 	// $2,000 sandbox cash; 0.1 BTC funded then posted as margin collateral.
 	postV2(t, d, svc, ledger.KindSandboxFunding, []ledger.Entry{
 		{Account: cust(ledger.CodeWallet, usd.ID), Side: ledger.Debit, Quantity: q6(2_000_000_000)},

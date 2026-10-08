@@ -83,7 +83,7 @@ func TestIntegration_ATransferChangesOwnershipNotLiabilities(t *testing.T) {
 	assert.Equal(t, 6, f.count(`SELECT count(*) FROM outbox_events WHERE topic = 'econ.intent.transitioned' AND aggregate_id = $1`, tr.IntentID.String()))
 	assert.Equal(t, 2, f.count(`SELECT count(*) FROM outbox_events WHERE topic = 'econ.effect.transitioned' AND aggregate_id = $1`, tr.EffectID.String()))
 	assert.Equal(t, 1, f.count(`SELECT count(*) FROM audit_events WHERE resource_type = 'internal_transfer' AND resource_id = $1 AND action = 'transfers.transfer.completed'`, tr.ID.String()))
-	assert.Equal(t, 1, f.count(`SELECT count(*) FROM notifications WHERE user_id = $1 AND resource_id = $2 AND kind = 'FUNDING_AVAILABLE'`, bob.user, tr.ID.String()))
+	assert.Equal(t, 1, f.count(`SELECT count(*) FROM notifications WHERE user_id = $1 AND resource_id = $2 AND kind = 'TRANSFER_RECEIVED'`, bob.user, tr.ID.String()))
 	assert.Equal(t, 0, f.count(`SELECT count(*) FROM notifications WHERE resource_id = $1 AND (body LIKE '%rent%' OR data::text LIKE '%rent%')`, tr.ID.String()))
 
 	// Both parties read it; a stranger is told it does not exist.

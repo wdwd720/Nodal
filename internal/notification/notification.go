@@ -35,7 +35,20 @@ const (
 	KindRiskLimitHit         Kind = "RISK_LIMIT_HIT"
 	KindSecuritySessionEvent Kind = "SECURITY_SESSION_EVENT"
 	KindReconciliationHold   Kind = "RECONCILIATION_HOLD"
+	// A customer received, or had reversed, a transfer of simulated value
+	// from another customer (internal/transfers, 00733).
+	KindTransferReceived Kind = "TRANSFER_RECEIVED"
+	KindTransferReversed Kind = "TRANSFER_REVERSED"
 )
+
+var allKinds = []Kind{
+	KindFundingAvailable, KindFundingFailed, KindFundingReversed, KindTradeFilled, KindTradeFailed,
+	KindAgentPaused, KindRiskLimitHit, KindSecuritySessionEvent, KindReconciliationHold,
+	KindTransferReceived, KindTransferReversed,
+}
+
+// AllKinds returns every notification kind, exactly the notifications_kind_check list.
+func AllKinds() []Kind { return append([]Kind(nil), allKinds...) }
 
 // Severity of a notification.
 type Severity string
@@ -48,10 +61,10 @@ const (
 )
 
 func (k Kind) valid() bool {
-	switch k {
-	case KindFundingAvailable, KindFundingFailed, KindFundingReversed, KindTradeFilled, KindTradeFailed,
-		KindAgentPaused, KindRiskLimitHit, KindSecuritySessionEvent, KindReconciliationHold:
-		return true
+	for _, known := range allKinds {
+		if k == known {
+			return true
+		}
 	}
 	return false
 }

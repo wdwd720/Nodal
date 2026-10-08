@@ -802,3 +802,83 @@ func TestIntegration_EffectsListOnlyTheAccountsOwnAndPageExactly(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(err))
 }
+
+// An intent may walk its whole lifecycle in one transaction -- the shape the
+// advanced model prescribes -- with every step licensed by its own transition
+// row (00733). Before the amendment the deferred binding remembered one edge
+// per intent, so the first five steps failed AU001 at commit.
+func TestIntegration_AnIntentWalksItsWholeLifecycleInOneTransaction(t *testing.T) {
+	f := newFixture(t)
+	in := validIntent()
+	in.AccountID = f.account()
+	in.IdempotencyKey = "walk-" + uuid.NewString()
+	var final Intent
+	require.NoError(t, f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+		cur, _, err := f.intents.Submit(ctx, tx, in)
+		if err != nil {
+			return err
+		}
+		for _, to := range []IntentStatus{StatusRouted, StatusRiskApproved, StatusReserved, StatusExecuting, StatusCompleted} {
+			if cur, err = f.intents.Transition(ctx, tx, cur.ID, to, systemActor, "step", ""); err != nil {
+				return err
+			}
+		}
+		final = cur
+		return nil
+	}))
+	assert.Equal(t, StatusCompleted, final.Status)
+	var steps int
+	require.NoError(t, testDB.QueryRow(f.ctx, `SELECT count(*) FROM economic_intent_transitions WHERE intent_id = $1`, final.ID).Scan(&steps))
+	assert.GreaterOrEqual(t, steps, 5, "every step left its own transition row")
+
+	// The same for an effect: PENDING -> UNKNOWN -> APPLIED in one transaction.
+	acct := f.account()
+	res := f.fund(acct, f.simAsset("SBXW"+strings.ToUpper(uuid.NewString()[:4])), 1_000)
+	require.NoError(t, f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+		e, _, err := f.effects.Begin(ctx, tx, BeginRequest{Key: "walk:" + uuid.NewString(), Subsystem: SubsystemTransfers,
+			Kind: "P2P_TRANSFER", AccountID: acct.String(), Request: map[string]string{"n": "1"}, PostsLedger: true, Actor: systemActor})
+		if err != nil {
+			return err
+		}
+		if _, err := f.effects.MarkUnknown(ctx, tx, e.ID, "ext-1", systemActor, "timeout"); err != nil {
+			return err
+		}
+		_, err = f.effects.Apply(ctx, tx, e.ID, ApplyRequest{JournalTransactionID: &res.TransactionID, Actor: systemActor, Reason: "observed"})
+		return err
+	}))
+}
+
+// Flagging other edges licenses nothing else: a status change whose own edge
+// has no transition row is still AU001, however many rows the transaction
+// wrote for other steps.
+func TestIntegration_AnUnlicensedStepIsRefusedAmongLicensedOnes(t *testing.T) {
+	f := newFixture(t)
+	in := validIntent()
+	in.AccountID = f.account()
+	in.IdempotencyKey = "forge-" + uuid.NewString()
+	var created Intent
+	require.NoError(t, f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+		var err error
+		created, _, err = f.intents.Submit(ctx, tx, in)
+		return err
+	}))
+	err := f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+		// A legitimate step with its row...
+		if _, err := f.intents.Transition(ctx, tx, created.ID, StatusRouted, systemActor, "step", ""); err != nil {
+			return err
+		}
+		// ...a row for a step that is never taken...
+		if _, err := tx.Exec(ctx, `INSERT INTO economic_intent_transitions (id, intent_id, from_status, to_status, actor_type, actor_id, reason)
+			VALUES ($1, $2, 'RESERVED', 'EXECUTING', 'SYSTEM', 'forger', 'decoy')`, uuid.New(), created.ID); err != nil {
+			return err
+		}
+		// ...and a bare UPDATE taking an edge nobody licensed.
+		_, err := tx.Exec(ctx, `UPDATE economic_intents SET status = 'RISK_APPROVED' WHERE id = $1`, created.ID)
+		return err
+	})
+	require.Error(t, err)
+	assert.Equal(t, "AU001", db.SQLState(err), "got %v", err)
+	got, err := f.intents.Get(f.ctx, testDB, created.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusReceived, got.Status, "the whole transaction rolled back")
+}

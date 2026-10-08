@@ -47,10 +47,13 @@ import (
 	"github.com/nodal/controlplane/internal/intent"
 	"github.com/nodal/controlplane/internal/killswitch"
 	"github.com/nodal/controlplane/internal/ledger"
+	"github.com/nodal/controlplane/internal/notification"
 	"github.com/nodal/controlplane/internal/prediction"
 	"github.com/nodal/controlplane/internal/reconciliation"
 	"github.com/nodal/controlplane/internal/risk"
+	"github.com/nodal/controlplane/internal/sandboxfund"
 	"github.com/nodal/controlplane/internal/security"
+	"github.com/nodal/controlplane/internal/transfers"
 )
 
 var (
@@ -172,6 +175,18 @@ func registry() []pair {
 		{table: "instrument_terms", constraint: "instrument_terms_margin_model_check", source: "instruments.AllMarginModels()", values: str(instruments.AllMarginModels())},
 		{table: "instrument_terms", constraint: "instrument_terms_corporate_action_behavior_check", source: "instruments.AllCorporateActionBehaviors()", values: str(instruments.AllCorporateActionBehaviors())},
 		{table: "instrument_terms", constraint: "instrument_terms_transferability_check", source: "instruments.AllTransferabilities()", values: str(instruments.AllTransferabilities())},
+
+		// Migration 00733 (kernel amendments), which pairs the notification
+		// kind list that had been unpaired since 00640.
+		{table: "notifications", constraint: "notifications_kind_check", source: "notification.AllKinds()", values: str(notification.AllKinds())},
+
+		// Migration 00744 (customer-to-customer transfers and the faucet).
+		{table: "internal_transfers", constraint: "internal_transfers_status_check", source: "transfers.AllStatuses()", values: str(transfers.AllStatuses())},
+		{table: "internal_transfers", constraint: "internal_transfers_mode_check", source: "transfers.SupportedModes()", values: str(transfers.SupportedModes())},
+		{table: "transfer_recipient_rules", constraint: "transfer_recipient_rules_rule_check", source: "transfers.AllRuleKinds()", values: str(transfers.AllRuleKinds())},
+		{table: "transfer_sender_modes", constraint: "transfer_sender_modes_mode_check", source: "transfers.AllSenderModes()", values: str(transfers.AllSenderModes())},
+		{table: "sandbox_fundings", constraint: "sandbox_fundings_environment_check", source: "sandboxfund.AllEnvironments()", values: str(sandboxfund.AllEnvironments())},
+		{table: "sandbox_fundings", constraint: "sandbox_fundings_actor_type_check", source: "sandboxfund.AllowedActorTypes()", values: str(sandboxfund.AllowedActorTypes())},
 	}
 	for _, table := range []string{
 		"agent_runs", "agents", "calibration_snapshots", "cost_accounting", "counterfactuals",
@@ -433,7 +448,6 @@ var unpaired = []string{
 	"native_market_fills.native_market_fills_side_check",
 	"native_market_quotes.native_market_quotes_side_check",
 	"native_markets.native_markets_status_check",
-	"notifications.notifications_kind_check",
 	"notifications.notifications_severity_check",
 	"orders.orders_side_check",
 	"payout_destinations.payout_destinations_kind_check",

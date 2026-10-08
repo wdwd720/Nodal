@@ -294,25 +294,6 @@ func lockAccount(ctx context.Context, tx pgx.Tx, account accounts.AccountID) err
 	return nil
 }
 
-// immediateIntentBinding makes the economic-intent transition binding check
-// each status change at the end of its own statement for the rest of tx.
-//
-// The binding (migration 00731, the 00726 edge shape) remembers one edge per
-// intent per transaction, so with the default deferred check an intent can
-// take only one step per transaction: a second step overwrites the first
-// edge and the first update then fails AU001 at COMMIT. A transfer takes its
-// intent RECEIVED -> ROUTED -> RISK_APPROVED -> RESERVED -> EXECUTING ->
-// COMPLETED atomically with the posting, so each step is checked as it is
-// written instead. Every step still needs its own transition row, written
-// before the update (IntentStore.Transition does exactly that), so the
-// binding is no weaker: only when it is checked changes.
-func immediateIntentBinding(ctx context.Context, tx pgx.Tx) error {
-	if _, err := tx.Exec(ctx, `SET CONSTRAINTS economic_intents_require_transition IMMEDIATE`); err != nil {
-		return dbErr("check intent transitions immediately", err)
-	}
-	return nil
-}
-
 func dbErr(op string, err error) error {
 	if db.IsRetryable(err) {
 		return err
