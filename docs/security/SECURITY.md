@@ -38,7 +38,7 @@ Design per `docs/architecture/SYSTEM.md` §2. Only `cmd/migrate` exists on disk 
 | `cmd/audit-worker` | chain verification, Merkle checkpoints, KMS signing, WORM archive | DB audit read, KMS sign, archive write | financial writes | no |
 | `cmd/migrate` | schema migrations | DB migrate role | production application data access | yes (`cmd/migrate/main.go`, `TestRun_UsageAndExitCodes`) |
 
-Each binary maps to its own ECS task role (PART 100) and DB role (PART 101): DESIGNED, pending Terraform (`infra/` is empty; EB-012).
+Each binary maps to its own ECS task role (PART 100) and DB role (PART 101): DESIGNED, pending Terraform (`infra/` is empty; EB-012). **Superseded 2026-09-06:** `infra/terraform` holds the stack, including one ECS task role per service (`modules/ecs-service`); it validates, and no apply is recorded (`docs/operations/DEPLOYMENT.md`).
 
 ## 3. Identity and sessions
 
@@ -92,7 +92,7 @@ IMPLEMENTED in `internal/security` (`roles.go`, `authz.go`, `principal.go`). The
 
 ## 6. Signing boundary and transaction inspection
 
-DESIGNED (EXECUTION.md §2–§4, ADR-0012; R-034-1..3, R-095-1, R-096-1). Nothing under `internal/signing`, `internal/wallet`, `internal/execution` or `proto/` exists on disk; SB-005 (decoder selection) is open. What exists: `wallets.delegation_verified_at` and the immutable `signing_decisions` table (`migrations/00300_wallets_execution.sql`), `assets.token_extensions` with `Asset.HasUnsupportedExtensions()` (`internal/assets/extensions.go`), and `execution_attempts.tx_signature UNIQUE`.
+DESIGNED (EXECUTION.md §2–§4, ADR-0012; R-034-1..3, R-095-1, R-096-1). Nothing under `internal/signing`, `internal/wallet`, `internal/execution` or `proto/` exists on disk; SB-005 (decoder selection) is open. **Superseded 2026-09-06:** all four exist, and SB-005 is resolved by `docs/build/DECISION_REGISTER.md` D-019, which pins `github.com/gagliardetto/solana-go` v1.23.0 (`docs/build/BLOCKERS.md`, Earlier ids). What exists: `wallets.delegation_verified_at` and the immutable `signing_decisions` table (`migrations/00300_wallets_execution.sql`), `assets.token_extensions` with `Asset.HasUnsupportedExtensions()` (`internal/assets/extensions.go`), and `execution_attempts.tx_signature UNIQUE`.
 
 Contract: `signing.Service.Sign` re-loads plan, quote, risk decision and reservation from Postgres, rebuilds `Expectations` from persisted data, runs the pure inspector, writes `signing_decisions` plus an audit event in one transaction, and only then calls `wallet.SigningProvider.SignTransaction`. Rejections emit `signing_rejection` security events. `signing` is importable only by `cmd/execution-worker`. Production startup fails closed unless delegated-signing capability is `VERIFIED` (PART 96).
 
@@ -174,7 +174,7 @@ DESIGNED: AWS Secrets Manager resolver, IAM task roles, GitHub OIDC deployment, 
 
 | Area | Designed (AWS, single primary region, ADR-0017) | On disk |
 |---|---|---|
-| Network (PART 102) | private RDS/Redis/workers; public entry only via WAF + ALB; TLS; restricted security groups; no public DB; no open management ports | `infra/` empty — pending Terraform (EB-012, R-102-1) |
+| Network (PART 102) | private RDS/Redis/workers; public entry only via WAF + ALB; TLS; restricted security groups; no public DB; no open management ports | `infra/` empty — pending Terraform (EB-012, R-102-1). **Superseded 2026-09-06:** written in `infra/terraform` (`modules/network`, `modules/waf-edge`); it validates, and no apply is recorded (`docs/operations/DEPLOYMENT.md`) |
 | IAM (PART 100) | one ECS task role per binary; API has no signing privilege; execution worker bounded signing; agent worker none | pending Terraform (R-100-1) |
 | Containers (PART 103) | distroless static, non-root, read-only filesystem, no shell, pinned deps, health checks, resource limits | `build/Dockerfile` IMPLEMENTED: `gcr.io/distroless/static-debian12:nonroot`, `USER 65532:65532`, `CGO_ENABLED=0`, `-trimpath`, `go mod verify`; images scanned with trivy in `release.yml`; ECS resource limits/health checks pending Terraform |
 | DB roles (PART 101) | migrate, app, read-only analytics, ops | `docker/postgres/init/001_roles.sql` (LOCAL only): `cp_migrate` owns schema; `cp_app` has **no** default table privileges (D-016) and receives per-table grants in each migration, never DELETE, never DDL; `cp_readonly`/`cp_ops` SELECT (ops may DELETE outbox/inbox/idempotency for cleanup). Tests: `TestIntegration_ApplicationRolePrivileges`, `TestIntegration_Migrations` ("role separation" subtest), `TestIntegration_AppRoleCannotDeleteIdempotencyKeys`. Production role bootstrap pending Terraform |
@@ -182,17 +182,17 @@ DESIGNED: AWS Secrets Manager resolver, IAM task roles, GitHub OIDC deployment, 
 
 ## 11. Supply chain
 
-`.github/workflows/ci.yml` (never executed yet: no git remote, SB-004) runs, per job:
+`.github/workflows/ci.yml` (never executed yet: no git remote, SB-004; **superseded 2026-09-06:** SB-004 is resolved and CI runs, first fully green in run 34062522222 — `docs/build/BLOCKERS.md`, Earlier ids) runs, per job:
 
 - `go`: `go build`, `make vet`, `gofumpt -l` format check, `staticcheck`, `golangci-lint` (gosec, depguard, forbidigo, errcheck, revive, …), `scripts/lintfin`, `make unit`, `make property`, `make race` (capital, ledger, event and the not-yet-existing execution/reconciliation/settlement/signing trees), `govulncheck`, `gosec`.
 - `fuzz`: every fuzz target for 10 s (`scripts/fuzzall`).
 - `contract`: `make contract` → `./test/contract/...` — the directory does not exist, so the step is vacuous today.
 - `scripts-crossplatform`: Windows and macOS vet/test of `scripts/`.
 - `integration`: docker-compose Postgres; `make migrate-test`, `make integration`, `make security` → `./test/security/...` — **the directory does not exist, so the security step passes vacuously**.
-- `security-scans`: gitleaks over full history (`.gitleaks.toml` allow-lists only local `cp_*_local` credentials), `trivy fs` (vuln + misconfig, fail on HIGH/CRITICAL, unfixed ignored), `trivy config infra/` (directory empty), `syft` SBOM uploaded as an artifact.
+- `security-scans`: gitleaks over full history (`.gitleaks.toml` allow-lists only local `cp_*_local` credentials), `trivy fs` (vuln + misconfig, fail on HIGH/CRITICAL, unfixed ignored), `trivy config infra/` (directory empty; **superseded 2026-09-06:** it holds `infra/terraform`), `syft` SBOM uploaded as an artifact.
 - `web`, `openapi-drift`, `generated-code-drift`: skipped until `apps/web`, `sqlc`, `buf` exist.
 
-`.github/workflows/release.yml`: immutable images tagged by git SHA, `trivy image` fail on HIGH/CRITICAL before push, push to GHCR, keyless `cosign sign` via GitHub OIDC, per-image SBOM with `cosign attest`, SLSA provenance via `actions/attest-build-provenance`; ECR path via OIDC role is commented out pending EB-012. Pinned tool downloads are checksum-verified and fail closed (`scripts/tool`: `TestInstallReleaseTool_ChecksumMismatch`, `TestInstallReleaseTool_APIErrorFailsClosed`, `TestInstallReleaseTool_UnverifiableRequiresFlag`). Missing versus PART 104: frontend dependency audit (no frontend yet), IaC scan with content, a `make security` that fails when the tree is empty.
+`.github/workflows/release.yml`: immutable images tagged by git SHA, `trivy image` fail on HIGH/CRITICAL before push, push to GHCR, keyless `cosign sign` via GitHub OIDC, per-image SBOM with `cosign attest`, SLSA provenance via `actions/attest-build-provenance`; ECR path via OIDC role is commented out pending EB-012 (**superseded 2026-09-06:** it is not commented out; its steps run only when the repository variable `AWS_RELEASE_ROLE_ARN` is set, and no repository variable was set on 2026-10-08). Pinned tool downloads are checksum-verified and fail closed (`scripts/tool`: `TestInstallReleaseTool_ChecksumMismatch`, `TestInstallReleaseTool_APIErrorFailsClosed`, `TestInstallReleaseTool_UnverifiableRequiresFlag`). Missing versus PART 104: frontend dependency audit (no frontend yet), IaC scan with content, a `make security` that fails when the tree is empty.
 
 ## 12. Security eventing
 

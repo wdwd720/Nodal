@@ -69,5 +69,5 @@ Steps for 2 and 3: OPERATIONS/FINANCE (`reconciliation:resolve`) proposes `POST 
 ## Post-incident
 
 - Archive the observations, decode, provider logs, the record and its transitions, and the posting.
-- Security review: THREAT_MODEL.md §3.6 rows; if the transaction was unauthorized, residual risk #1 is re-scored and EB-002/EB-005 updated.
-- Update `docs/build/REQUIREMENTS_TRACEABILITY.md` R-050-1, R-195-1; add `test/integration/missing_internal_txn_repair_test.go` to BLOCKERS if absent.
+- Security review: THREAT_MODEL.md §3.6 rows; if the transaction was unauthorized, residual risk #1 is re-scored and `docs/build/BLOCKERS.md` updated: B-18, which extends EB-002 and EB-005, where it covers the finding, otherwise a new `B-` entry (the EB- rows under "Earlier ids" are a frozen record and are not updated).
+- Update `docs/build/REQUIREMENTS_TRACEABILITY.md` R-050-1, R-195-1; record `test/integration/missing_internal_txn_repair_test.go` as work in `docs/build/MASTER_BUILD_STATE.md` if absent (BLOCKERS.md lists only external blockers).

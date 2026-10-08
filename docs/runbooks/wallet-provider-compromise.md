@@ -65,4 +65,4 @@ Severity: SEV1 (signing credential compromise; unauthorized signing) · Owner: S
 
 - Archive: chain scans (raw observations, `raw_ref`), provider incident report, signing decisions, credential rotation log, reconciliation records and postings, audit exports.
 - Security review: THREAT_MODEL.md §3.5 "wallet / signing provider" row moves from designed to whatever the evidence shows; re-score residual risk #1.
-- Update `docs/build/BLOCKERS.md` EB-002/EB-005 and `docs/build/REQUIREMENTS_TRACEABILITY.md` R-095-1, R-096-1; file `test/security/agent_raw_sign_attempt_test.go` and the fuzz/golden inspector tests as blockers if absent.
+- Update `docs/build/BLOCKERS.md` — B-18, which extends EB-002 and EB-005, where it covers the finding, otherwise a new `B-` entry; the EB- rows under "Earlier ids" are a frozen record and are not updated — and `docs/build/REQUIREMENTS_TRACEABILITY.md` R-095-1, R-096-1; record `test/security/agent_raw_sign_attempt_test.go` and the fuzz/golden inspector tests as work in `docs/build/MASTER_BUILD_STATE.md` if absent (BLOCKERS.md lists only external blockers).

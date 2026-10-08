@@ -37,7 +37,7 @@ Fresh deployments have no gate rows until `gates.Bootstrap` runs or the first pr
 | `LIVE_AGENT_TRADING` | autonomous strategies in CANARY/LIMITED/LIVE stages may create intents that reach signing | yes | everything above plus adviser/CTA analysis; strategy promotion evidence per agent | EB-001, EB-002, EB-005, EB-007 |
 | `WITHDRAWALS` | customers may move value off the platform path | yes | legal review, off-ramp/custody partner contract, risk approval, security approval | EB-015, EB-002 |
 | `SOCIAL_DATA_PERSISTENCE` | social/news content may be stored beyond ephemeral processing | no | data-licensing review per source | EB-008 |
-| `MARKETPLACE` | strategies may be listed for other customers | **no** (see note) | legal review (adviser/CTA), risk approval | EB-007 |
+| `MARKETPLACE` | internal-commerce purchases may commit: a user buys another user's product with Credits, and the seller's earning is recorded with its provenance (`commerce.Service.requireMarketplace`, `internal/commerce/service.go`). Strategy listings, which this row used to describe, are gated by the advanced capability `STRATEGY_MARKETPLACE` (`internal/gates/advanced.go`; BLOCKERS B-15) | yes (see note) | legal review, provider contract, risk approval, security approval | B-09, B-11 |
 | `CROSS_CHAIN` | plans may include CONVERT/TRANSFER/WAIT_FINALITY across chains | yes | provider contract (e.g. CCTP), risk approval, security approval | out of V1 |
 | `PREDICTION_MARKETS` | event-outcome instruments tradable | yes | regulated integration and legal review | out of V1 |
 | `SECURITIES` | equities or tokenised securities | yes | licensing | out of V1 |
