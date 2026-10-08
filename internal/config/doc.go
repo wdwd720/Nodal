@@ -292,6 +292,11 @@
 //
 //	CP_SEED_ENABLED                 bool (false in STAGING/PROD)
 //
+// Sandbox chains (simulated value only):
+//
+//	CP_SANDBOX_DEVNET_NETWORK       devnet host network, [a-z0-9-]{1,63}; empty = unwired
+//	CP_SANDBOX_DEVNET_SEED_REF      SecretRef -> 64 hex chars; required with the network
+//
 // Retention (days):
 //
 //	CP_RETENTION_LOGIN_ATTEMPT_DAYS     days a login_attempts row survives its expiry

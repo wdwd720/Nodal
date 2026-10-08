@@ -356,6 +356,14 @@ func TestValidate_FieldRulesApplyEverywhere(t *testing.T) {
 		{"otlp endpoint with scheme", "Telemetry.OTLPEndpoint", func(c *Config) { c.Telemetry.OTLPEndpoint = "https://otel:4317" }},
 		{"otlp endpoint without port", "Telemetry.OTLPEndpoint", func(c *Config) { c.Telemetry.OTLPEndpoint = "otel" }},
 		{"negative retention", "Retention.ModelIODays", func(c *Config) { c.Retention.ModelIODays = -1 }},
+		{"devnet network with uppercase", "Sandbox.DevnetNetwork", func(c *Config) {
+			c.Sandbox.DevnetNetwork, c.Sandbox.DevnetSeedRef = "Nodal", "env://CP_SEED"
+		}},
+		{"devnet network starting with a dash", "Sandbox.DevnetNetwork", func(c *Config) {
+			c.Sandbox.DevnetNetwork, c.Sandbox.DevnetSeedRef = "-nodal", "env://CP_SEED"
+		}},
+		{"devnet network without a seed", "Sandbox.DevnetSeedRef", func(c *Config) { c.Sandbox.DevnetNetwork = "nodal-sandbox" }},
+		{"devnet seed without a network", "Sandbox.DevnetNetwork", func(c *Config) { c.Sandbox.DevnetSeedRef = "env://CP_SEED" }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -376,6 +384,17 @@ func TestValidate_FieldRulesApplyEverywhere(t *testing.T) {
 			assert.True(t, found, "expected a FIELD violation on %s, got %v", tc.field, err)
 		})
 	}
+}
+
+// TestValidate_TheSandboxChainIsConfiguredWholeOrNotAtAll: both empty is the
+// unwired default, and a network with its seed is accepted in every
+// environment -- the chain only ever holds simulated value.
+func TestValidate_TheSandboxChainIsConfiguredWholeOrNotAtAll(t *testing.T) {
+	t.Parallel()
+	c := validProdConfig(t)
+	require.NoError(t, c.Validate(), "unwired by default")
+	c.Sandbox.DevnetNetwork, c.Sandbox.DevnetSeedRef = "nodal-sandbox", "aws-sm://nodal/sandbox-devnet-seed"
+	require.NoError(t, c.Validate())
 }
 
 func TestValidate_SampleRatioAccepts(t *testing.T) {

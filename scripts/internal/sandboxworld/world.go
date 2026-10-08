@@ -49,6 +49,7 @@ import (
 	"github.com/nodal/controlplane/internal/predmarket"
 	"github.com/nodal/controlplane/internal/reconciliation"
 	"github.com/nodal/controlplane/internal/risk"
+	"github.com/nodal/controlplane/internal/sandboxchain"
 	"github.com/nodal/controlplane/internal/sandboxfund"
 	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/stableasset"
@@ -265,18 +266,17 @@ func wire(d *db.DB, o Options) (*World, error) {
 	return w, nil
 }
 
-// wireChains opens the devnet host and the services that use it.
+// wireChains opens the devnet host and the services that use it. The chain's
+// keys derive from a seed derived in turn from the component name, through
+// internal/sandboxchain -- the derivation every binary uses -- so a run is
+// reproducible and the keys are the kind a deployment would have.
 func (w *World) wireChains(ctx context.Context, d *db.DB, component string) error {
-	seed := func(purpose string) [32]byte { return sha256.Sum256([]byte(component + "-" + purpose)) }
-	w.Custody = stableasset.NewCustodialWalletSigner(seed("custody"))
-	w.Issuer = stableasset.NewIssuerSigner(seed("issuer"))
-	w.Snapshots = stableasset.NewSnapshotSigner(seed("snapshots"))
-	w.Attester = bridge.NewAttester(seed("bridge-attester"))
-	var err error
-	w.Host, err = devnethost.Open(ctx, devnethost.NewPgStore(d), devnethost.DefaultConfig(component, w.Env, w.Attester.PublicKey()), w.Clock)
+	chain, err := sandboxchain.Open(ctx, d, w.Clock, w.Env, component, sandboxchain.Seed(sha256.Sum256([]byte(component+"-sandbox-chain"))))
 	if err != nil {
-		return fmt.Errorf("sandboxworld: devnet host: %w", err)
+		return fmt.Errorf("sandboxworld: sandbox chain: %w", err)
 	}
+	w.Host = chain.Host
+	w.Custody, w.Issuer, w.Snapshots, w.Attester = chain.Keys.Custody, chain.Keys.Issuer, chain.Keys.Snapshots, chain.Keys.Attester
 	recon := reconciliation.NewRepository(w.Clock, w.Outbox, w.Audit)
 	w.Stable, err = stableasset.New(stableasset.Deps{
 		DB: d, Clock: w.Clock, Host: w.Host, Intents: w.Intents, Effects: w.Effects, Authorizer: w.Authorizer,
