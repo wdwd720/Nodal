@@ -217,6 +217,69 @@ func (e AdvancedRiskDecisionVerdict) Valid() bool {
 	}
 }
 
+// Defines values for AdvancedTransferRecipientRuleKind.
+const (
+	TransferRuleAllow AdvancedTransferRecipientRuleKind = "ALLOW"
+	TransferRuleBlock AdvancedTransferRecipientRuleKind = "BLOCK"
+	TransferRuleClear AdvancedTransferRecipientRuleKind = "CLEAR"
+)
+
+// Valid indicates whether the value is a known member of the AdvancedTransferRecipientRuleKind enum.
+func (e AdvancedTransferRecipientRuleKind) Valid() bool {
+	switch e {
+	case TransferRuleAllow:
+		return true
+	case TransferRuleBlock:
+		return true
+	case TransferRuleClear:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdvancedTransferSenderMode.
+const (
+	TransferSenderAllowlistOnly AdvancedTransferSenderMode = "ALLOWLIST_ONLY"
+	TransferSenderOpen          AdvancedTransferSenderMode = "OPEN"
+)
+
+// Valid indicates whether the value is a known member of the AdvancedTransferSenderMode enum.
+func (e AdvancedTransferSenderMode) Valid() bool {
+	switch e {
+	case TransferSenderAllowlistOnly:
+		return true
+	case TransferSenderOpen:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdvancedTransferStatus.
+const (
+	TransferStatusCompleted AdvancedTransferStatus = "COMPLETED"
+	TransferStatusPending   AdvancedTransferStatus = "PENDING"
+	TransferStatusRejected  AdvancedTransferStatus = "REJECTED"
+	TransferStatusReversed  AdvancedTransferStatus = "REVERSED"
+)
+
+// Valid indicates whether the value is a known member of the AdvancedTransferStatus enum.
+func (e AdvancedTransferStatus) Valid() bool {
+	switch e {
+	case TransferStatusCompleted:
+		return true
+	case TransferStatusPending:
+		return true
+	case TransferStatusRejected:
+		return true
+	case TransferStatusReversed:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AssetKind.
 const (
 	FIAT         AssetKind = "FIAT"
@@ -2227,6 +2290,85 @@ type AdvancedCapabilityList struct {
 	ValueDomain ValueDomainSimulated `json:"value_domain"`
 }
 
+// AdvancedFaucetAllowance cap is the faucet policy's per-account limit for the rolling window, used is what the account was granted inside it, and remaining is cap - used (never below zero), all in base units of the sandbox dollar.
+type AdvancedFaucetAllowance struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId     UUID `json:"account_id"`
+	AssetDecimals int  `json:"asset_decimals"`
+
+	// AssetId UUIDv7 in canonical form
+	AssetId     UUID   `json:"asset_id"`
+	AssetSymbol string `json:"asset_symbol"`
+
+	// Cap Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Cap           Quantity `json:"cap"`
+	Environment   string   `json:"environment"`
+	PolicyHash    string   `json:"policy_hash"`
+	PolicyVersion string   `json:"policy_version"`
+
+	// Remaining Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Remaining Quantity `json:"remaining"`
+
+	// Used Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Used Quantity `json:"used"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+	WindowMs    int64                `json:"window_ms"`
+}
+
+// AdvancedFaucetGrant defines model for AdvancedFaucetGrant.
+type AdvancedFaucetGrant struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId     UUID `json:"account_id"`
+	AssetDecimals int  `json:"asset_decimals"`
+
+	// AssetId UUIDv7 in canonical form
+	AssetId     UUID   `json:"asset_id"`
+	AssetSymbol string `json:"asset_symbol"`
+
+	// EffectId UUIDv7 in canonical form
+	EffectId       UUID      `json:"effect_id"`
+	Environment    string    `json:"environment"`
+	EvidenceRef    *string   `json:"evidence_ref,omitempty"`
+	EvidenceSha256 *string   `json:"evidence_sha256,omitempty"`
+	GrantedAt      Timestamp `json:"granted_at"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// JournalTransactionId UUIDv7 in canonical form
+	JournalTransactionId UUID   `json:"journal_transaction_id"`
+	PolicyHash           string `json:"policy_hash"`
+	PolicyVersion        string `json:"policy_version"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity Quantity `json:"quantity"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// AdvancedFaucetGrantRequest The value is exactly one of amount (a plain decimal in whole sandbox dollars, never rounded) or quantity (exact base units; the sandbox dollar has 6 decimals).
+type AdvancedFaucetGrantRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID    `json:"account_id"`
+	Amount    *string `json:"amount,omitempty"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity *Quantity `json:"quantity,omitempty"`
+}
+
 // AdvancedInstrument defines model for AdvancedInstrument.
 type AdvancedInstrument struct {
 	CanonicalName string `json:"canonical_name"`
@@ -2302,6 +2444,238 @@ type AdvancedRiskDecisionVerdict string
 type AdvancedRiskDecisionList struct {
 	Items []AdvancedRiskDecision `json:"items"`
 }
+
+// AdvancedTransfer One customer-to-customer transfer of simulated value. What a reader sees depends on who they are: the sender sees their whole record but not the account id behind a handle they paid; a recipient sees a transfer once it moved value, without the sender's decision record or the reversal reason; an operator holding account:read_any sees everything.
+type AdvancedTransfer struct {
+	AssetDecimals int `json:"asset_decimals"`
+
+	// AssetId UUIDv7 in canonical form
+	AssetId     UUID       `json:"asset_id"`
+	AssetSymbol string     `json:"asset_symbol"`
+	CreatedAt   Timestamp  `json:"created_at"`
+	DecidedAt   *Timestamp `json:"decided_at,omitempty"`
+
+	// EffectId UUIDv7 in canonical form
+	EffectId       *UUID   `json:"effect_id,omitempty"`
+	EvidenceRef    *string `json:"evidence_ref,omitempty"`
+	EvidenceSha256 *string `json:"evidence_sha256,omitempty"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// IntentId UUIDv7 in canonical form
+	IntentId UUID `json:"intent_id"`
+
+	// JournalTransactionId UUIDv7 in canonical form
+	JournalTransactionId *UUID `json:"journal_transaction_id,omitempty"`
+
+	// Memo Visible to the two parties only and never in a journal or an event or a notification
+	Memo *string      `json:"memo,omitempty"`
+	Mode AdvancedMode `json:"mode"`
+
+	// NotionalUsd USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	NotionalUsd   USD    `json:"notional_usd"`
+	PolicyHash    string `json:"policy_hash"`
+	PolicyVersion string `json:"policy_version"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity Quantity `json:"quantity"`
+
+	// ReasonCodes Every code that applied to a REJECTED transfer with the primary first
+	ReasonCodes []string `json:"reason_codes"`
+
+	// RecipientAccountId UUIDv7 in canonical form
+	RecipientAccountId *UUID `json:"recipient_account_id,omitempty"`
+
+	// RecipientHandle The handle the sender named the recipient by (absent when named by account id)
+	RecipientHandle *string `json:"recipient_handle,omitempty"`
+
+	// RejectionCode The primary stable code of a REJECTED transfer
+	RejectionCode *string `json:"rejection_code,omitempty"`
+
+	// ReversalJournalTransactionId UUIDv7 in canonical form
+	ReversalJournalTransactionId *UUID      `json:"reversal_journal_transaction_id,omitempty"`
+	ReversalReasonCode           *string    `json:"reversal_reason_code,omitempty"`
+	ReversedAt                   *Timestamp `json:"reversed_at,omitempty"`
+
+	// RiskDecisionId UUIDv7 in canonical form
+	RiskDecisionId *UUID `json:"risk_decision_id,omitempty"`
+
+	// SenderAccountId UUIDv7 in canonical form
+	SenderAccountId UUID `json:"sender_account_id"`
+
+	// Status PENDING exists only inside the transaction that decides a transfer; a committed transfer is COMPLETED, REJECTED or REVERSED.
+	Status    AdvancedTransferStatus `json:"status"`
+	UpdatedAt Timestamp              `json:"updated_at"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// AdvancedTransferAssetIdentity The clearing identity of one asset: TRANSFER_OUT = TRANSFER_IN = the register's COMPLETED quantity, and the customer WALLET change over every transfer journal and reversal is zero.
+type AdvancedTransferAssetIdentity struct {
+	// AssetId UUIDv7 in canonical form
+	AssetId UUID `json:"asset_id"`
+
+	// RegisterCompleted Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	RegisterCompleted Quantity `json:"register_completed"`
+
+	// TransferIn Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	TransferIn Quantity `json:"transfer_in"`
+
+	// TransferOut Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	TransferOut Quantity `json:"transfer_out"`
+
+	// WalletDelta Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	WalletDelta Quantity `json:"wallet_delta"`
+}
+
+// AdvancedTransferDiscrepancy defines model for AdvancedTransferDiscrepancy.
+type AdvancedTransferDiscrepancy struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId *UUID `json:"account_id,omitempty"`
+
+	// AssetId UUIDv7 in canonical form
+	AssetId *UUID  `json:"asset_id,omitempty"`
+	Code    string `json:"code"`
+	Detail  string `json:"detail"`
+
+	// TransferId UUIDv7 in canonical form
+	TransferId *UUID `json:"transfer_id,omitempty"`
+}
+
+// AdvancedTransferHandle defines model for AdvancedTransferHandle.
+type AdvancedTransferHandle struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID      `json:"account_id"`
+	CreatedAt Timestamp `json:"created_at"`
+	Handle    string    `json:"handle"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+}
+
+// AdvancedTransferHandleRequest defines model for AdvancedTransferHandleRequest.
+type AdvancedTransferHandleRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// Handle 3..32 characters of a-z, 0-9, '_', '.', '-' starting with a letter or digit; a leading '@' is dropped and the handle is lower-cased
+	Handle string `json:"handle"`
+}
+
+// AdvancedTransferPage defines model for AdvancedTransferPage.
+type AdvancedTransferPage struct {
+	Items      []AdvancedTransfer        `json:"items"`
+	NextCursor nullable.Nullable[string] `json:"next_cursor"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// AdvancedTransferRecipientRule The rule as recorded; the recipient is named the way the request named it.
+type AdvancedTransferRecipientRule struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID    `json:"account_id"`
+	Reason    *string `json:"reason,omitempty"`
+
+	// RecipientAccountId UUIDv7 in canonical form
+	RecipientAccountId *UUID                             `json:"recipient_account_id,omitempty"`
+	RecipientHandle    *string                           `json:"recipient_handle,omitempty"`
+	Rule               AdvancedTransferRecipientRuleKind `json:"rule"`
+}
+
+// AdvancedTransferRecipientRuleKind defines model for AdvancedTransferRecipientRuleKind.
+type AdvancedTransferRecipientRuleKind string
+
+// AdvancedTransferRecipientRuleRequest Name the recipient by exactly one of recipient_handle or recipient_account_id.
+type AdvancedTransferRecipientRuleRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID    `json:"account_id"`
+	Reason    *string `json:"reason,omitempty"`
+
+	// RecipientAccountId UUIDv7 in canonical form
+	RecipientAccountId *UUID                             `json:"recipient_account_id,omitempty"`
+	RecipientHandle    *string                           `json:"recipient_handle,omitempty"`
+	Rule               AdvancedTransferRecipientRuleKind `json:"rule"`
+}
+
+// AdvancedTransferReconciliation defines model for AdvancedTransferReconciliation.
+type AdvancedTransferReconciliation struct {
+	Assets        []AdvancedTransferAssetIdentity `json:"assets"`
+	CheckedAt     Timestamp                       `json:"checked_at"`
+	Discrepancies []AdvancedTransferDiscrepancy   `json:"discrepancies"`
+	Ok            bool                            `json:"ok"`
+
+	// Transfers Transfers in scope whatever their status
+	Transfers int `json:"transfers"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// AdvancedTransferReverseRequest defines model for AdvancedTransferReverseRequest.
+type AdvancedTransferReverseRequest struct {
+	Reason string `json:"reason"`
+
+	// ReasonCode Examples: FRAUD_CONFIRMED
+	ReasonCode string `json:"reason_code"`
+}
+
+// AdvancedTransferSendRequest Name the recipient by exactly one of recipient_handle or recipient_account_id, and the value by exactly one of amount (a plain decimal in whole units of the asset, never rounded: more fractional digits than the asset has is PRECISION_LOSS) or quantity (exact base units). asset_id defaults to the sandbox dollar.
+type AdvancedTransferSendRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID    `json:"account_id"`
+	Amount    *string `json:"amount,omitempty"`
+
+	// AssetId UUIDv7 in canonical form
+	AssetId *UUID `json:"asset_id,omitempty"`
+
+	// Memo Printable text without surrounding whitespace; the transfer policy may bound it lower
+	Memo *string      `json:"memo,omitempty"`
+	Mode AdvancedMode `json:"mode"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity *Quantity `json:"quantity,omitempty"`
+
+	// RecipientAccountId UUIDv7 in canonical form
+	RecipientAccountId *UUID   `json:"recipient_account_id,omitempty"`
+	RecipientHandle    *string `json:"recipient_handle,omitempty"`
+}
+
+// AdvancedTransferSenderMode defines model for AdvancedTransferSenderMode.
+type AdvancedTransferSenderMode string
+
+// AdvancedTransferSenderModeRequest defines model for AdvancedTransferSenderModeRequest.
+type AdvancedTransferSenderModeRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID                       `json:"account_id"`
+	Mode      AdvancedTransferSenderMode `json:"mode"`
+}
+
+// AdvancedTransferSenderModeSetting defines model for AdvancedTransferSenderModeSetting.
+type AdvancedTransferSenderModeSetting struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID                       `json:"account_id"`
+	Mode      AdvancedTransferSenderMode `json:"mode"`
+}
+
+// AdvancedTransferStatus PENDING exists only inside the transaction that decides a transfer; a committed transfer is COMPLETED, REJECTED or REVERSED.
+type AdvancedTransferStatus string
 
 // Asset defines model for Asset.
 type Asset struct {
@@ -4529,6 +4903,60 @@ type GetAdvancedRiskDecisionsParams struct {
 	Limit     *Limit `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// GetAdvancedTransfersParams defines parameters for GetAdvancedTransfers.
+type GetAdvancedTransfersParams struct {
+	AccountId UUID    `form:"account_id" json:"account_id"`
+	Cursor    *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit     *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PostAdvancedTransfersParams defines parameters for PostAdvancedTransfers.
+type PostAdvancedTransfersParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetAdvancedTransfersFaucetAllowanceParams defines parameters for GetAdvancedTransfersFaucetAllowance.
+type GetAdvancedTransfersFaucetAllowanceParams struct {
+	AccountId UUID `form:"account_id" json:"account_id"`
+}
+
+// PostAdvancedTransfersFaucetGrantsParams defines parameters for PostAdvancedTransfersFaucetGrants.
+type PostAdvancedTransfersFaucetGrantsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedTransfersHandlesParams defines parameters for PostAdvancedTransfersHandles.
+type PostAdvancedTransfersHandlesParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedTransfersRecipientRulesParams defines parameters for PostAdvancedTransfersRecipientRules.
+type PostAdvancedTransfersRecipientRulesParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetAdvancedTransfersReconciliationParams defines parameters for GetAdvancedTransfersReconciliation.
+type GetAdvancedTransfersReconciliationParams struct {
+	// AssetId Reconcile this asset only
+	AssetId *UUID `form:"asset_id,omitempty" json:"asset_id,omitempty"`
+}
+
+// PostAdvancedTransfersSenderModeParams defines parameters for PostAdvancedTransfersSenderMode.
+type PostAdvancedTransfersSenderModeParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedTransfersTransferIdReverseParams defines parameters for PostAdvancedTransfersTransferIdReverse.
+type PostAdvancedTransfersTransferIdReverseParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // GetAuthCallbackParams defines parameters for GetAuthCallback.
 type GetAuthCallbackParams struct {
 	Code  string `form:"code" json:"code"`
@@ -4732,6 +5160,24 @@ type PostAdminKillSwitchesJSONRequestBody = KillSwitchRequest
 // PostAdminReconciliationRecordsRecordIdResolveJSONRequestBody defines body for PostAdminReconciliationRecordsRecordIdResolve for application/json ContentType.
 type PostAdminReconciliationRecordsRecordIdResolveJSONRequestBody = ReconciliationResolution
 
+// PostAdvancedTransfersJSONRequestBody defines body for PostAdvancedTransfers for application/json ContentType.
+type PostAdvancedTransfersJSONRequestBody = AdvancedTransferSendRequest
+
+// PostAdvancedTransfersFaucetGrantsJSONRequestBody defines body for PostAdvancedTransfersFaucetGrants for application/json ContentType.
+type PostAdvancedTransfersFaucetGrantsJSONRequestBody = AdvancedFaucetGrantRequest
+
+// PostAdvancedTransfersHandlesJSONRequestBody defines body for PostAdvancedTransfersHandles for application/json ContentType.
+type PostAdvancedTransfersHandlesJSONRequestBody = AdvancedTransferHandleRequest
+
+// PostAdvancedTransfersRecipientRulesJSONRequestBody defines body for PostAdvancedTransfersRecipientRules for application/json ContentType.
+type PostAdvancedTransfersRecipientRulesJSONRequestBody = AdvancedTransferRecipientRuleRequest
+
+// PostAdvancedTransfersSenderModeJSONRequestBody defines body for PostAdvancedTransfersSenderMode for application/json ContentType.
+type PostAdvancedTransfersSenderModeJSONRequestBody = AdvancedTransferSenderModeRequest
+
+// PostAdvancedTransfersTransferIdReverseJSONRequestBody defines body for PostAdvancedTransfersTransferIdReverse for application/json ContentType.
+type PostAdvancedTransfersTransferIdReverseJSONRequestBody = AdvancedTransferReverseRequest
+
 // PostFundingDepositsJSONRequestBody defines body for PostFundingDeposits for application/json ContentType.
 type PostFundingDepositsJSONRequestBody = StartDepositRequest
 
@@ -4866,6 +5312,36 @@ type ServerInterface interface {
 	// GetAdvancedRiskDecisions Risk Kernel V2 decisions about an account's intents, newest first
 	// (GET /advanced/risk/decisions)
 	GetAdvancedRiskDecisions(w http.ResponseWriter, r *http.Request, params GetAdvancedRiskDecisionsParams)
+	// GetAdvancedTransfers Transfers an account sent or received, newest first
+	// (GET /advanced/transfers)
+	GetAdvancedTransfers(w http.ResponseWriter, r *http.Request, params GetAdvancedTransfersParams)
+	// PostAdvancedTransfers Send simulated value from one of your own accounts to another customer
+	// (POST /advanced/transfers)
+	PostAdvancedTransfers(w http.ResponseWriter, r *http.Request, params PostAdvancedTransfersParams)
+	// GetAdvancedTransfersFaucetAllowance What the sandbox faucet would still grant an account in the current window
+	// (GET /advanced/transfers/faucet/allowance)
+	GetAdvancedTransfersFaucetAllowance(w http.ResponseWriter, r *http.Request, params GetAdvancedTransfersFaucetAllowanceParams)
+	// PostAdvancedTransfersFaucetGrants Request sandbox dollars from the sandbox faucet into one of your own accounts
+	// (POST /advanced/transfers/faucet/grants)
+	PostAdvancedTransfersFaucetGrants(w http.ResponseWriter, r *http.Request, params PostAdvancedTransfersFaucetGrantsParams)
+	// PostAdvancedTransfersHandles Register the handle other customers pay one of your accounts by
+	// (POST /advanced/transfers/handles)
+	PostAdvancedTransfersHandles(w http.ResponseWriter, r *http.Request, params PostAdvancedTransfersHandlesParams)
+	// PostAdvancedTransfersRecipientRules Allow, block or clear one recipient for transfers from one of your accounts
+	// (POST /advanced/transfers/recipient-rules)
+	PostAdvancedTransfersRecipientRules(w http.ResponseWriter, r *http.Request, params PostAdvancedTransfersRecipientRulesParams)
+	// GetAdvancedTransfersReconciliation Reconcile the transfer register, its economic effects and the ledger (read-only)
+	// (GET /advanced/transfers/reconciliation)
+	GetAdvancedTransfersReconciliation(w http.ResponseWriter, r *http.Request, params GetAdvancedTransfersReconciliationParams)
+	// PostAdvancedTransfersSenderMode Let one of your accounts pay anyone (OPEN) or only allowlisted recipients (ALLOWLIST_ONLY)
+	// (POST /advanced/transfers/sender-mode)
+	PostAdvancedTransfersSenderMode(w http.ResponseWriter, r *http.Request, params PostAdvancedTransfersSenderModeParams)
+	// GetAdvancedTransfersTransferId One transfer, to one of its parties; anyone else is told it does not exist
+	// (GET /advanced/transfers/{transferId})
+	GetAdvancedTransfersTransferId(w http.ResponseWriter, r *http.Request, transferId UUID)
+	// PostAdvancedTransfersTransferIdReverse Reverse a COMPLETED transfer with a compensating journal (operator correction; requires step-up)
+	// (POST /advanced/transfers/{transferId}/reverse)
+	PostAdvancedTransfersTransferIdReverse(w http.ResponseWriter, r *http.Request, transferId UUID, params PostAdvancedTransfersTransferIdReverseParams)
 	// GetAssets Registered assets with chain, mint, decimals and safety status
 	// (GET /assets)
 	GetAssets(w http.ResponseWriter, r *http.Request)
@@ -5175,6 +5651,66 @@ func (_ Unimplemented) GetAdvancedIntentsIntentId(w http.ResponseWriter, r *http
 // GetAdvancedRiskDecisions Risk Kernel V2 decisions about an account's intents, newest first
 // (GET /advanced/risk/decisions)
 func (_ Unimplemented) GetAdvancedRiskDecisions(w http.ResponseWriter, r *http.Request, params GetAdvancedRiskDecisionsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedTransfers Transfers an account sent or received, newest first
+// (GET /advanced/transfers)
+func (_ Unimplemented) GetAdvancedTransfers(w http.ResponseWriter, r *http.Request, params GetAdvancedTransfersParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedTransfers Send simulated value from one of your own accounts to another customer
+// (POST /advanced/transfers)
+func (_ Unimplemented) PostAdvancedTransfers(w http.ResponseWriter, r *http.Request, params PostAdvancedTransfersParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedTransfersFaucetAllowance What the sandbox faucet would still grant an account in the current window
+// (GET /advanced/transfers/faucet/allowance)
+func (_ Unimplemented) GetAdvancedTransfersFaucetAllowance(w http.ResponseWriter, r *http.Request, params GetAdvancedTransfersFaucetAllowanceParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedTransfersFaucetGrants Request sandbox dollars from the sandbox faucet into one of your own accounts
+// (POST /advanced/transfers/faucet/grants)
+func (_ Unimplemented) PostAdvancedTransfersFaucetGrants(w http.ResponseWriter, r *http.Request, params PostAdvancedTransfersFaucetGrantsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedTransfersHandles Register the handle other customers pay one of your accounts by
+// (POST /advanced/transfers/handles)
+func (_ Unimplemented) PostAdvancedTransfersHandles(w http.ResponseWriter, r *http.Request, params PostAdvancedTransfersHandlesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedTransfersRecipientRules Allow, block or clear one recipient for transfers from one of your accounts
+// (POST /advanced/transfers/recipient-rules)
+func (_ Unimplemented) PostAdvancedTransfersRecipientRules(w http.ResponseWriter, r *http.Request, params PostAdvancedTransfersRecipientRulesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedTransfersReconciliation Reconcile the transfer register, its economic effects and the ledger (read-only)
+// (GET /advanced/transfers/reconciliation)
+func (_ Unimplemented) GetAdvancedTransfersReconciliation(w http.ResponseWriter, r *http.Request, params GetAdvancedTransfersReconciliationParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedTransfersSenderMode Let one of your accounts pay anyone (OPEN) or only allowlisted recipients (ALLOWLIST_ONLY)
+// (POST /advanced/transfers/sender-mode)
+func (_ Unimplemented) PostAdvancedTransfersSenderMode(w http.ResponseWriter, r *http.Request, params PostAdvancedTransfersSenderModeParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedTransfersTransferId One transfer, to one of its parties; anyone else is told it does not exist
+// (GET /advanced/transfers/{transferId})
+func (_ Unimplemented) GetAdvancedTransfersTransferId(w http.ResponseWriter, r *http.Request, transferId UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedTransfersTransferIdReverse Reverse a COMPLETED transfer with a compensating journal (operator correction; requires step-up)
+// (POST /advanced/transfers/{transferId}/reverse)
+func (_ Unimplemented) PostAdvancedTransfersTransferIdReverse(w http.ResponseWriter, r *http.Request, transferId UUID, params PostAdvancedTransfersTransferIdReverseParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -6654,6 +7190,436 @@ func (siw *ServerInterfaceWrapper) GetAdvancedRiskDecisions(w http.ResponseWrite
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetAdvancedRiskDecisions(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedTransfers operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedTransfers(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedTransfersParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedTransfers(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedTransfers operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedTransfers(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedTransfersParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedTransfers(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedTransfersFaucetAllowance operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedTransfersFaucetAllowance(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedTransfersFaucetAllowanceParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedTransfersFaucetAllowance(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedTransfersFaucetGrants operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedTransfersFaucetGrants(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedTransfersFaucetGrantsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedTransfersFaucetGrants(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedTransfersHandles operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedTransfersHandles(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedTransfersHandlesParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedTransfersHandles(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedTransfersRecipientRules operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedTransfersRecipientRules(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedTransfersRecipientRulesParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedTransfersRecipientRules(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedTransfersReconciliation operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedTransfersReconciliation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedTransfersReconciliationParams
+
+	// ------------- Optional query parameter "asset_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "asset_id", r.URL.Query(), &params.AssetId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "asset_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "asset_id", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedTransfersReconciliation(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedTransfersSenderMode operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedTransfersSenderMode(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedTransfersSenderModeParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedTransfersSenderMode(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedTransfersTransferId operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedTransfersTransferId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "transferId" -------------
+	var transferId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "transferId", chi.URLParam(r, "transferId"), &transferId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "transferId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedTransfersTransferId(w, r, transferId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedTransfersTransferIdReverse operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedTransfersTransferIdReverse(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "transferId" -------------
+	var transferId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "transferId", chi.URLParam(r, "transferId"), &transferId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "transferId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedTransfersTransferIdReverseParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedTransfersTransferIdReverse(w, r, transferId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -8679,6 +9645,36 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/advanced/buying-power", wrapper.GetAdvancedBuyingPower)
 	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/transfers", wrapper.GetAdvancedTransfers)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/transfers", wrapper.PostAdvancedTransfers)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/transfers/{transferId}", wrapper.GetAdvancedTransfersTransferId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/transfers/{transferId}/reverse", wrapper.PostAdvancedTransfersTransferIdReverse)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/transfers/handles", wrapper.PostAdvancedTransfersHandles)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/transfers/recipient-rules", wrapper.PostAdvancedTransfersRecipientRules)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/transfers/sender-mode", wrapper.PostAdvancedTransfersSenderMode)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/transfers/reconciliation", wrapper.GetAdvancedTransfersReconciliation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/transfers/faucet/grants", wrapper.PostAdvancedTransfersFaucetGrants)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/transfers/faucet/allowance", wrapper.GetAdvancedTransfersFaucetAllowance)
+	})
 
 	return r
 }
@@ -9654,6 +10650,701 @@ func (response GetAdvancedRiskDecisions403ApplicationProblemPlusJSONResponse) Vi
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedTransfersRequestObject struct {
+	Params GetAdvancedTransfersParams
+}
+
+type GetAdvancedTransfersResponseObject interface {
+	VisitGetAdvancedTransfersResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedTransfers200JSONResponse AdvancedTransferPage
+
+func (response GetAdvancedTransfers200JSONResponse) VisitGetAdvancedTransfersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedTransfers400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedTransfers400ApplicationProblemPlusJSONResponse) VisitGetAdvancedTransfersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedTransfers403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedTransfers403ApplicationProblemPlusJSONResponse) VisitGetAdvancedTransfersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedTransfersRequestObject struct {
+	Params PostAdvancedTransfersParams
+	Body   *PostAdvancedTransfersJSONRequestBody
+}
+
+type PostAdvancedTransfersResponseObject interface {
+	VisitPostAdvancedTransfersResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedTransfers200JSONResponse AdvancedTransfer
+
+func (response PostAdvancedTransfers200JSONResponse) VisitPostAdvancedTransfersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedTransfers201JSONResponse AdvancedTransfer
+
+func (response PostAdvancedTransfers201JSONResponse) VisitPostAdvancedTransfersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedTransfers400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedTransfers400ApplicationProblemPlusJSONResponse) VisitPostAdvancedTransfersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedTransfers403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedTransfers403ApplicationProblemPlusJSONResponse) VisitPostAdvancedTransfersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedTransfers404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedTransfers404ApplicationProblemPlusJSONResponse) VisitPostAdvancedTransfersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedTransfers409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedTransfers409ApplicationProblemPlusJSONResponse) VisitPostAdvancedTransfersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedTransfers422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedTransfers422ApplicationProblemPlusJSONResponse) VisitPostAdvancedTransfersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedTransfers503ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedTransfers503ApplicationProblemPlusJSONResponse) VisitPostAdvancedTransfersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedTransfersFaucetAllowanceRequestObject struct {
+	Params GetAdvancedTransfersFaucetAllowanceParams
+}
+
+type GetAdvancedTransfersFaucetAllowanceResponseObject interface {
+	VisitGetAdvancedTransfersFaucetAllowanceResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedTransfersFaucetAllowance200JSONResponse AdvancedFaucetAllowance
+
+func (response GetAdvancedTransfersFaucetAllowance200JSONResponse) VisitGetAdvancedTransfersFaucetAllowanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedTransfersFaucetAllowance403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedTransfersFaucetAllowance403ApplicationProblemPlusJSONResponse) VisitGetAdvancedTransfersFaucetAllowanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedTransfersFaucetAllowance422ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedTransfersFaucetAllowance422ApplicationProblemPlusJSONResponse) VisitGetAdvancedTransfersFaucetAllowanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedTransfersFaucetGrantsRequestObject struct {
+	Params PostAdvancedTransfersFaucetGrantsParams
+	Body   *PostAdvancedTransfersFaucetGrantsJSONRequestBody
+}
+
+type PostAdvancedTransfersFaucetGrantsResponseObject interface {
+	VisitPostAdvancedTransfersFaucetGrantsResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedTransfersFaucetGrants200JSONResponse AdvancedFaucetGrant
+
+func (response PostAdvancedTransfersFaucetGrants200JSONResponse) VisitPostAdvancedTransfersFaucetGrantsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedTransfersFaucetGrants201JSONResponse AdvancedFaucetGrant
+
+func (response PostAdvancedTransfersFaucetGrants201JSONResponse) VisitPostAdvancedTransfersFaucetGrantsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedTransfersFaucetGrants400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedTransfersFaucetGrants400ApplicationProblemPlusJSONResponse) VisitPostAdvancedTransfersFaucetGrantsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedTransfersFaucetGrants403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedTransfersFaucetGrants403ApplicationProblemPlusJSONResponse) VisitPostAdvancedTransfersFaucetGrantsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedTransfersFaucetGrants422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedTransfersFaucetGrants422ApplicationProblemPlusJSONResponse) VisitPostAdvancedTransfersFaucetGrantsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedTransfersFaucetGrants429ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedTransfersFaucetGrants429ApplicationProblemPlusJSONResponse) VisitPostAdvancedTransfersFaucetGrantsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedTransfersHandlesRequestObject struct {
+	Params PostAdvancedTransfersHandlesParams
+	Body   *PostAdvancedTransfersHandlesJSONRequestBody
+}
+
+type PostAdvancedTransfersHandlesResponseObject interface {
+	VisitPostAdvancedTransfersHandlesResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedTransfersHandles200JSONResponse AdvancedTransferHandle
+
+func (response PostAdvancedTransfersHandles200JSONResponse) VisitPostAdvancedTransfersHandlesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedTransfersHandles201JSONResponse AdvancedTransferHandle
+
+func (response PostAdvancedTransfersHandles201JSONResponse) VisitPostAdvancedTransfersHandlesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedTransfersHandles400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedTransfersHandles400ApplicationProblemPlusJSONResponse) VisitPostAdvancedTransfersHandlesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedTransfersHandles403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedTransfersHandles403ApplicationProblemPlusJSONResponse) VisitPostAdvancedTransfersHandlesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedTransfersHandles409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedTransfersHandles409ApplicationProblemPlusJSONResponse) VisitPostAdvancedTransfersHandlesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedTransfersRecipientRulesRequestObject struct {
+	Params PostAdvancedTransfersRecipientRulesParams
+	Body   *PostAdvancedTransfersRecipientRulesJSONRequestBody
+}
+
+type PostAdvancedTransfersRecipientRulesResponseObject interface {
+	VisitPostAdvancedTransfersRecipientRulesResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedTransfersRecipientRules200JSONResponse AdvancedTransferRecipientRule
+
+func (response PostAdvancedTransfersRecipientRules200JSONResponse) VisitPostAdvancedTransfersRecipientRulesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedTransfersRecipientRules400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedTransfersRecipientRules400ApplicationProblemPlusJSONResponse) VisitPostAdvancedTransfersRecipientRulesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedTransfersRecipientRules403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedTransfersRecipientRules403ApplicationProblemPlusJSONResponse) VisitPostAdvancedTransfersRecipientRulesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedTransfersRecipientRules404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedTransfersRecipientRules404ApplicationProblemPlusJSONResponse) VisitPostAdvancedTransfersRecipientRulesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedTransfersReconciliationRequestObject struct {
+	Params GetAdvancedTransfersReconciliationParams
+}
+
+type GetAdvancedTransfersReconciliationResponseObject interface {
+	VisitGetAdvancedTransfersReconciliationResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedTransfersReconciliation200JSONResponse AdvancedTransferReconciliation
+
+func (response GetAdvancedTransfersReconciliation200JSONResponse) VisitGetAdvancedTransfersReconciliationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedTransfersReconciliation400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedTransfersReconciliation400ApplicationProblemPlusJSONResponse) VisitGetAdvancedTransfersReconciliationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedTransfersReconciliation403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedTransfersReconciliation403ApplicationProblemPlusJSONResponse) VisitGetAdvancedTransfersReconciliationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedTransfersSenderModeRequestObject struct {
+	Params PostAdvancedTransfersSenderModeParams
+	Body   *PostAdvancedTransfersSenderModeJSONRequestBody
+}
+
+type PostAdvancedTransfersSenderModeResponseObject interface {
+	VisitPostAdvancedTransfersSenderModeResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedTransfersSenderMode200JSONResponse AdvancedTransferSenderModeSetting
+
+func (response PostAdvancedTransfersSenderMode200JSONResponse) VisitPostAdvancedTransfersSenderModeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedTransfersSenderMode400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedTransfersSenderMode400ApplicationProblemPlusJSONResponse) VisitPostAdvancedTransfersSenderModeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedTransfersSenderMode403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedTransfersSenderMode403ApplicationProblemPlusJSONResponse) VisitPostAdvancedTransfersSenderModeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedTransfersTransferIdRequestObject struct {
+	TransferId UUID `json:"transferId"`
+}
+
+type GetAdvancedTransfersTransferIdResponseObject interface {
+	VisitGetAdvancedTransfersTransferIdResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedTransfersTransferId200JSONResponse AdvancedTransfer
+
+func (response GetAdvancedTransfersTransferId200JSONResponse) VisitGetAdvancedTransfersTransferIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedTransfersTransferId404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedTransfersTransferId404ApplicationProblemPlusJSONResponse) VisitGetAdvancedTransfersTransferIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedTransfersTransferIdReverseRequestObject struct {
+	TransferId UUID `json:"transferId"`
+	Params     PostAdvancedTransfersTransferIdReverseParams
+	Body       *PostAdvancedTransfersTransferIdReverseJSONRequestBody
+}
+
+type PostAdvancedTransfersTransferIdReverseResponseObject interface {
+	VisitPostAdvancedTransfersTransferIdReverseResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedTransfersTransferIdReverse200JSONResponse AdvancedTransfer
+
+func (response PostAdvancedTransfersTransferIdReverse200JSONResponse) VisitPostAdvancedTransfersTransferIdReverseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedTransfersTransferIdReverse400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedTransfersTransferIdReverse400ApplicationProblemPlusJSONResponse) VisitPostAdvancedTransfersTransferIdReverseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedTransfersTransferIdReverse403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedTransfersTransferIdReverse403ApplicationProblemPlusJSONResponse) VisitPostAdvancedTransfersTransferIdReverseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedTransfersTransferIdReverse404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedTransfersTransferIdReverse404ApplicationProblemPlusJSONResponse) VisitPostAdvancedTransfersTransferIdReverseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedTransfersTransferIdReverse409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedTransfersTransferIdReverse409ApplicationProblemPlusJSONResponse) VisitPostAdvancedTransfersTransferIdReverseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -11656,6 +13347,36 @@ type StrictServerInterface interface {
 	// GetAdvancedRiskDecisions Risk Kernel V2 decisions about an account's intents, newest first
 	// (GET /advanced/risk/decisions)
 	GetAdvancedRiskDecisions(ctx context.Context, request GetAdvancedRiskDecisionsRequestObject) (GetAdvancedRiskDecisionsResponseObject, error)
+	// GetAdvancedTransfers Transfers an account sent or received, newest first
+	// (GET /advanced/transfers)
+	GetAdvancedTransfers(ctx context.Context, request GetAdvancedTransfersRequestObject) (GetAdvancedTransfersResponseObject, error)
+	// PostAdvancedTransfers Send simulated value from one of your own accounts to another customer
+	// (POST /advanced/transfers)
+	PostAdvancedTransfers(ctx context.Context, request PostAdvancedTransfersRequestObject) (PostAdvancedTransfersResponseObject, error)
+	// GetAdvancedTransfersFaucetAllowance What the sandbox faucet would still grant an account in the current window
+	// (GET /advanced/transfers/faucet/allowance)
+	GetAdvancedTransfersFaucetAllowance(ctx context.Context, request GetAdvancedTransfersFaucetAllowanceRequestObject) (GetAdvancedTransfersFaucetAllowanceResponseObject, error)
+	// PostAdvancedTransfersFaucetGrants Request sandbox dollars from the sandbox faucet into one of your own accounts
+	// (POST /advanced/transfers/faucet/grants)
+	PostAdvancedTransfersFaucetGrants(ctx context.Context, request PostAdvancedTransfersFaucetGrantsRequestObject) (PostAdvancedTransfersFaucetGrantsResponseObject, error)
+	// PostAdvancedTransfersHandles Register the handle other customers pay one of your accounts by
+	// (POST /advanced/transfers/handles)
+	PostAdvancedTransfersHandles(ctx context.Context, request PostAdvancedTransfersHandlesRequestObject) (PostAdvancedTransfersHandlesResponseObject, error)
+	// PostAdvancedTransfersRecipientRules Allow, block or clear one recipient for transfers from one of your accounts
+	// (POST /advanced/transfers/recipient-rules)
+	PostAdvancedTransfersRecipientRules(ctx context.Context, request PostAdvancedTransfersRecipientRulesRequestObject) (PostAdvancedTransfersRecipientRulesResponseObject, error)
+	// GetAdvancedTransfersReconciliation Reconcile the transfer register, its economic effects and the ledger (read-only)
+	// (GET /advanced/transfers/reconciliation)
+	GetAdvancedTransfersReconciliation(ctx context.Context, request GetAdvancedTransfersReconciliationRequestObject) (GetAdvancedTransfersReconciliationResponseObject, error)
+	// PostAdvancedTransfersSenderMode Let one of your accounts pay anyone (OPEN) or only allowlisted recipients (ALLOWLIST_ONLY)
+	// (POST /advanced/transfers/sender-mode)
+	PostAdvancedTransfersSenderMode(ctx context.Context, request PostAdvancedTransfersSenderModeRequestObject) (PostAdvancedTransfersSenderModeResponseObject, error)
+	// GetAdvancedTransfersTransferId One transfer, to one of its parties; anyone else is told it does not exist
+	// (GET /advanced/transfers/{transferId})
+	GetAdvancedTransfersTransferId(ctx context.Context, request GetAdvancedTransfersTransferIdRequestObject) (GetAdvancedTransfersTransferIdResponseObject, error)
+	// PostAdvancedTransfersTransferIdReverse Reverse a COMPLETED transfer with a compensating journal (operator correction; requires step-up)
+	// (POST /advanced/transfers/{transferId}/reverse)
+	PostAdvancedTransfersTransferIdReverse(ctx context.Context, request PostAdvancedTransfersTransferIdReverseRequestObject) (PostAdvancedTransfersTransferIdReverseResponseObject, error)
 	// GetAssets Registered assets with chain, mint, decimals and safety status
 	// (GET /assets)
 	GetAssets(ctx context.Context, request GetAssetsRequestObject) (GetAssetsResponseObject, error)
@@ -12615,6 +14336,309 @@ func (sh *strictHandler) GetAdvancedRiskDecisions(w http.ResponseWriter, r *http
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetAdvancedRiskDecisionsResponseObject); ok {
 		if err := validResponse.VisitGetAdvancedRiskDecisionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedTransfers operation middleware
+func (sh *strictHandler) GetAdvancedTransfers(w http.ResponseWriter, r *http.Request, params GetAdvancedTransfersParams) {
+	var request GetAdvancedTransfersRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedTransfers(ctx, request.(GetAdvancedTransfersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedTransfers")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedTransfersResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedTransfersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedTransfers operation middleware
+func (sh *strictHandler) PostAdvancedTransfers(w http.ResponseWriter, r *http.Request, params PostAdvancedTransfersParams) {
+	var request PostAdvancedTransfersRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedTransfersJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedTransfers(ctx, request.(PostAdvancedTransfersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedTransfers")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedTransfersResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedTransfersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedTransfersFaucetAllowance operation middleware
+func (sh *strictHandler) GetAdvancedTransfersFaucetAllowance(w http.ResponseWriter, r *http.Request, params GetAdvancedTransfersFaucetAllowanceParams) {
+	var request GetAdvancedTransfersFaucetAllowanceRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedTransfersFaucetAllowance(ctx, request.(GetAdvancedTransfersFaucetAllowanceRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedTransfersFaucetAllowance")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedTransfersFaucetAllowanceResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedTransfersFaucetAllowanceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedTransfersFaucetGrants operation middleware
+func (sh *strictHandler) PostAdvancedTransfersFaucetGrants(w http.ResponseWriter, r *http.Request, params PostAdvancedTransfersFaucetGrantsParams) {
+	var request PostAdvancedTransfersFaucetGrantsRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedTransfersFaucetGrantsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedTransfersFaucetGrants(ctx, request.(PostAdvancedTransfersFaucetGrantsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedTransfersFaucetGrants")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedTransfersFaucetGrantsResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedTransfersFaucetGrantsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedTransfersHandles operation middleware
+func (sh *strictHandler) PostAdvancedTransfersHandles(w http.ResponseWriter, r *http.Request, params PostAdvancedTransfersHandlesParams) {
+	var request PostAdvancedTransfersHandlesRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedTransfersHandlesJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedTransfersHandles(ctx, request.(PostAdvancedTransfersHandlesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedTransfersHandles")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedTransfersHandlesResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedTransfersHandlesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedTransfersRecipientRules operation middleware
+func (sh *strictHandler) PostAdvancedTransfersRecipientRules(w http.ResponseWriter, r *http.Request, params PostAdvancedTransfersRecipientRulesParams) {
+	var request PostAdvancedTransfersRecipientRulesRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedTransfersRecipientRulesJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedTransfersRecipientRules(ctx, request.(PostAdvancedTransfersRecipientRulesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedTransfersRecipientRules")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedTransfersRecipientRulesResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedTransfersRecipientRulesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedTransfersReconciliation operation middleware
+func (sh *strictHandler) GetAdvancedTransfersReconciliation(w http.ResponseWriter, r *http.Request, params GetAdvancedTransfersReconciliationParams) {
+	var request GetAdvancedTransfersReconciliationRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedTransfersReconciliation(ctx, request.(GetAdvancedTransfersReconciliationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedTransfersReconciliation")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedTransfersReconciliationResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedTransfersReconciliationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedTransfersSenderMode operation middleware
+func (sh *strictHandler) PostAdvancedTransfersSenderMode(w http.ResponseWriter, r *http.Request, params PostAdvancedTransfersSenderModeParams) {
+	var request PostAdvancedTransfersSenderModeRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedTransfersSenderModeJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedTransfersSenderMode(ctx, request.(PostAdvancedTransfersSenderModeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedTransfersSenderMode")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedTransfersSenderModeResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedTransfersSenderModeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedTransfersTransferId operation middleware
+func (sh *strictHandler) GetAdvancedTransfersTransferId(w http.ResponseWriter, r *http.Request, transferId UUID) {
+	var request GetAdvancedTransfersTransferIdRequestObject
+
+	request.TransferId = transferId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedTransfersTransferId(ctx, request.(GetAdvancedTransfersTransferIdRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedTransfersTransferId")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedTransfersTransferIdResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedTransfersTransferIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedTransfersTransferIdReverse operation middleware
+func (sh *strictHandler) PostAdvancedTransfersTransferIdReverse(w http.ResponseWriter, r *http.Request, transferId UUID, params PostAdvancedTransfersTransferIdReverseParams) {
+	var request PostAdvancedTransfersTransferIdReverseRequestObject
+
+	request.TransferId = transferId
+	request.Params = params
+
+	var body PostAdvancedTransfersTransferIdReverseJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedTransfersTransferIdReverse(ctx, request.(PostAdvancedTransfersTransferIdReverseRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedTransfersTransferIdReverse")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedTransfersTransferIdReverseResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedTransfersTransferIdReverseResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -13948,308 +15972,362 @@ func (sh *strictHandler) PostWithdrawals(w http.ResponseWriter, r *http.Request,
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

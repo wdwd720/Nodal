@@ -76,6 +76,10 @@ type Ports struct {
 	// >>> advanced:orders port
 
 	// >>> advanced:transfers port
+	// Transfers serves customer-to-customer transfers of simulated value, and
+	// SandboxFaucet the sandbox faucet. A nil port answers UNSUPPORTED.
+	Transfers     AdvancedTransfersPort
+	SandboxFaucet SandboxFaucetPort
 
 	// >>> advanced:treasury port
 

@@ -184,6 +184,23 @@ var operationPolicies = map[string]operationPolicy{
 	// >>> advanced:orders operations
 
 	// >>> advanced:transfers operations
+	//
+	// Sending, handles and recipient settings are the customer's own writes
+	// (ownership-only scoping per request); the transfer service judges
+	// step-up above its own threshold, so the route does not demand it. The
+	// faucet is a separate exposure with its own permission. Reversal is an
+	// operator correction that moves value back, hence step-up; the service
+	// additionally requires ledger:post_correction. Reconciliation reads only.
+	"PostAdvancedTransfers":                  {AnyOf: perms(security.PermSandboxTransfer), Mutating: true},
+	"GetAdvancedTransfers":                   {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedTransfersTransferId":         {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"PostAdvancedTransfersHandles":           {AnyOf: perms(security.PermSandboxTransfer), Mutating: true},
+	"PostAdvancedTransfersRecipientRules":    {AnyOf: perms(security.PermSandboxTransfer), Mutating: true},
+	"PostAdvancedTransfersSenderMode":        {AnyOf: perms(security.PermSandboxTransfer), Mutating: true},
+	"PostAdvancedTransfersFaucetGrants":      {AnyOf: perms(security.PermSandboxFund), Mutating: true},
+	"GetAdvancedTransfersFaucetAllowance":    {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"PostAdvancedTransfersTransferIdReverse": {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"GetAdvancedTransfersReconciliation":     {AnyOf: perms(security.PermSandboxOperate, security.PermReconciliationRead)},
 
 	// >>> advanced:treasury operations
 

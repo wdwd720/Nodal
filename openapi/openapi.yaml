@@ -1066,6 +1066,209 @@ paths:
   # >>> advanced:orders paths (insert this subsystem's paths directly below; keep the marker)
 
   # >>> advanced:transfers paths (insert this subsystem's paths directly below; keep the marker)
+  #
+  # Customer-to-customer transfers of simulated value (internal/transfers) and
+  # the sandbox faucet (internal/sandboxfund). The transfer service decides
+  # every rule itself -- eligibility, the P2P_TRANSFERS gate and kill
+  # switches, step-up above its threshold, the versioned transfer policy,
+  # Risk Kernel V2, the compliance screen, the reservation of the sender's
+  # funds -- and these routes only carry its answer.
+  /advanced/transfers:
+    post:
+      tags: [advanced]
+      summary: Send simulated value from one of your own accounts to another customer
+      description: >-
+        A refusal the service reaches after accepting the request is RECORDED:
+        the answer is the refusal's stable code (fields carry transfer_id,
+        rejection_code and every reason_codes entry) and the transfer stays
+        readable as a REJECTED row. A refusal before that (validation, an
+        unknown recipient, a capability that is not enabled, step-up) writes
+        nothing. Name the recipient by handle where you can: the handle is
+        resolved on the server and the account id behind it is never returned
+        to the sender.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedTransferSendRequest" } } }
+      responses:
+        "201":
+          description: The transfer is COMPLETED (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedTransfer" } } }
+        "200":
+          description: Idempotent replay of the original answer
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedTransfer" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    get:
+      tags: [advanced]
+      summary: Transfers an account sent or received, newest first
+      description: >-
+        A REJECTED attempt is the sender's record and is listed for the sender
+        only; a received transfer is listed once it moved value (COMPLETED or
+        REVERSED). A page can therefore hold fewer items than the limit while
+        next_cursor is still set.
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of transfers
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedTransferPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/transfers/{transferId}:
+    get:
+      tags: [advanced]
+      summary: One transfer, to one of its parties; anyone else is told it does not exist
+      parameters:
+        - { in: path, name: transferId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The transfer
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedTransfer" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/transfers/{transferId}/reverse:
+    post:
+      tags: [advanced]
+      summary: Reverse a COMPLETED transfer with a compensating journal (operator correction; requires step-up)
+      description: >-
+        History is never edited: the reversal is a new COMPENSATION journal
+        naming the original. It is refused (CONFLICT, rejection_code
+        TRANSFER_REVERSAL_FUNDS_UNAVAILABLE) when the recipient no longer holds
+        the funds, and reversing a REVERSED transfer returns it unchanged. The
+        service also requires ledger:post_correction of the operator.
+      parameters:
+        - { in: path, name: transferId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedTransferReverseRequest" } } }
+      responses:
+        "200":
+          description: The transfer, REVERSED
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedTransfer" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/transfers/handles:
+    post:
+      tags: [advanced]
+      summary: Register the handle other customers pay one of your accounts by
+      description: >-
+        An account has at most one handle and a handle names at most one
+        account, for good: handles are never reassigned, so a payment to a
+        handle can never reach a later holder. There is deliberately no route
+        that resolves a handle to an account id.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedTransferHandleRequest" } } }
+      responses:
+        "201":
+          description: Handle registered
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedTransferHandle" } } }
+        "200":
+          description: Idempotent replay of the original answer
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedTransferHandle" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/transfers/recipient-rules:
+    post:
+      tags: [advanced]
+      summary: Allow, block or clear one recipient for transfers from one of your accounts
+      description: >-
+        Rules are append-only and the latest one for a recipient is in force.
+        ALLOW puts the recipient on the sender's allowlist, BLOCK refuses every
+        transfer to it, CLEAR withdraws either.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedTransferRecipientRuleRequest" } } }
+      responses:
+        "200":
+          description: The rule is recorded and in force
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedTransferRecipientRule" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/transfers/sender-mode:
+    post:
+      tags: [advanced]
+      summary: Let one of your accounts pay anyone (OPEN) or only allowlisted recipients (ALLOWLIST_ONLY)
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedTransferSenderModeRequest" } } }
+      responses:
+        "200":
+          description: The mode is recorded and in force
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedTransferSenderModeSetting" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/transfers/reconciliation:
+    get:
+      tags: [advanced]
+      summary: Reconcile the transfer register, its economic effects and the ledger (read-only)
+      description: >-
+        Proves from the database that no transfer is left PENDING, every
+        settled transfer names the effect and journal it should, per party and
+        asset TRANSFER_OUT and TRANSFER_IN equal the register, and the customer
+        WALLET legs of every transfer journal cancel. Every discrepancy is a
+        SEV1.
+      parameters:
+        - in: query
+          name: asset_id
+          schema: { $ref: "#/components/schemas/UUID" }
+          description: Reconcile this asset only
+      responses:
+        "200":
+          description: The reconciliation report
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedTransferReconciliation" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/transfers/faucet/grants:
+    post:
+      tags: [advanced]
+      summary: Request sandbox dollars from the sandbox faucet into one of your own accounts
+      description: >-
+        Grants the sandbox dollar (SBX-USD, simulated, no economic value),
+        within the faucet policy's rolling per-account cap (RATE_LIMITED
+        beyond it). The faucet runs in LOCAL, TEST and DEV; anywhere else it
+        answers CAPABILITY_NOT_APPROVED unless the deployment enables it.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedFaucetGrantRequest" } } }
+      responses:
+        "201":
+          description: Granted (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedFaucetGrant" } } }
+        "200":
+          description: Idempotent replay of the original answer
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedFaucetGrant" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+  /advanced/transfers/faucet/allowance:
+    get:
+      tags: [advanced]
+      summary: What the sandbox faucet would still grant an account in the current window
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: Cap, used and remaining, in base units of the sandbox dollar
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedFaucetAllowance" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
 
   # >>> advanced:treasury paths (insert this subsystem's paths directly below; keep the marker)
 
@@ -2541,6 +2744,229 @@ components:
     # >>> advanced:orders schemas (insert this subsystem's schemas directly below; keep the marker)
 
     # >>> advanced:transfers schemas (insert this subsystem's schemas directly below; keep the marker)
+    #
+    # The enums carry x-enum-varnames so their Go constants can never collide
+    # with another schema's (ALLOW and OPEN already exist unprefixed).
+    AdvancedTransferStatus:
+      type: string
+      enum: [PENDING, COMPLETED, REJECTED, REVERSED]
+      x-enum-varnames: [TransferStatusPending, TransferStatusCompleted, TransferStatusRejected, TransferStatusReversed]
+      description: PENDING exists only inside the transaction that decides a transfer; a committed transfer is COMPLETED, REJECTED or REVERSED.
+    AdvancedTransfer:
+      type: object
+      description: >-
+        One customer-to-customer transfer of simulated value. What a reader
+        sees depends on who they are: the sender sees their whole record but
+        not the account id behind a handle they paid; a recipient sees a
+        transfer once it moved value, without the sender's decision record or
+        the reversal reason; an operator holding account:read_any sees
+        everything.
+      required: [id, intent_id, status, sender_account_id, asset_id, asset_symbol, asset_decimals, quantity, notional_usd,
+                 mode, reason_codes, policy_version, policy_hash, created_at, updated_at, value_domain]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        intent_id: { $ref: "#/components/schemas/UUID" }
+        status: { $ref: "#/components/schemas/AdvancedTransferStatus" }
+        sender_account_id: { $ref: "#/components/schemas/UUID" }
+        recipient_account_id: { $ref: "#/components/schemas/UUID" }
+        recipient_handle: { type: string, description: The handle the sender named the recipient by (absent when named by account id) }
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        asset_symbol: { type: string }
+        asset_decimals: { type: integer, minimum: 0, maximum: 18 }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        notional_usd: { $ref: "#/components/schemas/USD" }
+        mode: { $ref: "#/components/schemas/AdvancedMode" }
+        memo: { type: string, description: Visible to the two parties only and never in a journal or an event or a notification }
+        rejection_code: { type: string, description: The primary stable code of a REJECTED transfer }
+        reason_codes: { type: array, items: { type: string }, description: Every code that applied to a REJECTED transfer with the primary first }
+        policy_version: { type: string }
+        policy_hash: { type: string }
+        risk_decision_id: { $ref: "#/components/schemas/UUID" }
+        effect_id: { $ref: "#/components/schemas/UUID" }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        evidence_ref: { type: string }
+        evidence_sha256: { type: string }
+        decided_at: { $ref: "#/components/schemas/Timestamp" }
+        reversal_journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        reversal_reason_code: { type: string }
+        reversed_at: { $ref: "#/components/schemas/Timestamp" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedTransferPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items, value_domain]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/AdvancedTransfer" } }
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedTransferSendRequest:
+      type: object
+      description: >-
+        Name the recipient by exactly one of recipient_handle or
+        recipient_account_id, and the value by exactly one of amount (a plain
+        decimal in whole units of the asset, never rounded: more fractional
+        digits than the asset has is PRECISION_LOSS) or quantity (exact base
+        units). asset_id defaults to the sandbox dollar.
+      required: [account_id, mode]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        recipient_handle: { type: string, maxLength: 33, pattern: '^@?[A-Za-z0-9][A-Za-z0-9_.-]{2,31}$' }
+        recipient_account_id: { $ref: "#/components/schemas/UUID" }
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        amount: { type: string, maxLength: 64, pattern: '^[0-9]+(\.[0-9]+)?$' }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        mode: { $ref: "#/components/schemas/AdvancedMode" }
+        memo: { type: string, maxLength: 280, description: Printable text without surrounding whitespace; the transfer policy may bound it lower }
+    AdvancedTransferReverseRequest:
+      type: object
+      required: [reason_code, reason]
+      properties:
+        reason_code: { type: string, pattern: '^[A-Z][A-Z0-9_]{2,63}$', examples: ["FRAUD_CONFIRMED"] }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    AdvancedTransferHandleRequest:
+      type: object
+      required: [account_id, handle]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        handle:
+          type: string
+          maxLength: 33
+          pattern: '^@?[A-Za-z0-9][A-Za-z0-9_.-]{2,31}$'
+          description: 3..32 characters of a-z, 0-9, '_', '.', '-' starting with a letter or digit; a leading '@' is dropped and the handle is lower-cased
+    AdvancedTransferHandle:
+      type: object
+      required: [id, account_id, handle, created_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        handle: { type: string }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+    AdvancedTransferRecipientRuleKind:
+      type: string
+      enum: [ALLOW, BLOCK, CLEAR]
+      x-enum-varnames: [TransferRuleAllow, TransferRuleBlock, TransferRuleClear]
+    AdvancedTransferRecipientRuleRequest:
+      type: object
+      description: Name the recipient by exactly one of recipient_handle or recipient_account_id.
+      required: [account_id, rule]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        recipient_handle: { type: string, maxLength: 33, pattern: '^@?[A-Za-z0-9][A-Za-z0-9_.-]{2,31}$' }
+        recipient_account_id: { $ref: "#/components/schemas/UUID" }
+        rule: { $ref: "#/components/schemas/AdvancedTransferRecipientRuleKind" }
+        reason: { type: string, maxLength: 500 }
+    AdvancedTransferRecipientRule:
+      type: object
+      description: The rule as recorded; the recipient is named the way the request named it.
+      required: [account_id, rule]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        recipient_handle: { type: string }
+        recipient_account_id: { $ref: "#/components/schemas/UUID" }
+        rule: { $ref: "#/components/schemas/AdvancedTransferRecipientRuleKind" }
+        reason: { type: string }
+    AdvancedTransferSenderMode:
+      type: string
+      enum: [OPEN, ALLOWLIST_ONLY]
+      x-enum-varnames: [TransferSenderOpen, TransferSenderAllowlistOnly]
+    AdvancedTransferSenderModeRequest:
+      type: object
+      required: [account_id, mode]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        mode: { $ref: "#/components/schemas/AdvancedTransferSenderMode" }
+    AdvancedTransferSenderModeSetting:
+      type: object
+      required: [account_id, mode]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        mode: { $ref: "#/components/schemas/AdvancedTransferSenderMode" }
+    AdvancedTransferAssetIdentity:
+      type: object
+      description: >-
+        The clearing identity of one asset: TRANSFER_OUT = TRANSFER_IN = the
+        register's COMPLETED quantity, and the customer WALLET change over every
+        transfer journal and reversal is zero.
+      required: [asset_id, transfer_out, transfer_in, register_completed, wallet_delta]
+      properties:
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        transfer_out: { $ref: "#/components/schemas/Quantity" }
+        transfer_in: { $ref: "#/components/schemas/Quantity" }
+        register_completed: { $ref: "#/components/schemas/Quantity" }
+        wallet_delta: { $ref: "#/components/schemas/Quantity" }
+    AdvancedTransferDiscrepancy:
+      type: object
+      required: [code, detail]
+      properties:
+        code: { type: string }
+        transfer_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        detail: { type: string }
+    AdvancedTransferReconciliation:
+      type: object
+      required: [checked_at, transfers, ok, assets, discrepancies, value_domain]
+      properties:
+        checked_at: { $ref: "#/components/schemas/Timestamp" }
+        transfers: { type: integer, description: Transfers in scope whatever their status }
+        ok: { type: boolean }
+        assets: { type: array, items: { $ref: "#/components/schemas/AdvancedTransferAssetIdentity" } }
+        discrepancies: { type: array, items: { $ref: "#/components/schemas/AdvancedTransferDiscrepancy" } }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedFaucetGrantRequest:
+      type: object
+      description: >-
+        The value is exactly one of amount (a plain decimal in whole sandbox
+        dollars, never rounded) or quantity (exact base units; the sandbox
+        dollar has 6 decimals).
+      required: [account_id]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        amount: { type: string, maxLength: 64, pattern: '^[0-9]+(\.[0-9]+)?$' }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+    AdvancedFaucetGrant:
+      type: object
+      required: [id, account_id, asset_id, asset_symbol, asset_decimals, quantity, policy_version, policy_hash, environment,
+                 effect_id, journal_transaction_id, granted_at, value_domain]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        asset_symbol: { type: string }
+        asset_decimals: { type: integer, minimum: 0, maximum: 18 }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        policy_version: { type: string }
+        policy_hash: { type: string }
+        environment: { type: string }
+        effect_id: { $ref: "#/components/schemas/UUID" }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        evidence_ref: { type: string }
+        evidence_sha256: { type: string }
+        granted_at: { $ref: "#/components/schemas/Timestamp" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedFaucetAllowance:
+      type: object
+      description: >-
+        cap is the faucet policy's per-account limit for the rolling window,
+        used is what the account was granted inside it, and remaining is
+        cap - used (never below zero), all in base units of the sandbox dollar.
+      required: [account_id, asset_id, asset_symbol, asset_decimals, cap, used, remaining, window_ms, policy_version,
+                 policy_hash, environment, value_domain]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        asset_symbol: { type: string }
+        asset_decimals: { type: integer, minimum: 0, maximum: 18 }
+        cap: { $ref: "#/components/schemas/Quantity" }
+        used: { $ref: "#/components/schemas/Quantity" }
+        remaining: { $ref: "#/components/schemas/Quantity" }
+        window_ms: { type: integer, format: int64 }
+        policy_version: { type: string }
+        policy_hash: { type: string }
+        environment: { type: string }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
 
     # >>> advanced:treasury schemas (insert this subsystem's schemas directly below; keep the marker)
 

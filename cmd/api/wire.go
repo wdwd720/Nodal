@@ -46,6 +46,7 @@ import (
 	"github.com/nodal/controlplane/internal/legalrouter"
 	"github.com/nodal/controlplane/internal/nativeasset"
 	"github.com/nodal/controlplane/internal/nativemarket"
+	"github.com/nodal/controlplane/internal/notification"
 	"github.com/nodal/controlplane/internal/observability"
 	"github.com/nodal/controlplane/internal/payout"
 	"github.com/nodal/controlplane/internal/positions"
@@ -54,7 +55,9 @@ import (
 	"github.com/nodal/controlplane/internal/ratelimit"
 	"github.com/nodal/controlplane/internal/reconciliation"
 	"github.com/nodal/controlplane/internal/risk"
+	"github.com/nodal/controlplane/internal/sandboxfund"
 	"github.com/nodal/controlplane/internal/stream"
+	"github.com/nodal/controlplane/internal/transfers"
 	"github.com/nodal/controlplane/internal/valuation"
 	"github.com/nodal/controlplane/internal/withdrawal"
 )
@@ -315,6 +318,64 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// >>> advanced:orders services
 
 	// >>> advanced:transfers services
+	//
+	// Customer-to-customer transfers of simulated value, and the sandbox
+	// faucet. The transfer service decides every rule itself (eligibility, the
+	// P2P_TRANSFERS gate, step-up, policy limits, Risk Kernel V2, the screen,
+	// the reservation); this block hands it its collaborators and the defaults
+	// its package documents.
+	//
+	// The settlement compiler judges each transfer against the deployment's
+	// configured legal policy, defaulting -- as the native economy's does -- to
+	// the conservative one when none is configured. Both permit simulation and
+	// nothing that is not.
+	transfersRouter, err := legalRouterFor(cfg.Env, in.cfg.API.LegalPolicy)
+	if err != nil {
+		return nil, err
+	}
+	if transfersRouter == nil {
+		if transfersRouter, err = legalrouter.New(legalrouter.ConservativePolicy()); err != nil {
+			return nil, fmt.Errorf("transfers legal router: %w", err)
+		}
+	}
+	// The package's default screen: deterministic, versioned, and named in
+	// every decision's evidence. No sanctions list is configured for this
+	// deployment, so it blocks no party; a configured list replaces the nil.
+	transfersScreen, err := transfers.NewListScreen("transfers-list-screen-v1", nil)
+	if err != nil {
+		return nil, fmt.Errorf("transfers compliance screen: %w", err)
+	}
+	transfersSvc, err := transfers.NewService(transfers.Deps{
+		Clock: clk, Ledger: ledgerSvc, Capital: capitalSvc,
+		Intents:    econ.NewIntentStore(clk, outbox, auditWriter),
+		Effects:    econ.NewEffectStore(clk, outbox, auditWriter),
+		Authorizer: econ.NewAuthorizer(gateChecker, killChecker), KillSwitches: killChecker,
+		Router: transfersRouter, Risk: risk.NewStore(), RiskPolicy: risk.DefaultAdvancedPolicy(),
+		Policy: transfers.DefaultPolicy(),
+		// Par for the sandbox dollar and any other registry-declared paper
+		// dollar; anything else at a mark in the sandbox dollar no older than
+		// the one buying power V2 accepts. No mark, no transfer.
+		Valuer: transfers.RegistryValuer{
+			Prices: priceStore, Assets: assetRepo, QuoteAssetID: econ.SandboxDollarID(), MaxMarkAge: 5 * time.Minute,
+		},
+		Screen:   transfersScreen,
+		Notifier: transfers.NewNotificationNotifier(notification.NewRepository()),
+		Audit:    auditWriter,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("transfers service: %w", err)
+	}
+	// The faucet always runs in LOCAL, TEST and DEV. No configuration setting
+	// enables it in STAGING or PROD, so it stays off there: handing play money
+	// to the users of a deployed system is a decision someone has to own.
+	const sandboxFaucetEnabled = false
+	sandboxFaucet, err := sandboxfund.New(sandboxfund.Deps{
+		Clock: clk, Ledger: ledgerSvc, Effects: econ.NewEffectStore(clk, outbox, auditWriter),
+		Environment: cfg.Env, Enabled: sandboxFaucetEnabled, Policy: sandboxfund.DefaultPolicy(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("sandbox faucet: %w", err)
+	}
 
 	// >>> advanced:treasury services
 
@@ -349,6 +410,9 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		// >>> advanced:orders deps
 
 		// >>> advanced:transfers deps
+		Transfers: httpapi.TransfersDeps{
+			Service: transfersSvc, Faucet: sandboxFaucet, FaucetEnabled: sandboxFaucetEnabled,
+		},
 
 		// >>> advanced:treasury deps
 

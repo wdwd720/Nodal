@@ -177,6 +177,7 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		// >>> advanced:orders path parameters
 
 		// >>> advanced:transfers path parameters
+		"{transferId}": testSessionID,
 
 		// >>> advanced:treasury path parameters
 
@@ -215,6 +216,8 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		// >>> advanced:orders required query
 
 		// >>> advanced:transfers required query
+		"/v1/advanced/transfers":                  "account_id=" + testAccountID.String(),
+		"/v1/advanced/transfers/faucet/allowance": "account_id=" + testAccountID.String(),
 
 		// >>> advanced:treasury required query
 
