@@ -230,21 +230,16 @@ func dbErr(op string, err error) error {
 	return errs.Wrap(err, errs.CodeInternal, "bridge: "+op)
 }
 
-// immediateBindings makes the econ intent/effect transition bindings, and
-// this package's own leg binding, check each status change at the end of its
-// statement instead of at COMMIT: a leg's admission moves one intent through
-// several statuses and one leg AVAILABLE -> RESERVED -> BRIDGE_REQUESTED in
-// one transaction, and on this branch the deferred AU001 binding keeps a
-// single edge per entity per transaction. Every transition row is written
+// immediateBindings makes this package's leg binding check each status change
+// at the end of its statement instead of at COMMIT: a leg's admission moves it
+// AVAILABLE -> RESERVED -> BRIDGE_REQUESTED in one transaction, and the leg
+// binding (cp_flag_transition_edge / cp_require_transition_edge, 00726) keeps
+// a single edge per entity per transaction. Every transition row is written
 // before the UPDATE it licenses, so every immediate check passes; nothing is
-// weakened.
-//
-// INTEGRATOR: once migration 00733 (accumulated edges) is merged, delete this
-// helper and its one call site (PrepareLeg): bridge_legs is bound by the same
-// cp_flag_transition_edge / cp_require_transition_edge functions.
+// weakened. The economic intent and effect bindings need no such help: 00733
+// lets their edges accumulate (their machines are acyclic, 00734).
 func immediateBindings(ctx context.Context, tx pgx.Tx) error {
-	if _, err := tx.Exec(ctx, `SET CONSTRAINTS economic_intents_require_transition, economic_effects_require_transition,
-		bridge_legs_require_transition IMMEDIATE`); err != nil {
+	if _, err := tx.Exec(ctx, `SET CONSTRAINTS bridge_legs_require_transition IMMEDIATE`); err != nil {
 		return dbErr("make transition bindings immediate", err)
 	}
 	return nil

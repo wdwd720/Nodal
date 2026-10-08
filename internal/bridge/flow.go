@@ -330,7 +330,8 @@ func (s *Service) PrepareLeg(ctx context.Context, tx pgx.Tx, req BridgeRequest, 
 	}
 	res, err := s.capital.Reserve(ctx, tx, capital.ReserveRequest{
 		AccountID: req.AccountID.String(), AssetID: r.SourceAssetID, Quantity: q, ActorType: req.Actor.Type, ActorID: req.Actor.ID,
-		IdempotencyKey: "bridge:lock:" + in.ID.String(), TTL: s.params.ReservationTTL, Reason: "bridge: units to lock",
+		EconomicIntentID: in.ID.String(),
+		IdempotencyKey:   "bridge:lock:" + in.ID.String(), TTL: s.params.ReservationTTL, Reason: "bridge: units to lock",
 	})
 	if err != nil {
 		switch errs.CodeOf(err) {

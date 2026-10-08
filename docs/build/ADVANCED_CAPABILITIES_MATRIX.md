@@ -12,7 +12,7 @@ an external provider's sandbox) · `BLOCKED_EXTERNAL` · `LIVE_CAPABLE_BUT_DISAB
 code (`gates.DecideMode` → `LIVE_NOT_IMPLEMENTED`) and unrepresentable in the database (D-049). The live
 column below says what activation would need, never that it is near.
 
-Last updated: 2026-10-08 — foundation, kernel amendments (00733), transfers + faucet (00744), margin (00740), derivatives (00741), prediction markets (00749), strategy marketplace (00750), sandboxed runs (00751) and the internal order book (00742) merged; other subsystem lanes in progress.
+Last updated: 2026-10-08 — foundation, kernel amendments (00733), transfers + faucet (00744), margin (00740), derivatives (00741), prediction markets (00749), strategy marketplace (00750), sandboxed runs (00751) the internal order book (00742), the stable asset (00747) and bridges (00748) merged; other subsystem lanes in progress.
 
 ## Summary
 
@@ -24,7 +24,7 @@ Last updated: 2026-10-08 — foundation, kernel amendments (00733), transfers + 
 | 4 | Ledger V2 subledgers (§22) | VERIFIED_LOCAL | SIMULATED domain | — |
 | 5 | Capability gates + mode policy (§28) | VERIFIED_LOCAL | — | — |
 | 6 | Risk Kernel V2 (§21) | VERIFIED_LOCAL | — | — |
-| 7 | Stable asset subsystem (§5) | IN_PROGRESS | SANDBOX/DEVNET | B-16 |
+| 7 | Stable asset subsystem (§5) | VERIFIED_LOCAL (API in progress) | SANDBOX/DEVNET | B-16 |
 | 8 | Margin + leverage engine (§6) | VERIFIED_LOCAL (API in progress) | PAPER/SANDBOX | B-15 |
 | 9 | Derivatives: futures, perps, options (§7) | VERIFIED_LOCAL (API in progress) | PAPER/SANDBOX | B-15, B-17 |
 | 10 | Equities abstraction (§8) | IN_PROGRESS | PAPER/SANDBOX | B-15, B-17 |
@@ -37,7 +37,7 @@ Last updated: 2026-10-08 — foundation, kernel amendments (00733), transfers + 
 | 17 | Sandboxed user code (§15) | VERIFIED_LOCAL (API in progress) | SANDBOX | B-19 |
 | 18 | Delegated agent signing (§16) | NOT_STARTED | SANDBOX/DEVNET | B-18 |
 | 19 | Delegated agent withdrawals (§17) | NOT_STARTED | SANDBOX/DEVNET | B-18 |
-| 20 | Cross-chain buying power (§18) | NOT_STARTED | SANDBOX/DEVNET | B-20 |
+| 20 | Cross-chain buying power (§18) | VERIFIED_LOCAL (bridge; V2 wiring and API in progress) | SANDBOX/DEVNET | B-20 |
 | 21 | Prediction markets (§19) | VERIFIED_LOCAL (API in progress) | PAPER/SANDBOX | B-15, B-17 |
 | 22 | Universal buying power V2 (§20) | VERIFIED_LOCAL (margin wired; derivatives, bridge pending) | SIMULATED domain | — |
 | 23 | Provider layer modes (§27) | IN_PROGRESS | fake/sandbox | B-17, B-20 |
@@ -116,3 +116,14 @@ Last updated: 2026-10-08 — foundation, kernel amendments (00733), transfers + 
 - **Tests:** `TestIntegration_DeterministicReplayYieldsByteEquivalentBookStateThroughTheDB`, `TestProp_NoCrossedRestingBookAfterEveryCommandThroughTheService`, `TestProp_QuantitiesAreConservedAndNoOrderOverfillsThroughTheService`, `TestIntegration_FIFOWithinAPriceLevel`, `TestIntegration_SelfTradePreventionNeverTradesAnOwnerWithItself`, `TestIntegration_CancelRaceHasExactlyOneOutcome`, `TestIntegration_ConcurrentSubmitsReplayToTheLiveStateHash`, `TestProp_CustomerWalletsChangeOnlyByFeesAcrossRandomTrading`, `TestIntegration_HouseCustomerCrossingIsRejectedByDefault`, `TestIntegration_ScenarioD_TwoSandboxUsersTradeWithAnAuditProof`, fuzzers for order conversion and command/event decoding.
 - **Measured (lane, shared machine):** matching engine about 729k commands/s; persistent staged pipeline 96 orders/s on one book (p95 582 ms), bounded by the book row lock held through commit and the ledger's deferred triggers.
 - **Limitations:** one book's throughput is capped by its row lock; StateHash is O(book size) per command; market orders need a protection price; house orders cannot be replaced.
+
+### 7. Stable asset subsystem (and the simulated chains it issues on)
+- **Implementation:** `internal/devnethost` (a persistent host for the simulated chains: every chain-changing call is one event in an append-only, gapless, hash-chained `devnet_events` log written in its own transaction; the network is rebuilt by replaying that log and refuses to run on a history that does not replay to the recorded state hashes; fault injection only in LOCAL/TEST/DEV) and `internal/stableasset` (registry with mint/burn/redemption authority modes, reserve assets, a reserve ledger, mint and burn as two-phase operations around a devnet submission whose UNKNOWN outcome is reconciled rather than retried, peg monitoring with alerts, hash-chained signed reserve snapshots — attestations — and supply reconciliation against the chain).
+- **DB:** `00747_stable_assets.sql` (DH001; SV001–SV007: supply above the cap, issuance without full backing and redemptions that overpay are refused by the database).
+- **Tests:** property and integration suites in both packages (reserve invariant, supply cap, no double counting, unknown submissions, snapshot chain verification, replay, append-only log).
+
+### 20. Cross-chain capital (bridges)
+- **Implementation:** `internal/bridge` (routes, legs with a state machine from AVAILABLE through BRIDGE_REQUESTED, SOURCE_FINALIZED, MESSAGE_IN_FLIGHT, DESTINATION_OBSERVED/FINALIZED to RECONCILED or FAILED/MANUAL_REVIEW; lock-and-release over the devnet with attested releases inspected before submission; refunds; route reconciliation of `BRIDGE_LOCKED = BRIDGE_OUTSTANDING + Σ BRIDGE_IN_FLIGHT`; a cross-chain buying power evaluation where in-flight value counts only at the policy factor).
+- **DB:** `00748_bridges.sql` (BR001–BR005; a requested leg carries its lock).
+- **Tests:** `TestProp_IntegrationNoDoubleCounting`, `TestProp_EachLegIsCountedOnceWhereItsValueIs`, `TestProp_PostingsConserveValueAcrossChains`, `TestIntegration_AFailedLockRestoresTheSourceState`, `TestIntegration_AFailedReleaseIsRefundedAndRestoresTheSourceState`, `TestIntegration_ADelayedBridgeCreatesNoPhantomCapital`, `TestIntegration_AReorgNeverRevertsFinalityOrDoubleCounts`, `TestIntegration_ADuplicateReleaseMintsNothingTwice`, `TestIntegration_ConcurrentDuplicatesSettleOnce`, `TestHaircut_InFlightValueCountsOnlyAtThePolicyFactor`, `TestIntegration_BridgeReconciliationDetectsAnOutOfBandLock`, `TestIntegration_TheDatabaseRefusesBridgeBookkeepingBypasses`, `TestIntegration_ARequestedLegCarriesItsLock`.
+- **Limitations:** DEVNET legs and unknown submissions advance only when `ObservePending` runs (no scheduler yet); every bridge posting serializes on its route's row lock.

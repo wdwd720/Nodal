@@ -146,9 +146,6 @@ func (s *Service) PrepareMint(ctx context.Context, tx pgx.Tx, req MintRequest) (
 	if err := s.authenticate(ctx, req.Actor, req.AccountID); err != nil {
 		return MintTicket{}, err
 	}
-	if err := immediateKernelBindings(ctx, tx); err != nil {
-		return MintTicket{}, err
-	}
 	if err := s.authorizer.Require(ctx, tx, gates.StableAssetMint, req.Mode); err != nil {
 		return MintTicket{}, err
 	}
@@ -245,7 +242,8 @@ func (s *Service) PrepareMint(ctx context.Context, tx pgx.Tx, req MintRequest) (
 
 	res, err := s.capital.Reserve(ctx, tx, capital.ReserveRequest{
 		AccountID: req.AccountID.String(), AssetID: reserve.AssetID, Quantity: rq, ActorType: req.Actor.Type, ActorID: req.Actor.ID,
-		IdempotencyKey: "stableasset:mint:" + in.ID.String(), TTL: s.params.ReservationTTL, Reason: "stable asset mint: reserve payment",
+		EconomicIntentID: in.ID.String(),
+		IdempotencyKey:   "stableasset:mint:" + in.ID.String(), TTL: s.params.ReservationTTL, Reason: "stable asset mint: reserve payment",
 	})
 	if err != nil {
 		if isBusinessRefusal(err) {

@@ -35,11 +35,13 @@ import (
 	"github.com/nodal/controlplane/internal/admin"
 	"github.com/nodal/controlplane/internal/agent"
 	"github.com/nodal/controlplane/internal/assets"
+	"github.com/nodal/controlplane/internal/bridge"
 	"github.com/nodal/controlplane/internal/commerce"
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/db/migrate"
 	"github.com/nodal/controlplane/internal/derivatives"
+	"github.com/nodal/controlplane/internal/devnethost"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/execution"
 	"github.com/nodal/controlplane/internal/funding"
@@ -59,6 +61,7 @@ import (
 	"github.com/nodal/controlplane/internal/sandboxfund"
 	"github.com/nodal/controlplane/internal/sandboxrt"
 	"github.com/nodal/controlplane/internal/security"
+	"github.com/nodal/controlplane/internal/stableasset"
 	"github.com/nodal/controlplane/internal/transfers"
 )
 
@@ -254,6 +257,25 @@ func registry() []pair {
 		{table: "book_house_reservation_transitions", constraint: "book_house_reservation_transitions_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
 		{table: "paper_fills", constraint: "paper_fills_side_check", source: "orders.AllSides()", values: str(orders.AllSides())},
 
+		// Migrations 00747 and 00748 (devnet host, stable assets, bridges).
+		{table: "devnet_events", constraint: "devnet_events_kind_check", source: "devnethost.AllEventKinds()", values: str(devnethost.AllEventKinds())},
+		{table: "devnet_events", constraint: "devnet_events_outcome_check", source: "devnethost.AllOutcomes()", values: str(devnethost.AllOutcomes())},
+		{table: "stable_assets", constraint: "stable_assets_status_check", source: "stableasset.AllStatuses()", values: str(stableasset.AllStatuses())},
+		{table: "stable_assets", constraint: "stable_assets_redemption_mode_check", source: "stableasset.AllRedemptionModes()", values: str(stableasset.AllRedemptionModes())},
+		{table: "stable_assets", constraint: "stable_assets_created_by_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
+		{table: "stable_reserve_assets", constraint: "stable_reserve_assets_reserve_kind_check", source: "stableasset.AllReserveKinds()", values: str(stableasset.AllReserveKinds())},
+		{table: "stable_mint_requests", constraint: "stable_mint_requests_mode_check", source: "stableasset.RequestModes()", values: str(stableasset.RequestModes())},
+		{table: "stable_mint_requests", constraint: "stable_mint_requests_status_check", source: "stableasset.AllMintStatuses()", values: str(stableasset.AllMintStatuses())},
+		{table: "stable_burn_requests", constraint: "stable_burn_requests_mode_check", source: "stableasset.RequestModes()", values: str(stableasset.RequestModes())},
+		{table: "stable_burn_requests", constraint: "stable_burn_requests_status_check", source: "stableasset.AllBurnStatuses()", values: str(stableasset.AllBurnStatuses())},
+		{table: "stable_peg_alerts", constraint: "stable_peg_alerts_kind_check", source: "stableasset.AllAlertKinds()", values: str(stableasset.AllAlertKinds())},
+		{table: "stable_peg_alerts", constraint: "stable_peg_alerts_severity_check", source: "stableasset.AllSeverities()", values: str(stableasset.AllSeverities())},
+		{table: "bridge_routes", constraint: "bridge_routes_status_check", source: "bridge.AllRouteStatuses()", values: str(bridge.AllRouteStatuses())},
+		{table: "bridge_routes", constraint: "bridge_routes_created_by_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
+		{table: "bridge_legs", constraint: "bridge_legs_mode_check", source: "bridge.LegModes()", values: str(bridge.LegModes())},
+		{table: "bridge_legs", constraint: "bridge_legs_status_check", source: "bridge.AllStates()", values: str(bridge.AllStates())},
+		{table: "bridge_release_attempts", constraint: "bridge_release_attempts_kind_check", source: "bridge.AllAttemptKinds()", values: str(bridge.AllAttemptKinds())},
+
 		// Migrations 00750 and 00751 (strategy marketplace, sandboxed runs).
 		{table: "marketplace_evaluations", constraint: "marketplace_evaluations_actor_type_check", source: "marketplace.TransitionActorTypes()", values: str(marketplace.TransitionActorTypes())},
 		{table: "marketplace_follow_intents", constraint: "marketplace_follow_intents_outcome_check", source: "marketplace.AllFollowOutcomes()", values: str(marketplace.AllFollowOutcomes())},
@@ -359,6 +381,14 @@ var bespoke = []string{
 	// drives both.
 	"book_orders.book_orders_market_tif",
 	"book_orders.book_orders_quantity_conserved",
+	// Not a list of values but a rule: a leg past RESERVED carries the lock
+	// transaction it was requested with. internal/bridge's
+	// TestIntegration_ARequestedLegCarriesItsLock drives it.
+	"bridge_legs.bridge_legs_requested_has_lock",
+	// Not a list of values but a rule: a SUBMIT event's outcome is ACCEPTED or
+	// TIMEOUT and no other kind has one of those. internal/devnethost's
+	// TestIntegration_TheDatabaseRefusesAGapInTheHistory drives it.
+	"devnet_events.devnet_events_submit_outcome",
 }
 
 var (

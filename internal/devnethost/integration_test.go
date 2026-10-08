@@ -161,6 +161,21 @@ func TestIntegration_TheDatabaseRefusesAGapInTheHistory(t *testing.T) {
 	require.Error(t, err, "GENESIS is only ever the first event")
 	err = insert(last.Seq, EventClearFaults, string(ChainSolana))
 	require.Error(t, err, "a taken position")
+
+	// A submission's outcome is ACCEPTED or TIMEOUT, and only a submission
+	// has one of those (devnet_events_submit_outcome).
+	withOutcome := func(kind EventKind, outcome string) error {
+		_, err := testDB.Exec(w.ctx, `INSERT INTO devnet_events (id, network, seq, kind, chain_id, args, outcome, state_hash, prev_hash, event_hash, occurred_at)
+			VALUES ($1,$2,$3::numeric,$4,$5,'{}',$6,$7,$7,$7,now())`,
+			uuid.New(), cfg.Network, strconv.FormatUint(last.Seq+1, 10), string(kind), string(ChainSolana), outcome, last.StateHash[:])
+		return err
+	}
+	err = withOutcome(EventSubmit, "APPLIED")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "devnet_events_submit_outcome", "%v", err)
+	err = withOutcome(EventClearFaults, "ACCEPTED")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "devnet_events_submit_outcome", "%v", err)
 }
 
 // TestIntegration_AForgedEventIsRefusedOnReplay: a row inserted around Go at

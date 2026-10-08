@@ -370,3 +370,24 @@ func TestProp_IntegrationNoDoubleCounting(t *testing.T) {
 		}
 	})
 }
+
+// TestIntegration_ARequestedLegCarriesItsLock: the leg register refuses a leg
+// past RESERVED that does not carry the lock transaction it was requested
+// with (bridge_legs_requested_has_lock), even written directly by the owner.
+func TestIntegration_ARequestedLegCarriesItsLock(t *testing.T) {
+	f := newFixture(t)
+	c := f.customer()
+	owner, err := pgx.Connect(f.ctx, testMigrateURL)
+	require.NoError(t, err)
+	defer owner.Close(f.ctx)
+	intentID := uuid.New()
+	_, err = owner.Exec(f.ctx, `INSERT INTO economic_intents (id, account_id, kind, mode, capability, actor_type, actor_id,
+		content_hash, idempotency_key, status) VALUES ($1, $2, 'BRIDGE_VALUE', 'SANDBOX', 'CROSS_CHAIN_BUYING_POWER', 'USER', 'u',
+		sha256('lockless'::bytea), $3, 'RECEIVED')`, intentID, c.id, "lockless-"+uuid.NewString())
+	require.NoError(t, err)
+	_, err = owner.Exec(f.ctx, `INSERT INTO bridge_legs (id, route_id, account_id, intent_id, mode, quantity, source_owner,
+		destination_owner, lock_nonce, plan, plan_hash, status) VALUES ($1, $2, $3, $4, 'SANDBOX', 1, 'a', 'b', 987654321,
+		'{}', sha256('plan'::bytea), 'BRIDGE_REQUESTED')`, uuid.New(), f.route.ID, c.id, intentID)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "bridge_legs_requested_has_lock", "%v", err)
+}

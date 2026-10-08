@@ -120,9 +120,6 @@ func (s *Service) PrepareBurn(ctx context.Context, tx pgx.Tx, req BurnRequest) (
 	if err := s.authenticate(ctx, req.Actor, req.AccountID); err != nil {
 		return BurnTicket{}, err
 	}
-	if err := immediateKernelBindings(ctx, tx); err != nil {
-		return BurnTicket{}, err
-	}
 	if err := s.authorizer.Require(ctx, tx, gates.StableAssetMint, req.Mode); err != nil {
 		return BurnTicket{}, err
 	}
@@ -237,7 +234,8 @@ func (s *Service) PrepareBurn(ctx context.Context, tx pgx.Tx, req BurnRequest) (
 	}
 	res, err := s.capital.Reserve(ctx, tx, capital.ReserveRequest{
 		AccountID: req.AccountID.String(), AssetID: a.AssetID, Quantity: q, ActorType: req.Actor.Type, ActorID: req.Actor.ID,
-		IdempotencyKey: "stableasset:burn:" + in.ID.String(), TTL: s.params.ReservationTTL, Reason: "stable asset burn",
+		EconomicIntentID: in.ID.String(),
+		IdempotencyKey:   "stableasset:burn:" + in.ID.String(), TTL: s.params.ReservationTTL, Reason: "stable asset burn",
 	})
 	if err != nil {
 		if isBusinessRefusal(err) {
