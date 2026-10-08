@@ -128,7 +128,6 @@ type fakeBooks struct {
 	depth  orders.Depth
 	proof  orders.BookProof
 	jproof orders.JournalProof
-	rule   orders.CrossingRule
 	calls  map[string]int
 
 	lastSubmit  BookOrderSubmit
@@ -137,7 +136,6 @@ type fakeBooks struct {
 	lastOpen    BookOpen
 	lastStatus  orders.BookStatus
 	lastReason  string
-	lastAllow   bool
 	lastAcct    accounts.AccountID
 	lastWorking bool
 	lastCursor  string
@@ -157,7 +155,6 @@ func newFakeBooks() *fakeBooks {
 			LastCommandSeq: 7, SnapshotSeq: 4, SnapshotHash: []byte{0x01, 0x02}},
 		jproof: orders.JournalProof{BookID: booksBookID, InstrumentID: booksInstrument, Commands: 7, Events: 21, Trades: 2,
 			OrdersChecked: 5, SnapshotSeq: 4},
-		rule:  orders.CrossingRule{BookID: booksBookID, Version: 1, AllowHouseCustomerCrossing: true, Reason: "market making pilot", Actor: econ.Actor{Type: security.ActorOperator, ID: "op-1"}, CreatedAt: testNow},
 		calls: map[string]int{},
 	}
 }
@@ -199,11 +196,6 @@ func (f *fakeBooks) SetBookStatus(_ context.Context, _ instruments.InstrumentID,
 	v := f.book
 	v.Book.Status = to
 	return v, f.hit("SetBookStatus")
-}
-
-func (f *fakeBooks) SetCrossingRule(_ context.Context, _ instruments.InstrumentID, allow bool, reason string) (orders.CrossingRule, error) {
-	f.lastAllow, f.lastReason = allow, reason
-	return f.rule, f.hit("SetCrossingRule")
 }
 
 func (f *fakeBooks) VerifyJournal(context.Context, instruments.InstrumentID) (orders.JournalProof, error) {
@@ -348,8 +340,6 @@ func TestBooks_UnwiredPortIsUnsupported(t *testing.T) {
 		{http.MethodGet, booksBase0 + "/" + booksInstrument.String() + "/depth", nil, customerPrincipal()},
 		{http.MethodPost, booksBase0 + "/" + booksInstrument.String() + "/orders", booksOrderBody(), customerPrincipal()},
 		{http.MethodPost, booksBase0 + "/" + booksInstrument.String() + "/status", map[string]any{"status": "HALTED", "reason": "drill"}, op},
-		{http.MethodPost, booksBase0 + "/" + booksInstrument.String() + "/crossing-rule",
-			map[string]any{"allow_house_customer_crossing": true, "reason": "pilot"}, op},
 		{http.MethodGet, booksBase0 + "/" + booksInstrument.String() + "/journal-verification", nil, op},
 		{http.MethodGet, booksBase0 + "/" + booksInstrument.String() + "/trades/2/proof", nil, customerPrincipal()},
 		{http.MethodGet, booksBase0 + "/orders?account_id=" + testAccountID.String(), nil, customerPrincipal()},
@@ -517,8 +507,6 @@ func TestBooks_EveryMutationIsReplayedNotReExecuted(t *testing.T) {
 		{"open", booksBase0, "OpenBook", booksOpenBody(), changedOpen, true, http.StatusCreated},
 		{"status", inst + "/status", "SetBookStatus", map[string]any{"status": "HALTED", "reason": "drill"},
 			map[string]any{"status": "HALTED", "reason": "drill 2"}, true, http.StatusOK},
-		{"crossing", inst + "/crossing-rule", "SetCrossingRule", map[string]any{"allow_house_customer_crossing": true, "reason": "pilot"},
-			map[string]any{"allow_house_customer_crossing": false, "reason": "pilot"}, true, http.StatusOK},
 	} {
 		t.Run(m.name, func(t *testing.T) {
 			t.Parallel()
@@ -757,26 +745,46 @@ func TestBooks_OpenBookCarriesTheSchedulesAndSpotTermsExactly(t *testing.T) {
 	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
 }
 
-func TestBooks_CrossingAndStatusCarryTheOperatorsDecision(t *testing.T) {
+// The crossing rule is read here and changed only through the treasury
+// service: a recorded rule is disclosed on the book exactly, and no route of
+// this API records one (or a house order) -- the paths do not exist.
+func TestBooks_TheCrossingRuleIsDisclosedAndNeverChangedHere(t *testing.T) {
+	t.Parallel()
+	h, fb := newBooksHarness(t)
+	fb.book.Crossing = orders.CrossingRule{BookID: booksBookID, Version: 2, AllowHouseCustomerCrossing: true,
+		Reason: "market making pilot", Actor: econ.Actor{Type: security.ActorOperator, ID: "op-1"}, CreatedAt: testNow}
+	fb.book.CrossingDefault = false
+	inst := booksBase0 + "/" + booksInstrument.String()
+	res := h.do(http.MethodGet, inst, nil)
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	var book api.AdvancedBook
+	res.json(&book)
+	rule := book.CrossingRule
+	assert.Equal(t, 2, rule.Version)
+	assert.True(t, rule.AllowHouseCustomerCrossing)
+	assert.False(t, rule.IsDefault)
+	require.NotNil(t, rule.Reason)
+	assert.Equal(t, "market making pilot", *rule.Reason)
+	require.NotNil(t, rule.ActorId)
+	assert.Equal(t, "op-1", *rule.ActorId)
+	require.NotNil(t, rule.CreatedAt)
+
+	op := operatorPrincipal()
+	h.as(&op)
+	for _, path := range []string{inst + "/crossing-rule", inst + "/house-orders", booksBase0 + "/house-orders"} {
+		res = h.do(http.MethodPost, path, map[string]any{"allow_house_customer_crossing": true, "reason": "pilot"},
+			"Idempotency-Key", "books-house-01")
+		assert.Contains(t, []int{http.StatusNotFound, http.StatusMethodNotAllowed}, res.Code, "%s: body=%s", path, res.Body.String())
+	}
+}
+
+func TestBooks_StatusAndJournalCarryTheOperatorsDecision(t *testing.T) {
 	t.Parallel()
 	h, fb := newBooksHarness(t)
 	op := operatorPrincipal()
 	h.as(&op)
 	inst := booksBase0 + "/" + booksInstrument.String()
-	res := h.do(http.MethodPost, inst+"/crossing-rule", map[string]any{"allow_house_customer_crossing": true, "reason": "pilot"},
-		"Idempotency-Key", "books-cross-01")
-	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
-	assert.True(t, fb.lastAllow)
-	assert.Equal(t, "pilot", fb.lastReason)
-	var rule api.AdvancedBookCrossingRule
-	res.json(&rule)
-	assert.Equal(t, 1, rule.Version)
-	assert.True(t, rule.AllowHouseCustomerCrossing)
-	assert.False(t, rule.IsDefault)
-	require.NotNil(t, rule.ActorId)
-	assert.Equal(t, "op-1", *rule.ActorId)
-
-	res = h.do(http.MethodPost, inst+"/status", map[string]any{"status": "HALTED", "reason": "drill"}, "Idempotency-Key", "books-status-01")
+	res := h.do(http.MethodPost, inst+"/status", map[string]any{"status": "HALTED", "reason": "drill"}, "Idempotency-Key", "books-status-01")
 	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
 	assert.Equal(t, orders.BookHalted, fb.lastStatus)
 	assert.Equal(t, "HALTED", res.raw()["status"])
@@ -800,7 +808,6 @@ func TestBooks_OperatorRoutesNeedOperateAndStepUp(t *testing.T) {
 	}{
 		{booksBase0, booksOpenBody()},
 		{inst + "/status", map[string]any{"status": "HALTED", "reason": "drill"}},
-		{inst + "/crossing-rule", map[string]any{"allow_house_customer_crossing": true, "reason": "pilot"}},
 	}
 	for _, c := range commands {
 		t.Run(c.path, func(t *testing.T) {
@@ -813,7 +820,7 @@ func TestBooks_OperatorRoutesNeedOperateAndStepUp(t *testing.T) {
 			res = h.do(http.MethodPost, c.path, c.body, "Idempotency-Key", "books-op-stale-1")
 			require.Equal(t, http.StatusForbidden, res.Code, "body=%s", res.Body.String())
 			assert.Equal(t, errs.CodeStepUpRequired, res.problem().Code)
-			assert.Zero(t, fb.count("OpenBook")+fb.count("SetBookStatus")+fb.count("SetCrossingRule"))
+			assert.Zero(t, fb.count("OpenBook")+fb.count("SetBookStatus"))
 		})
 	}
 	h, _ := newBooksHarness(t)

@@ -139,13 +139,18 @@ type BookTradeProof struct {
 // AdvancedBooksPort serves internal/orders. Commands that the service refuses
 // after recording the refusal return that refusal as their error, carrying
 // its stable reason and the id of the order it recorded.
+//
+// It carries customer orders only. House orders and the crossing rule reach
+// the book solely through internal/treasury (PlaceOrder, QuoteTwoSided,
+// CancelOrder), which enforces the house book's limits, loss caps and
+// crossing disclosures; nothing here submits or cancels a house order or
+// records a crossing rule. A book read discloses the rule in force.
 type AdvancedBooksPort interface {
 	Books(ctx context.Context, cursor string, limit int) ([]BookView, string, error)
 	Book(ctx context.Context, instrumentID instruments.InstrumentID) (BookView, error)
 	Depth(ctx context.Context, instrumentID instruments.InstrumentID, levels int) (BookDepthView, error)
 	OpenBook(ctx context.Context, r BookOpen) (BookView, error)
 	SetBookStatus(ctx context.Context, instrumentID instruments.InstrumentID, to orders.BookStatus, reason string) (BookView, error)
-	SetCrossingRule(ctx context.Context, instrumentID instruments.InstrumentID, allow bool, reason string) (orders.CrossingRule, error)
 	VerifyJournal(ctx context.Context, instrumentID instruments.InstrumentID) (orders.JournalProof, error)
 
 	Submit(ctx context.Context, r BookOrderSubmit) (BookCommandView, error)

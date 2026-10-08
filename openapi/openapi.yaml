@@ -2159,6 +2159,9 @@ paths:
   # decides every rule -- the INTERNAL_MATCHING gate and kill switches, Risk
   # Kernel V2, the capital reservation, self-trade prevention and the
   # house-versus-customer crossing policy -- and these routes carry its answer.
+  # House orders and the crossing rule are changed only through the treasury
+  # service (internal/treasury), which enforces the house book's limits and
+  # disclosures; these routes read the rule in force and never change it.
   /advanced/books:
     get:
       tags: [advanced]
@@ -2375,28 +2378,6 @@ paths:
         "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
-  /advanced/books/{instrumentId}/crossing-rule:
-    post:
-      tags: [advanced]
-      summary: Record the next version of the book's house-versus-customer crossing rule (operator; requires step-up)
-      description: >-
-        By default a house (principal) book never trades with a customer.
-        Only a recorded rule can allow it; rules are append-only, the latest
-        version is in force, the book's read discloses it, and every trade it
-        allows names its version.
-      parameters:
-        - { $ref: "#/components/parameters/InstrumentId" }
-        - { $ref: "#/components/parameters/IdempotencyKey" }
-      requestBody:
-        required: true
-        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBookCrossingRuleRequest" } } }
-      responses:
-        "200":
-          description: The rule now in force
-          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBookCrossingRule" } } }
-        "400": { $ref: "#/components/responses/Problem" }
-        "403": { $ref: "#/components/responses/Problem" }
-        "404": { $ref: "#/components/responses/Problem" }
   /advanced/books/{instrumentId}/journal-verification:
     get:
       tags: [advanced]
@@ -6127,12 +6108,6 @@ components:
       required: [status, reason]
       properties:
         status: { $ref: "#/components/schemas/AdvancedBookStatus" }
-        reason: { type: string, minLength: 1, maxLength: 500 }
-    AdvancedBookCrossingRuleRequest:
-      type: object
-      required: [allow_house_customer_crossing, reason]
-      properties:
-        allow_house_customer_crossing: { type: boolean }
         reason: { type: string, minLength: 1, maxLength: 500 }
     AdvancedBookDepthLevel:
       type: object

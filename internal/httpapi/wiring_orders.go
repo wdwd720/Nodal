@@ -593,20 +593,6 @@ func (a booksAdapter) SetBookStatus(ctx context.Context, instrumentID instrument
 	return out, err
 }
 
-func (a booksAdapter) SetCrossingRule(ctx context.Context, instrumentID instruments.InstrumentID, allow bool, reason string) (orders.CrossingRule, error) {
-	actor, err := booksActor(ctx)
-	if err != nil {
-		return orders.CrossingRule{}, err
-	}
-	var out orders.CrossingRule
-	err = booksWriteTx(ctx, a.db, func(ctx context.Context, tx pgx.Tx) error {
-		var serr error
-		out, serr = a.svc.SetCrossingRule(ctx, tx, instrumentID, allow, actor, reason)
-		return serr
-	})
-	return out, err
-}
-
 // --- customer commands ------------------------------------------------------
 
 // Submit runs a customer order through orders.Pipeline: Accept, Approve,

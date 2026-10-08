@@ -928,57 +928,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/advanced/books/{instrumentId}/crossing-rule": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Record the next version of the book's house-versus-customer crossing rule (operator; requires step-up)
-         * @description By default a house (principal) book never trades with a customer. Only a recorded rule can allow it; rules are append-only, the latest version is in force, the book's read discloses it, and every trade it allows names its version.
-         */
-        post: {
-            parameters: {
-                query?: never;
-                header: {
-                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
-                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-                };
-                path: {
-                    instrumentId: components["parameters"]["InstrumentId"];
-                };
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["AdvancedBookCrossingRuleRequest"];
-                };
-            };
-            responses: {
-                /** @description The rule now in force */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["AdvancedBookCrossingRule"];
-                    };
-                };
-                400: components["responses"]["Problem"];
-                403: components["responses"]["Problem"];
-                404: components["responses"]["Problem"];
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/advanced/books/{instrumentId}/depth": {
         parameters: {
             query?: never;
@@ -7793,10 +7742,6 @@ export interface components {
             is_default: boolean;
             reason?: string;
             version: number;
-        };
-        AdvancedBookCrossingRuleRequest: {
-            allow_house_customer_crossing: boolean;
-            reason: string;
         };
         AdvancedBookDepth: {
             asks: components["schemas"]["AdvancedBookDepthLevel"][];

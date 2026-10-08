@@ -282,9 +282,10 @@ var operationPolicies = map[string]operationPolicy{
 	// fills are tenant-scoped per request; an order by id and a trade's audit
 	// proof answer NOT_FOUND to anyone but a party (or account:read_any).
 	// Submitting, cancelling and replacing are the customer's own writes
-	// (ownership-only scoping). Opening a book, halting or closing it and
-	// changing its house-versus-customer crossing rule are operator commands
-	// with step-up; verifying a book's journal reads only.
+	// (ownership-only scoping). Opening a book and halting or closing it are
+	// operator commands with step-up; verifying a book's journal reads only.
+	// House orders and the crossing rule have no route here: they go through
+	// the treasury service, which enforces the house book's limits.
 	"GetAdvancedBooks":                                {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
 	"GetAdvancedBooksInstrumentId":                    {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
 	"GetAdvancedBooksInstrumentIdDepth":               {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
@@ -297,7 +298,6 @@ var operationPolicies = map[string]operationPolicy{
 	"PostAdvancedBooksOrdersOrderIdReplace":           {AnyOf: perms(security.PermSandboxTrade), Mutating: true},
 	"PostAdvancedBooks":                               {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
 	"PostAdvancedBooksInstrumentIdStatus":             {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
-	"PostAdvancedBooksInstrumentIdCrossingRule":       {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
 	"GetAdvancedBooksInstrumentIdJournalVerification": {AnyOf: perms(security.PermSandboxOperate, security.PermReconciliationRead)},
 
 	// >>> advanced:transfers operations

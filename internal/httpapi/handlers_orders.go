@@ -186,36 +186,6 @@ func (s *Server) PostAdvancedBooksInstrumentIdStatus(ctx context.Context, reques
 	return api.PostAdvancedBooksInstrumentIdStatus200JSONResponse(res.Value), nil
 }
 
-// PostAdvancedBooksInstrumentIdCrossingRule records the next version of a
-// book's house-versus-customer crossing rule (operator, step-up).
-func (s *Server) PostAdvancedBooksInstrumentIdCrossingRule(ctx context.Context, request api.PostAdvancedBooksInstrumentIdCrossingRuleRequestObject) (api.PostAdvancedBooksInstrumentIdCrossingRuleResponseObject, error) {
-	if s.opts.Ports.Books == nil {
-		return nil, errNotWired("the internal order book")
-	}
-	if request.Body == nil {
-		return nil, validationError("body", "a request body is required")
-	}
-	iid, err := bookInstrumentID(request.InstrumentId)
-	if err != nil {
-		return nil, err
-	}
-	allow, reason := request.Body.AllowHouseCustomerCrossing, request.Body.Reason
-	res, err := runCommand(ctx, s, request.Params.IdempotencyKey,
-		func(ctx context.Context) (api.AdvancedBookCrossingRule, commandMeta, error) {
-			r, serr := s.opts.Ports.Books.SetCrossingRule(ctx, iid, allow, reason)
-			if serr != nil {
-				return api.AdvancedBookCrossingRule{}, commandMeta{}, serr
-			}
-			return toAPIBookCrossingRule(r, false), commandMeta{
-				Status: http.StatusOK, ResourceType: "order_book_crossing_rule", ResourceID: r.BookID.String(),
-			}, nil
-		})
-	if err != nil {
-		return nil, err
-	}
-	return api.PostAdvancedBooksInstrumentIdCrossingRule200JSONResponse(res.Value), nil
-}
-
 // GetAdvancedBooksInstrumentIdJournalVerification replays a book's journal
 // from the database and reports what it proved (operator, read-only).
 func (s *Server) GetAdvancedBooksInstrumentIdJournalVerification(ctx context.Context, request api.GetAdvancedBooksInstrumentIdJournalVerificationRequestObject) (api.GetAdvancedBooksInstrumentIdJournalVerificationResponseObject, error) {
