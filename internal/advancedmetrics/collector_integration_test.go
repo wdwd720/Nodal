@@ -30,6 +30,7 @@ import (
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/event"
+	"github.com/nodal/controlplane/internal/feeledger"
 	"github.com/nodal/controlplane/internal/fees"
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/instruments"
@@ -124,19 +125,23 @@ func newFixture(t *testing.T) *fixture {
 		f.usd, err = econ.EnsureSandboxDollar(ctx, tx)
 		return err
 	}))
+	feeLedger, err := feeledger.NewService(feeledger.Config{
+		Clock: clk, Ledger: f.ledger, Capital: f.capital, Effects: f.effects, Authorizer: authz, Assets: f.assets, Audit: aw,
+	})
+	require.NoError(t, err)
 	f.margin, err = margin.NewService(margin.Config{
 		Policy: margin.DefaultPolicy(), RiskPolicy: risk.DefaultAdvancedPolicy(),
 		LendingPoolName: "Margin lending pool (sandbox)", InsuranceFundName: "Margin insurance fund (sandbox)",
 	}, margin.Dependencies{
 		Clock: clk, Ledger: f.ledger, Effects: f.effects, Intents: intents, Authorizer: authz, Registry: f.registry,
 		Risk: risk.NewStore(), Capital: f.capital, Prices: f.prices, Router: router, Identity: compliance.NewAccountVerification(clk),
-		KillSwitch: kills, Venue: margin.PaperVenue{}, Audit: aw,
+		KillSwitch: kills, Venue: margin.PaperVenue{}, Audit: aw, FeeLedger: feeLedger,
 	})
 	require.NoError(t, err)
 	f.orders, err = orders.NewService(orders.Config{
 		Clock: clk, Ledger: f.ledger, Capital: f.capital, Intents: intents, Effects: f.effects, Authorizer: authz,
 		Registry: f.registry, Risk: risk.NewStore(), RiskPolicy: risk.DefaultAdvancedPolicy(), Router: router,
-		Instruments: f.instr, Assets: f.assets, Prices: f.prices, KillSwitches: kills,
+		Instruments: f.instr, Assets: f.assets, Prices: f.prices, KillSwitches: kills, FeeLedger: feeLedger,
 	})
 	require.NoError(t, err)
 	f.pipeline, err = orders.NewPipeline(f.orders, testDB)
@@ -452,10 +457,15 @@ func TestIntegration_GaugesEqualTheRowDerivedTruth(t *testing.T) {
 
 // seedSandboxRun writes a sandbox run row with the given termination, with
 // an artifact of its own, its digests computed by the database the way the
-// table's constraints check them.
+// table's constraints check them, and charged -- as every sandbox run is
+// (00757, SX002) -- to an account of its own: its wall time and the
+// wall-time limit it was granted (none for a run the kill switch stopped),
+// within a budget it states.
 func (f *fixture) seedSandboxRun(termination string) {
 	f.t.Helper()
 	wasm := []byte("\x00asm\x01\x00\x00\x00" + uuid.NewString())
+	runID := uuid.New()
+	payer := f.customer().account
 	f.inTx(func(ctx context.Context, tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, `INSERT INTO strategy_artifacts (id, artifact_digest, source_digest, wasm, wasm_size,
 				toolchain_version, sdk_version, build_log_digest, scan_report, scan_codes, created_by_actor_type, created_by_actor_id)
@@ -464,14 +474,23 @@ func (f *fixture) seedSandboxRun(termination string) {
 			wasm); err != nil {
 			return err
 		}
-		_, err := tx.Exec(ctx, `INSERT INTO sandbox_runs (id, artifact_digest, input_digest, limits_version, limits_hash, limits,
+		if _, err := tx.Exec(ctx, `INSERT INTO sandbox_runs (id, artifact_digest, input_digest, limits_version, limits_hash, limits,
 				termination_reason, termination_detail, exit_code, artifact_verified, wall_ms, output, output_bytes, stderr_bytes,
 				stderr_digest, peak_memory_bytes, output_digest, run_digest, proposals_count, accepted_count, violations_count,
 				manifest_hash, strategy_ref, actor_type, actor_id, started_at)
-			VALUES (gen_random_uuid(), sha256($1::bytea), sha256('input'::bytea), 'v1', repeat('b', 64), '{}'::jsonb,
+			VALUES ($3, sha256($1::bytea), sha256('input'::bytea), 'v1', repeat('b', 64), '{"wall_time_ms": 1000}'::jsonb,
 				$2, '', 0, true, 1, ''::bytea, 0, 0, sha256(''::bytea), 0, sha256(''::bytea),
 				sha256(sha256($1::bytea) || sha256('input'::bytea) || ''::bytea), 0, 0, 0,
-				sha256('manifest'::bytea), 'advancedmetrics-itest', 'SYSTEM', 'advancedmetrics-itest', now())`, wasm, termination)
+				sha256('manifest'::bytea), 'advancedmetrics-itest', 'SYSTEM', 'advancedmetrics-itest', now())`,
+			wasm, termination, runID); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `INSERT INTO sandbox_usage (id, run_id, account_id, purpose, cpu_ms, wall_ms, charged_at, budget_version,
+				window_ms, max_runs, max_cpu_ms, max_wall_ms)
+			SELECT gen_random_uuid(), r.id, $2, 'SIMULATION',
+				CASE WHEN r.termination_reason = 'KILLED_BY_SWITCH' THEN 0 ELSE (r.limits->>'wall_time_ms')::bigint END,
+				r.wall_ms, now(), 'advancedmetrics-itest', 3600000, 100, 3600000, 3600000
+			FROM sandbox_runs r WHERE r.id = $1`, runID, payer)
 		return err
 	})
 }

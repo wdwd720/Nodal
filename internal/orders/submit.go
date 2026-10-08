@@ -16,6 +16,7 @@ import (
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
+	"github.com/nodal/controlplane/internal/feeledger"
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/instruments"
 	"github.com/nodal/controlplane/internal/matching"
@@ -486,15 +487,14 @@ func (s *Service) Approve(ctx context.Context, tx pgx.Tx, oid OrderID) (StageOut
 	if in.Status != econ.StatusRouted {
 		return s.settled(c, o, in), nil
 	}
-	if err := s.auth.Require(ctx, tx, gates.InternalMatching, o.Mode); err != nil {
-		code := errs.CodeOf(err)
-		if code == errs.CodeCapabilityNotApproved || code == errs.CodeKillSwitchActive {
-			return s.rejectPending(ctx, tx, c, o, in, ReasonCapability, string(code), err)
-		}
-		return StageOutcome{}, err
+	if out, refused, err := s.requireStageCapabilities(ctx, tx, c, o, in); refused || err != nil {
+		return out, err
 	}
 	if cur.Status != BookOpen {
 		return s.rejectPending(ctx, tx, c, o, in, ReasonBookNotOpen, ReasonBookNotOpen, rejection(ReasonBookNotOpen, "book is "+string(cur.Status)))
+	}
+	if out, refused, err := s.requireFeeSchedules(ctx, tx, c, o, in); refused || err != nil {
+		return out, err
 	}
 	terms, err := decodeOrderTerms(in.Terms)
 	if err != nil {
@@ -517,6 +517,50 @@ func (s *Service) Approve(ctx context.Context, tx pgx.Tx, oid OrderID) (StageOut
 		return StageOutcome{}, err
 	}
 	return s.outcome(c, o, in), nil
+}
+
+// requireStageCapabilities authorizes an order's capabilities in its mode:
+// INTERNAL_MATCHING always, and SPREAD_ENGINE when the book can charge a fee,
+// because every fee is booked through the fee ledger, which charges only
+// under it. A refusal ends the PENDING order and its intent REJECTED with
+// ReasonCapability (refused is true and out carries the recorded refusal);
+// any other failure is returned.
+func (s *Service) requireStageCapabilities(ctx context.Context, tx pgx.Tx, c *bookConfig, o orderRow, in econ.Intent) (StageOutcome, bool, error) {
+	err := s.auth.Require(ctx, tx, gates.InternalMatching, o.Mode)
+	if err == nil {
+		err = s.requireCharging(ctx, tx, c, o.Mode)
+	}
+	if err == nil {
+		return StageOutcome{}, false, nil
+	}
+	code := errs.CodeOf(err)
+	if code == errs.CodeCapabilityNotApproved || code == errs.CodeKillSwitchActive {
+		out, rerr := s.rejectPending(ctx, tx, c, o, in, ReasonCapability, string(code), err)
+		return out, true, rerr
+	}
+	return StageOutcome{}, false, err
+}
+
+// requireFeeSchedules makes sure a fee-charging book's maker and taker
+// schedules are still the fee-ledger versions in force (publishing them for a
+// book opened before they were). When another version is in force -- an
+// operator published one under a book's key -- no fill of the book can be
+// booked, so the PENDING order ends REJECTED with ReasonFeeScheduleNotInForce
+// (refused is true) rather than failing at a fill.
+func (s *Service) requireFeeSchedules(ctx context.Context, tx pgx.Tx, c *bookConfig, o orderRow, in econ.Intent) (StageOutcome, bool, error) {
+	if !c.chargesFees() {
+		return StageOutcome{}, false, nil
+	}
+	err := s.publishBookSchedules(ctx, tx, c, s.actor)
+	if err == nil {
+		return StageOutcome{}, false, nil
+	}
+	if feeledger.ReasonOf(err) != feeledger.ReasonScheduleNotInForce {
+		return StageOutcome{}, false, err
+	}
+	out, rerr := s.rejectPending(ctx, tx, c, o, in, ReasonFeeScheduleNotInForce, ReasonFeeScheduleNotInForce,
+		rejection(ReasonFeeScheduleNotInForce, "the book's fee schedule is not the fee-ledger version in force; its fills cannot be booked"))
+	return out, true, rerr
 }
 
 // riskReason renders a rejection's risk codes as the order's stable reason,
@@ -636,6 +680,19 @@ func (s *Service) Execute(ctx context.Context, tx pgx.Tx, oid OrderID) (StageOut
 			return s.rejectPending(ctx, tx, c, o, in, ReasonTermsChanged, ReasonTermsChanged, err)
 		}
 		return StageOutcome{}, err
+	}
+	// The fee ledger charges only under SPREAD_ENGINE: an order whose fill
+	// could be charged a fee is refused here, under the book's lock, rather
+	// than failing at its fill (the capability may have changed since Approve).
+	if err := s.requireCharging(ctx, tx, c, o.Mode); err != nil {
+		code := errs.CodeOf(err)
+		if code == errs.CodeCapabilityNotApproved || code == errs.CodeKillSwitchActive {
+			return s.rejectPending(ctx, tx, c, o, in, ReasonCapability, string(code), err)
+		}
+		return StageOutcome{}, err
+	}
+	if out, refused, err := s.requireFeeSchedules(ctx, tx, c, o, in); refused || err != nil {
+		return out, err
 	}
 	rid, err := capital.ParseReservationID(o.ReservationID)
 	if err != nil {

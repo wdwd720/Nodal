@@ -28,6 +28,7 @@ import (
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/event"
+	"github.com/nodal/controlplane/internal/feeledger"
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/gen/api"
 	"github.com/nodal/controlplane/internal/instruments"
@@ -136,13 +137,19 @@ func TestIntegration_BooksTwoCustomersTradeThroughHTTP(t *testing.T) {
 	router, err := legalrouter.New(legalrouter.ConservativePolicy())
 	require.NoError(t, err)
 	prices := valuation.NewPriceStore(clk)
+	capitalSvc := capital.NewService(clk, capital.OutboxEmitter{Outbox: outbox, Clock: clk})
+	feeLedger, err := feeledger.NewService(feeledger.Config{
+		Clock: clk, Ledger: led, Capital: capitalSvc, Effects: econ.NewEffectStore(clk, outbox, aw),
+		Authorizer: econ.NewAuthorizer(checker, kills), Assets: assets.NewRepository(), Audit: aw,
+	})
+	require.NoError(t, err)
 	svc, err := orders.NewService(orders.Config{
-		Clock: clk, Ledger: led, Capital: capital.NewService(clk, capital.OutboxEmitter{Outbox: outbox, Clock: clk}),
+		Clock: clk, Ledger: led, Capital: capitalSvc,
 		Intents: econ.NewIntentStore(clk, outbox, aw), Effects: econ.NewEffectStore(clk, outbox, aw),
 		Authorizer: econ.NewAuthorizer(checker, kills), Registry: econ.NewRegistry(), Risk: risk.NewStore(),
 		RiskPolicy: risk.DefaultAdvancedPolicy(), Router: router, Instruments: instruments.NewRepository(),
 		Assets: assets.NewRepository(), Prices: prices, KillSwitches: kills,
-		Verification: AdvancedVerificationLevels{Rule: compliance.NewAccountVerification(clk)},
+		Verification: AdvancedVerificationLevels{Rule: compliance.NewAccountVerification(clk)}, FeeLedger: feeLedger,
 	})
 	require.NoError(t, err)
 	pipe, err := orders.NewPipeline(svc, d)

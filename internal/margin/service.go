@@ -19,6 +19,7 @@ import (
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
+	"github.com/nodal/controlplane/internal/feeledger"
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/legalrouter"
@@ -93,6 +94,11 @@ type Dependencies struct {
 	Venue       Venue
 	Audit       audit.Writer
 	Derivatives ExposureSource
+	// FeeLedger records every liquidation fee: the policy's fee is published
+	// as a fee-ledger schedule, each fee is disclosed to its payer and booked
+	// against the LIQUIDATION journal that charged it. A service without it
+	// would charge fees nobody can find, so it is refused at startup.
+	FeeLedger *feeledger.Service
 }
 
 // Service runs margin accounts against the database. It holds no mutable
@@ -134,7 +140,7 @@ func NewService(cfg Config, d Dependencies) (*Service, error) {
 	}
 	if d.Clock == nil || d.Ledger == nil || d.Effects == nil || d.Intents == nil || d.Authorizer == nil || d.Registry == nil ||
 		d.Risk == nil || d.Capital == nil || d.Prices == nil || d.Router == nil || d.Identity == nil || d.KillSwitch == nil ||
-		d.Venue == nil || d.Audit == nil {
+		d.Venue == nil || d.Audit == nil || d.FeeLedger == nil {
 		return nil, errs.New(errs.CodeValidationFailed, "margin: every dependency except Derivatives is required")
 	}
 	return &Service{

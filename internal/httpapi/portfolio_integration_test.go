@@ -30,6 +30,7 @@ import (
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/event"
+	"github.com/nodal/controlplane/internal/feeledger"
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/gen/api"
 	"github.com/nodal/controlplane/internal/instruments"
@@ -106,6 +107,12 @@ func newPortfolioWorld(t *testing.T) *portfolioWorld {
 	intents := econ.NewIntentStore(clk, outbox, aw)
 	authorizer, riskStore := econ.NewAuthorizer(checker, kills), risk.NewStore()
 	instrumentRepo, assetRepo := instruments.NewRepository(), assets.NewRepository()
+	// The fee ledger margin's liquidation fees and the book's fees are booked
+	// through, as cmd/api builds it.
+	feeLedger, err := feeledger.NewService(feeledger.Config{
+		Clock: clk, Ledger: w.led, Capital: w.capital, Effects: w.effects, Authorizer: authorizer, Assets: assetRepo, Audit: aw,
+	})
+	require.NoError(t, err)
 
 	pol := margin.DefaultPolicy()
 	pol.Version = "portfolio-itest-" + uuid.NewString()
@@ -117,7 +124,7 @@ func newPortfolioWorld(t *testing.T) *portfolioWorld {
 	}, margin.Dependencies{
 		Clock: clk, Ledger: w.led, Effects: w.effects, Intents: intents, Authorizer: authorizer, Registry: econ.NewRegistry(),
 		Risk: riskStore, Capital: w.capital, Prices: w.prices, Router: router, Identity: compliance.NewAccountVerification(clk),
-		KillSwitch: kills, Venue: margin.PaperVenue{}, Audit: aw,
+		KillSwitch: kills, Venue: margin.PaperVenue{}, Audit: aw, FeeLedger: feeLedger,
 	})
 	require.NoError(t, err)
 	derivSvc, err := derivatives.NewService(derivatives.Config{
@@ -140,7 +147,7 @@ func newPortfolioWorld(t *testing.T) *portfolioWorld {
 		Clock: clk, Ledger: w.led, Capital: w.capital, Intents: intents, Effects: w.effects, Authorizer: authorizer,
 		Registry: econ.NewRegistry(), Risk: riskStore, RiskPolicy: risk.DefaultAdvancedPolicy(), Router: router,
 		Instruments: instrumentRepo, Assets: assetRepo, Prices: w.prices, KillSwitches: kills,
-		Verification: AdvancedVerificationLevels{Rule: compliance.NewAccountVerification(clk)},
+		Verification: AdvancedVerificationLevels{Rule: compliance.NewAccountVerification(clk)}, FeeLedger: feeLedger,
 	})
 	require.NoError(t, err)
 	pipe, err := orders.NewPipeline(booksSvc, d)

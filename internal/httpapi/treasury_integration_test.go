@@ -80,10 +80,14 @@ func newTreasuryWorld(t *testing.T) *treasuryWorld {
 	effects := econ.NewEffectStore(w.clk, outbox, aw)
 	authorizer := econ.NewAuthorizer(checker, kills)
 	instr, assetRepo := instruments.NewRepository(), assets.NewRepository()
+	w.fees, err = feeledger.NewService(feeledger.Config{
+		Clock: w.clk, Ledger: w.ledger, Capital: capitalSvc, Effects: effects, Authorizer: authorizer, Assets: assetRepo, Audit: aw,
+	})
+	require.NoError(t, err)
 	w.orders, err = orders.NewService(orders.Config{
 		Clock: w.clk, Ledger: w.ledger, Capital: capitalSvc, Intents: econ.NewIntentStore(w.clk, outbox, aw), Effects: effects,
 		Authorizer: authorizer, Registry: econ.NewRegistry(), Risk: risk.NewStore(), RiskPolicy: risk.DefaultAdvancedPolicy(),
-		Router: router, Instruments: instr, Assets: assetRepo, Prices: w.prices, KillSwitches: kills,
+		Router: router, Instruments: instr, Assets: assetRepo, Prices: w.prices, KillSwitches: kills, FeeLedger: w.fees,
 	})
 	require.NoError(t, err)
 	w.pipe, err = orders.NewPipeline(w.orders, d)
@@ -91,10 +95,6 @@ func newTreasuryWorld(t *testing.T) *treasuryWorld {
 	w.treasury, err = treasury.NewService(treasury.Config{
 		Clock: w.clk, Ledger: w.ledger, Effects: effects, Authorizer: authorizer, Registry: econ.NewRegistry(), Orders: w.orders,
 		Prices: w.prices, Assets: assetRepo, Instruments: instr, KillSwitches: kills, Audit: aw, RiskPolicy: risk.DefaultAdvancedPolicy(),
-	})
-	require.NoError(t, err)
-	w.fees, err = feeledger.NewService(feeledger.Config{
-		Clock: w.clk, Ledger: w.ledger, Capital: capitalSvc, Effects: effects, Authorizer: authorizer, Assets: assetRepo, Audit: aw,
 	})
 	require.NoError(t, err)
 

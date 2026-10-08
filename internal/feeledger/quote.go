@@ -116,6 +116,10 @@ type QuoteRequest struct {
 	BaseAsset *assets.AssetID
 	Mode      gates.Mode
 	Actor     econ.Actor
+	// RiskReducing says the quote prices a charge of a risk-reducing
+	// operation (a liquidation's fee): a SPREAD_ENGINE kill switch or an
+	// inactive gate does not refuse it (see EmbeddedRequest.RiskReducing).
+	RiskReducing bool
 }
 
 // RecordQuote prices an order, proves the quote and its disclosure against
@@ -133,7 +137,7 @@ func (s *Service) RecordQuote(ctx context.Context, tx pgx.Tx, r QuoteRequest) (S
 	if !r.Subsystem.Valid() {
 		return StoredQuote{}, errs.Newf(errs.CodeValidationFailed, "feeledger: unknown subsystem %q", r.Subsystem)
 	}
-	if err := s.requireMode(ctx, tx, gates.SpreadEngine, r.Mode); err != nil {
+	if err := s.requireCharge(ctx, tx, r.Mode, r.RiskReducing); err != nil {
 		return StoredQuote{}, err
 	}
 	now := s.clk.Now().UTC()

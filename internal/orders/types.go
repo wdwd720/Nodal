@@ -416,4 +416,5 @@ const (
 	ReasonNotOwner                = "ORDER_NOT_OWNER"
 	ReasonNotOpen                 = "ORDER_NOT_OPEN"
 	ReasonScheduleNotInternalBook = "ORDER_SCHEDULE_NOT_ALLOWED_ON_INTERNAL_BOOK"
+	ReasonFeeScheduleNotInForce   = "ORDER_FEE_SCHEDULE_NOT_IN_FORCE"
 )
