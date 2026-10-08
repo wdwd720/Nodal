@@ -32,6 +32,13 @@
 //     FACILITY and HOUSE accounts belong to.
 //   - Evidence writes a canonical, hashed evidence document into the
 //     write-once evidence archive inside the caller's transaction.
+//   - SupplyController and RefuseSupplyControlled are the one check of a
+//     supply-controlled asset (a platform stable asset, a bridged twin;
+//     migration 00763): every subsystem entry point that would lead such an
+//     asset into a journal kind the database refuses for it refuses it first,
+//     by name (ASSET_RESTRICTED, refusal SUPPLY_CONTROLLED_ASSET), before
+//     anything is written. RefuseFacilityFunding is its form for
+//     FACILITY_FUNDING.
 //
 // # What this package must never do
 //

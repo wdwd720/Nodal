@@ -212,12 +212,12 @@ func TestIntegration_TheFaucetNeverGrantsAnAssetWhoseSupplyAControllerOwns(t *te
 	for _, tc := range []struct {
 		asset      assets.AssetID
 		controller string
-	}{{stable.ID, ControllerStableIssuer}, {twin.ID, ControllerBridge}} {
+	}{{stable.ID, econ.ControllerStableIssuer}, {twin.ID, econ.ControllerBridge}} {
 		_, err := f.fund(f.faucet, c.p, c.account, tc.asset, 1_000_000, "controlled-"+tc.controller)
-		requireCode(t, err, errs.CodeForbidden)
+		requireCode(t, err, errs.CodeAssetRestricted)
 		e, ok := errs.As(err)
 		require.True(t, ok)
-		assert.Equal(t, RefusalSupplyControlled, e.Fields["refusal"])
+		assert.Equal(t, econ.RefusalSupplyControlled, e.Fields["refusal"])
 		assert.Equal(t, tc.controller, e.Fields["controller"])
 		assert.Equal(t, tc.asset.String(), e.Fields["asset_id"])
 		assert.True(t, f.wallet(c.account, tc.asset).IsZero())

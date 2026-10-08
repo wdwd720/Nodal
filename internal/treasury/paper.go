@@ -148,6 +148,11 @@ func (s *Service) Rebalance(ctx context.Context, tx pgx.Tx, r RebalanceRequest) 
 	if r.Target.IsNegative() {
 		return PaperOutcome{}, false, errs.New(errs.CodeValidationFailed, "treasury: a rebalancing target must not be negative")
 	}
+	// Refused before the book is locked and synced (supply.go); ExecutePaper
+	// would refuse it too, after both.
+	if err := s.refuseSupplyControlledPaper(ctx, tx, r.HouseAccountID, r.Asset); err != nil {
+		return PaperOutcome{}, false, err
+	}
 	book, err := s.lockBook(ctx, tx, r.HouseAccountID)
 	if err != nil {
 		return PaperOutcome{}, false, err
@@ -198,6 +203,10 @@ func (s *Service) ExecutePaper(ctx context.Context, tx pgx.Tx, r PaperRequest) (
 	}
 	if mode != gates.ModePaper && mode != gates.ModeSandbox {
 		return PaperOutcome{}, errs.Newf(errs.CodeValidationFailed, "treasury: the house paper venue runs in PAPER or SANDBOX, not %q", mode)
+	}
+	// Refused before the book is locked (supply.go).
+	if err := s.refuseSupplyControlledPaper(ctx, tx, r.HouseAccountID, r.Asset); err != nil {
+		return PaperOutcome{}, err
 	}
 	book, err := s.lockBook(ctx, tx, r.HouseAccountID)
 	if err != nil {

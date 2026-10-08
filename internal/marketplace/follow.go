@@ -204,6 +204,12 @@ func (s *Service) follow(ctx context.Context, tx pgx.Tx, iid InstallID, trigger 
 	if err != nil {
 		return FollowRun{}, err
 	}
+	// The paper venue refuses an instrument that names a supply-controlled
+	// asset; a follow refuses it before the sandbox run is written
+	// (supply.go).
+	if err := refuseSupplyControlledInstruments(ctx, tx, universe(v, book), "a follow"); err != nil {
+		return FollowRun{}, err
+	}
 	refs, err := s.references(ctx, tx, universe(v, book), asOf)
 	if err != nil {
 		return FollowRun{}, err

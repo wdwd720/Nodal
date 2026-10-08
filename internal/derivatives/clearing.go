@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/nodal/controlplane/internal/assets"
+	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/money"
@@ -26,6 +27,11 @@ func (s *Service) FundClearingHouse(ctx context.Context, tx pgx.Tx, asset assets
 	}
 	if !qty.IsPositive() {
 		return nil, errs.New(errs.CodeValidationFailed, "derivatives: clearing house funding must be positive")
+	}
+	// FACILITY_FUNDING is refused for a supply-controlled asset (SU001):
+	// refused before the clearing house is even ensured.
+	if err := econ.RefuseFacilityFunding(ctx, tx, ledger.FacilityClearingHouse, asset); err != nil {
+		return nil, err
 	}
 	if err := s.serializeClearing(ctx, tx); err != nil {
 		return nil, err

@@ -186,6 +186,20 @@ func (s *Service) OpenPeriod(ctx context.Context, tx pgx.Tx, r OpenPeriodRequest
 		return Period{}, errs.New(errs.CodeValidationFailed,
 			"feeledger: a performance fee is accounted in a SIMULATED asset with at least two decimals")
 	}
+	// A period's accruals and its crystallization post
+	// PERFORMANCE_FEE_ACCRUAL and PERFORMANCE_FEE_CRYSTALLIZATION in its fee
+	// asset, kinds the database refuses for a platform stable asset or a
+	// bridged twin (SU001, migration 00763). Opening the period is the one
+	// entry to both: Accrue, Crystallize, CancelPeriod and
+	// ReverseCrystallization act on a period that exists, whose fee asset
+	// never changes. So the fee asset is refused here, before the period is
+	// written.
+	if err := econ.RefuseSupplyControlled(ctx, tx, asset.ID, "feeledger: a performance-fee period accounted in it",
+		"its accruals and its crystallization would be PERFORMANCE_FEE_ACCRUAL and PERFORMANCE_FEE_CRYSTALLIZATION journals "+
+			"in it, which the database refuses for such an asset (SU001, migration 00763): the period could never accrue or "+
+			"crystallize its fee"); err != nil {
+		return Period{}, err
+	}
 	var open int
 	if err := tx.QueryRow(ctx, `SELECT count(*) FROM performance_fee_periods WHERE account_id = $1 AND strategy_ref = $2 AND status = 'OPEN'`,
 		r.AccountID, r.StrategyRef).Scan(&open); err != nil {

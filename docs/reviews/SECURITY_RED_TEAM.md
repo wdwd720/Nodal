@@ -31,10 +31,17 @@ fixed; the fourth observation is recorded as a residual risk of the sandbox.
 | O4 | — | Fee reversals and corporate-action applications are single-operator actions on simulated value | recorded as a residual risk of the sandbox: both are reason-coded, audited and exactly once, and a live activation would put them under dual control like transfer reversals (PT006-PT008) and derivative overrides (DV008) | — |
 
 Integrating O1's rule showed that its database refusal was the only refusal on some paths: a platform stable asset
-can be a margin account's numeraire (any USD-pegged SIMULATED asset can), and such an account's borrowing,
-interest and liquidation postings are now refused at commit — a liquidation that could never complete. Guards
-that refuse every such configuration up front, with a coded reason, are being added; this report is updated
-when they merge.
+could be a margin account's numeraire (any USD-pegged SIMULATED asset can), and such an account's borrowing,
+interest and liquidation postings would have been refused at commit — a liquidation that could never complete.
+Fourteen entry points now refuse a supply-controlled asset up front, before anything is written, with
+`ASSET_RESTRICTED` and the refusal `SUPPLY_CONTROLLED_ASSET` (`internal/econ/supply.go`): margin accounts, collateral
+and leveraged buys; derivative positions and the clearing house's funding; equity listings, orders and corporate
+actions; treasury funding and paper trades; the order book's paper venue; marketplace installs and follows; fee
+periods; delegated withdrawals and swaps a venue could only fund by creating units. A table with one row per
+advanced journal kind names each kind's guard or why it is unreachable, and is checked against the database's rule
+(`TestSupplyKinds_EveryKindHasARow`, `TestSupplyKinds_EveryGuardRefusesSupplyControlledAssets`,
+`TestIntegration_SupplyKindsAgreeWithTheDatabase`; `TestIntegration_AMarginAccountNeverBooksASupplyControlledAsset`).
+Configurations made before the guards are not re-checked; none exists outside test databases.
 
 ## What was attacked and held
 

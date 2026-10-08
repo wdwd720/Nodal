@@ -56,6 +56,12 @@ func (s *Service) InstallVersion(ctx context.Context, tx pgx.Tx, req InstallRequ
 		return Install{}, false, errs.Newf(errs.CodeForbidden, "marketplace: a %s/%s version cannot be installed", v.Status, v.Moderation).
 			WithField("version_id", v.ID.String())
 	}
+	// An install exists only to be followed, and a follow of a version whose
+	// instruments name a supply-controlled asset is refused (supply.go):
+	// refused here too, before the install is written.
+	if err := refuseSupplyControlledInstruments(ctx, tx, universe(v, paperBook{}), "an install"); err != nil {
+		return Install{}, false, err
+	}
 	existing, err := scanInstall(tx.QueryRow(ctx, `SELECT `+installColumns+` FROM marketplace_installs
 		WHERE account_id = $1 AND version_id = $2 AND status = 'ACTIVE'`, req.AccountID, req.VersionID))
 	if err == nil {

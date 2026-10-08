@@ -252,6 +252,10 @@ func (s *Service) ListEquity(ctx context.Context, tx pgx.Tx, spec ListingSpec) (
 	if err := checkCashAsset(cash); err != nil {
 		return Listing{}, err
 	}
+	// Refused before the share asset is created (supply.go).
+	if err := refuseSupplyControlledCash(ctx, tx, cash.ID); err != nil {
+		return Listing{}, err
+	}
 	sch, ok := s.schedules[cash.ID]
 	if !ok {
 		return Listing{}, errs.New(errs.CodeValidationFailed, "equities: no fee schedule covers this settlement asset")

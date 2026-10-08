@@ -127,6 +127,11 @@ func (s *Service) PostCollateral(ctx context.Context, tx pgx.Tx, r CollateralReq
 	if err != nil {
 		return CollateralResult{}, err
 	}
+	// The move is allowed for a supply-controlled asset, the liquidation it
+	// exists for is not (supply.go): refused before the intent is written.
+	if err := econ.RefuseSupplyControlled(ctx, tx, r.AssetID, "margin: posting it as margin collateral", whySupplyPosition); err != nil {
+		return CollateralResult{}, err
+	}
 	sp := intentSpec{
 		kind: econ.KindTransferValue, capability: gates.Margin, account: a, requester: r.Requester, key: r.IdempotencyKey,
 		asset: r.AssetID, quantity: r.Quantity, corr: r.CorrelationID,

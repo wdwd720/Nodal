@@ -95,6 +95,14 @@ func (s *Service) OpenAccount(ctx context.Context, tx pgx.Tx, r OpenRequest) (Ac
 			return Account{}, errs.New(errs.CodeValidationFailed, "margin: the isolated asset must be an eligible SIMULATED asset other than the numeraire")
 		}
 	}
+	// A platform stable asset is a USD-pegged SIMULATED asset, and so is a
+	// twin of one, so either passes the checks above. As the numeraire, the
+	// isolated asset or a policy rule's asset it would put the account's
+	// loans, interest and liquidations into journal kinds the database
+	// refuses for it (supply.go): refused here, before anything is written.
+	if err := s.refuseSupplyControlledTerms(ctx, tx, r); err != nil {
+		return Account{}, err
+	}
 	if err := s.st.ensurePolicy(ctx, tx, s.policy); err != nil {
 		return Account{}, err
 	}
@@ -168,6 +176,11 @@ func (s *Service) SeedFacilities(ctx context.Context, tx pgx.Tx, r SeedRequest) 
 	}
 	if !simulatedAsset(a) {
 		return Facilities{}, errs.New(errs.CodeValidationFailed, "margin: facilities hold SIMULATED value only")
+	}
+	// FACILITY_FUNDING is refused for a supply-controlled asset (SU001);
+	// refused here before the facilities are even ensured.
+	if err := refuseSupplyControlledFunding(ctx, tx, r.Asset, r.PoolAmount, r.FundAmount); err != nil {
+		return Facilities{}, err
 	}
 	pool, fund, err := s.facilities(ctx, tx)
 	if err != nil {

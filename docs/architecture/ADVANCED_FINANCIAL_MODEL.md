@@ -132,6 +132,20 @@ Every posting of a simulated-only kind **balances per party**: for each `(owner_
 
 A reversal is `COMPENSATION` with `reversal_of` set and a reason code; history is never edited.
 
+**Supply-controlled assets** (`00763`). A platform stable asset and a bridged twin exist only as their
+controller -- the asset's `STABLE_ISSUER`, the route's `BRIDGE` -- issues them. Such an asset **may** move in its
+controller's own kinds (`STABLE_ISSUANCE`, `STABLE_REDEMPTION`; `BRIDGE_DESTINATION_FINALIZED`), in the
+reserve, bridge-source and prediction-collateral kinds where it is a stable asset's reserve, a route's source or
+a market's collateral, and in five customer movements: `SIM_TRADE` between two booked parties (the internal
+book, a house book's principal trade, a delegated swap with a venue's house book), `P2P_TRANSFER`,
+`COMPENSATION`, `MARGIN_COLLATERAL_MOVE` and `DERIVATIVE_MARGIN_MOVE`; every transaction keeps its holdings
+(`ledger.HoldingCodes`) equal to the controller's outstanding (SU001, SU002). It **may not** be granted by the
+faucet, fund a facility or a house book, be withdrawn, be a margin account's numeraire, isolated asset, policy
+asset or collateral, settle a derivative, be an equity listing's cash or shares, account a performance fee, or
+fill at a paper venue (orders, treasury, an equity trade date, a marketplace follow): the database refuses those
+kinds, and every entry point that would reach one refuses the asset first through `econ.RefuseSupplyControlled`
+(`ASSET_RESTRICTED`, refusal `SUPPLY_CONTROLLED_ASSET`), before anything is written.
+
 ## 6. The economic operation, step by step
 
 Every mutating operation of every subsystem has this shape, inside one `db.InTx` unless a step is
