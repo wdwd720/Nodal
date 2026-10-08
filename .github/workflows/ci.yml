@@ -570,8 +570,22 @@ jobs:
             echo "CP_API_SETTLEMENT_CHAIN=${asset% *}"
             echo "CP_API_SETTLEMENT_MINT=${asset#* }"
           } >> "$GITHUB_ENV"
+          # The sandbox chain the stable asset, the bridge and delegated
+          # authority run on. Without it those routes answer UNSUPPORTED, the
+          # delegation specs skip and the stable-asset and bridge specs only
+          # ever see "not wired". Its seed (internal/config:
+          # CP_SANDBOX_DEVNET_SEED_REF, a SecretRef to exactly 64 hexadecimal
+          # characters; file:// is accepted in LOCAL, TEST and DEV) is 32
+          # random bytes made for this run alone, written outside the checkout
+          # and readable by this user only, so it is never committed, never
+          # printed and never reused; the network (1..63 of [a-z0-9-]) is this
+          # job's own. Nothing here is a real credential: every key derived
+          # from the seed signs only on the simulated chain.
+          devnet_seed="$RUNNER_TEMP/sandbox-devnet.seed"
+          (umask 077 && openssl rand -hex 32 > "$devnet_seed")
+          test "$(wc -c < "$devnet_seed")" -eq 65 || { echo "::error::the sandbox devnet seed is not 64 hex characters"; exit 1; }
           go build -o bin/api ./cmd/api
-          CP_API_SETTLEMENT_CHAIN="${asset% *}" CP_API_SETTLEMENT_MINT="${asset#* }"             CP_API_LEGAL_POLICY=DEVELOPMENT             CP_API_ENABLED_CAPABILITIES=MARKETPLACE             ./bin/api > api.log 2>&1 &
+          CP_API_SETTLEMENT_CHAIN="${asset% *}" CP_API_SETTLEMENT_MINT="${asset#* }"             CP_API_LEGAL_POLICY=DEVELOPMENT             CP_API_ENABLED_CAPABILITIES=MARKETPLACE             CP_SANDBOX_DEVNET_NETWORK=ci-web-e2e             CP_SANDBOX_DEVNET_SEED_REF="file://$devnet_seed"             ./bin/api > api.log 2>&1 &
           for i in $(seq 1 40); do
             if curl -sf -m 2 http://127.0.0.1:18099/v1/healthz >/dev/null; then
               echo "api up"; exit 0
