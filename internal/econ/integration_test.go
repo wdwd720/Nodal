@@ -307,6 +307,56 @@ func TestIntegration_SQLAndGoAgreeOnEffectTransitions(t *testing.T) {
 	}
 }
 
+func TestIntegration_SQLAndGoAgreeOnIntentTransitions(t *testing.T) {
+	requireEnv(t)
+	for _, from := range AllIntentStatuses() {
+		for _, to := range AllIntentStatuses() {
+			var legal bool
+			require.NoError(t, testDB.QueryRow(context.Background(), `SELECT cp_intent_transition_legal($1,$2)`, from, to).Scan(&legal))
+			assert.Equal(t, CanTransitionIntent(from, to), legal, "%s -> %s", from, to)
+		}
+	}
+}
+
+// The database refuses an intent edge the machine does not have, whoever
+// writes it and whatever transition row licenses it (00734): a finished
+// intent cannot be reopened, so an edge can never recur in a transaction.
+func TestIntegration_TheDatabaseRefusesAnIllegalIntentEdge(t *testing.T) {
+	f := newFixture(t)
+	in := validIntent()
+	in.AccountID = f.account()
+	in.IdempotencyKey = "reopen-" + uuid.NewString()
+	var done Intent
+	require.NoError(t, f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+		cur, _, err := f.intents.Submit(ctx, tx, in)
+		if err != nil {
+			return err
+		}
+		for _, to := range []IntentStatus{StatusRouted, StatusRiskApproved, StatusExecuting, StatusCompleted} {
+			if cur, err = f.intents.Transition(ctx, tx, cur.ID, to, systemActor, "step", ""); err != nil {
+				return err
+			}
+		}
+		done = cur
+		return nil
+	}))
+	// A transition row claiming COMPLETED -> RECEIVED is refused...
+	err := f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `INSERT INTO economic_intent_transitions (id, intent_id, from_status, to_status, actor_type, actor_id, reason)
+			VALUES ($1, $2, 'COMPLETED', 'RECEIVED', 'SYSTEM', 'forger', 'reopen')`, uuid.New(), done.ID)
+		return err
+	})
+	require.Error(t, err)
+	assert.Equal(t, "EI001", db.SQLState(err), "got %v", err)
+	// ...and so is the bare change itself, before any binding is consulted.
+	err = f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `UPDATE economic_intents SET status = 'RECEIVED' WHERE id = $1`, done.ID)
+		return err
+	})
+	require.Error(t, err)
+	assert.Equal(t, "EI001", db.SQLState(err), "got %v", err)
+}
+
 func TestIntegration_UnknownIsResolvedNotRetried(t *testing.T) {
 	f := newFixture(t)
 	acct := f.account()
