@@ -15,6 +15,63 @@
 
 ---
 
+# PART -2 — ADVANCED FINANCIAL CAPABILITIES (sandbox first)
+
+Source: `NODAL_MEGA_GOAL_ADVANCED_FINANCIAL_SYSTEMS.md` (set 2026-10-07 as the active goal). Decision:
+`docs/adr/0020-advanced-financial-capabilities-sandbox-first.md`. Contract:
+`docs/architecture/ADVANCED_FINANCIAL_MODEL.md`. Per-capability status: `ADVANCED_CAPABILITIES_MATRIX.md`.
+Test evidence: `ADVANCED_TEST_EVIDENCE.md`. Everything in PART -1 and below remains accurate.
+
+## Environment this work runs in (2026-10-07)
+
+macOS arm64, **no Docker**. Go 1.27.1 under `~/sdk/go1.27.1` (checksum-verified from go.dev);
+PostgreSQL 16.15 (zonky portable binaries, sha1-verified from Maven Central) as a local cluster on
+127.0.0.1:5433 with the roles of `docker/postgres/init/001_roles.sql`; PostgreSQL 16 client tools from
+the EDB macOS binaries for `scripts/restoredrill -pg-bin`. Redis, Redpanda, ClickHouse, Temporal and MinIO
+are not running here; nothing in the advanced work depends on them.
+
+## Starting state, measured before any change
+
+- `go build ./...` exit 0. Unit tier (`make unit` package set): 90 packages ok, 39 without tests, 0 failures.
+- Integration (`go run ./scripts/inttest`): 50 of 51 packages passed; `internal/capacity`
+  `TestIntegration_EachCeilingRefusesAtTheMeasuredValue` failed on every fresh database (its ceilings
+  fell back to 1 when the measured count was 0). Fixed in `40ffe3c` by measuring inside a rolled-back
+  transaction that first inserts one row per dimension. 51/51 after the fix.
+
+## What has landed
+
+- `40ffe3c` capacity test fix (above).
+- `964eadb` the foundation: Ledger V2 (67 codes, 50 kinds, HOUSE/FACILITY owner types, SM001/SM002/FA001),
+  SIMULATED asset kind, 15 capability gates + `AdvancedSpecs`/`DecideMode`, `CAPABILITY_DISABLE` kill
+  switch, `internal/econ` (intents, exactly-once effects, authorizer, facilities, evidence, route), Risk
+  Kernel V2, 16 `SIMULATED_*` settlement actions, canonical instruments (00732), six reconciliation kinds,
+  restore drill re-run at version 732 (128 tables, 0 drift).
+- `91f13b8` wazero v1.12.0 for the strategy sandbox.
+
+## In flight (isolated worktrees, merged by the integrator)
+
+Pure cores: `internal/matching`, `internal/quant`, `internal/fees` (spread/fee/performance), `internal/devnet`.
+DB-backed lanes: `internal/margin` (00740), `internal/transfers` + `internal/sandboxfund` (00744),
+`internal/sandboxrt` (00751) + `internal/marketplace` (00750).
+
+## Next exact work
+
+1. Merge the four pure cores; launch derivatives (00741, needs quant), orders + treasury + fee ledger
+   (00742/00745/00746, need matching + fees), stable asset + bridge (00747/00748, need devnet), prediction
+   markets (00749, needs matching), equities (00743), delegation (00752/00753, needs devnet).
+2. Buying power V2, API surface (OpenAPI + handlers + wiring), web pages, `make advanced-demo`.
+3. Hardening: race/fuzz/load runs, threat models, the three reviews, README and portfolio evidence.
+
+## Verification commands that matter for this goal
+
+```
+go test -count=1 ./internal/econ/... ./internal/risk/... ./internal/ledger/... ./internal/gates/...
+go run ./scripts/inttest -pkg '^\./(internal/(econ|risk|ledger|instruments|gates|assets)|test/integration/(enums|migrations))$'
+go run ./scripts/restoredrill -pg-bin <postgres client bin dir>
+```
+
+---
+
 # PART -1 — STRIPE PROVIDER ACTIVATION WORKSTREAM (pgf.md)
 
 Started 2026-09-08 from `pgf.md` at the repository root. It is a workstream inside the existing

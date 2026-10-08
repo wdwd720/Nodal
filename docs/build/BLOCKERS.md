@@ -350,6 +350,93 @@ locally.
 
 ---
 
+# Advanced financial capabilities (ADR-0020)
+
+Every advanced capability is built, tested and runnable in PAPER, SANDBOX or DEVNET mode. What follows
+is what stands between each one and real customer value. None of these is software: in every case the
+code path, the gate, the evidence fields and the refusal already exist, and `gates.AdvancedSpecs`
+names the evidence a live activation would require. Live is refused in code (`LIVE_NOT_IMPLEMENTED`)
+and unrepresentable in the database (no `LIVE` economic intent, no non-SIMULATED house or facility
+account) until a change resolves the relevant blocker below.
+
+## B-15 — Licences or exemptions for regulated advanced activities · BLOCKED_EXTERNAL
+
+**Decision needed.** For each of margin lending and leverage, futures, perpetuals and options,
+equities and ETFs, an internal order book, principal trading, performance-based fees, a strategy
+marketplace, customer-to-customer value transfer and event contracts: which licence, registration or
+exemption would permit offering it with real value, in which jurisdictions.
+
+**Why external.** These are determinations by counsel and, in most cases, by a regulator (broker-dealer
+or FCM registration, a designated contract market or swap execution facility, investment-adviser
+registration, money-transmission licences). No code produces one.
+
+**What the code already supports.** The full simulated implementation of each, its capability gate
+(`MARGIN`, `LEVERAGE`, `DERIVATIVES`, `EQUITIES`, `INTERNAL_MATCHING`, `PRINCIPAL_TRADING`,
+`PERFORMANCE_FEES`, `STRATEGY_MARKETPLACE`, `P2P_TRANSFERS`, `PREDICTION_MARKETS`), and a spec listing the
+`REGULATORY_LICENSE_OR_EXEMPTION` evidence a live activation must attach.
+
+**Evidence required to close.** A written legal determination per capability and jurisdiction, and the
+licence or exemption reference itself.
+
+**Capabilities currently live-disabled.** All ten above.
+
+## B-16 — Stable-asset issuance: reserve custodian, attestation and issuer licensing · BLOCKED_EXTERNAL
+
+**Decision needed.** Whether the platform may issue a redeemable value token at all (ADR-0018 says no
+for real value), and if so the reserve custodian, the attestation firm and the licensing basis.
+
+**What the code already supports.** `internal/stableasset`: reserve ledger, issuance cap, mint/burn
+workflows with exactly-once semantics on a simulated chain, peg and reserve monitors with circuit
+breakers, hash-linked reserve/supply snapshots. Capability `STABLE_ASSET_MINT` requires
+`RESERVE_ATTESTATION` evidence for live.
+
+**Evidence required to close.** Custody agreement, attestation engagement, legal opinion.
+
+## B-17 — Execution and clearing partners for equities, derivatives and event contracts · BLOCKED_EXTERNAL
+
+**Decision needed.** A broker-dealer with a production execution API for equities, a clearing member
+or venue for listed derivatives, and a designated contract market for event contracts.
+
+**What the code already supports.** `EquitiesExecutionAdapter` with a deterministic paper adapter and
+recorded fixtures; the derivatives clearing house is a simulated facility; prediction markets run on
+the internal book. Provider mode `live` is refused for every advanced adapter.
+
+**Evidence required to close.** Signed partner agreements and verified sandbox credentials, followed by
+contract tests against the partner's sandbox.
+
+## B-18 — Delegated signing and withdrawal custody analysis · BLOCKED_EXTERNAL
+
+**Decision needed.** Whether delegated, policy-scoped agent authority over a customer wallet is a
+custody arrangement, and which wallet provider's policy engine is verified to enforce the scopes
+(extends EB-002 and EB-005).
+
+**What the code already supports.** Capability tokens with scope, limits, expiry, nonce and revocation;
+an independent transaction inspector; bounded signing on the local simulated chain only; withdrawal
+proposals with policy evaluation and optional human approval. Capabilities `AGENT_SIGNING` and
+`AGENT_WITHDRAWALS` require `CUSTODY_ANALYSIS` evidence for live.
+
+## B-19 — Independent review of the strategy sandbox · BLOCKED_EXTERNAL
+
+**Decision needed.** An independent security review (and ideally a sandbox-escape engagement) of the
+WASM runtime, its host configuration and the build worker before any user code runs in a deployed
+environment.
+
+**What the code already supports.** The runtime's own escape, resource-exhaustion and secret-absence
+tests. `USER_CODE_SANDBOX` requires `SANDBOX_ISOLATION_AUDIT` evidence for live, and ADR-0011 still
+forbids user code in any live path.
+
+## B-20 — A bridge provider and public-testnet access · BLOCKED_EXTERNAL
+
+**Decision needed.** Which bridge provider, with which documented finality and failure semantics; and
+whether CI may reach public testnets.
+
+**What the code already supports.** `BridgeProvider` with a deterministic simulated bridge over two
+simulated chains (`internal/devnet`), including delayed, failed, reorged and duplicated messages.
+Public-testnet adapters are not built: the deterministic local chain replaces them, which is the goal's
+stated fallback ("use deterministic local providers when external credentials are unavailable").
+
+---
+
 ## Not blockers
 
 Recorded because their absence might otherwise look like one:

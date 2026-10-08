@@ -321,3 +321,50 @@ Two defects in `scripts/seed`, both of which hid behind a misleading error.
 - **Evidence:** `internal/identity` `TestIntegration_ExpiredLoginAttemptsArePurged` (asserts the application role's own DELETE is refused with `42501` first, then that only rows past retention go) and `TestIntegration_ThePurgeRefusesTooShortARetention`. Observed failing with the DELETE made a no-op.
 - **Consequences:** `audit-worker` holds two database roles. A deployment that runs it must provide `CP_DATABASE_OPS_URL`; one that does not will fail at startup rather than silently skip.
 - **Open, deliberately:** three of the six declared retention classes (`SOCIAL_DATA`, `MODEL_IO`, `OPERATIONAL_LOG`) still have no enforcement. The tables they would cover carry `forbid_mutation` triggers that refuse DELETE outright, so retention there is partition management or archival-then-drop — a design decision about how an append-only financial record is aged out, and it belongs in an ADR before it belongs in a purge command.
+
+## D-046 — Advanced capabilities live in the real ledger, in value domain SIMULATED
+
+- **Original recommendation:** the advanced goal (`NODAL_MEGA_GOAL_ADVANCED_FINANCIAL_SYSTEMS`, §22) keeps the existing double-entry ledger authoritative and extends it with subledgers for every advanced capability.
+- **Alternatives:** a separate sandbox ledger (rejected: it would re-implement balance, immutability, idempotency and isolation and prove nothing about the real one); a flag on postings (rejected: a flag is a convention).
+- **Chosen:** every advanced capability posts only SIMULATED-domain value through `ledger.Service.Post`. Migration 00710 already makes SIMULATED structurally unable to touch any other domain; 00731 adds a `SIMULATED` asset kind, 31 simulated-only journal kinds that may touch only SIMULATED accounts (SM001), and HOUSE/FACILITY books that cannot hold anything else.
+- **Evidence:** `internal/econ` `TestIntegration_ASimulatedOnlyKindCannotTouchRealCapital`, `TestIntegration_HouseAndFacilityBooksCannotHoldRealValue`.
+
+## D-047 — Simulated-only postings balance per party, not only per asset
+
+- **Problem:** per-asset balance lets value appear in one party's books and disappear from another's with nothing in either party's own books explaining it ("Dr WALLET(B) / Cr WALLET(A)" balances per asset).
+- **Chosen:** for every simulated-only kind, each `(owner_type, owner_id, asset)` balances. Value moves between parties only as an explicit pair (TRANSFER_OUT / TRANSFER_IN, TRADING_OUTFLOW / TRADING_INFLOW, facility reserve / supply). Enforced in Go (`checkPerPartyBalance`) and at COMMIT in SQL (SM002).
+- **Consequence:** the conservation identity of every advanced subsystem is checkable per party from the ledger alone.
+- **Evidence:** `TestIntegration_ATransferMustBalancePerParty` (raw-SQL bypass refused with SM002).
+
+## D-048 — HOUSE and FACILITY owner types instead of more PLATFORM codes
+
+- **Problem:** a PLATFORM account is unique per (code, asset); two stable assets with the same reserve asset, two prediction markets, or two house strategies would share one account.
+- **Chosen:** owner type HOUSE (owner id = `house_accounts.id`) and FACILITY (owner id = `facilities.id`, with a kind). A FACILITY code may only be held by a facility of its kind (FA001). Each prediction market's escrow, each stable issuer's reserve and each house book is a segregated set of accounts.
+- **Evidence:** `TestIntegration_FacilityBooksAreSegregatedByKind`, `TestIntegration_GoAndSQLAgreeOnOwnerTypeAndFacilityKind`.
+
+## D-049 — Live is unrepresentable for advanced capabilities, not merely disabled
+
+- **Chosen:** `gates.AdvancedSpec.LiveImplemented = false` for every advanced capability and `gates.DecideMode` refuses LIVE (`LIVE_NOT_IMPLEMENTED`) whatever the gate says; `economic_intents.mode` has no LIVE value. Simulated modes run ungated in LOCAL/TEST/DEV and need an ACTIVE gate in STAGING/PROD.
+- **Evidence:** `TestProp_LiveIsNeverAllowed`, `TestIntegration_ALiveIntentCannotBeWrittenDown`.
+
+## D-050 — One exactly-once register (`economic_effects`) for every advanced subsystem
+
+- **Chosen:** `econ.EffectStore`. Unique deterministic effect key; request-hash reuse refusal; a ledger-posting effect cannot be APPLIED without its journal (CHECK) and a journal backs at most one effect (unique index); the status machine is enforced in SQL (EF001) and every change is bound to a transition row naming both endpoints (AU001); UNKNOWN is resolved only by reconciliation.
+- **Evidence:** `TestIntegration_EffectIsClaimedExactlyOnceUnderConcurrency`, `TestIntegration_TheEffectStatusMachineHoldsInSQL`, `TestIntegration_UnknownIsResolvedNotRetried`.
+
+## D-051 — `CAPABILITY_DISABLE`: one kill-switch kind for every advanced capability
+
+- **Problem:** the advanced goal needs a treasury kill switch, a code-sandbox kill switch, a stable mint/burn pause and per-capability circuit breakers.
+- **Chosen:** a single kill-switch kind scoped by capability name rather than a kind per capability. It blocks NEW_RISK and WITHDRAW for its capability and never blocks risk reduction. The V1 spot kernel matches it to nothing (no V1 intent exercises an advanced capability); Risk V2 and `econ.Authorizer` enforce it.
+- **Evidence:** `internal/killswitch` matrix tests, `TestAuthorizer_KillSwitchAndGate`, `TestAdvanced_KillSwitchesAndBreakers`.
+
+## D-052 — Risk Kernel V2 beside V1, composable and fail-closed on missing sections
+
+- **Chosen:** `risk.EvaluateAdvanced` with 21 single-purpose checks, each reading only its section. `RequiredSections` lists, per intent kind, the sections a caller must supply; a missing one is RISK_INPUT_INVALID, never a pass. Stale or missing marks block risk-increasing intents and never risk reduction. V1 `Evaluate` is unchanged for spot trade intents.
+- **Evidence:** `TestProp_AdvancedDeterminism`, `TestProp_StaleOrMissingOracleNeverAllowsNewRisk`, `TestProp_RiskIncreasingNeverLeavesEquityBelowMaintenance`, `TestIntegration_AdvancedDecisionsArePersistedImmutablyAndUntampered`.
+
+## D-053 — Prediction-market contracts reuse EVENT_OUTCOME; advanced instruments settle only in SIMULATED value
+
+- **Problem:** V1 reserved EVENT_OUTCOME as "representable but never activatable"; a new PREDICTION_CONTRACT type would duplicate the concept.
+- **Chosen:** reuse EVENT_OUTCOME, and make every non-SPOT_PAIR instrument settle only in a SIMULATED asset (IN001). The V1 promise stays true for real value.
+- **Evidence:** `internal/instruments` `TestIntegration_CanonicalInstrumentsAreVersionedAndSimulatedOnly`.
