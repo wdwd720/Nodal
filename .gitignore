@@ -45,3 +45,6 @@ Thumbs.db
 # Local data
 /.data/
 /docker/data/
+
+# Agent worktrees (Claude Code isolation); never part of the repository
+/.claude/worktrees/

@@ -88,6 +88,10 @@ func TestKind_AlwaysMaterial(t *testing.T) {
 	assert.False(t, KindExecution.AlwaysMaterial())
 	assert.False(t, KindWalletBalance.AlwaysMaterial())
 	assert.False(t, KindFunding.AlwaysMaterial())
+	for _, k := range []Kind{KindEconomicEffect, KindStableReserve, KindBridge, KindPredictionEscrow, KindClearing, KindDevnetChain} {
+		assert.True(t, k.AlwaysMaterial(), "%s is a conservation check and is never small", k)
+	}
+	require.Len(t, AllKinds(), 12)
 	for _, k := range AllKinds() {
 		assert.True(t, k.Valid())
 	}

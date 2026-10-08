@@ -292,6 +292,9 @@ func (s *Service) Post(ctx context.Context, tx pgx.Tx, p Posting) (PostResult, e
 	if err != nil {
 		return PostResult{}, err
 	}
+	if err := checkSimulatedOnly(p.Kind, rows); err != nil {
+		return PostResult{}, err
+	}
 	if err := s.checkDomainIsolation(ctx, tx, rows, p.Conversion); err != nil {
 		return PostResult{}, err
 	}
@@ -398,6 +401,31 @@ func (s *Service) PostInTx(ctx context.Context, d *db.DB, p Posting) (PostResult
 		return PostResult{}, MapError(fmt.Errorf("ledger: post %s: %w", p.Kind, err))
 	}
 	return res, nil
+}
+
+// checkSimulatedOnly is the application half of rules 1 and 2 in advanced.go;
+// migration 00731 is the database half. A simulated-only kind may touch only
+// SIMULATED accounts, and a HOUSE or FACILITY account is SIMULATED whatever
+// the kind -- the house book and the platform's facilities hold no real value
+// in this schema version.
+func checkSimulatedOnly(kind Kind, rows []entryRow) error {
+	for _, r := range rows {
+		owner := r.account.Ref.OwnerType
+		if (owner == OwnerHouse || owner == OwnerFacility) && r.account.Domain != valuedomain.Simulated {
+			return errs.Newf(errs.CodeForbidden,
+				"%s ledger accounts exist only in value domain SIMULATED; %s is %s",
+				owner, r.account.Ref.String(), r.account.Domain).
+				WithField("account", r.account.Ref.String())
+		}
+		if kind.IsSimulatedOnly() && r.account.Domain != valuedomain.Simulated {
+			return errs.Newf(errs.CodeForbidden,
+				"%s is a simulated-only journal kind and cannot touch %s, which is value domain %s",
+				kind, r.account.Ref.String(), r.account.Domain).
+				WithField("kind", string(kind)).
+				WithField("account", r.account.Ref.String())
+		}
+	}
+	return nil
 }
 
 // checkDomainIsolation is the application half of the value-domain invariant

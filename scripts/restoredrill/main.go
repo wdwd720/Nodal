@@ -31,6 +31,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -70,6 +71,7 @@ func main() {
 func run() int {
 	var (
 		container = flag.String("container", "cp-postgres", "docker container running Postgres")
+		pgBin     = flag.String("pg-bin", "", "run pg_dump/pg_restore from this directory against the admin DSN's host instead of through `docker exec` (a host without Docker)")
 		admin     = flag.String("admin", localdb.DefaultAdminDSN, "admin DSN (LOCAL only)")
 		keep      = flag.Bool("keep", false, "keep the source and restored databases")
 		out       = flag.String("out", filepath.Join("dist", "restore-drill.json"), "report path")
@@ -112,7 +114,8 @@ func run() int {
 	step("provisioned and seeded %s", src.Name)
 
 	// 2. Backup.
-	dump, err := dockerOut(ctx, *container, "pg_dump", "-U", "cp_admin", "-Fc", src.Name)
+	tools := pgTools{container: *container, bin: *pgBin, admin: *admin}
+	dump, err := tools.run(ctx, nil, "pg_dump", "-U", "cp_admin", "-Fc", src.Name)
 	if err != nil {
 		return fail(fmt.Errorf("pg_dump: %w", err))
 	}
@@ -129,7 +132,7 @@ func run() int {
 	if !*keep {
 		defer func() { _ = localdb.Drop(context.Background(), "drill_restored", *admin) }()
 	}
-	if _, err := dockerIn(ctx, dump, *container, "pg_restore", "-U", "cp_admin", "-d", dst.Name, "--exit-on-error"); err != nil {
+	if _, err := tools.run(ctx, dump, "pg_restore", "-U", "cp_admin", "-d", dst.Name, "--exit-on-error"); err != nil {
 		return fail(fmt.Errorf("pg_restore: %w", err))
 	}
 	step("restored into %s", dst.Name)
@@ -299,6 +302,46 @@ func journalHash(ctx context.Context, adminDSN string) (string, error) {
 			SELECT t.id::text || '|' || t.kind || '|' || t.idempotency_key || '|' || e.seq || '|' || e.ledger_account_id::text || '|' || e.side || '|' || e.quantity::text AS line
 			FROM journal_transactions t JOIN journal_entries e ON e.transaction_id = t.id) x`).Scan(&h)
 	return h, err
+}
+
+// pgTools runs the PostgreSQL client tools either inside the docker-compose
+// container (the default) or from a local directory against the admin DSN's
+// host and port. The second exists for a development host with no Docker: the
+// drill is the same drill, the binaries just live somewhere else.
+type pgTools struct {
+	container string
+	bin       string
+	admin     string
+}
+
+func (p pgTools) run(ctx context.Context, stdin []byte, tool string, args ...string) ([]byte, error) {
+	if p.bin == "" {
+		if stdin == nil {
+			return dockerOut(ctx, p.container, append([]string{tool}, args...)...)
+		}
+		return dockerIn(ctx, stdin, p.container, append([]string{tool}, args...)...)
+	}
+	u, err := url.Parse(p.admin)
+	if err != nil {
+		return nil, fmt.Errorf("admin dsn: %w", err)
+	}
+	host, port := u.Hostname(), u.Port()
+	if port == "" {
+		port = "5432"
+	}
+	password, _ := u.User.Password()
+	full := append([]string{"-h", host, "-p", port}, args...)
+	cmd := exec.CommandContext(ctx, filepath.Join(p.bin, tool), full...) // #nosec G204 -- local restore drill: the binary is pg_dump/pg_restore from the operator's -pg-bin directory; no shell is involved
+	cmd.Env = append(os.Environ(), "PGPASSWORD="+password)
+	var stdout, stderr bytes.Buffer
+	if stdin != nil {
+		cmd.Stdin = bytes.NewReader(stdin)
+	}
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("%w: %s", err, stderr.String())
+	}
+	return stdout.Bytes(), nil
 }
 
 func dockerOut(ctx context.Context, container string, args ...string) ([]byte, error) {

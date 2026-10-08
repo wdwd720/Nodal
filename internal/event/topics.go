@@ -41,6 +41,12 @@ const (
 	TopicSecurityEvent                    Topic = "security.event"
 	TopicAgentRunCompleted                Topic = "agent.run.completed"
 	TopicPredictionCommitted              Topic = "prediction.committed"
+	// TopicEconIntentTransitioned and TopicEconEffectTransitioned carry the
+	// advanced capabilities: every economic intent status change and every
+	// economic effect status change (internal/econ), whichever subsystem
+	// produced it.
+	TopicEconIntentTransitioned Topic = "econ.intent.transitioned"
+	TopicEconEffectTransitioned Topic = "econ.effect.transitioned"
 )
 
 // Aggregate types used as partition keys. Declared here so producers and the
@@ -61,6 +67,8 @@ const (
 	AggregatePrincipal            = "principal"
 	AggregateAgentRun             = "agent_run"
 	AggregatePrediction           = "prediction"
+	AggregateEconomicIntent       = "economic_intent"
+	AggregateEconomicEffect       = "economic_effect"
 )
 
 // ErrUnknownTopic is the cause of the VALIDATION_FAILED error returned when
@@ -152,6 +160,8 @@ var registry = func() map[Topic]Spec {
 		spec(TopicSecurityEvent, 1, AggregatePrincipal),
 		spec(TopicAgentRunCompleted, 1, AggregateAgentRun),
 		spec(TopicPredictionCommitted, 1, AggregatePrediction),
+		spec(TopicEconIntentTransitioned, 1, AggregateEconomicIntent),
+		spec(TopicEconEffectTransitioned, 1, AggregateEconomicEffect),
 	}
 	m := make(map[Topic]Spec, len(specs))
 	for _, s := range specs {

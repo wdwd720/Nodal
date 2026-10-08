@@ -39,12 +39,18 @@ import (
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/db/migrate"
+	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/execution"
 	"github.com/nodal/controlplane/internal/funding"
 	"github.com/nodal/controlplane/internal/gates"
+	"github.com/nodal/controlplane/internal/instruments"
 	"github.com/nodal/controlplane/internal/intent"
 	"github.com/nodal/controlplane/internal/killswitch"
+	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/prediction"
+	"github.com/nodal/controlplane/internal/reconciliation"
+	"github.com/nodal/controlplane/internal/risk"
+	"github.com/nodal/controlplane/internal/security"
 )
 
 var (
@@ -131,6 +137,41 @@ func registry() []pair {
 		{table: "tools", constraint: "tools_status_check", source: "agent.ToolStatuses()", values: str(agent.ToolStatuses())},
 		{table: "trade_intents", constraint: "trade_intents_action_check", source: "intent.Actions()", values: str(intent.Actions())},
 		{table: "trade_intents", constraint: "trade_intents_status_check", source: "intent.Statuses()", values: str(intent.Statuses())},
+
+		// Migration 00731 (advanced capabilities). Every enum it introduced
+		// is paired, and so are the four it widened that had been unpaired
+		// until then: the chart, the owner types, the journal kinds and the
+		// reconciliation kinds.
+		{table: "ledger_accounts", constraint: "ledger_accounts_code_check", source: "ledger.AllCodes()", values: str(ledger.AllCodes())},
+		{table: "ledger_accounts", constraint: "ledger_accounts_owner_type_check", source: "ledger.AllOwnerTypes()", values: str(ledger.AllOwnerTypes())},
+		{table: "journal_transactions", constraint: "journal_transactions_kind_check", source: "ledger.AllKinds()", values: str(ledger.AllKinds())},
+		{table: "reconciliation_records", constraint: "reconciliation_records_kind_check", source: "reconciliation.AllKinds()", values: str(reconciliation.AllKinds())},
+		{table: "facilities", constraint: "facilities_kind_check", source: "ledger.AllFacilityKinds()", values: str(ledger.AllFacilityKinds())},
+		{table: "facilities", constraint: "facilities_status_check", source: "econ.AllFacilityStatuses()", values: str(econ.AllFacilityStatuses())},
+		{table: "facilities", constraint: "facilities_created_by_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
+		{table: "house_accounts", constraint: "house_accounts_status_check", source: "econ.AllHouseStatuses()", values: str(econ.AllHouseStatuses())},
+		{table: "house_accounts", constraint: "house_accounts_strategy_check", source: "econ.AllHouseStrategies()", values: str(econ.AllHouseStrategies())},
+		{table: "house_accounts", constraint: "house_accounts_created_by_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
+		{table: "economic_intents", constraint: "economic_intents_kind_check", source: "econ.AllIntentKinds()", values: str(econ.AllIntentKinds())},
+		{table: "economic_intents", constraint: "economic_intents_mode_check", source: "econ.PersistableModes()", values: str(econ.PersistableModes())},
+		{table: "economic_intents", constraint: "economic_intents_capability_check", source: "econ.AdvancedCapabilities()", values: str(econ.AdvancedCapabilities())},
+		{table: "economic_intents", constraint: "economic_intents_status_check", source: "econ.AllIntentStatuses()", values: str(econ.AllIntentStatuses())},
+		{table: "economic_intents", constraint: "economic_intents_actor_type_check", source: "security.AllActorTypes()", values: str(security.AllActorTypes())},
+		{table: "economic_effects", constraint: "economic_effects_subsystem_check", source: "econ.AllSubsystems()", values: str(econ.AllSubsystems())},
+		{table: "economic_effects", constraint: "economic_effects_status_check", source: "econ.AllEffectStatuses()", values: str(econ.AllEffectStatuses())},
+		{table: "advanced_risk_decisions", constraint: "advanced_risk_decisions_stage_check", source: "risk.AllStages()", values: str(risk.AllStages())},
+		{table: "advanced_risk_decisions", constraint: "advanced_risk_decisions_verdict_check", source: "risk.AllVerdicts()", values: str(risk.AllVerdicts())},
+
+		// Migration 00732 (canonical instruments), which also pairs the
+		// instrument type list that had been unpaired since 00200.
+		{table: "instruments", constraint: "instruments_type_check", source: "instruments.AllTypes()", values: str(instruments.AllTypes())},
+		{table: "instrument_terms", constraint: "instrument_terms_kind_check", source: "instruments.AllTypes()", values: str(instruments.AllTypes())},
+		{table: "instrument_terms", constraint: "instrument_terms_option_right_check", source: "instruments.AllOptionRights()", values: str(instruments.AllOptionRights())},
+		{table: "instrument_terms", constraint: "instrument_terms_exercise_style_check", source: "instruments.AllExerciseStyles()", values: str(instruments.AllExerciseStyles())},
+		{table: "instrument_terms", constraint: "instrument_terms_settlement_style_check", source: "instruments.AllSettlementStyles()", values: str(instruments.AllSettlementStyles())},
+		{table: "instrument_terms", constraint: "instrument_terms_margin_model_check", source: "instruments.AllMarginModels()", values: str(instruments.AllMarginModels())},
+		{table: "instrument_terms", constraint: "instrument_terms_corporate_action_behavior_check", source: "instruments.AllCorporateActionBehaviors()", values: str(instruments.AllCorporateActionBehaviors())},
+		{table: "instrument_terms", constraint: "instrument_terms_transferability_check", source: "instruments.AllTransferabilities()", values: str(instruments.AllTransferabilities())},
 	}
 	for _, table := range []string{
 		"agent_runs", "agents", "calibration_snapshots", "cost_accounting", "counterfactuals",
@@ -196,7 +237,13 @@ func TestTheThreeModeListsAgreeWithEachOther(t *testing.T) {
 
 // bespoke names the constraints compared by a test of their own because their
 // shape is not a flat list of values.
-var bespoke = []string{"agents.agents_check3"}
+var bespoke = []string{
+	"agents.agents_check3",
+	// Not a list of values but a rule: the house book and every facility hold
+	// SIMULATED value only. internal/econ's
+	// TestIntegration_HouseAndFacilityBooksCannotHoldRealValue drives it.
+	"ledger_accounts.ledger_accounts_segregated_books_are_simulated",
+}
 
 var (
 	stageNullMode = regexp.MustCompile(`\(stage = ANY \(ARRAY\[([^\]]*)\]\)\) AND \(mode IS NULL\)`)
@@ -368,16 +415,12 @@ var unpaired = []string{
 	"ingest_checkpoints.ingest_checkpoints_status_check",
 	"instruments.instruments_risk_class_check",
 	"instruments.instruments_status_check",
-	"instruments.instruments_type_check",
 	"internal_commerce_orders.internal_commerce_orders_earning_origin_check",
 	"internal_sellers.internal_sellers_status_check",
 	"journal_entries.journal_entries_side_check",
-	"journal_transactions.journal_transactions_kind_check",
 	"kill_switch_transitions.kill_switch_transitions_actor_type_check",
 	"kill_switches.kill_switches_severity_check",
-	"ledger_accounts.ledger_accounts_code_check",
 	"ledger_accounts.ledger_accounts_normal_side_check",
-	"ledger_accounts.ledger_accounts_owner_type_check",
 	"ledger_accounts.ledger_accounts_status_check",
 	"ledger_accounts.ledger_accounts_value_domain_check",
 	"login_attempts.login_attempts_outcome_check",
@@ -406,7 +449,6 @@ var unpaired = []string{
 	"provider_health_samples.provider_health_samples_state_check",
 	"quotes.quotes_side_check",
 	"raw_archive_objects.raw_archive_objects_retention_class_check",
-	"reconciliation_records.reconciliation_records_kind_check",
 	"reconciliation_records.reconciliation_records_mode_check",
 	"reconciliation_records.reconciliation_records_status_check",
 	"risk_decisions.risk_decisions_decision_check",

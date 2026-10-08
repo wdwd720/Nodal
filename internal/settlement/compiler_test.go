@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/nodal/controlplane/internal/agentauthority"
@@ -118,6 +119,11 @@ func intentFor(a ActionType) FinancialIntent {
 		fi.Quantity = qty(1_000)
 	case ActionBuyHostedAsset, ActionSellHostedAsset, ActionBuyOnchainAsset, ActionSellOnchainAsset, ActionSimulatedTrade:
 		fi.Quantity = qty(1_000)
+	default:
+		// Every advanced (SIMULATED_*) action accepts an exact quantity.
+		if _, ok := lookupAdvanced(a); ok {
+			fi.Quantity = qty(1_000)
+		}
 	}
 	if a == ActionRequestPayout {
 		fi.ValueOrigin = valuedomain.OriginCreatorEarning
@@ -207,7 +213,12 @@ func TestCompile_AFreshDeploymentPermitsOnlySimulation(t *testing.T) {
 	for _, a := range AllActionTypes() {
 		t.Run(string(a), func(t *testing.T) {
 			r := compile(t, intentFor(a), router, nil)
-			if a == ActionSimulatedTrade {
+			// "Only simulation" is decided by the action's domain, not by a
+			// list of names: SIMULATED_TRADE and every advanced SIMULATED_*
+			// action run on the simulated rail and nothing else does. Whether
+			// an advanced capability may run in this deployment is a separate
+			// question (gates.DecideMode), answered outside the compiler.
+			if domain, _, _, _ := Profile(a); domain == valuedomain.Simulated {
 				require.True(t, r.Permitted,
 					"simulation must work out of the box; reasons=%v", r.Reasons)
 				require.Equal(t, ExecutorSimulated, r.Executor)
@@ -263,8 +274,8 @@ func TestCompile_AGateBeingOffIsNotAPolicyRefusal(t *testing.T) {
 func TestCompile_EveryPermittedRouteNamesTheGatesThatPermittedIt(t *testing.T) {
 	router := permissiveRouter(t)
 	for _, a := range AllActionTypes() {
-		if a == ActionSimulatedTrade {
-			continue // deliberately ungated
+		if domain, _, _, _ := Profile(a); domain == valuedomain.Simulated {
+			continue // deliberately ungated: no value moves on the simulated rail
 		}
 		_, rail, _, _ := Profile(a)
 		if !rail.Implemented() {
@@ -801,4 +812,94 @@ func TestProfiles_BuyAndSellAgreeOnEveryExternalRail(t *testing.T) {
 			"%s and %s must route identically, or internal/httpapi cannot route TARGET_EXPOSURE as a buy",
 			pair[0], pair[1])
 	}
+}
+
+// ---------------------------------------------------------------------------
+// The advanced (SIMULATED_*) actions
+// ---------------------------------------------------------------------------
+
+// TestCompile_AdvancedActionsAreSimulatedOnly: every advanced action lives on
+// the simulated rail, executes on the simulated executor, and is refused if the
+// caller declares any other value domain.
+func TestCompile_AdvancedActionsAreSimulatedOnly(t *testing.T) {
+	router := permissiveRouter(t)
+	require.Len(t, AdvancedActionTypes(), 16)
+	for _, a := range AdvancedActionTypes() {
+		domain, rail, product, ok := Profile(a)
+		require.True(t, ok, "%s has no profile", a)
+		assert.Equal(t, valuedomain.Simulated, domain, "%s", a)
+		assert.Equal(t, valuedomain.RailSimulated, rail, "%s", a)
+		assert.Equal(t, legalrouter.ProductSimulation, product, "%s", a)
+
+		r := compile(t, intentFor(a), router, nil)
+		require.Equal(t, ExecutorSimulated, r.Executor, "%s", a)
+
+		for _, other := range valuedomain.AllDomains() {
+			if other == valuedomain.Simulated {
+				continue
+			}
+			fi := intentFor(a)
+			fi.CapitalDomain = other
+			r := compile(t, fi, router, allCaps())
+			assert.False(t, r.Permitted, "%s declared as %s must be refused", a, other)
+			assert.True(t, r.HasReason(ReasonDeclaredDomainMismatch), "%s declared as %s", a, other)
+		}
+	}
+}
+
+// TestCompile_AnAgentCanNeverTransferOrWithdrawEvenInSimulation: moving value
+// to another customer and withdrawing are the two things the authority ladder
+// forbids at every level. Simulation does not change that; a delegated
+// withdrawal is an agent PROPOSAL carried out by a service.
+func TestCompile_AnAgentCanNeverTransferOrWithdrawEvenInSimulation(t *testing.T) {
+	router := permissiveRouter(t)
+	caps := allCaps()
+	for _, l := range agentauthority.AllLevels() {
+		caps[l.RequiresCapability()] = true
+	}
+	for _, a := range []ActionType{"SIMULATED_TRANSFER_VALUE", "SIMULATED_WITHDRAW"} {
+		for _, l := range agentauthority.AllLevels() {
+			fi := intentFor(a)
+			fi.ActorType = security.ActorAgent
+			fi.AgentID = "0193b2e0-0000-7000-8000-0000000000e1"
+			fi.AgentAuthority = l
+			r := compile(t, fi, router, caps)
+			assert.False(t, r.Permitted, "%s at level %s", a, l)
+			assert.True(t, r.HasReason(ReasonAgentActionForbidden), "%s at level %s", a, l)
+		}
+	}
+	// The same actions by a person are permitted on the simulated rail.
+	for _, a := range []ActionType{"SIMULATED_TRANSFER_VALUE", "SIMULATED_WITHDRAW"} {
+		r := compile(t, intentFor(a), router, nil)
+		assert.True(t, r.Permitted, "%s by a person: %v", a, r.Reasons)
+	}
+}
+
+// TestFinancialIntent_AdvancedAmountRules: a quantity-only action refuses USD,
+// and a notional-or-quantity action refuses both and neither.
+func TestFinancialIntent_AdvancedAmountRules(t *testing.T) {
+	usd := money.USDFromMinor(100)
+
+	fi := intentFor("SIMULATED_TRANSFER_VALUE")
+	fi.NotionalUSD = &usd
+	require.Error(t, fi.Validate(), "a transfer is never denominated in USD")
+	fi = intentFor("SIMULATED_TRANSFER_VALUE")
+	fi.Quantity = nil
+	require.Error(t, fi.Validate(), "a transfer states its quantity")
+
+	fi = intentFor("SIMULATED_ACQUIRE_EXPOSURE")
+	fi.NotionalUSD = &usd
+	require.Error(t, fi.Validate(), "both amounts")
+	fi.Quantity = nil
+	require.NoError(t, fi.Validate(), "notional only")
+
+	fi = intentFor("SIMULATED_CLOSE_POSITION")
+	fi.Quantity = nil
+	require.NoError(t, fi.Validate(), "closing everything states no quantity")
+
+	a, ok := AdvancedActionFor("BRIDGE_VALUE")
+	require.True(t, ok)
+	assert.Equal(t, ActionType("SIMULATED_BRIDGE_VALUE"), a)
+	_, ok = AdvancedActionFor("PRINT_MONEY")
+	assert.False(t, ok)
 }

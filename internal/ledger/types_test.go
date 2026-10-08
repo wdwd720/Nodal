@@ -43,9 +43,61 @@ func TestCode_Chart(t *testing.T) {
 		{CodeMarketInventory, OwnerPlatform, Debit, false},
 		{CodePayoutClearing, OwnerPlatform, Credit, false},
 		{CodePayoutSettled, OwnerPlatform, Debit, false},
+
+		// Advanced capabilities, customer side (migration 00731).
+		{CodeTransferOut, OwnerCustomer, Debit, false},
+		{CodeTransferIn, OwnerCustomer, Credit, false},
+		{CodeFeesSpread, OwnerCustomer, Debit, false},
+		{CodeFeesPerformance, OwnerCustomer, Debit, false},
+		{CodeMarginCollateral, OwnerCustomer, Debit, false},
+		{CodeMarginLoan, OwnerCustomer, Credit, false},
+		{CodeInterestExpense, OwnerCustomer, Debit, false},
+		{CodeDerivativesMargin, OwnerCustomer, Debit, false},
+		{CodeRealizedPnL, OwnerCustomer, Credit, true},
+		{CodeOptionPremiumPaid, OwnerCustomer, Debit, false},
+		{CodeOptionPremiumReceived, OwnerCustomer, Credit, false},
+		{CodeUnsettledReceivable, OwnerCustomer, Debit, false},
+		{CodeBridgeInFlight, OwnerCustomer, Debit, false},
+		{CodeCorporateActions, OwnerCustomer, Credit, true},
+		{CodeDividends, OwnerCustomer, Credit, false},
+		{CodeWithdrawn, OwnerCustomer, Debit, false},
+		// Platform side.
+		{CodeSpreadRevenue, OwnerPlatform, Credit, false},
+		{CodePerformanceFeeAccrued, OwnerPlatform, Debit, false},
+		{CodePerformanceFeeDeferred, OwnerPlatform, Credit, false},
+		{CodePerformanceFeeRevenue, OwnerPlatform, Credit, false},
+		// House book.
+		{CodeHouseInventory, OwnerHouse, Debit, false},
+		{CodeHouseCapital, OwnerHouse, Credit, false},
+		{CodeHouseTradingOutflow, OwnerHouse, Debit, false},
+		{CodeHouseTradingInflow, OwnerHouse, Credit, false},
+		{CodeHouseFees, OwnerHouse, Debit, false},
+		// Facilities.
+		{CodeStableReserve, OwnerFacility, Debit, false},
+		{CodeStableReserveFunding, OwnerFacility, Credit, false},
+		{CodeStableIssued, OwnerFacility, Debit, false},
+		{CodeStableOutstanding, OwnerFacility, Credit, false},
+		{CodePoolCash, OwnerFacility, Debit, false},
+		{CodePoolCapital, OwnerFacility, Credit, false},
+		{CodeLoanReceivable, OwnerFacility, Debit, false},
+		{CodeInterestIncome, OwnerFacility, Credit, false},
+		{CodeInsuranceFundCash, OwnerFacility, Debit, false},
+		{CodeInsuranceFundCapital, OwnerFacility, Credit, false},
+		{CodeDeficitReceivable, OwnerFacility, Debit, false},
+		{CodeClearingCash, OwnerFacility, Debit, false},
+		{CodeClearingCapital, OwnerFacility, Credit, false},
+		{CodeClearingResult, OwnerFacility, Credit, true},
+		{CodeBridgeLocked, OwnerFacility, Debit, false},
+		{CodeBridgeLockFunding, OwnerFacility, Credit, false},
+		{CodeBridgeMinted, OwnerFacility, Debit, false},
+		{CodeBridgeOutstanding, OwnerFacility, Credit, false},
+		{CodePredictionEscrow, OwnerFacility, Debit, false},
+		{CodePredictionCollateral, OwnerFacility, Credit, false},
+		{CodePredictionSharesIssued, OwnerFacility, Debit, false},
+		{CodePredictionSharesOutstanding, OwnerFacility, Credit, false},
 	}
-	require.Len(t, want, 20)
-	require.Len(t, AllCodes(), 20)
+	require.Len(t, want, 67)
+	require.Len(t, AllCodes(), 67)
 	for i, w := range want {
 		assert.Equal(t, w.code, AllCodes()[i], "chart order")
 		assert.True(t, w.code.Valid(), "%s valid", w.code)
@@ -77,7 +129,14 @@ func TestSide(t *testing.T) {
 
 func TestKind(t *testing.T) {
 	t.Parallel()
-	require.Len(t, AllKinds(), 19)
+	require.Len(t, AllKinds(), 50)
+	require.Len(t, AdvancedKinds(), 31)
+	for _, k := range AdvancedKinds() {
+		assert.True(t, k.IsSimulatedOnly(), "%s", k)
+	}
+	for _, k := range AllKinds()[:19] {
+		assert.False(t, k.IsSimulatedOnly(), "%s predates the advanced capabilities and is not simulated-only", k)
+	}
 	for _, k := range AllKinds() {
 		assert.True(t, k.Valid(), "%s", k)
 	}

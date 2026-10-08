@@ -26,12 +26,18 @@ const (
 	FundingDisable            Kind = "FUNDING_DISABLE"              // (*)
 	WithdrawalsDisable        Kind = "WITHDRAWALS_DISABLE"          // (*)
 	ModelDisable              Kind = "MODEL_DISABLE"                // (model_id|*)
+	// CapabilityDisable stops new activity in one advanced capability
+	// (gates.AdvancedSpecs): the treasury kill switch, the code-sandbox kill
+	// switch, the stable-asset mint/burn pause and every other per-capability
+	// circuit breaker are this one kind with a different scope. Risk-reducing
+	// actions stay open, so positions can still be closed while it is on.
+	CapabilityDisable Kind = "CAPABILITY_DISABLE" // (capability)
 )
 
 var allKinds = []Kind{
 	GlobalNewRiskKill, AccountFreeze, AgentPause, StrategyVersionDisable, VenueDisable,
 	InstrumentCloseOnly, InstrumentHalt, ChainDisableNewActions, ProviderDisableNewActions,
-	FundingDisable, WithdrawalsDisable, ModelDisable,
+	FundingDisable, WithdrawalsDisable, ModelDisable, CapabilityDisable,
 }
 
 // AllKinds returns every kind in declaration order.
@@ -66,7 +72,8 @@ func (k Kind) Severity() Severity {
 	switch k {
 	case GlobalNewRiskKill, ChainDisableNewActions, ProviderDisableNewActions, FundingDisable, WithdrawalsDisable:
 		return SeveritySevere
-	case AccountFreeze, AgentPause, StrategyVersionDisable, VenueDisable, InstrumentCloseOnly, InstrumentHalt, ModelDisable:
+	case AccountFreeze, AgentPause, StrategyVersionDisable, VenueDisable, InstrumentCloseOnly, InstrumentHalt, ModelDisable,
+		CapabilityDisable:
 		return SeverityStandard
 	}
 	return SeveritySevere

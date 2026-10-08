@@ -35,10 +35,33 @@ const (
 	// KindSubmissionUnknown is an attempt whose outcome is not yet known, or
 	// wallet activity that matches no attempt (PART 48).
 	KindSubmissionUnknown Kind = "SUBMISSION_UNKNOWN"
+
+	// --- advanced capabilities (migration 00731) ---
+
+	// KindEconomicEffect is an economic effect whose outcome is not known
+	// (status UNKNOWN), or an applied effect whose journal disagrees with it.
+	KindEconomicEffect Kind = "ECONOMIC_EFFECT"
+	// KindStableReserve compares a stable asset's outstanding supply with its
+	// verified eligible reserve and with the supply observed on the simulated
+	// chain.
+	KindStableReserve Kind = "STABLE_RESERVE"
+	// KindBridge compares value locked on a bridge's source with value
+	// released on its destination plus value in flight.
+	KindBridge Kind = "BRIDGE"
+	// KindPredictionEscrow compares a prediction market's escrowed collateral
+	// with the outcome shares it has outstanding.
+	KindPredictionEscrow Kind = "PREDICTION_ESCROW"
+	// KindClearing checks that a clearing house's internal books net to zero
+	// across longs and shorts.
+	KindClearing Kind = "CLEARING"
+	// KindDevnetChain compares ledger balances with balances observed on a
+	// simulated chain.
+	KindDevnetChain Kind = "DEVNET_CHAIN"
 )
 
 var allKinds = []Kind{
 	KindExecution, KindWalletBalance, KindFunding, KindLedgerInternal, KindPositionLedger, KindSubmissionUnknown,
+	KindEconomicEffect, KindStableReserve, KindBridge, KindPredictionEscrow, KindClearing, KindDevnetChain,
 }
 
 // AllKinds returns every kind in declaration order.
@@ -58,7 +81,16 @@ func (k Kind) Valid() bool {
 // regardless of its magnitude. Internal drift (RECONCILIATION.md §6) and an
 // unknown submission (PART 48) are never "small".
 func (k Kind) AlwaysMaterial() bool {
-	return k == KindLedgerInternal || k == KindPositionLedger || k == KindSubmissionUnknown
+	switch k {
+	case KindLedgerInternal, KindPositionLedger, KindSubmissionUnknown,
+		// Every advanced kind is a conservation check: an effect whose outcome
+		// is unknown, supply beyond reserve, value counted on both sides of a
+		// bridge, escrow that cannot pay its shares, a clearing house that does
+		// not net to zero. None of those is ever small.
+		KindEconomicEffect, KindStableReserve, KindBridge, KindPredictionEscrow, KindClearing, KindDevnetChain:
+		return true
+	}
+	return false
 }
 
 // Mode is how the comparison was triggered (PART 50).

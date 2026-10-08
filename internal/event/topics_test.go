@@ -39,6 +39,8 @@ var allTopicConstants = []Topic{
 	TopicSecurityEvent,
 	TopicAgentRunCompleted,
 	TopicPredictionCommitted,
+	TopicEconIntentTransitioned,
+	TopicEconEffectTransitioned,
 }
 
 func TestTopics_RegistryComplete(t *testing.T) {
@@ -63,6 +65,8 @@ func TestTopics_RegistryComplete(t *testing.T) {
 		"security.event",
 		"agent.run.completed",
 		"prediction.committed",
+		"econ.intent.transitioned",
+		"econ.effect.transitioned",
 	}
 	for _, name := range required {
 		_, ok := Lookup(Topic(name))

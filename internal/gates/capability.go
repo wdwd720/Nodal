@@ -55,6 +55,31 @@ const (
 	AgentAutonomousSelection Capability = "AGENT_AUTONOMOUS_SELECTION"
 	// AgentAutonomousPortfolio is authority level 6.
 	AgentAutonomousPortfolio Capability = "AGENT_AUTONOMOUS_PORTFOLIO"
+
+	// --- advanced financial capabilities (sandbox-first; see advanced.go) --
+	//
+	// Each is a separate gate because each is a separate legal activity. In
+	// this build none of them has a live implementation: AdvancedSpec says so,
+	// DecideMode refuses LIVE for every one of them, and the database refuses
+	// to persist a LIVE economic intent at all. The gates exist so that the
+	// day one of them gains a live implementation, switching it on is the same
+	// dual-controlled, evidence-backed ceremony as every other gate.
+
+	StableAssetMint       Capability = "STABLE_ASSET_MINT"
+	Margin                Capability = "MARGIN"
+	Leverage              Capability = "LEVERAGE"
+	Derivatives           Capability = "DERIVATIVES"
+	Equities              Capability = "EQUITIES"
+	InternalMatching      Capability = "INTERNAL_MATCHING"
+	P2PTransfers          Capability = "P2P_TRANSFERS"
+	PrincipalTrading      Capability = "PRINCIPAL_TRADING"
+	SpreadEngine          Capability = "SPREAD_ENGINE"
+	PerformanceFees       Capability = "PERFORMANCE_FEES"
+	StrategyMarketplace   Capability = "STRATEGY_MARKETPLACE"
+	UserCodeSandbox       Capability = "USER_CODE_SANDBOX"
+	AgentSigning          Capability = "AGENT_SIGNING"
+	AgentWithdrawals      Capability = "AGENT_WITHDRAWALS"
+	CrossChainBuyingPower Capability = "CROSS_CHAIN_BUYING_POWER"
 )
 
 var allCapabilities = []Capability{
@@ -65,6 +90,11 @@ var allCapabilities = []Capability{
 	CreditPurchase, NativeAssetCreation, NativeMarketTrading,
 	PayoutReserve, PayoutSettle, HostedTrading, HostedFunding,
 	AgentBoundedDiscretion, AgentAutonomousSelection, AgentAutonomousPortfolio,
+
+	StableAssetMint, Margin, Leverage, Derivatives, Equities, InternalMatching,
+	P2PTransfers, PrincipalTrading, SpreadEngine, PerformanceFees,
+	StrategyMarketplace, UserCodeSandbox, AgentSigning, AgentWithdrawals,
+	CrossChainBuyingPower,
 }
 
 // AllCapabilities returns every capability in declaration order.
@@ -106,6 +136,18 @@ func IsHighRisk(c Capability) bool {
 	// would let one approver switch on the only legitimate way withdrawable
 	// provenance comes into existence.
 	case Marketplace:
+		return true
+
+	// Every advanced capability is high risk. Each one, switched on live,
+	// would issue money-like liabilities, extend credit, offer regulated
+	// instruments, move value between customers, trade against them, charge
+	// them, run their code or let an agent act for them. That none of them can
+	// be switched on live in this build (AdvancedSpec.LiveImplemented) is a
+	// second control, not a reason to weaken the first.
+	case StableAssetMint, Margin, Leverage, Derivatives, Equities, InternalMatching,
+		P2PTransfers, PrincipalTrading, SpreadEngine, PerformanceFees,
+		StrategyMarketplace, UserCodeSandbox, AgentSigning, AgentWithdrawals,
+		CrossChainBuyingPower:
 		return true
 
 		// NativeAssetCreation is deliberately NOT high risk. Creating a draft

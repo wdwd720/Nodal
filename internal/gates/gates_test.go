@@ -118,7 +118,7 @@ func TestCanTransition_EveryPair(t *testing.T) {
 
 func TestCapabilities_And_HighRisk(t *testing.T) {
 	caps := AllCapabilities()
-	require.Len(t, caps, 20)
+	require.Len(t, caps, 35)
 	high := map[Capability]bool{
 		LiveFunding: true, LiveManualTrading: true, LiveAgentTrading: true, Withdrawals: true,
 		Securities: true, CEXTrading: true, CrossChain: true, PredictionMarkets: true,
@@ -141,6 +141,13 @@ func TestCapabilities_And_HighRisk(t *testing.T) {
 		// publication is a content and jurisdiction question, not because a
 		// provider contract could possibly be relevant to naming a token.
 		NativeAssetCreation: false,
+
+		// The advanced capabilities: every one is high risk, live or not.
+		StableAssetMint: true, Margin: true, Leverage: true, Derivatives: true,
+		Equities: true, InternalMatching: true, P2PTransfers: true,
+		PrincipalTrading: true, SpreadEngine: true, PerformanceFees: true,
+		StrategyMarketplace: true, UserCodeSandbox: true, AgentSigning: true,
+		AgentWithdrawals: true, CrossChainBuyingPower: true,
 	}
 	for _, c := range caps {
 		assert.True(t, c.Valid())

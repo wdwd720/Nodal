@@ -47,7 +47,9 @@ const (
 )
 
 // Valid reports whether o is a declared owner type.
-func (o OwnerType) Valid() bool { return o == OwnerCustomer || o == OwnerPlatform }
+func (o OwnerType) Valid() bool {
+	return o == OwnerCustomer || o == OwnerPlatform || o == OwnerHouse || o == OwnerFacility
+}
 
 // PlatformOwnerID is the fixed owner_id of every PLATFORM ledger account. It
 // is a version-7-shaped UUID so it parses wherever account ids do, and it is
@@ -147,8 +149,9 @@ type codeInfo struct {
 	allowNegative bool
 }
 
-// codeRegistry is the chart of accounts. It is never mutated after init.
-var codeRegistry = map[Code]codeInfo{
+// codeRegistry is the chart of accounts. It is never mutated after init; the
+// advanced half (advanced.go) is merged in when it is built.
+var codeRegistry = withAdvancedCodes(map[Code]codeInfo{
 	CodeWallet:                   {OwnerCustomer, Debit, false},
 	CodeCapital:                  {OwnerCustomer, Credit, false},
 	CodeTradingOutflow:           {OwnerCustomer, Debit, false},
@@ -171,15 +174,31 @@ var codeRegistry = map[Code]codeInfo{
 	CodeMarketInventory: {OwnerPlatform, Debit, false},
 	CodePayoutClearing:  {OwnerPlatform, Credit, false},
 	CodePayoutSettled:   {OwnerPlatform, Debit, false},
+})
+
+func withAdvancedCodes(m map[Code]codeInfo) map[Code]codeInfo {
+	for _, c := range advancedCodes {
+		if _, dup := m[c.code]; dup {
+			panic("ledger: advanced code " + string(c.code) + " is already in the chart")
+		}
+		m[c.code] = c.info
+	}
+	return m
 }
 
-var allCodes = []Code{
-	CodeWallet, CodeCapital, CodeTradingOutflow, CodeTradingInflow,
-	CodeFeesNetwork, CodeFeesVenue, CodeFeesPlatform, CodeDeficit, CodeReconciliationAdjustment,
-	CodePlatformFeeReceivable, CodePlatformFeeRevenue, CodePlatformAdjustment,
-	CodeCreditBalance, CodeCreditIssuance, CodeNativeAssetBalance, CodePayoutReserved,
-	CodeMarketReserve, CodeMarketInventory, CodePayoutClearing, CodePayoutSettled,
-}
+var allCodes = func() []Code {
+	out := []Code{
+		CodeWallet, CodeCapital, CodeTradingOutflow, CodeTradingInflow,
+		CodeFeesNetwork, CodeFeesVenue, CodeFeesPlatform, CodeDeficit, CodeReconciliationAdjustment,
+		CodePlatformFeeReceivable, CodePlatformFeeRevenue, CodePlatformAdjustment,
+		CodeCreditBalance, CodeCreditIssuance, CodeNativeAssetBalance, CodePayoutReserved,
+		CodeMarketReserve, CodeMarketInventory, CodePayoutClearing, CodePayoutSettled,
+	}
+	for _, c := range advancedCodes {
+		out = append(out, c.code)
+	}
+	return out
+}()
 
 // AllCodes returns every account code in chart order (a copy).
 func AllCodes() []Code { return append([]Code(nil), allCodes...) }
@@ -244,13 +263,13 @@ const (
 	KindPayoutReturned Kind = "PAYOUT_RETURNED"
 )
 
-var allKinds = []Kind{
+var allKinds = append([]Kind{
 	KindFundingSettled, KindFundingReversal, KindFundingReversalDeficit, KindTradeFill, KindFee,
 	KindWithdrawalSettled, KindCompensation, KindCorrection, KindReconciliationAdjustment, KindSeed,
 	KindCreditIssued, KindCreditReversed, KindCreditSpent, KindNativeTrade,
 	KindInternalPurchase, KindCreatorEarning,
 	KindPayoutReserved, KindPayoutSettled, KindPayoutReturned,
-}
+}, advancedKinds...)
 
 // AllKinds returns every kind in declaration order (a copy).
 func AllKinds() []Kind { return append([]Kind(nil), allKinds...) }
@@ -322,6 +341,15 @@ func (r AccountRef) Validate() error {
 		acct, err := accounts.ParseAccountID(r.OwnerID)
 		if err != nil || acct.IsZero() || strings.EqualFold(r.OwnerID, PlatformOwnerID) {
 			return errs.New(errs.CodeValidationFailed, "customer ledger accounts need a canonical account id as owner id")
+		}
+	case OwnerHouse, OwnerFacility:
+		// A house book or a facility is identified by its own row id. It may
+		// never borrow the platform's id: that would put a segregated book
+		// back inside the platform's.
+		parsed, err := id.ParseAny(r.OwnerID)
+		if err != nil || parsed.IsZero() || strings.EqualFold(r.OwnerID, PlatformOwnerID) {
+			return errs.Newf(errs.CodeValidationFailed, "%s ledger accounts need the canonical id of their %s row as owner id",
+				r.OwnerType, strings.ToLower(string(r.OwnerType)))
 		}
 	}
 	return nil

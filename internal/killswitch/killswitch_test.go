@@ -80,7 +80,7 @@ func active(kind Kind, scope string) Switch {
 
 func TestKinds_SeverityAndScopeRules(t *testing.T) {
 	kinds := AllKinds()
-	require.Len(t, kinds, 12)
+	require.Len(t, kinds, 13)
 	severe := map[Kind]bool{GlobalNewRiskKill: true, ChainDisableNewActions: true, ProviderDisableNewActions: true, FundingDisable: true, WithdrawalsDisable: true}
 	for _, k := range kinds {
 		assert.True(t, k.Valid())
@@ -105,7 +105,7 @@ func TestKinds_SeverityAndScopeRules(t *testing.T) {
 		assert.Equalf(t, errs.CodeValidationFailed, errs.CodeOf(err), "%s must be global", k)
 	}
 	// Id-only kinds.
-	for _, k := range []Kind{AccountFreeze, AgentPause, StrategyVersionDisable, VenueDisable, InstrumentCloseOnly, InstrumentHalt, ChainDisableNewActions, ProviderDisableNewActions} {
+	for _, k := range []Kind{AccountFreeze, AgentPause, StrategyVersionDisable, VenueDisable, InstrumentCloseOnly, InstrumentHalt, ChainDisableNewActions, ProviderDisableNewActions, CapabilityDisable} {
 		s, err := k.NormalizeScope(" x-1 ")
 		require.NoError(t, err)
 		assert.Equal(t, "x-1", s)
@@ -153,7 +153,7 @@ func TestActionClasses(t *testing.T) {
 func trade(class ActionClass) Action {
 	return Action{
 		Class: class, AccountID: "acct", AgentID: "agent", StrategyVersionID: "sv", Venue: "jupiter",
-		InstrumentID: "SOL-USDC", Chain: "solana", Provider: "helius", ModelID: "model",
+		InstrumentID: "SOL-USDC", Chain: "solana", Provider: "helius", ModelID: "model", Capability: "MARGIN",
 	}
 }
 
@@ -162,7 +162,7 @@ func TestMatrix_NewRisk(t *testing.T) {
 	matching := map[Kind]string{
 		GlobalNewRiskKill: "*", AccountFreeze: "acct", AgentPause: "agent", StrategyVersionDisable: "sv", VenueDisable: "jupiter",
 		InstrumentCloseOnly: "SOL-USDC", InstrumentHalt: "SOL-USDC", ChainDisableNewActions: "solana", ProviderDisableNewActions: "helius",
-		FundingDisable: "*", WithdrawalsDisable: "*", ModelDisable: "model",
+		FundingDisable: "*", WithdrawalsDisable: "*", ModelDisable: "model", CapabilityDisable: "MARGIN",
 	}
 	for _, k := range AllKinds() {
 		sw := active(k, matching[k])
@@ -179,9 +179,14 @@ func TestMatrix_NewRisk(t *testing.T) {
 		assert.Falsef(t, Blocks(sw, a, Policy{}), "inactive %s", k)
 	}
 	// Non-matching scopes never block.
-	for _, k := range []Kind{AccountFreeze, AgentPause, StrategyVersionDisable, VenueDisable, InstrumentCloseOnly, InstrumentHalt, ChainDisableNewActions, ProviderDisableNewActions, ModelDisable} {
+	for _, k := range []Kind{AccountFreeze, AgentPause, StrategyVersionDisable, VenueDisable, InstrumentCloseOnly, InstrumentHalt, ChainDisableNewActions, ProviderDisableNewActions, ModelDisable, CapabilityDisable} {
 		assert.Falsef(t, Blocks(active(k, "other"), a, Policy{}), "non-matching %s", k)
 	}
+	// CAPABILITY_DISABLE stops new risk in its own capability and nowhere else.
+	assert.True(t, Blocks(active(CapabilityDisable, "MARGIN"), a, Policy{}))
+	other := a
+	other.Capability = "DERIVATIVES"
+	assert.False(t, Blocks(active(CapabilityDisable, "MARGIN"), other, Policy{}))
 	// A funding session is blocked by FUNDING_DISABLE and by its provider's
 	// switch, and a plain trade is not blocked by FUNDING_DISABLE.
 	funding := Action{Class: NewRisk, AccountID: "acct", Provider: "stripe", Funding: true}
@@ -209,7 +214,7 @@ func TestMatrix_ReduceRisk(t *testing.T) {
 	matching := map[Kind]string{
 		GlobalNewRiskKill: "*", AccountFreeze: "acct", AgentPause: "agent", StrategyVersionDisable: "sv", VenueDisable: "jupiter",
 		InstrumentCloseOnly: "SOL-USDC", InstrumentHalt: "SOL-USDC", ChainDisableNewActions: "solana", ProviderDisableNewActions: "helius",
-		FundingDisable: "*", WithdrawalsDisable: "*", ModelDisable: "model",
+		FundingDisable: "*", WithdrawalsDisable: "*", ModelDisable: "model", CapabilityDisable: "MARGIN",
 	}
 	for _, k := range AllKinds() {
 		assert.Equalf(t, blockedBy[k], Blocks(active(k, matching[k]), a, Policy{}), "REDUCE_RISK vs %s (default policy)", k)
@@ -235,7 +240,7 @@ func TestMatrix_Withdraw(t *testing.T) {
 	matching := map[Kind]string{
 		GlobalNewRiskKill: "*", AccountFreeze: "acct", AgentPause: "agent", StrategyVersionDisable: "sv", VenueDisable: "jupiter",
 		InstrumentCloseOnly: "SOL-USDC", InstrumentHalt: "SOL-USDC", ChainDisableNewActions: "solana", ProviderDisableNewActions: "stripe",
-		FundingDisable: "*", WithdrawalsDisable: "*", ModelDisable: "*",
+		FundingDisable: "*", WithdrawalsDisable: "*", ModelDisable: "*", CapabilityDisable: "MARGIN",
 	}
 	for _, k := range AllKinds() {
 		assert.Equalf(t, blockedBy[k], Blocks(active(k, matching[k]), a, Policy{}), "WITHDRAW vs %s", k)
@@ -344,7 +349,7 @@ func TestProp_EveryActiveSwitchCombination(t *testing.T) {
 	matching := map[Kind]string{
 		GlobalNewRiskKill: "*", AccountFreeze: "acct", AgentPause: "agent", StrategyVersionDisable: "sv", VenueDisable: "jupiter",
 		InstrumentCloseOnly: "SOL-USDC", InstrumentHalt: "SOL-USDC", ChainDisableNewActions: "solana", ProviderDisableNewActions: "helius",
-		FundingDisable: "*", WithdrawalsDisable: "*", ModelDisable: "*",
+		FundingDisable: "*", WithdrawalsDisable: "*", ModelDisable: "*", CapabilityDisable: "MARGIN",
 	}
 	for mask := 0; mask < 1<<len(kinds); mask++ {
 		var sws []Switch

@@ -79,7 +79,12 @@ const (
 	// RISK_MAX_POSITION because the limit is a RATIO rather than a size, and
 	// the remedy is different: a smaller order does not always fix it, and
 	// waiting for the denominator to grow sometimes does.
-	CodeRiskConcentration       Code = "RISK_CONCENTRATION"
+	CodeRiskConcentration Code = "RISK_CONCENTRATION"
+	// CodeRiskRejected: the advanced risk kernel (Risk Kernel V2) refused an
+	// economic intent. The stable reason codes it produced travel in the
+	// problem's fields ("reason_codes"); the code itself only says that the
+	// refusal is a risk decision rather than a validation or a gate.
+	CodeRiskRejected            Code = "RISK_REJECTED"
 	CodeEligibilityJurisdiction Code = "ELIGIBILITY_JURISDICTION"
 	CodeCapabilityNotApproved   Code = "CAPABILITY_NOT_APPROVED"
 	// CodeVerificationRequired: the action would be permitted at a higher
@@ -256,6 +261,7 @@ var registry = map[Code]codeInfo{
 	CodeRiskMaxPosition:            {http.StatusUnprocessableEntity, "Maximum position limit exceeded"},
 	CodeRiskDailyLoss:              {http.StatusUnprocessableEntity, "Daily loss limit reached"},
 	CodeRiskConcentration:          {http.StatusUnprocessableEntity, "Concentration limit exceeded"},
+	CodeRiskRejected:               {http.StatusUnprocessableEntity, "Rejected by the risk kernel"},
 	CodeEligibilityJurisdiction:    {http.StatusUnprocessableEntity, "Not eligible in this jurisdiction"},
 	CodeCapabilityNotApproved:      {http.StatusUnprocessableEntity, "Capability not approved"},
 	CodeVerificationRequired:       {http.StatusUnprocessableEntity, "Identity verification required"},
@@ -322,6 +328,7 @@ var allCodes = []Code{
 	CodeRiskMaxPosition,
 	CodeRiskDailyLoss,
 	CodeRiskConcentration,
+	CodeRiskRejected,
 	CodeEligibilityJurisdiction,
 	CodeCapabilityNotApproved,
 	CodeVerificationRequired,

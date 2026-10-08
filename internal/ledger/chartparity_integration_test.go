@@ -69,30 +69,104 @@ func TestIntegration_AnAccountCannotExemptItselfFromTheNegativeBalanceGuard(t *t
 	requireEnv(t)
 	asset := createAsset(t, "CHRT", 6, false)
 
+	// The rows below are CUSTOMER-owned because WALLET is a customer code.
+	// Until migration 00731 these were PLATFORM rows: the database did not
+	// know which owner type a code belongs to, so a PLATFORM-owned WALLET was
+	// "the honest row". It is not honest, and the database now says so.
+	owner := createAccount(t).String()
+
 	// WALLET does not allow a negative balance. An INSERT that says it does
 	// must be refused by the database, whatever the caller believes.
 	_, err := testDB.Exec(t.Context(),
 		`INSERT INTO ledger_accounts (id, owner_type, owner_id, code, asset_id, normal_side, allow_negative, status, created_at)
-		 VALUES ($1,'PLATFORM',$3,'WALLET',$2,'DEBIT',true,'OPEN',now())`,
-		NewLedgerAccountID(), asset, PlatformOwnerID)
+		 VALUES ($1,'CUSTOMER',$3,'WALLET',$2,'DEBIT',true,'OPEN',now())`,
+		NewLedgerAccountID(), asset, owner)
 	require.Error(t, err, "an account may not choose its own exemption from LG001")
 	assert.Contains(t, err.Error(), "ledger_accounts_match_chart")
 
 	// And the normal side is not a caller's choice either.
 	_, err = testDB.Exec(t.Context(),
 		`INSERT INTO ledger_accounts (id, owner_type, owner_id, code, asset_id, normal_side, allow_negative, status, created_at)
-		 VALUES ($1,'PLATFORM',$3,'WALLET',$2,'CREDIT',false,'OPEN',now())`,
-		NewLedgerAccountID(), asset, PlatformOwnerID)
+		 VALUES ($1,'CUSTOMER',$3,'WALLET',$2,'CREDIT',false,'OPEN',now())`,
+		NewLedgerAccountID(), asset, owner)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "ledger_accounts_match_chart")
+
+	// Nor is the owner type: a customer code on a platform row is refused.
+	_, err = testDB.Exec(t.Context(),
+		`INSERT INTO ledger_accounts (id, owner_type, owner_id, code, asset_id, normal_side, allow_negative, status, created_at)
+		 VALUES ($1,'PLATFORM',$3,'WALLET',$2,'DEBIT',false,'OPEN',now())`,
+		NewLedgerAccountID(), asset, PlatformOwnerID)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "ledger_accounts_owner_matches_chart")
 
 	// The honest row is accepted, so the constraint refuses forgeries and not
 	// the application.
 	_, err = testDB.Exec(t.Context(),
 		`INSERT INTO ledger_accounts (id, owner_type, owner_id, code, asset_id, normal_side, allow_negative, status, created_at)
-		 VALUES ($1,'PLATFORM',$3,'WALLET',$2,'DEBIT',false,'OPEN',now())`,
-		NewLedgerAccountID(), asset, PlatformOwnerID)
+		 VALUES ($1,'CUSTOMER',$3,'WALLET',$2,'DEBIT',false,'OPEN',now())`,
+		NewLedgerAccountID(), asset, owner)
 	assert.NoError(t, err)
+}
+
+// TestIntegration_GoAndSQLAgreeOnOwnerTypeAndFacilityKind extends the chart
+// comparison to the two facts migration 00731 put in SQL: which owner type a
+// code belongs to, and which facility kind may hold a FACILITY code.
+func TestIntegration_GoAndSQLAgreeOnOwnerTypeAndFacilityKind(t *testing.T) {
+	requireEnv(t)
+	var disagreements []string
+	facilityCodes := 0
+	for _, c := range AllCodes() {
+		var sqlOwner string
+		var sqlFacility *string
+		require.NoError(t, testDB.QueryRow(t.Context(),
+			`SELECT cp_ledger_code_owner_type($1), cp_ledger_code_facility_kind($1)`, string(c)).
+			Scan(&sqlOwner, &sqlFacility))
+		if string(c.OwnerType()) != sqlOwner {
+			disagreements = append(disagreements, string(c)+" owner: Go "+string(c.OwnerType())+", SQL "+sqlOwner)
+		}
+		goFacility := string(c.FacilityKind())
+		sqlFac := ""
+		if sqlFacility != nil {
+			sqlFac = *sqlFacility
+		}
+		if goFacility != sqlFac {
+			disagreements = append(disagreements, string(c)+" facility: Go "+goFacility+", SQL "+sqlFac)
+		}
+		if goFacility != "" {
+			facilityCodes++
+		}
+	}
+	sort.Strings(disagreements)
+	assert.Empty(t, disagreements)
+	assert.Positive(t, facilityCodes, "no FACILITY codes; the comparison is vacuous")
+	for _, k := range AllFacilityKinds() {
+		found := false
+		for _, c := range AllCodes() {
+			if c.FacilityKind() == k {
+				found = true
+			}
+		}
+		assert.True(t, found, "facility kind %s has no codes", k)
+	}
+}
+
+// TestIntegration_GoAndSQLAgreeOnSimulatedOnlyKinds compares the two lists of
+// simulated-only journal kinds.
+func TestIntegration_GoAndSQLAgreeOnSimulatedOnlyKinds(t *testing.T) {
+	requireEnv(t)
+	simulated := 0
+	for _, k := range AllKinds() {
+		var sqlSimulated bool
+		require.NoError(t, testDB.QueryRow(t.Context(),
+			`SELECT cp_journal_kind_is_simulated_only($1)`, string(k)).Scan(&sqlSimulated))
+		assert.Equal(t, k.IsSimulatedOnly(), sqlSimulated, "%s", k)
+		if sqlSimulated {
+			simulated++
+		}
+	}
+	assert.Equal(t, len(AdvancedKinds()), simulated)
+	assert.Less(t, simulated, len(AllKinds()), "every kind is simulated-only; the rule distinguishes nothing")
 }
 
 func boolWord(b bool) string {

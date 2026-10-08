@@ -39,7 +39,10 @@ type Action struct {
 	Chain             string
 	Provider          string
 	ModelID           string
-	Funding           bool
+	// Capability is the advanced capability the action exercises, if any
+	// (gates.Capability as a string; this package does not import gates).
+	Capability string
+	Funding    bool
 }
 
 // Validate fails with VALIDATION_FAILED for an unknown class.
@@ -82,6 +85,8 @@ func Matches(sw Switch, a Action) bool {
 		return a.Provider != "" && a.Provider == sw.ScopeID
 	case ModelDisable:
 		return a.ModelID != "" && (sw.ScopeID == GlobalScope || a.ModelID == sw.ScopeID)
+	case CapabilityDisable:
+		return a.Capability != "" && a.Capability == sw.ScopeID
 	}
 	return false
 }
@@ -112,7 +117,7 @@ func Blocks(sw Switch, a Action, p Policy) bool {
 		return false
 	case Withdraw:
 		switch sw.Kind {
-		case WithdrawalsDisable, GlobalNewRiskKill, AccountFreeze:
+		case WithdrawalsDisable, GlobalNewRiskKill, AccountFreeze, CapabilityDisable:
 			return Matches(sw, a)
 		}
 		return false

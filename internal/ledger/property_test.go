@@ -52,11 +52,23 @@ func shuffleEntries(t *rapid.T, entries []Entry) []Entry {
 
 func genAccountRef(t *rapid.T, asset assets.AssetID) AccountRef {
 	code := rapid.SampledFrom(AllCodes()).Draw(t, "code")
-	if code.OwnerType() == OwnerPlatform {
+	switch code.OwnerType() {
+	case OwnerPlatform:
 		return PlatformAccount(code, asset)
+	case OwnerHouse:
+		return AccountRef{OwnerType: OwnerHouse, OwnerID: testHouse, Code: code, AssetID: asset}
+	case OwnerFacility:
+		return AccountRef{OwnerType: OwnerFacility, OwnerID: testFacility, Code: code, AssetID: asset}
 	}
 	return CustomerAccount(testAccount, code, asset)
 }
+
+// Fixed owner ids for the two owner types that are identified by their own
+// rows rather than by an account or the platform constant.
+const (
+	testHouse    = "0199a0c0-0000-7000-8000-00000000a001"
+	testFacility = "0199a0c0-0000-7000-8000-00000000f001"
+)
 
 // genBalancedEntries draws a random multi-asset balanced entry set: per
 // asset, 1..4 debits whose total is split into 1..3 credits.

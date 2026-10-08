@@ -628,7 +628,22 @@
     "HOSTED_FUNDING",
     "AGENT_BOUNDED_DISCRETION",
     "AGENT_AUTONOMOUS_SELECTION",
-    "AGENT_AUTONOMOUS_PORTFOLIO"
+    "AGENT_AUTONOMOUS_PORTFOLIO",
+    "STABLE_ASSET_MINT",
+    "MARGIN",
+    "LEVERAGE",
+    "DERIVATIVES",
+    "EQUITIES",
+    "INTERNAL_MATCHING",
+    "P2P_TRANSFERS",
+    "PRINCIPAL_TRADING",
+    "SPREAD_ENGINE",
+    "PERFORMANCE_FEES",
+    "STRATEGY_MARKETPLACE",
+    "USER_CODE_SANDBOX",
+    "AGENT_SIGNING",
+    "AGENT_WITHDRAWALS",
+    "CROSS_CHAIN_BUYING_POWER"
   ],
   "kill_switch_kinds": [
     {
@@ -638,6 +653,11 @@
     },
     {
       "kind": "AGENT_PAUSE",
+      "severity": "STANDARD",
+      "release_needs_approval": false
+    },
+    {
+      "kind": "CAPABILITY_DISABLE",
       "severity": "STANDARD",
       "release_needs_approval": false
     },

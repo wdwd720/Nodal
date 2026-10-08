@@ -20,6 +20,12 @@ const (
 	StageContinuous Stage = "CONTINUOUS"
 )
 
+// AllStages returns every stage in declaration order.
+func AllStages() []Stage { return []Stage{StagePreTrade, StageFinal, StageContinuous} }
+
+// AllVerdicts returns every verdict in declaration order.
+func AllVerdicts() []Verdict { return []Verdict{Allow, Reject} }
+
 // Valid reports whether s is a known stage.
 func (s Stage) Valid() bool {
 	switch s {
@@ -82,6 +88,10 @@ const (
 	KillFundingDisable         = "FUNDING_DISABLE"
 	KillWithdrawalsDisable     = "WITHDRAWALS_DISABLE"
 	KillModelDisable           = "MODEL_DISABLE"
+	// KillCapabilityDisable stops one advanced capability. A V1 spot trade
+	// intent exercises no advanced capability, so it never matches one; the
+	// advanced kernel (EvaluateAdvanced) is where it bites.
+	KillCapabilityDisable = "CAPABILITY_DISABLE"
 
 	KillScopeAll = "*"
 )

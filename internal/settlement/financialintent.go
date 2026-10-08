@@ -112,13 +112,13 @@ const (
 	ActionCreateNativeAsset ActionType = "CREATE_NATIVE_ASSET"
 )
 
-var allActionTypes = []ActionType{
+var allActionTypes = withAdvancedActionTypes([]ActionType{
 	ActionBuyNativeAsset, ActionSellNativeAsset,
 	ActionBuyHostedAsset, ActionSellHostedAsset,
 	ActionBuyOnchainAsset, ActionSellOnchainAsset,
 	ActionPurchaseInternalService, ActionRequestPayout,
 	ActionSimulatedTrade, ActionCreateNativeAsset,
-}
+})
 
 // AllActionTypes returns every declared action type in declaration order.
 func AllActionTypes() []ActionType { return append([]ActionType(nil), allActionTypes...) }
@@ -168,6 +168,7 @@ const (
 var allSubjectTypes = []SubjectType{
 	SubjectInstrument, SubjectNativeMarket, SubjectNativeAsset,
 	SubjectInternalProduct, SubjectPayoutRequest,
+	SubjectAccount, SubjectFacility, SubjectDestination,
 }
 
 // AllSubjectTypes returns every declared subject type (a copy).
@@ -196,7 +197,7 @@ type Subject struct {
 // requiredSubject maps each action type to the subject type it must carry.
 // An action absent from this map would be undecided, which validateActionShape
 // refuses.
-var requiredSubject = map[ActionType]SubjectType{
+var requiredSubject = withAdvancedSubjects(map[ActionType]SubjectType{
 	ActionBuyNativeAsset:          SubjectNativeMarket,
 	ActionSellNativeAsset:         SubjectNativeMarket,
 	ActionBuyHostedAsset:          SubjectInstrument,
@@ -207,7 +208,7 @@ var requiredSubject = map[ActionType]SubjectType{
 	ActionRequestPayout:           SubjectPayoutRequest,
 	ActionSimulatedTrade:          SubjectInstrument,
 	ActionCreateNativeAsset:       SubjectNativeAsset,
-}
+})
 
 // RequiredSubject returns the subject type an action must carry.
 func RequiredSubject(a ActionType) (SubjectType, bool) {
@@ -216,7 +217,7 @@ func RequiredSubject(a ActionType) (SubjectType, bool) {
 }
 
 // sideOf maps each action type to the side it must declare.
-var sideOf = map[ActionType]Side{
+var sideOf = withAdvancedSides(map[ActionType]Side{
 	ActionBuyNativeAsset:          SideBuy,
 	ActionSellNativeAsset:         SideSell,
 	ActionBuyHostedAsset:          SideBuy,
@@ -227,7 +228,7 @@ var sideOf = map[ActionType]Side{
 	ActionRequestPayout:           SideNone,
 	ActionSimulatedTrade:          SideBuy,
 	ActionCreateNativeAsset:       SideNone,
-}
+})
 
 // SideOf returns the side an action implies.
 func SideOf(a ActionType) (Side, bool) {
@@ -332,6 +333,8 @@ func validateActionShape(fi FinancialIntent, fields map[string]any) {
 		if fi.Quantity != nil || fi.NotionalUSD != nil {
 			fields["amount"] = "creating an asset moves no value and takes no amount"
 		}
+	default:
+		validateAdvancedAmounts(fi, fields)
 	}
 
 	if fi.ActionType == ActionRequestPayout && fi.ValueOrigin != "" && !fi.ValueOrigin.Valid() {

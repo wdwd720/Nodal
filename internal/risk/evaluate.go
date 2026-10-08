@@ -261,6 +261,8 @@ func (ks KillSwitch) matches(it Intent, providers map[string]struct{}) bool {
 		return ok
 	case KillModelDisable:
 		return scoped(it.ModelID)
+	case KillCapabilityDisable:
+		return false // a V1 trade intent exercises no advanced capability
 	}
 	return true
 }
@@ -277,7 +279,8 @@ func (ks KillSwitch) blocks(class ActionClass, allowDuringKill, blockOnFreeze bo
 		return blockOnFreeze
 	case KillGlobalNewRisk:
 		return !allowDuringKill
-	case KillAgentPause, KillStrategyVersionDisable, KillVenueDisable, KillInstrumentCloseOnly, KillModelDisable:
+	case KillAgentPause, KillStrategyVersionDisable, KillVenueDisable, KillInstrumentCloseOnly, KillModelDisable,
+		KillCapabilityDisable:
 		return false
 	}
 	return true

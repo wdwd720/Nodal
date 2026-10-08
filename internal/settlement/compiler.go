@@ -214,7 +214,7 @@ type actionProfile struct {
 
 // profiles is the compiler's routing table. Every declared action type must
 // appear exactly once; Validate proves it.
-var profiles = map[ActionType]actionProfile{
+var profiles = withAdvancedProfiles(map[ActionType]actionProfile{
 	ActionBuyNativeAsset: {
 		domain: valuedomain.InternalNativeAsset, rail: valuedomain.RailNativeInternal,
 		product:      legalrouter.ProductNativeMarketTrade,
@@ -352,7 +352,7 @@ var profiles = map[ActionType]actionProfile{
 		requiresRiskEvaluation: true,
 		payoutMode:             legalrouter.PayoutModeNone,
 	},
-}
+})
 
 // AllRequiredCapabilities returns every capability any action profile can
 // require, sorted and de-duplicated.

@@ -95,7 +95,10 @@ func validatePosting(p Posting) error {
 				WithField("credits", im.credits.String())
 		}
 	}
-	return nil
+	if p.Kind.IsSimulatedOnly() && p.Conversion != nil {
+		return errs.Newf(errs.CodeForbidden, "%s is simulated-only and can never declare a value-domain conversion", p.Kind)
+	}
+	return checkPerPartyBalance(p)
 }
 
 // assetImbalance is the per-asset totals of a set of entries.

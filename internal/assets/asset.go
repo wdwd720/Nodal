@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -43,6 +44,12 @@ const (
 	// KindNativeAsset is a Nodal-native asset created by a user inside the
 	// platform. It is not a blockchain token (gola.md PART XIII).
 	KindNativeAsset Kind = "NATIVE_ASSET"
+	// KindSimulated is a sandbox unit: a paper dollar, a paper share, a
+	// devnet-only stable token, an asset on a simulated chain. It is always
+	// value domain SIMULATED, which the database refuses to move to or from
+	// any other domain, so nothing denominated in it can ever become real
+	// value (ADR-0020).
+	KindSimulated Kind = "SIMULATED"
 )
 
 // allKinds is every declared kind, in the order the constants are written.
@@ -51,7 +58,7 @@ const (
 // rule below is duplicated in SQL as `assets_kind_domain_agree`, and a
 // comparison that iterated a hand-written list would stop covering a kind the
 // day somebody added one.
-var allKinds = []Kind{KindNative, KindSPLToken, KindSPLToken2022, KindFiat, KindCredit, KindNativeAsset}
+var allKinds = []Kind{KindNative, KindSPLToken, KindSPLToken2022, KindFiat, KindCredit, KindNativeAsset, KindSimulated}
 
 // AllKinds returns every declared asset kind.
 func AllKinds() []Kind { return append([]Kind(nil), allKinds...) }
@@ -67,6 +74,34 @@ func (k Kind) IsInternal() bool { return k == KindCredit || k == KindNativeAsset
 
 // FiatChain is the chain value every fiat reference uses.
 const FiatChain = "fiat"
+
+// SandboxChain is the chain value of a SIMULATED asset that exists on no
+// chain at all, such as a paper dollar or a paper share. Its mint_address is
+// its own id, exactly like an internal asset.
+const SandboxChain = "nodal-sandbox"
+
+// SimulatedChainPrefix prefixes every simulated public chain (internal/devnet).
+// A SIMULATED asset on such a chain carries the devnet mint as mint_address,
+// so the same paper dollar on two simulated chains is two assets -- which is
+// what lets cross-chain buying power tell them apart.
+const SimulatedChainPrefix = "sbx-"
+
+// IsSimulatedChain reports whether chain is the sandbox chain or a simulated
+// public chain.
+func IsSimulatedChain(chain string) bool {
+	if chain == SandboxChain {
+		return true
+	}
+	if !strings.HasPrefix(chain, SimulatedChainPrefix) || len(chain) == len(SimulatedChainPrefix) {
+		return false
+	}
+	for _, c := range chain[len(SimulatedChainPrefix):] {
+		if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '-' {
+			return false
+		}
+	}
+	return true
+}
 
 // RiskClass groups assets for policy purposes.
 type RiskClass string
@@ -173,9 +208,19 @@ func (a Asset) Validate() error {
 		problems = append(problems, "mint_address required")
 	}
 	switch a.Kind {
-	case KindNative, KindSPLToken, KindSPLToken2022, KindFiat, KindCredit, KindNativeAsset:
+	case KindNative, KindSPLToken, KindSPLToken2022, KindFiat, KindCredit, KindNativeAsset, KindSimulated:
 	default:
 		problems = append(problems, fmt.Sprintf("unknown kind %q", a.Kind))
+	}
+	if a.Kind == KindSimulated {
+		if !IsSimulatedChain(a.Chain) {
+			problems = append(problems, "SIMULATED asset must use chain "+SandboxChain+" or a "+SimulatedChainPrefix+"* simulated chain")
+		}
+		if a.Chain == SandboxChain && (a.ID.IsZero() || a.MintAddress != a.ID.String()) {
+			problems = append(problems, "a SIMULATED asset on "+SandboxChain+" uses its own id as mint_address")
+		}
+	} else if IsSimulatedChain(a.Chain) {
+		problems = append(problems, "only SIMULATED assets may use a simulated chain")
 	}
 	problems = append(problems, a.valueDomainProblems()...)
 	if a.Kind.IsInternal() {
@@ -260,7 +305,8 @@ func (r *Repository) Create(ctx context.Context, q db.Querier, a Asset) (Asset, 
 	// mint_address is its own id, and Validate checks that relationship.
 	if a.ID.IsZero() {
 		a.ID = NewAssetID()
-		if a.Kind.IsInternal() && a.MintAddress == "" {
+		ownMint := a.Kind.IsInternal() || (a.Kind == KindSimulated && a.Chain == SandboxChain)
+		if ownMint && a.MintAddress == "" {
 			a.MintAddress = a.ID.String()
 		}
 	}
@@ -397,6 +443,10 @@ func (a Asset) valueDomainProblems() []string {
 	case KindNativeAsset:
 		if a.ValueDomain != valuedomain.InternalNativeAsset {
 			problems = append(problems, "NATIVE_ASSET assets are always domain INTERNAL_NATIVE_ASSET")
+		}
+	case KindSimulated:
+		if a.ValueDomain != valuedomain.Simulated {
+			problems = append(problems, "SIMULATED assets are always domain SIMULATED")
 		}
 	case KindNative, KindSPLToken, KindSPLToken2022:
 		switch a.ValueDomain {
