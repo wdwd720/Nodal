@@ -210,18 +210,27 @@ func TestProp_EvaluationIsDeterministicAndAutoApprovesOnlyLowRisk(t *testing.T) 
 	})
 }
 
-// TestProp_DelegatedKeysAreAFunctionOfSeedAccountAndChain.
+// TestProp_DelegatedKeysAreAFunctionOfSeedAccountAndChain: a second signer
+// built from the same seed derives the same key for the same account and
+// chain (the key is a function of its inputs, not of a signer's state), and
+// another account or another seed never derives that key.
 func TestProp_DelegatedKeysAreAFunctionOfSeedAccountAndChain(t *testing.T) {
 	s := unitSigner(t, useed("prop master"))
+	again := unitSigner(t, useed("prop master"))
+	other := unitSigner(t, useed("another master"))
 	rapid.Check(t, func(t *rapid.T) {
 		a := accounts.AccountID(id.New[id.Any]())
 		b := accounts.AccountID(id.New[id.Any]())
 		chain := rapid.SampledFrom(Chains()).Draw(t, "chain")
-		if s.PublicKey(a, chain) != s.PublicKey(a, chain) {
-			t.Fatalf("derivation is not deterministic")
+		key := s.PublicKey(a, chain)
+		if again.PublicKey(a, chain) != key {
+			t.Fatalf("two signers from one seed derive different keys for one account and chain")
 		}
-		if s.PublicKey(a, chain) == s.PublicKey(b, chain) {
+		if s.PublicKey(b, chain) == key {
 			t.Fatalf("two accounts share a key")
+		}
+		if other.PublicKey(a, chain) == key {
+			t.Fatalf("two seeds derive the same key for one account and chain")
 		}
 	})
 	_ = config.EnvTest

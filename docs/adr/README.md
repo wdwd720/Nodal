@@ -42,6 +42,11 @@ The set of ADRs is the one required by goal PART 210.
 "Accepted" in the table abbreviates the full status line used in each file:
 `Accepted — implementation tracked in docs/build/REQUIREMENTS_TRACEABILITY.md`.
 
+Most of the EB- and SB- ids cited in this table and in ADRs 0002–0019 carry
+meanings `docs/build/BLOCKERS.md` never gave them; its section "Earlier ids
+(EB-, SB-), kept so older documents still resolve" explains the mismatch, and
+where the two disagree, the ADR's own words say what it meant.
+
 ## How the ADRs relate
 
 - Truth and storage: 0001 (ledger) is the authority; 0005, 0006, 0007 are derived
