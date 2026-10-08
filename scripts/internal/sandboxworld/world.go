@@ -173,6 +173,7 @@ func wire(d *db.DB, o Options) (*World, error) {
 	}
 	w.Faucet, err = sandboxfund.New(sandboxfund.Deps{
 		Clock: clk, Ledger: led, Effects: w.Effects, Environment: env, Policy: sandboxfund.DefaultPolicy(),
+		KillSwitches: kills,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("sandboxworld: faucet: %w", err)
