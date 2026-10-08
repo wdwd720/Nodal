@@ -11,7 +11,9 @@ The last section lists the claims that must not be made at all.
 The citations are checked rather than promised: this document is in the `inScope` list of
 `test/docs/references_test.go`, so `go test ./test/docs/` fails if any test function named here stops
 existing. When this document was written, every evidence command below was run once at `80f616b`, and every
-test a claim cites was reported `PASS` (see "How this document was verified").
+test a claim cites was reported `PASS` (see "How this document was verified"). Claims revised since were re-run
+when they changed: C3 and SEC2 at `e575c4b`, DA4 (the agent worker holding no key material) at `ba20d9c`,
+the new test in M1's caveat at `da9f0c0`, OP2 (the restore drill) at `9db3f7c`.
 
 ## The one paragraph to read first
 
