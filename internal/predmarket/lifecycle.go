@@ -363,9 +363,12 @@ func (s *Service) Open(ctx context.Context, tx pgx.Tx, marketID MarketID, by eco
 // on nothing is issued, redeemed or traded: the outcome instruments go
 // HALTED, so Risk V2's instrument check and the order book refuse every new
 // order in them, and the market instrument goes CLOSE_ONLY, which admits only
-// the risk-reducing settlement and refund intents. Closing needs no
-// authorization: it only ever removes activity, so a kill switch never stops
-// it. Closing a market already past OPEN is a no-op.
+// the risk-reducing settlement and refund intents. When the service has
+// OutcomeBooks, every order still resting on an outcome instrument is
+// cancelled in the same transaction, releasing what it reserved, so no order
+// outlives its market. Closing needs no authorization: it only ever removes
+// activity, so a kill switch never stops it. Closing a market already past
+// OPEN is a no-op.
 func (s *Service) Close(ctx context.Context, tx pgx.Tx, marketID MarketID, by econ.Actor) (Market, error) {
 	by, err := canonicalLifecycleActor(by)
 	if err != nil {
@@ -402,7 +405,37 @@ func (s *Service) closeLocked(ctx context.Context, tx pgx.Tx, m Market, by econ.
 	if err := s.setInstrumentStatus(ctx, tx, m.InstrumentID, assets.StatusCloseOnly, by, "prediction market closed: settlement only"); err != nil {
 		return Market{}, err
 	}
-	return s.marketTransition(ctx, tx, m, StatusClosed, by, "trading closed", "", nil, nil)
+	cancelled, err := s.cancelResting(ctx, tx, m, by, "prediction market "+m.Symbol+" closed: no order outlives its market")
+	if err != nil {
+		return Market{}, err
+	}
+	var payload map[string]any
+	if s.books != nil {
+		payload = map[string]any{"resting_orders_cancelled": cancelled}
+	}
+	return s.marketTransition(ctx, tx, m, StatusClosed, by, "trading closed", "", nil, payload)
+}
+
+// cancelResting has the order book cancel every order resting on the
+// market's outcome instruments, in tx, when the service has one. Without
+// OutcomeBooks it does nothing and returns 0: a settlement or void then
+// refuses while any outcome share is still reserved (requireUnencumbered).
+func (s *Service) cancelResting(ctx context.Context, tx pgx.Tx, m Market, by econ.Actor, reason string) (int, error) {
+	if s.books == nil {
+		return 0, nil
+	}
+	ids := make([]instruments.InstrumentID, 0, len(m.Outcomes))
+	for _, o := range m.Outcomes {
+		ids = append(ids, o.InstrumentID)
+	}
+	n, err := s.books.CancelResting(ctx, tx, ids, by, reason)
+	if err != nil {
+		return 0, dbErr("cancel resting orders on the outcome books", err)
+	}
+	if n < 0 {
+		return 0, errs.New(errs.CodeInternal, "predmarket: the order book reported a negative number of cancelled orders")
+	}
+	return n, nil
 }
 
 // CloseDue closes up to limit OPEN markets whose close time has passed, for
@@ -496,13 +529,15 @@ type ResolveResult struct {
 // Resolve accepts an oracle report. The report must name this market, come
 // from the market's oracle source, verify against the market's oracle key,
 // name one of its outcomes, and have been observed at or after close and not
-// in the future. The operator must not be the market's creator.
+// in the future. The operator must not be the market's creator, nor an
+// operator who recorded an oracle observation for it.
 //
 //   - RESOLVING: the report resolves the market (an ORACLE resolution).
 //   - Replaying an accepted report, in any state, changes nothing.
 //   - DISPUTED: a different report closes the dispute -- DISPUTE_OVERTURNED
-//     when its outcome differs, DISPUTE_UPHELD when it does not -- and may not
-//     be submitted by the operator who raised the dispute.
+//     when its outcome differs, DISPUTE_UPHELD when it does not -- and may be
+//     submitted neither by the operator who raised the dispute nor by the one
+//     whose resolution is disputed.
 //   - RESOLVED or SETTLED: a different report is refused.
 func (s *Service) Resolve(ctx context.Context, tx pgx.Tx, req ResolveRequest) (ResolveResult, error) {
 	by, err := canonicalOperator(req.Actor)
@@ -520,6 +555,9 @@ func (s *Service) Resolve(ctx context.Context, tx pgx.Tx, req ResolveRequest) (R
 			return err
 		}
 		if err := requireOtherThan(by, m.CreatedBy, "the creator of a market cannot resolve it"); err != nil {
+			return err
+		}
+		if err := requireNotObserver(ctx, tx, m, by); err != nil {
 			return err
 		}
 		hash := req.Report.Hash()
@@ -545,6 +583,9 @@ func (s *Service) Resolve(ctx context.Context, tx pgx.Tx, req ResolveRequest) (R
 				return err
 			}
 			if err := requireOtherThan(by, dispute.RaisedBy, "the operator who raised a dispute cannot rule on it"); err != nil {
+				return err
+			}
+			if err := requireOtherThan(by, current.AcceptedBy, "the operator whose resolution is disputed cannot rule on the dispute"); err != nil {
 				return err
 			}
 			r.Kind = ResolutionDisputeUpheld
@@ -662,8 +703,10 @@ type DisputeRequest struct {
 
 // Dispute moves a RESOLVED market to DISPUTED, recording who disputed it,
 // why and on what evidence. Settlement is blocked until the dispute is
-// closed by Resolve with a new report, by UpholdResolution, or by Void. Only
-// an ORACLE resolution can be disputed, and only once: a ruling is final.
+// closed by Resolve with a new report, by UpholdResolution, or by an approved
+// void (ProposeVoid, then ApproveVoid by another operator). Only an ORACLE
+// resolution can be disputed, and only once: a ruling is final. Disputing is
+// also the only way to void a RESOLVED market inside its dispute window.
 func (s *Service) Dispute(ctx context.Context, tx pgx.Tx, req DisputeRequest) (Dispute, Market, error) {
 	by, err := canonicalOperator(req.Actor)
 	if err != nil {
@@ -731,8 +774,10 @@ type RulingRequest struct {
 }
 
 // UpholdResolution closes a DISPUTED market's dispute keeping its outcome:
-// DISPUTED -> RESOLVED with a DISPUTE_UPHELD resolution. Neither the market's
-// creator nor the operator who raised the dispute may rule.
+// DISPUTED -> RESOLVED with a DISPUTE_UPHELD resolution. The ruling is
+// independent: neither the market's creator, nor the operator who raised the
+// dispute, nor the operator whose resolution is disputed, nor one who
+// recorded an oracle observation for the market may rule.
 func (s *Service) UpholdResolution(ctx context.Context, tx pgx.Tx, req RulingRequest) (ResolveResult, error) {
 	by, err := canonicalOperator(req.Actor)
 	if err != nil {
@@ -759,6 +804,12 @@ func (s *Service) UpholdResolution(ctx context.Context, tx pgx.Tx, req RulingReq
 			return err
 		}
 		if err := requireOtherThan(by, dispute.RaisedBy, "the operator who raised a dispute cannot rule on it"); err != nil {
+			return err
+		}
+		if err := requireOtherThan(by, current.AcceptedBy, "the operator whose resolution is disputed cannot uphold it"); err != nil {
+			return err
+		}
+		if err := requireNotObserver(ctx, tx, m, by); err != nil {
 			return err
 		}
 		r := Resolution{

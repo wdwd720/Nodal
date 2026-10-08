@@ -3,7 +3,6 @@ package httpapi
 import (
 	"context"
 	"crypto/ed25519"
-	"time"
 
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/assets"
@@ -26,11 +25,13 @@ type PredictionMarketRecord struct {
 }
 
 // PredictionMarketDetailView is one market with its resolution history, the
-// disputes raised on it and its settlement record, read from one snapshot.
+// disputes raised on it, the void proposals made on it and its settlement
+// record, read from one snapshot.
 type PredictionMarketDetailView struct {
-	Record      PredictionMarketRecord
-	Resolutions []predmarket.Resolution
-	Disputes    []predmarket.Dispute
+	Record        PredictionMarketRecord
+	Resolutions   []predmarket.Resolution
+	Disputes      []predmarket.Dispute
+	VoidProposals []predmarket.VoidProposal
 	// Settlement is nil until the market settles or is voided.
 	Settlement *predmarket.Settlement
 }
@@ -45,10 +46,12 @@ type PredictionBooksView struct {
 	Violations []string
 }
 
-// PredictionPositionsView is one account's outcome shares in one market.
+// PredictionPositionsView is one account's outcome shares in one market, and
+// the payout the market holds for it, if any.
 type PredictionPositionsView struct {
-	Record    PredictionMarketRecord
-	Positions []predmarket.Position
+	Record     PredictionMarketRecord
+	Positions  []predmarket.Position
+	HeldPayout *predmarket.HeldPayout
 }
 
 // PredictionOracleView is the oracle a deployment resolves markets from.
@@ -79,18 +82,27 @@ type PredictionDisputeView struct {
 }
 
 // PredictionSettleView is a market after its settlement or refund, with what
-// the call paid (nothing on a replay).
+// the call paid and held (nothing on a replay).
 type PredictionSettleView struct {
 	Record     PredictionMarketRecord
 	Settlement predmarket.Settlement
 	Plan       predmarket.SettlementPlan
 	Lines      []predmarket.ActionResult
+	Held       []predmarket.HeldPayout
 	Replay     bool
 }
 
+// PredictionVoidProposalView is a market and the void proposal just made on
+// it.
+type PredictionVoidProposalView struct {
+	Record   PredictionMarketRecord
+	Proposal predmarket.VoidProposal
+}
+
 // PredictionMarketsPort serves prediction markets: the public reads of a
-// market and its escrow, an account's shares, the customer's complete-set
-// issuance and redemption, and the operator's lifecycle, resolution and
+// market and its escrow, an account's shares and held payout, the customer's
+// complete-set issuance and redemption and the claim of a held payout, and
+// the operator's lifecycle, resolution, void (proposal and approval) and
 // settlement actions. Each method is one service call in its own
 // transaction; the service enforces every rule, dual control included.
 type PredictionMarketsPort interface {
@@ -107,11 +119,13 @@ type PredictionMarketsPort interface {
 	Open(ctx context.Context, id predmarket.MarketID, by econ.Actor) (PredictionMarketRecord, error)
 	Close(ctx context.Context, id predmarket.MarketID, by econ.Actor) (PredictionMarketRecord, error)
 	RequestResolution(ctx context.Context, id predmarket.MarketID, by econ.Actor) (PredictionMarketRecord, error)
-	Observe(ctx context.Context, id predmarket.MarketID, outcome string, observedAt time.Time, evidence []byte) (predmarket.OracleReport, error)
+	Observe(ctx context.Context, req predmarket.ObservationRequest) (predmarket.ObservationResult, error)
 	Resolve(ctx context.Context, cmd PredictionResolveCommand) (PredictionResolveView, error)
 	Dispute(ctx context.Context, req predmarket.DisputeRequest) (PredictionDisputeView, error)
 	Uphold(ctx context.Context, req predmarket.RulingRequest) (PredictionResolveView, error)
-	Void(ctx context.Context, req predmarket.VoidRequest) (PredictionSettleView, error)
+	ProposeVoid(ctx context.Context, req predmarket.VoidProposalRequest) (PredictionVoidProposalView, error)
+	ApproveVoid(ctx context.Context, req predmarket.VoidApprovalRequest) (PredictionSettleView, error)
+	Claim(ctx context.Context, req predmarket.ClaimRequest) (predmarket.ClaimResult, error)
 	Settle(ctx context.Context, req predmarket.SettleRequest) (PredictionSettleView, error)
 	Reconcile(ctx context.Context, id predmarket.MarketID, by reconciliation.Actor) (reconciliation.Record, error)
 }

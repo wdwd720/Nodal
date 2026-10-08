@@ -244,6 +244,10 @@ func registry() []pair {
 		{table: "performance_fee_period_transitions", constraint: "performance_fee_period_transitions_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
 		{table: "performance_fee_flows", constraint: "performance_fee_flows_recorded_by_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
 		{table: "performance_fee_lines", constraint: "performance_fee_lines_kind_check", source: "feeledger.AllLineKinds()", values: str(feeledger.AllLineKinds())},
+		// 00756 prediction-market hardening: two-operator voids, held payouts.
+		{table: "prediction_void_proposals", constraint: "prediction_void_proposals_market_status_check", source: "predmarket.VoidableStatuses()", values: str(predmarket.VoidableStatuses())},
+		{table: "prediction_held_payouts", constraint: "prediction_held_payouts_kind_check", source: "predmarket.AllSettlementKinds()", values: str(predmarket.AllSettlementKinds())},
+		{table: "prediction_held_payout_claims", constraint: "prediction_held_payout_claims_claimed_by_actor_type_check", source: "predmarket.ClaimActorTypes()", values: str(predmarket.ClaimActorTypes())},
 		// 00752 delegated signing and 00753 delegated withdrawals. The array
 		// CHECKs (<@ ARRAY[...]) on delegated_capabilities are paired by the
 		// package's own TestIntegration_EveryDelegationEnumMatchesItsCheck.

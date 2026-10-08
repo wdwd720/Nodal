@@ -10,9 +10,8 @@
  * A voided market refunds every share instead. Every figure here is the
  * backend's, in base units, and simulated.
  *
- * Trading shares on an order book belongs to the internal order book, which
- * this build does not have yet; the pages say so where a reader could
- * otherwise assume it.
+ * Shares trade on the internal order book (the order-books section), one book
+ * per outcome; this section issues and redeems complete sets and settles.
  */
 import { useId, type ReactNode } from "react";
 import { Link, Route, Routes, useSearchParams } from "react-router-dom";

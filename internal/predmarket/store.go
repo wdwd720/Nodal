@@ -196,12 +196,17 @@ func (s *Service) auditMarket(ctx context.Context, tx pgx.Tx, m Market, from, to
 	if err != nil {
 		return errs.Wrap(err, errs.CodeInternal, "predmarket: encode audit payload")
 	}
-	_, err = s.audit.Append(ctx, tx, audit.Event{
-		Stream: audit.AdminStream, ActorType: string(actor.Type), ActorID: actor.ID,
-		Action: "predmarket.market." + strings.ToLower(string(to)), ResourceType: "prediction_market", ResourceID: m.ID.String(),
-		Reason: reason, EvidenceRef: evidenceRef, Payload: body, OccurredAt: at,
-	})
+	_, err = s.audit.Append(ctx, tx, auditEvent(actor, "predmarket.market."+strings.ToLower(string(to)), m, reason, evidenceRef, body, at))
 	return err
+}
+
+// auditEvent is one admin-stream audit event about a market.
+func auditEvent(actor econ.Actor, action string, m Market, reason, evidenceRef string, body []byte, at time.Time) audit.Event {
+	return audit.Event{
+		Stream: audit.AdminStream, ActorType: string(actor.Type), ActorID: actor.ID,
+		Action: action, ResourceType: "prediction_market", ResourceID: m.ID.String(),
+		Reason: reason, EvidenceRef: evidenceRef, Payload: body, OccurredAt: at,
+	}
 }
 
 // --- resolutions, disputes, settlements ----------------------------------------
@@ -348,20 +353,20 @@ func (s *Service) Disputes(ctx context.Context, q db.Querier, marketID MarketID)
 }
 
 const settlementColumns = `id, market_id, kind, resolution_id, winning_outcome_index, outcome_count, unit_quantity::text,
-	refund_rate_per_share::text, rounding_policy, escrow_before::text, total_paid::text, residual::text, holder_count,
-	evidence_ref, evidence_sha256, settled_by_actor_type, settled_by_actor_id, settled_at`
+	refund_rate_per_share::text, rounding_policy, escrow_before::text, total_paid::text, total_held::text, residual::text,
+	holder_count, evidence_ref, evidence_sha256, settled_by_actor_type, settled_by_actor_id, settled_at`
 
 func scanSettlement(row pgx.Row) (Settlement, error) {
 	var (
-		st                      Settlement
-		winning                 *int16
-		count                   int16
-		unit, escrow, paid, rem string
-		rate                    *string
-		holders                 int32
+		st                            Settlement
+		winning                       *int16
+		count                         int16
+		unit, escrow, paid, held, rem string
+		rate                          *string
+		holders                       int32
 	)
 	if err := row.Scan(&st.ID, &st.MarketID, &st.Kind, &st.ResolutionID, &winning, &count, &unit, &rate, &st.RoundingPolicy,
-		&escrow, &paid, &rem, &holders, &st.EvidenceRef, &st.EvidenceSHA256, &st.SettledBy.Type, &st.SettledBy.ID,
+		&escrow, &paid, &held, &rem, &holders, &st.EvidenceRef, &st.EvidenceSHA256, &st.SettledBy.Type, &st.SettledBy.ID,
 		&st.SettledAt); err != nil {
 		return Settlement{}, err
 	}
@@ -375,7 +380,7 @@ func scanSettlement(row pgx.Row) (Settlement, error) {
 	for _, f := range []struct {
 		src string
 		dst *money.Quantity
-	}{{unit, &st.UnitQuantity}, {escrow, &st.EscrowBefore}, {paid, &st.TotalPaid}, {rem, &st.Residual}} {
+	}{{unit, &st.UnitQuantity}, {escrow, &st.EscrowBefore}, {paid, &st.TotalPaid}, {held, &st.TotalHeld}, {rem, &st.Residual}} {
 		if *f.dst, err = money.ScanQuantity(f.src); err != nil {
 			return Settlement{}, errs.Wrap(err, errs.CodeInternal, "predmarket: stored settlement amount is not an integer")
 		}
@@ -401,11 +406,12 @@ func insertSettlement(ctx context.Context, tx pgx.Tx, st Settlement) error {
 	}
 	_, err := tx.Exec(ctx, `INSERT INTO prediction_settlements
 		(id, market_id, kind, resolution_id, winning_outcome_index, outcome_count, unit_quantity, refund_rate_per_share,
-		 rounding_policy, escrow_before, total_paid, residual, holder_count, evidence_ref, evidence_sha256,
+		 rounding_policy, escrow_before, total_paid, total_held, residual, holder_count, evidence_ref, evidence_sha256,
 		 settled_by_actor_type, settled_by_actor_id, settled_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7::numeric,$8::numeric,$9,$10::numeric,$11::numeric,$12::numeric,$13,$14,$15,$16,$17,$18)`,
+		VALUES ($1,$2,$3,$4,$5,$6,$7::numeric,$8::numeric,$9,$10::numeric,$11::numeric,$12::numeric,$13::numeric,$14,$15,$16,$17,$18,$19)`,
 		st.ID, st.MarketID, st.Kind, st.ResolutionID, winning, int16(st.OutcomeCount), st.UnitQuantity.String(), rate, // #nosec G115 -- bounded by MaxOutcomes
-		st.RoundingPolicy, st.EscrowBefore.String(), st.TotalPaid.String(), st.Residual.String(), int32(st.HolderCount), // #nosec G115 -- one row per holder of one market
+		st.RoundingPolicy, st.EscrowBefore.String(), st.TotalPaid.String(), st.TotalHeld.String(), st.Residual.String(),
+		int32(st.HolderCount), // #nosec G115 -- one row per holder of one market
 		st.EvidenceRef, st.EvidenceSHA256, st.SettledBy.Type, st.SettledBy.ID, st.SettledAt)
 	if err != nil {
 		return dbErr("record settlement", err)
@@ -477,10 +483,11 @@ func (s *Service) holdings(ctx context.Context, q db.Querier, m Market) ([]Holdi
 	return out, nil
 }
 
-// Books reads one consistent snapshot of a market's facility books and of
-// the customer holdings of its shares. It is ONE statement on purpose: under
-// READ COMMITTED every statement has its own snapshot, and an identity
-// checked across two statements could see an issuance committed between them.
+// Books reads one consistent snapshot of a market's facility books, of the
+// customer holdings of its shares and of the payouts its escrow holds for
+// their holders. It is ONE statement on purpose: under READ COMMITTED every
+// statement has its own snapshot, and an identity checked across two
+// statements could see an issuance committed between them.
 func (s *Service) Books(ctx context.Context, q db.Querier, m Market) (EscrowBooks, error) {
 	rows, err := q.Query(ctx, `
 		WITH fac AS (
@@ -495,7 +502,10 @@ func (s *Service) Books(ctx context.Context, q db.Querier, m Market) (EscrowBook
 		                  WHERE la.value_domain = 'SIMULATED' AND la.asset_id = o.share_asset_id
 		                    AND la.owner_type = 'CUSTOMER' AND la.code = 'WALLET'), 0)::text,
 		       coalesce((SELECT balance FROM fac WHERE code = 'PREDICTION_ESCROW' AND asset_id = $3), 0)::text,
-		       coalesce((SELECT balance FROM fac WHERE code = 'PREDICTION_COLLATERAL' AND asset_id = $3), 0)::text
+		       coalesce((SELECT balance FROM fac WHERE code = 'PREDICTION_COLLATERAL' AND asset_id = $3), 0)::text,
+		       coalesce((SELECT sum(h.amount) FROM prediction_held_payouts h
+		                  WHERE h.market_id = $1
+		                    AND NOT EXISTS (SELECT 1 FROM prediction_held_payout_claims c WHERE c.held_payout_id = h.id)), 0)::text
 		  FROM prediction_outcomes_registry o
 		 WHERE o.market_id = $1
 		 ORDER BY o.outcome_index`, m.ID, m.FacilityID, m.CollateralAssetID)
@@ -506,12 +516,12 @@ func (s *Service) Books(ctx context.Context, q db.Querier, m Market) (EscrowBook
 	var b EscrowBooks
 	for rows.Next() {
 		var idx int16
-		var issued, outstanding, held, escrow, collateral string
-		if err := rows.Scan(&idx, &issued, &outstanding, &held, &escrow, &collateral); err != nil {
+		var issued, outstanding, held, escrow, collateral, owed string
+		if err := rows.Scan(&idx, &issued, &outstanding, &held, &escrow, &collateral, &owed); err != nil {
 			return EscrowBooks{}, dbErr("scan escrow books", err)
 		}
-		vals := make([]money.Quantity, 5)
-		for i, src := range []string{issued, outstanding, held, escrow, collateral} {
+		vals := make([]money.Quantity, 6)
+		for i, src := range []string{issued, outstanding, held, escrow, collateral, owed} {
 			if vals[i], err = money.ScanQuantity(src); err != nil {
 				return EscrowBooks{}, errs.Wrap(err, errs.CodeInternal, "predmarket: a facility balance is not an integer")
 			}
@@ -522,7 +532,7 @@ func (s *Service) Books(ctx context.Context, q db.Querier, m Market) (EscrowBook
 		b.SharesIssued = append(b.SharesIssued, vals[0])
 		b.SharesOutstanding = append(b.SharesOutstanding, vals[1])
 		b.HeldByCustomers = append(b.HeldByCustomers, vals[2])
-		b.Escrow, b.Collateral = vals[3], vals[4]
+		b.Escrow, b.Collateral, b.Held = vals[3], vals[4], vals[5]
 	}
 	if err := rows.Err(); err != nil {
 		return EscrowBooks{}, dbErr("read escrow books", err)

@@ -1,15 +1,18 @@
 /**
  * The operator's actions on one market: its lifecycle, the sandbox oracle's
- * observation, resolution, disputes and rulings, voiding, settlement, and the
- * escrow reconciliation.
+ * observation, resolution, disputes and rulings, the two halves of a void (a
+ * proposal and a second operator's approval), settlement, and the escrow
+ * reconciliation.
  *
  * The panel offers the actions the market's current status admits, and the
  * backend decides each one: permissions, step-up, dual control (the creator
- * never resolves or voids, a disputer never rules), times and the escrow
- * identity are all its rules, and a refusal is shown with its code. Every
- * action carries an idempotency key created when the operator confirms and
- * reused, with the same request, on every retry. Settling and voiding move
- * value and ask for a review first.
+ * never resolves or takes part in a void, an observation's recorder never
+ * resolves, a disputer and the disputed resolution's author never rule, a
+ * proposer never approves their own void), times and the escrow identity are
+ * all its rules, and a refusal is shown with its code. Every action carries an
+ * idempotency key created when the operator confirms and reused, with the
+ * same request, on every retry. Settling and approving a void move value and
+ * ask for a review first.
  */
 import { useId, useState, type ReactNode } from "react";
 import type { UseMutationResult } from "@tanstack/react-query";
@@ -22,8 +25,10 @@ import {
   useReconcileMarket,
   useResolveMarket,
   useSettleMarket,
+  useApproveVoid,
+  useProposeVoid,
   useUpholdResolution,
-  useVoidMarket,
+  type ApproveVoidCommand,
   type EvidenceCommand,
   type ObserveCommand,
   type PredictionDisputeResult,
@@ -32,6 +37,9 @@ import {
   type PredictionOracleObservation,
   type PredictionResolutionResult,
   type PredictionSettlementResult,
+  type PredictionVoidProposal,
+  type PredictionVoidProposalResult,
+  type ProposeVoidCommand,
   type ReasonCommand,
   type StepCommand,
 } from "../../../api/advanced/predmarket.ts";
@@ -39,10 +47,16 @@ import { Button } from "../../../components/Button.tsx";
 import { Explanation } from "../../../components/DataState.tsx";
 import { Field, FieldGrid, Identifier, Panel, Pill } from "../../../components/Layout.tsx";
 import { Qty } from "../../../components/Money.tsx";
-import { localInputToInstant, reasonProblem, statusTone } from "../../../lib/predmarket.ts";
+import {
+  VOID_DUAL_CONTROL_NOTE,
+  localInputToInstant,
+  pendingVoidProposals,
+  reasonProblem,
+  statusTone,
+} from "../../../lib/predmarket.ts";
 import { formatInstant } from "../../../lib/time.ts";
 import { useConfirmation } from "./confirm.ts";
-import { CommandFailure, KeyLine } from "./parts.tsx";
+import { ActorLine, CommandFailure, KeyLine } from "./parts.tsx";
 
 interface ActionFormProps<C, R> {
   readonly title: string;
@@ -210,7 +224,11 @@ function MarketAfter(props: { readonly market: PredictionMarket }): ReactNode {
   );
 }
 
-export function OperatorActionsPanel(props: { readonly market: PredictionMarket }): ReactNode {
+export function OperatorActionsPanel(props: {
+  readonly market: PredictionMarket;
+  /** Every void proposal made on the market, as the market's detail lists them. */
+  readonly proposals: readonly PredictionVoidProposal[];
+}): ReactNode {
   const { market } = props;
   const status = market.status;
   const open = useMarketStep("open");
@@ -220,7 +238,8 @@ export function OperatorActionsPanel(props: { readonly market: PredictionMarket 
   const resolve = useResolveMarket();
   const dispute = useDisputeMarket();
   const uphold = useUpholdResolution();
-  const voidMarket = useVoidMarket();
+  const proposeVoid = useProposeVoid();
+  const approveVoid = useApproveVoid();
   const settle = useSettleMarket();
   const reconcile = useReconcileMarket();
   // The backend's answer to the last action, kept here because the form that
@@ -234,7 +253,7 @@ export function OperatorActionsPanel(props: { readonly market: PredictionMarket 
   return (
     <Panel
       title="Operator actions"
-      description="The actions this market's status admits. The backend decides each one, including who may take it: the market's creator never resolves or voids it, and an operator who raised a dispute never rules on it."
+      description="The actions this market's status admits. The backend decides each one, including who may take it: the market's creator never resolves it or takes part in voiding it, the operator who recorded an oracle observation never resolves it, neither the operator who raised a dispute nor the author of the disputed resolution rules on it, and a void needs a second operator's approval."
     >
       {answer !== undefined && (
         <div className="callout" role="status">
@@ -299,7 +318,17 @@ export function OperatorActionsPanel(props: { readonly market: PredictionMarket 
           nothingHappened="Nothing was paid by this attempt: a settlement is all or nothing."
         />
       )}
-      {!terminal && <VoidAction market={market} mutation={voidMarket} onAnswer={setAnswer} />}
+      {!terminal &&
+        pendingVoidProposals(props.proposals, status).map((proposal) => (
+          <ApproveVoidAction
+            key={`approve-${proposal.id}`}
+            market={market}
+            proposal={proposal}
+            mutation={approveVoid}
+            onAnswer={setAnswer}
+          />
+        ))}
+      {!terminal && <ProposeVoidAction market={market} mutation={proposeVoid} onAnswer={setAnswer} />}
       <ActionForm
         title="Reconcile the escrow"
         description="Compares the escrow with the shares outstanding (PREDICTION_ESCROW) and records what it found. It moves nothing."
@@ -343,7 +372,7 @@ function ObservationAction(props: {
   return (
     <ActionForm
       title="Record the sandbox oracle's observation"
-      description="The sandbox oracle stands in for the world this market asks about. What you record is what it will sign when a resolution asks it for a report; a later observation replaces an earlier one."
+      description="The sandbox oracle stands in for the world this market asks about. What you record is signed and stored, with your name on it; a resolution reads the latest stored observation back and verifies it. Recording an observation means you can no longer resolve this market."
       confirmLabel="Record the observation"
       busyLabel="Recording…"
       problem={
@@ -363,6 +392,13 @@ function ObservationAction(props: {
           <Field label="Source">{result.report.source}</Field>
           <Field label="Report hash" note="The hash a resolution from this report will record.">
             <Identifier value={result.report_hash} />
+          </Field>
+          <Field label="Recorded by" note="Who recorded it, who can never resolve this market.">
+            <ActorLine actor={result.recorded_by} />
+          </Field>
+          <Field label="Recorded">
+            {formatInstant(result.recorded_at)}
+            {result.replay && <span className="cell-note">the same observation was already recorded</span>}
           </Field>
         </FieldGrid>
       )}
@@ -442,7 +478,7 @@ function ResolveAction(props: {
   return (
     <ActionForm
       title={props.market.status === "DISPUTED" ? "Rule on the dispute from a new report" : "Resolve from the oracle's report"}
-      description="The backend asks the configured oracle for its report and accepts it only if it verifies against the key this market registered, names one of its outcomes, and was observed after close. On a dispute, a report naming another outcome overturns the resolution."
+      description="The backend reads the latest stored observation of the sandbox oracle (or asks an external oracle) and accepts the report only if it verifies against the key this market registered, names one of its outcomes, and was observed after close. On a dispute, a report naming another outcome overturns the resolution."
       confirmLabel="Resolve"
       busyLabel="Verifying the report…"
       build={(key) => ({ marketId: props.market.id, idempotencyKey: key, reason })}
@@ -502,7 +538,7 @@ function UpholdAction(props: {
   return (
     <ActionForm
       title="Uphold the disputed resolution"
-      description="Closes the dispute keeping the disputed outcome. A ruling is final."
+      description="Closes the dispute keeping the disputed outcome. A ruling is final, and is never made by the operator who raised the dispute or the one whose resolution is disputed."
       confirmLabel="Uphold the resolution"
       busyLabel="Recording the ruling…"
       {...(problem === undefined ? {} : { problem })}
@@ -517,29 +553,79 @@ function UpholdAction(props: {
   );
 }
 
-function VoidAction(props: {
+function ProposeVoidAction(props: {
   readonly market: PredictionMarket;
-  readonly mutation: UseMutationResult<PredictionSettlementResult, unknown, EvidenceCommand>;
+  readonly mutation: UseMutationResult<PredictionVoidProposalResult, unknown, ProposeVoidCommand>;
   readonly onAnswer: (answer: ReactNode) => void;
 }): ReactNode {
   const [reason, setReason] = useState("");
   const [evidence, setEvidence] = useState("");
-  const problem = reasonProblem(reason);
+  const problem = reasonProblem(reason) ?? (evidence.trim() === "" ? "A void proposal carries its evidence." : undefined);
   return (
     <ActionForm
-      title="Void the market"
-      description="Refunds every share at the market's refund rate, rounded down once per holder; what is not paid stays in the escrow as a disclosed residual."
-      confirmLabel="Confirm the void"
-      busyLabel="Voiding…"
-      review={`Void ${props.market.symbol}: every share is refunded and the market can never settle. This cannot be undone.`}
+      title="Propose a void"
+      description={`${VOID_DUAL_CONTROL_NOTE} A proposal refunds nothing.`}
+      confirmLabel="Propose the void"
+      busyLabel="Recording the proposal…"
       {...(problem === undefined ? {} : { problem })}
       build={(key) => ({ marketId: props.market.id, idempotencyKey: key, reason, evidence })}
+      mutation={props.mutation}
+      onAnswer={props.onAnswer}
+      renderResult={(result: PredictionVoidProposalResult) => (
+        <FieldGrid columns={2}>
+          <Field label="Proposal">
+            <Identifier value={result.proposal.id} />
+          </Field>
+          <Field label="Proposed by" note="A different operator approves it.">
+            <ActorLine actor={result.proposal.proposed_by} />
+          </Field>
+          <Field label="Market">
+            <Pill tone={statusTone(result.market.status)}>{result.market.status}</Pill>
+          </Field>
+        </FieldGrid>
+      )}
+      nothingHappened="No void was proposed by this attempt."
+    >
+      <ReasonFields reason={reason} onReason={setReason} evidence={{ value: evidence, onChange: setEvidence, required: true }} />
+    </ActionForm>
+  );
+}
+
+function ApproveVoidAction(props: {
+  readonly market: PredictionMarket;
+  readonly proposal: PredictionVoidProposal;
+  readonly mutation: UseMutationResult<PredictionSettlementResult, unknown, ApproveVoidCommand>;
+  readonly onAnswer: (answer: ReactNode) => void;
+}): ReactNode {
+  const { market, proposal } = props;
+  const [note, setNote] = useState("");
+  const noteId = useId();
+  return (
+    <ActionForm
+      title="Approve the proposed void"
+      description={`Proposed ${formatInstant(proposal.proposed_at)} by ${proposal.proposed_by.actor_type} ${proposal.proposed_by.actor_id}: “${proposal.reason}”. Approving it voids the market and refunds every share at its refund rate, rounded down once per holder; a refund that cannot be delivered is held in the escrow for its holder.`}
+      confirmLabel="Confirm the void"
+      busyLabel="Voiding…"
+      review={`Approve the void of ${market.symbol}: every share is refunded and the market can never settle. This cannot be undone.`}
+      build={(key) => ({ marketId: market.id, proposalId: proposal.id, idempotencyKey: key, reason: note })}
       mutation={props.mutation}
       onAnswer={props.onAnswer}
       renderResult={(result: PredictionSettlementResult) => <SettlementOutcome result={result} />}
       nothingHappened="Nothing was refunded by this attempt: a void is all or nothing."
     >
-      <ReasonFields reason={reason} onReason={setReason} evidence={{ value: evidence, onChange: setEvidence, required: false }} />
+      <div className="form-row">
+        <label htmlFor={noteId}>Your note (optional)</label>
+        <textarea
+          id={noteId}
+          className="input"
+          rows={2}
+          value={note}
+          onChange={(event) => {
+            setNote(event.target.value);
+          }}
+        />
+        <p className="field-note">Without a note, the proposal&apos;s reason stands for the void.</p>
+      </div>
     </ActionForm>
   );
 }
@@ -558,8 +644,11 @@ function SettlementOutcome(props: { readonly result: PredictionSettlementResult 
         <Field label="Escrow before">
           <Qty value={settlement.escrow_before} decimals={market.collateral_decimals} symbol={market.collateral_symbol} />
         </Field>
-        <Field label="Paid">
+        <Field label="Paid" note="Delivered, or held in the escrow for its holder.">
           <Qty value={settlement.total_paid} decimals={market.collateral_decimals} symbol={market.collateral_symbol} />
+        </Field>
+        <Field label="Held for holders" note="Payouts that could not be delivered, kept in the escrow until claimed.">
+          <Qty value={settlement.total_held} decimals={market.collateral_decimals} symbol={market.collateral_symbol} />
         </Field>
         <Field label="Residual kept by the escrow">
           <Qty value={settlement.residual} decimals={market.collateral_decimals} symbol={market.collateral_symbol} />
@@ -573,8 +662,9 @@ function SettlementOutcome(props: { readonly result: PredictionSettlementResult 
         <ul className="link-list">
           {result.lines.map((line) => (
             <li key={line.account_id}>
-              <code className="mono-small">{line.account_id}</code> paid{" "}
+              <code className="mono-small">{line.account_id}</code> {line.held ? "held" : "paid"}{" "}
               <Qty value={line.amount} decimals={market.collateral_decimals} symbol={market.collateral_symbol} />
+              {line.held && <span className="cell-note">not delivered: held in the escrow until the holder claims it</span>}
               {line.journal_transaction_id !== undefined && (
                 <span className="cell-note">
                   journal <code className="mono-small">{line.journal_transaction_id}</code>

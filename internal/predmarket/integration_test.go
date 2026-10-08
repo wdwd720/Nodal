@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -85,10 +86,16 @@ type fixture struct {
 	recon      *reconciliation.Repository
 	oracle     *SandboxOracle
 	collateral assets.AssetID
-	// Three operators: the creator of every market, a resolver, and a third
-	// who disputes or settles. Dual control keeps the first two apart.
+	// Five operators: the creator of every market, a resolver, a third who
+	// disputes or settles, the approver of every void tryVoid proposes, and
+	// the observer who records what the sandbox oracle saw. Dual control
+	// keeps them apart.
 	creator, resolver, third econ.Actor
+	approver, observer       econ.Actor
 	system                   econ.Actor
+	// orderBooks, when set by withBooks, is the fake order book the service
+	// cancels resting orders through.
+	orderBooks *fakeBooks
 }
 
 type fixtureOption func(*Config)
@@ -124,7 +131,7 @@ func newFixture(t testing.TB, opts ...fixtureOption) *fixture {
 		Authorizer: econ.NewAuthorizer(gc, kills), Registry: econ.NewRegistry(), KillSwitches: kills,
 		Ledger: led, Capital: capSvc, Risk: risk.NewStore(), RiskPolicy: risk.DefaultAdvancedPolicy(),
 		Router: router, Instruments: instruments.NewRepository(), Assets: assets.NewRepository(),
-		Reconciliation: recon, Audit: aw, Oracle: oracle,
+		Reconciliation: recon, Audit: aw, SandboxOracle: oracle,
 	}
 	for _, o := range opts {
 		o(&cfg)
@@ -137,6 +144,10 @@ func newFixture(t testing.TB, opts ...fixtureOption) *fixture {
 	}
 	f.collateral = f.sandboxDollar()
 	f.creator, f.resolver, f.third = f.operator(), f.operator(), f.operator()
+	f.approver, f.observer = f.operator(), f.operator()
+	if b, ok := cfg.Books.(*fakeBooks); ok {
+		f.orderBooks = b
+	}
 	return f
 }
 
@@ -375,18 +386,33 @@ func (f *fixture) closeMarket(m Market) Market {
 	return got
 }
 
-// report has the sandbox oracle observe an outcome after close and returns
-// its signed report.
+// report has the observer record what the sandbox oracle observed after
+// close, and returns the stored, verified report FetchReport reads back.
 func (f *fixture) report(m Market, outcome string) OracleReport {
 	f.t.Helper()
 	at := m.CloseAt.Add(30 * time.Second)
 	if f.clk.Now().Before(at) {
 		f.clk.Set(at.Add(time.Second))
 	}
-	require.NoError(f.t, f.oracle.Observe(m.ID, outcome, at, []byte(`{"certified":"`+outcome+`","board":"sandbox"}`)))
-	r, err := f.svc.FetchReport(f.ctx, m.ID)
+	_, err := f.observe(m, outcome, at, f.observer)
+	require.NoError(f.t, err)
+	r, err := f.svc.FetchReport(f.ctx, testDB, m.ID)
 	require.NoError(f.t, err)
 	return r
+}
+
+// observe records a sandbox oracle observation as by.
+func (f *fixture) observe(m Market, outcome string, at time.Time, by econ.Actor) (ObservationResult, error) {
+	var out ObservationResult
+	err := f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+		var err error
+		out, err = f.svc.RecordObservation(ctx, tx, ObservationRequest{
+			MarketID: m.ID, Outcome: outcome, ObservedAt: at, Actor: by,
+			Evidence: []byte(`{"certified":"` + outcome + `","board":"sandbox"}`),
+		})
+		return err
+	})
+	return out, err
 }
 
 func (f *fixture) requestResolution(m Market) {
@@ -430,15 +456,129 @@ func (f *fixture) trySettle(m Market, by econ.Actor) (SettleResult, error) {
 	return out, err
 }
 
+// tryVoid has by propose voiding the market and the fixture's approver
+// approve it: the two halves of a dual-controlled void, each in its own
+// transaction as two operators would take them.
 func (f *fixture) tryVoid(m Market, by econ.Actor) (SettleResult, error) {
-	var out SettleResult
+	p, err := f.tryProposeVoid(m, by)
+	if err != nil {
+		return SettleResult{}, err
+	}
+	return f.tryApproveVoid(m, p, f.approver)
+}
+
+func (f *fixture) tryProposeVoid(m Market, by econ.Actor) (VoidProposal, error) {
+	var out VoidProposal
 	err := f.inTx(func(ctx context.Context, tx pgx.Tx) error {
 		var err error
-		out, err = f.svc.Void(ctx, tx, VoidRequest{MarketID: m.ID, Actor: by, Reason: "the event was cancelled by its organiser",
-			Evidence: map[string]string{"notice": "cancelled"}})
+		out, err = f.svc.ProposeVoid(ctx, tx, VoidProposalRequest{MarketID: m.ID, Actor: by,
+			Reason: "the event was cancelled by its organiser", Evidence: map[string]string{"notice": "cancelled"}})
 		return err
 	})
 	return out, err
+}
+
+func (f *fixture) tryApproveVoid(m Market, p VoidProposal, by econ.Actor) (SettleResult, error) {
+	var out SettleResult
+	err := f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+		var err error
+		out, err = f.svc.ApproveVoid(ctx, tx, VoidApprovalRequest{MarketID: m.ID, ProposalID: p.ID, Actor: by})
+		return err
+	})
+	return out, err
+}
+
+// tryClaim has the holder claim the payout a market holds for them,
+// keeping a refusal on record as the HTTP adapter does.
+func (f *fixture) tryClaim(m Market, acct accounts.AccountID) (ClaimResult, error) {
+	var out ClaimResult
+	err := f.inTxKeepingRefusal(func(ctx context.Context, tx pgx.Tx) error {
+		var err error
+		out, err = f.svc.ClaimHeldPayout(ctx, tx, ClaimRequest{
+			MarketID: m.ID, AccountID: acct, IdempotencyKey: "itest-claim-" + uuid.NewString(),
+			ActorType: security.ActorUser, ActorID: "user-" + acct.String(),
+		})
+		return err
+	})
+	return out, err
+}
+
+// setAccountStatus moves an account to a status as compliance would.
+func (f *fixture) setAccountStatus(acct accounts.AccountID, to accounts.Status) {
+	f.t.Helper()
+	require.NoError(f.t, f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+		_, err := accounts.NewRepository().Transition(ctx, tx, acct, accounts.StatusChange{
+			To: to, ActorType: "OPERATOR", ActorID: "compliance", Reason: "itest"}, f.clk.Now())
+		return err
+	}))
+}
+
+// fakeBooks stands in for the order book's OutcomeBooks adapter: each
+// resting order is a capital reservation the test registered against one of
+// a market's outcome instruments, and cancelling it releases the reservation
+// in the caller's transaction, as the order book does.
+type fakeBooks struct {
+	mu      sync.Mutex
+	capital *capital.Service
+	resting map[instruments.InstrumentID][]capital.ReservationID
+	calls   [][]instruments.InstrumentID
+	actors  []econ.Actor
+	fail    error
+}
+
+func newFakeBooks() *fakeBooks {
+	return &fakeBooks{resting: map[instruments.InstrumentID][]capital.ReservationID{}}
+}
+
+func withBooks(b *fakeBooks) fixtureOption {
+	return func(c *Config) {
+		b.capital = c.Capital
+		c.Books = b
+	}
+}
+
+func (b *fakeBooks) rest(iid instruments.InstrumentID, rid capital.ReservationID) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.resting[iid] = append(b.resting[iid], rid)
+}
+
+func (b *fakeBooks) CancelResting(ctx context.Context, tx pgx.Tx, ids []instruments.InstrumentID, by econ.Actor, reason string) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.calls = append(b.calls, append([]instruments.InstrumentID(nil), ids...))
+	b.actors = append(b.actors, by)
+	if b.fail != nil {
+		return 0, b.fail
+	}
+	n := 0
+	for _, iid := range ids {
+		for _, rid := range b.resting[iid] {
+			if _, err := b.capital.Release(ctx, tx, rid, reason); err != nil {
+				return n, err
+			}
+			n++
+		}
+		delete(b.resting, iid)
+	}
+	return n, nil
+}
+
+// reserveShares stands in for a resting sell order: a capital reservation of
+// an account's outcome shares.
+func (f *fixture) reserveShares(acct accounts.AccountID, share assets.AssetID, qty int64) capital.Reservation {
+	f.t.Helper()
+	var rv capital.Reservation
+	require.NoError(f.t, f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+		var err error
+		rv, err = f.capital.Reserve(ctx, tx, capital.ReserveRequest{
+			AccountID: acct.String(), AssetID: share, Quantity: money.QuantityFromInt64(qty),
+			ActorType: security.ActorUser, ActorID: "user-" + acct.String(), IdempotencyKey: "itest-order-" + uuid.NewString(),
+			TTL: time.Hour, Reason: "a resting sell order on an outcome book",
+		})
+		return err
+	}))
+	return rv
 }
 
 func (f *fixture) count(sql string, args ...any) int {
