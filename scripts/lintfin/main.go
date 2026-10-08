@@ -64,8 +64,17 @@ func DefaultConfig(root, module string) Config {
 			"internal/positions", "internal/valuation", "internal/quote", "internal/settlement",
 			"internal/credit", "internal/nativemarket", "internal/commerce",
 			"internal/payout", "internal/valuedomain",
+			// The advanced capabilities (ADR-0020). Listed before some of
+			// them exist so that none can be added with a float in it.
+			"internal/econ", "internal/fees", "internal/instruments", "internal/devnet", "internal/devnethost",
+			"internal/matching", "internal/quant", "internal/margin", "internal/derivatives",
+			"internal/orders", "internal/equities", "internal/transfers", "internal/sandboxfund",
+			"internal/treasury", "internal/feeledger", "internal/stableasset", "internal/bridge",
+			"internal/predmarket", "internal/marketplace", "internal/sandboxrt", "internal/delegation",
 		},
-		AgentDirs: []string{"internal/agent", "internal/strategy"},
+		// The strategy sandbox runs untrusted code; it is held to the agent
+		// boundary as well.
+		AgentDirs: []string{"internal/agent", "internal/strategy", "internal/sandboxrt"},
 		AgentDenied: []string{
 			"internal/signing", "internal/wallet", "internal/admin", "internal/capital", "internal/risk/policy",
 		},
