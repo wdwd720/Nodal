@@ -31,6 +31,7 @@ import (
 	"github.com/nodal/controlplane/internal/config"
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
+	"github.com/nodal/controlplane/internal/derivatives"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/event"
 	"github.com/nodal/controlplane/internal/execution"
@@ -309,6 +310,37 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// >>> advanced:margin services
 
 	// >>> advanced:derivatives services
+	//
+	// Futures, perpetuals and options in PAPER and SANDBOX mode, cleared
+	// through one CLEARING_HOUSE facility. The service decides every rule
+	// itself (route, gate, kill switches, Risk Kernel V2, reservation, fill,
+	// runs, settlement); this block hands it the collaborators already built
+	// above and the defaults its package documents. Its settlement compiler
+	// judges each intent against the deployment's configured legal policy,
+	// defaulting -- as the native economy's does -- to the conservative one,
+	// which permits simulation and nothing that is not (httpapi's
+	// TestDerivatives_TheDeploymentLegalPoliciesRouteEveryDerivativeIntent).
+	derivativesRouter, err := legalRouterFor(cfg.Env, in.cfg.API.LegalPolicy)
+	if err != nil {
+		return nil, err
+	}
+	if derivativesRouter == nil {
+		if derivativesRouter, err = legalrouter.New(legalrouter.ConservativePolicy()); err != nil {
+			return nil, fmt.Errorf("derivatives legal router: %w", err)
+		}
+	}
+	derivativesSvc, err := derivatives.NewService(derivatives.Config{
+		Clock: clk, Intents: econ.NewIntentStore(clk, outbox, auditWriter), Effects: econ.NewEffectStore(clk, outbox, auditWriter),
+		Authorizer: econ.NewAuthorizer(gateChecker, killChecker), Registry: econ.NewRegistry(), Ledger: ledgerSvc,
+		Capital: capitalSvc, RiskStore: risk.NewStore(), RiskPolicy: risk.DefaultAdvancedPolicy(),
+		Policy: derivatives.DefaultPolicy(), Prices: priceStore, Instruments: instrumentRepo, Router: derivativesRouter,
+		KillSwitches: killChecker, Reconciliation: reconciliation.NewRepository(clk, outbox, auditWriter),
+		// Margin snapshots and books are valued in the sandbox dollar.
+		USDAssetID: econ.SandboxDollarID(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("derivatives service: %w", err)
+	}
 
 	// >>> advanced:equities services
 
@@ -343,6 +375,13 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		// >>> advanced:margin deps
 
 		// >>> advanced:derivatives deps
+		// ValuationAssetID is the USDAssetID the service was built with. The
+		// route facts come from the deployment's own resolvers: the
+		// verification Nodal establishes itself, and no jurisdiction
+		// determination (UNKNOWN), exactly as for the native economy below.
+		Derivatives: httpapi.DerivativesDeps{
+			Service: derivativesSvc, ValuationAssetID: econ.SandboxDollarID(), Verification: verificationResolver,
+		},
 
 		// >>> advanced:equities deps
 

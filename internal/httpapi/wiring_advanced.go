@@ -41,6 +41,9 @@ type AdvancedDeps struct {
 	// >>> advanced:margin deps
 
 	// >>> advanced:derivatives deps
+	// Derivatives serves /advanced/derivatives (see DerivativesDeps); a nil
+	// service leaves those routes UNSUPPORTED.
+	Derivatives DerivativesDeps
 
 	// >>> advanced:equities deps
 
@@ -78,6 +81,7 @@ func wireAdvanced(p *Ports, d WireDeps) {
 	// >>> advanced:margin wire
 
 	// >>> advanced:derivatives wire
+	wireDerivatives(p, d)
 
 	// >>> advanced:equities wire
 

@@ -251,6 +251,7 @@ func TestIDOR_QueryParameterSmuggling(t *testing.T) {
 		// >>> advanced:margin account-scoped list routes
 
 		// >>> advanced:derivatives account-scoped list routes
+		"/v1/advanced/derivatives/positions", "/v1/advanced/derivatives/flows", "/v1/advanced/derivatives/funding-accruals",
 
 		// >>> advanced:equities account-scoped list routes
 

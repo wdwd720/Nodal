@@ -178,6 +178,40 @@ var operationPolicies = map[string]operationPolicy{
 	// >>> advanced:margin operations
 
 	// >>> advanced:derivatives operations
+	//
+	// Contracts, their marks, the policy and option analytics are reference
+	// data, read under the instrument catalogue's permissions. Positions, the
+	// flow register and funding accruals are tenant-scoped per request (the
+	// owner, or an operator holding account:read_any); a position by id is
+	// scoped by its own account. Opening, closing and exercising are the
+	// customer's own writes (ownership-only, per request). On the operator
+	// side, recording a mark and reconciling the clearing house move no
+	// value; variation margin, funding, final settlement and capitalizing the
+	// clearing house do, hence step-up.
+	"GetAdvancedDerivativesPolicy":                         {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedDerivativesContracts":                      {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedDerivativesContractsInstrumentId":          {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedDerivativesContractsInstrumentIdMarks":     {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedDerivativesContractsInstrumentIdAnalytics": {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedDerivativesPositions":                      {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedDerivativesPositionsPositionId":            {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedDerivativesFlows":                          {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedDerivativesFundingAccruals":                {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"PostAdvancedDerivativesPositions":                     {AnyOf: perms(security.PermSandboxTrade), Mutating: true},
+	"PostAdvancedDerivativesPositionsPositionIdClose":      {AnyOf: perms(security.PermSandboxTrade), Mutating: true},
+	"PostAdvancedDerivativesPositionsPositionIdExercise":   {AnyOf: perms(security.PermSandboxTrade), Mutating: true},
+	"PostAdvancedDerivativesContractsInstrumentIdMarks":    {AnyOf: perms(security.PermSandboxOperate), Mutating: true},
+	"PostAdvancedDerivativesContractsInstrumentIdVariationMarginRuns": {
+		AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true,
+	},
+	"PostAdvancedDerivativesContractsInstrumentIdFundingRuns": {
+		AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true,
+	},
+	"PostAdvancedDerivativesContractsInstrumentIdSettlement": {
+		AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true,
+	},
+	"PostAdvancedDerivativesClearingHouseFunding":         {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedDerivativesClearingHouseReconciliations": {AnyOf: perms(security.PermSandboxOperate), Mutating: true},
 
 	// >>> advanced:equities operations
 
