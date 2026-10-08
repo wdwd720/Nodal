@@ -24,12 +24,12 @@ Last updated: 2026-10-08 — every domain subsystem is merged: kernel amendments
 | 4 | Ledger V2 subledgers (§22) | VERIFIED_LOCAL | SIMULATED domain | — |
 | 5 | Capability gates + mode policy (§28) | VERIFIED_LOCAL | — | — |
 | 6 | Risk Kernel V2 (§21) | VERIFIED_LOCAL | — | — |
-| 7 | Stable asset subsystem (§5) | VERIFIED_LOCAL (API in progress; demo A, I) | SANDBOX/DEVNET | B-16 |
+| 7 | Stable asset subsystem (§5) | VERIFIED_LOCAL (API + UI merged; demo A, I) | SANDBOX/DEVNET | B-16 |
 | 8 | Margin + leverage engine (§6) | VERIFIED_LOCAL (API + UI merged; review-1 findings fixed; demo B) | PAPER/SANDBOX | B-15 |
-| 9 | Derivatives: futures, perps, options (§7) | VERIFIED_LOCAL (API + UI merged; review-2 hardening in progress; demo C) | PAPER/SANDBOX | B-15, B-17 |
-| 10 | Equities abstraction (§8) | VERIFIED_LOCAL (API in progress) | PAPER/SANDBOX | B-15, B-17 |
-| 11 | Internal matching engine (§9) | VERIFIED_LOCAL (API in progress; demo D, H) | internal simulation | B-15 |
-| 12 | Customer-to-customer transfers (§10) | VERIFIED_LOCAL (API + UI merged; reversal dual control in progress; demo 0) | SANDBOX | B-15 |
+| 9 | Derivatives: futures, perps, options (§7) | VERIFIED_LOCAL (API + UI merged; review-2 findings fixed; demo C) | PAPER/SANDBOX | B-15, B-17 |
+| 10 | Equities abstraction (§8) | VERIFIED_LOCAL (API + UI merged; venue and settlement runs scheduled) | PAPER/SANDBOX | B-15, B-17 |
+| 11 | Internal matching engine (§9) | VERIFIED_LOCAL (API + UI merged; demo D, H) | internal simulation | B-15 |
+| 12 | Customer-to-customer transfers (§10) | VERIFIED_LOCAL (API + UI merged; reversals under dual control; demo 0) | SANDBOX | B-15 |
 | 13 | Principal / treasury book (§11) | VERIFIED_LOCAL (API in progress) | PAPER/SANDBOX | B-15 |
 | 14 | Transparent spread + fee engine (§12) | VERIFIED_LOCAL (engine + fee ledger; API in progress; subsystems' fee-ledger calls being wired) | PAPER/SANDBOX | B-15 |
 | 15 | Performance fee engine (§13) | VERIFIED_LOCAL (engine + periods; API in progress) | PAPER/SANDBOX | B-15 |
@@ -37,13 +37,13 @@ Last updated: 2026-10-08 — every domain subsystem is merged: kernel amendments
 | 17 | Sandboxed user code (§15) | VERIFIED_LOCAL (API + UI merged; review-2 hardening in progress) | SANDBOX | B-19 |
 | 18 | Delegated agent signing (§16) | VERIFIED_LOCAL (API in progress) | SANDBOX/DEVNET | B-18 |
 | 19 | Delegated agent withdrawals (§17) | VERIFIED_LOCAL (API in progress) | SANDBOX/DEVNET | B-18 |
-| 20 | Cross-chain buying power (§18) | VERIFIED_LOCAL (bridge; API in progress; demo G) | SANDBOX/DEVNET | B-20 |
-| 21 | Prediction markets (§19) | VERIFIED_LOCAL (API + UI merged; review-2 hardening in progress; demo H) | PAPER/SANDBOX | B-15, B-17 |
+| 20 | Cross-chain buying power (§18) | VERIFIED_LOCAL (bridge API + UI merged with holdings by chain, in flight and haircut; V2 counts BRIDGE_IN_FLIGHT at the haircut; demo G) | SANDBOX/DEVNET | B-20 |
+| 21 | Prediction markets (§19) | VERIFIED_LOCAL (API + UI merged; review-2 findings fixed; demo H) | PAPER/SANDBOX | B-15, B-17 |
 | 22 | Universal buying power V2 (§20) | VERIFIED_LOCAL (margin + derivatives combined, D-054; bridge in-flight haircut) | SIMULATED domain | — |
 | 23 | Provider layer modes (§27) | IN_PROGRESS | fake/sandbox | B-17, B-20 |
-| 24 | Observability (§29) | IN_PROGRESS (instruments declared; collector in the advanced worker lane) | — | — |
-| 25 | API surface (§25) | IN_PROGRESS (core, transfers, margin, prediction markets, derivatives, marketplace merged; orders/equities, stable/bridge, treasury/fees, delegation, operator console running) | — | — |
-| 26 | Web application (§26) | IN_PROGRESS (core, transfers, margin, prediction markets, derivatives, marketplace sections merged) | — | — |
+| 24 | Observability (§29) | VERIFIED_LOCAL (collector in the advanced worker; dashboard widgets; three alarms and a runbook; some execution-path instruments unrecorded, see detail) | — | — |
+| 25 | API surface (§25) | IN_PROGRESS (every subsystem merged except treasury/fees and delegated authority, which are running) | — | — |
+| 26 | Web application (§26) | IN_PROGRESS (every section merged except treasury/fees and agent authority, which are running; a portfolio page is pending) | — | — |
 | 27 | Demo scenarios A–I (§34) | IN_PROGRESS (`make advanced-demo`: 0, A, B, C, D, G, H, I pass — 79 checks; E and F pending) | — | — |
 
 ## Foundation detail
@@ -106,7 +106,7 @@ Last updated: 2026-10-08 — every domain subsystem is merged: kernel amendments
 ### 16–17. Strategy marketplace and sandboxed user code
 - **Implementation:** `internal/sandboxrt` (static scan of strategy source with forbidden imports refused, a builder that compiles Go to WASM with an embedded SDK and an environment carrying nothing from the parent, a wazero runner with wall-time, memory (metered allocator), output-size and no-network/no-filesystem limits, output parsing into proposals checked against a manifest, proposals converted to economic intents that then go through the normal route/gate/Risk V2 path — untrusted code can only ever produce risk-checked intents, never a transfer or withdrawal) and `internal/marketplace` (listing lifecycle with review by someone other than the creator, immutable manifests, PAPER-only installs, paper-follow producing intents and evidence, forks with provenance, evaluations and performance snapshots).
 - **DB:** `00750_strategy_marketplace.sql` (MK001–MK010), `00751_sandbox_runs.sql` (SX001: a run's violation count matches its violation rows).
-- **Tests:** sandbox escape suite (`TestSandbox_FilesystemEscapeAttemptFails`, `…NetworkAttemptFails`, `…ForkBombBlocked`, `…CPUInfiniteLoopKilled`, `…MemoryBombKilled`, `…OversizedOutputKilled`, `…EnvironmentSecretsAbsent`, `…StrategyCannotConstructALiveSigningCall`), `TestProp_NoStrategyOutputBecomesATransferOrWithdrawal`, `TestSandbox_SameArtifactSameInputIsByteIdentical`, `FuzzScan`, `TestIntegration_Prop_UntrustedOutputOnlyBecomesRiskCheckedIntents`, `TestIntegration_CreatorCannotApproveOwnListing`, `TestIntegration_InstallIsPaperOnly`, `TestIntegration_ConcurrentFollowsOfOneSnapshotDispatchOnce`.
+- **Tests:** sandbox escape suite (`TestSandbox_FilesystemEscapeAttemptFails`, `…NetworkAttemptFails`, `…ForkBombBlocked`, `…CPUInfiniteLoopKilled`, `…MemoryBombKilled`, `…OversizedOutputKilled`, `…EnvironmentSecretsAbsent`, `…StrategyCannotConstructALiveSigningCall`), `TestProp_NoStrategyOutputBecomesATransferOrWithdrawal`, `TestSandbox_SameArtifactSameInputIsByteIdentical`, `FuzzScan`, `TestIntegration_Prop_UntrustedOutputOnlyBecomesRiskCheckedIntents`, `TestIntegration_CreatorCannotApproveOwnListing`, `TestIntegration_InstallIsPaperOnly`, `TestIntegration_ConcurrentFollowsOfOneInstantDispatchOnce`.
 - **Measured:** cold start (compile) 1.16 s on a quiet machine, per-run p50 7.6 ms, p95 9.2 ms for a 4.9 MB strategy module (lane measurement; the performance report re-measures).
 - **Limitations:** under `-race` the Go-built module tests skip (each compile takes about two minutes); host-side concurrency is still raced with hand-assembled modules. Any violation in a run rejects every intent from that run.
 

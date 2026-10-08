@@ -186,6 +186,11 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		"{proposalId}": testOrderID.String(),
 
 		// >>> advanced:treasury path parameters
+		"{houseBookId}":     testOrderID.String(),
+		"{feeDisclosureId}": testDepositID.String(),
+		"{feeBookingId}":    testSessionID,
+		"{feePeriodId}":     testIntentID.String(),
+		// {orderId} is mapped above.
 
 		// >>> advanced:stable path parameters
 		"{stableAssetId}":      testInstrument.String(),
@@ -208,6 +213,10 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		"{installId}": testSessionID,
 
 		// >>> advanced:delegation path parameters
+		"{capabilityId}":  testSessionID,
+		"{destinationId}": testSessionID,
+		"{swapId}":        testSessionID,
+		"{withdrawalId}":  testSessionID,
 
 		// >>> advanced:operator path parameters
 	}
@@ -253,6 +262,14 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		"/v1/advanced/transfers/faucet/allowance": "account_id=" + testAccountID.String(),
 
 		// >>> advanced:treasury required query
+		"/v1/advanced/treasury/crossing-disclosures": "instrument_id=" + testInstrument.String(),
+		"/v1/advanced/treasury/house-trades":         "account_id=" + testAccountID.String(),
+		"/v1/advanced/fees/schedules/history":        "key=orders:paper",
+		"/v1/advanced/fees/quotes":                   "account_id=" + testAccountID.String(),
+		"/v1/advanced/fees/quote-preview":            "schedule_key=orders:paper&side=BUY&base_quantity=1000000&base_decimals=6&reference_price=100.25",
+		"/v1/advanced/fees/bookings":                 "account_id=" + testAccountID.String(),
+		"/v1/advanced/fees/spread-totals":            "quote_asset_id=" + testAssetID.String(),
+		"/v1/advanced/fees/periods":                  "account_id=" + testAccountID.String(),
 
 		// >>> advanced:stable required query
 		"/v1/advanced/stable-assets/holdings":    "account_id=" + testAccountID.String(),
@@ -274,6 +291,12 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		"/v1/advanced/strategies/runs":     "account_id=" + testAccountID.String(),
 
 		// >>> advanced:delegation required query
+		"/v1/advanced/delegation/agents":            "account_id=" + testAccountID.String(),
+		"/v1/advanced/delegation/capabilities":      "account_id=" + testAccountID.String(),
+		"/v1/advanced/delegation/destinations":      "account_id=" + testAccountID.String(),
+		"/v1/advanced/delegation/withdrawal-policy": "account_id=" + testAccountID.String(),
+		"/v1/advanced/delegation/swaps":             "account_id=" + testAccountID.String(),
+		"/v1/advanced/delegation/withdrawals":       "account_id=" + testAccountID.String(),
 
 		// >>> advanced:operator required query
 		"/v1/advanced/ops/marks": "asset_id=" + testInstrument.String(),

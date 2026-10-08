@@ -169,21 +169,21 @@ func TestManifest_ProposalsBeyondManifestDroppedAndCounted(t *testing.T) {
 		{Seq: 2, Kind: econ.KindOpenPosition, InstrumentID: insA, Side: SideBuy, Quantity: q("1")},                                // kind not allowed
 		{Seq: 3, Kind: econ.KindAcquireExposure, InstrumentID: insB, Side: SideBuy, Quantity: q("1")},                             // instrument not allowed
 		{Seq: 4, Kind: econ.KindAcquireExposure, InstrumentID: insA, Side: SideBuy, Quantity: q("7000000")},                       // 1051.75 > 1000
-		{Seq: 5, Kind: econ.KindAcquireExposure, InstrumentID: insA, Side: SideBuy, Quantity: q("7000000"), LimitPrice: "100.00"}, // 700.00 at limit: ok
-		{Seq: 6, Kind: econ.KindReduceExposure, InstrumentID: insA, Side: SideSell, Quantity: q("1")},                             // third accepted: over max
+		{Seq: 5, Kind: econ.KindAcquireExposure, InstrumentID: insA, Side: SideBuy, Quantity: q("7000000"), LimitPrice: "100.00"}, // still 1051.75: a limit values nothing
+		{Seq: 6, Kind: econ.KindReduceExposure, InstrumentID: insA, Side: SideSell, Quantity: q("1")},                             // 0.00015025: ok
+		{Seq: 7, Kind: econ.KindReduceExposure, InstrumentID: insA, Side: SideSell, Quantity: q("1")},                             // third accepted: over max
 	}
 	accepted, violations := testManifest().Filter(proposals, snap)
 	require.Len(t, accepted, 2)
 	assert.Equal(t, 1, accepted[0].Seq)
 	assert.Equal(t, "150.25000000", accepted[0].Notional)
-	assert.Equal(t, PriceMark, accepted[0].PriceSource)
-	assert.Equal(t, 5, accepted[1].Seq)
-	assert.Equal(t, "700.00000000", accepted[1].Notional)
-	assert.Equal(t, PriceLimit, accepted[1].PriceSource)
-	require.Len(t, violations, 4)
-	assert.Equal(t, []ViolationCode{ViolationManifestKind, ViolationManifestInstrument, ViolationManifestNotional, ViolationManifestMaxIntents},
-		codesOf(violations))
-	assert.Equal(t, []int{2, 3, 4, 6}, []int{violations[0].Seq, violations[1].Seq, violations[2].Seq, violations[3].Seq})
+	assert.Equal(t, "150.25", accepted[0].ReferencePrice)
+	assert.Equal(t, 6, accepted[1].Seq)
+	assert.Equal(t, "0.00015025", accepted[1].Notional)
+	require.Len(t, violations, 5)
+	assert.Equal(t, []ViolationCode{ViolationManifestKind, ViolationManifestInstrument, ViolationManifestNotional, ViolationManifestNotional,
+		ViolationManifestMaxIntents}, codesOf(violations))
+	assert.Equal(t, []int{2, 3, 4, 5, 7}, []int{violations[0].Seq, violations[1].Seq, violations[2].Seq, violations[3].Seq, violations[4].Seq})
 
 	// An instrument allowed by kind.
 	byKind := testManifest()
@@ -191,6 +191,66 @@ func TestManifest_ProposalsBeyondManifestDroppedAndCounted(t *testing.T) {
 	accepted, violations = byKind.Filter(proposals[2:3], snap)
 	assert.Len(t, accepted, 1)
 	assert.Empty(t, violations)
+}
+
+// TestManifest_ANotionalIsComputedAtTheReferencePriceNeverTheStrategysLimit
+// is review-2 F11: a new short of 1 000 000 whole units, worth 150 250 000 at
+// the market, quoted at a limit of 0.000001, is valued at the host's
+// reference price -- not at the strategy's limit -- and refused by a 1 000
+// cap; the same notional is what Risk V2 sees.
+func TestManifest_ANotionalIsComputedAtTheReferencePriceNeverTheStrategysLimit(t *testing.T) {
+	m := Manifest{AllowedIntentKinds: []econ.IntentKind{econ.KindOpenPosition}, AllowedInstrumentIDs: []string{insA},
+		AllowedInstrumentKinds: []string{}, MaxNotionalPerIntent: "1000.00", MaxIntentsPerRun: 2, MinIntervalSeconds: 3600}.Canonicalize()
+	require.NoError(t, m.Validate())
+	snap := snapshotOf(t, testInput())
+	short := IntentRecord{Seq: 1, Kind: "OPEN_POSITION", InstrumentID: insA, Side: "SELL", Quantity: "1000000000000", LimitPrice: "0.000001"}
+	p, v := ValidateProposal(short, snap)
+	require.Nil(t, v)
+	accepted, dropped := m.Filter([]Proposal{p}, snap)
+	assert.Empty(t, accepted)
+	require.Len(t, dropped, 1)
+	assert.Equal(t, ViolationManifestNotional, dropped[0].Code)
+	assert.Contains(t, dropped[0].Detail, "reference price 150.25")
+
+	// Reference prices the host read separately win over the snapshot's
+	// own marks, and the strategy's limit never enters.
+	small := IntentRecord{Seq: 2, Kind: "OPEN_POSITION", InstrumentID: insA, Side: "BUY", Quantity: "2000000", LimitPrice: "999.99"}
+	p, v = ValidateProposal(small, snap)
+	require.Nil(t, v)
+	ref, err := nodalsdk.ParseDecimal("151.00")
+	require.NoError(t, err)
+	accepted, dropped = m.FilterAt([]Proposal{p}, snap, ReferencePrices{insA: ref})
+	require.Empty(t, dropped)
+	require.Len(t, accepted, 1)
+	assert.Equal(t, "302.00000000", accepted[0].Notional, "2 whole units at the reference 151.00")
+	assert.Equal(t, "151.00", accepted[0].ReferencePrice)
+	usd, err := accepted[0].NotionalUSD()
+	require.NoError(t, err)
+	assert.Equal(t, money.USDFromMinor(30200), usd, "Risk V2 sees the reference notional")
+}
+
+// TestManifest_AProposalWithoutAFreshReferencePriceIsRefusedAndRecorded: a
+// proposal on an instrument the host holds no fresh reference price for is
+// dropped with its own violation code, whatever limit it names.
+func TestManifest_AProposalWithoutAFreshReferencePriceIsRefusedAndRecorded(t *testing.T) {
+	snap := snapshotOf(t, testInput())
+	p, v := ValidateProposal(IntentRecord{Seq: 1, Kind: "ACQUIRE_EXPOSURE", InstrumentID: insA, Side: "BUY", Quantity: "1000000",
+		LimitPrice: "150.25"}, snap)
+	require.Nil(t, v)
+	for name, refs := range map[string]ReferencePrices{
+		"none":         {},
+		"other":        {insB: nodalsdk.IntDecimal(40)},
+		"non-positive": {insA: nodalsdk.IntDecimal(0)},
+	} {
+		accepted, dropped := testManifest().FilterAt([]Proposal{p}, snap, refs)
+		assert.Empty(t, accepted, name)
+		require.Len(t, dropped, 1, name)
+		assert.Equal(t, ViolationReferencePriceUnavailable, dropped[0].Code, name)
+		assert.Equal(t, 1, dropped[0].Seq, name)
+		assert.False(t, dropped[0].Code.RunLevel(), "only the proposal is dropped")
+	}
+	_, err := AcceptedProposal{Proposal: p, InstrumentKind: "SPOT_PAIR", Notional: "150.25"}.Intent(testIntentContext())
+	assert.Error(t, err, "an accepted proposal without the reference price of its notional never becomes an intent")
 }
 
 // TestProp_ManifestFilterNeverAcceptsBeyondTheManifest: for arbitrary
@@ -247,6 +307,19 @@ func TestProp_ManifestFilterNeverAcceptsBeyondTheManifest(t *testing.T) {
 			if err != nil || n.Cmp(capDec) > 0 {
 				rt.Fatalf("accepted notional %s above cap %s", a.Notional, m.MaxNotionalPerIntent)
 			}
+			// Whatever limit the strategy named, the notional is the
+			// quantity at the instrument's reference price.
+			var mark nodalsdk.Decimal
+			var decimals uint8
+			for _, ins := range snap.Instruments {
+				if ins.ID == a.InstrumentID {
+					mark, decimals = ins.Mark, ins.BaseDecimals
+				}
+			}
+			atMark, err := Notional(a.Quantity.String(), decimals, mark)
+			if err != nil || atMark.Cmp(n) != 0 || a.ReferencePrice != mark.String() {
+				rt.Fatalf("notional %s at %s is not the quantity at the reference price %s", a.Notional, a.ReferencePrice, mark)
+			}
 		}
 	})
 }
@@ -262,7 +335,7 @@ func testIntentContext() IntentContext {
 func TestIntent_AProposalBecomesAServiceIntentThatRecordsItsOrigin(t *testing.T) {
 	snap := snapshotOf(t, testInput())
 	accepted, _ := testManifest().Filter([]Proposal{{Seq: 7, Kind: econ.KindAcquireExposure, InstrumentID: insA, Side: SideBuy,
-		Quantity: money.QuantityFromInt64(1_000_000), LimitPrice: "150.30"}}, snap)
+		Quantity: money.QuantityFromInt64(1_000_000), LimitPrice: "150.10"}}, snap)
 	require.Len(t, accepted, 1)
 	c := testIntentContext()
 	in, err := accepted[0].Intent(c)
@@ -278,12 +351,14 @@ func TestIntent_AProposalBecomesAServiceIntentThatRecordsItsOrigin(t *testing.T)
 	assert.Equal(t, OriginSandbox, terms.Origin)
 	assert.Equal(t, c.RunID.String(), terms.SandboxRunID)
 	assert.Equal(t, 7, terms.ProposalSeq)
-	assert.Equal(t, "150.30000000", terms.Notional)
+	assert.Equal(t, "150.25000000", terms.Notional, "at the reference price, not the limit")
+	assert.Equal(t, "150.25", terms.ReferencePrice)
+	assert.Equal(t, "150.10", terms.LimitPrice, "the limit travels as the venue instruction it is")
 
 	ri, err := RiskIntent(in, accepted[0])
 	require.NoError(t, err)
 	assert.True(t, ri.SandboxOriginated)
-	assert.Equal(t, money.USDFromMinor(15030), ri.NotionalUSD)
+	assert.Equal(t, money.USDFromMinor(15025), ri.NotionalUSD)
 	required := risk.RequiredSections(risk.AdvancedInput{Intent: ri})
 	assert.Contains(t, required, risk.SecSandbox)
 	assert.Contains(t, required, risk.SecStrategy)
@@ -366,7 +441,7 @@ func TestProp_NoStrategyOutputBecomesATransferOrWithdrawal(t *testing.T) {
 			}
 			for k := range terms {
 				switch k {
-				case "origin", "side", "limit_price", "notional", "price_source", "sandbox_run_id", "run_digest", "artifact_digest", "proposal_seq":
+				case "origin", "side", "limit_price", "notional", "reference_price", "sandbox_run_id", "run_digest", "artifact_digest", "proposal_seq":
 				default:
 					rt.Fatalf("intent terms carry %q, which no strategy can set", k)
 				}

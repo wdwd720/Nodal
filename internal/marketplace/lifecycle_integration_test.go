@@ -6,8 +6,10 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -83,7 +85,7 @@ func TestIntegration_LifecycleFromDraftToDeprecated(t *testing.T) {
 		return f.svc.Deprecate(ctx, tx, v.ID, f.creator, "superseded")
 	})
 	assert.Equal(t, StatusDeprecated, dep.Status)
-	_, err = f.follow(f.svc, in, f.input(f.clk.Now()))
+	_, err = f.follow(f.svc, in)
 	assert.Equal(t, errs.CodeForbidden, errs.CodeOf(err), "a deprecated version is no longer followed")
 	err = f.inTx(func(ctx context.Context, tx pgx.Tx) error {
 		_, _, err := f.svc.InstallVersion(ctx, tx, InstallRequest{VersionID: v.ID, AccountID: f.creatorAccount, Mode: gates.ModePaper, Actor: f.creator})
@@ -140,10 +142,7 @@ func TestIntegration_CreatorCannotApproveOwnListing(t *testing.T) {
 	f := newFixture(t)
 	_, v := f.draft("momentum")
 	f.step(func(ctx context.Context, tx pgx.Tx) (Version, error) { return f.svc.Submit(ctx, tx, v.ID, f.creator) })
-	f.step(func(ctx context.Context, tx pgx.Tx) (Version, error) {
-		out, _, err := f.svc.Validate(ctx, tx, v.ID, econ.SystemActor("validator"))
-		return out, err
-	})
+	f.validate(v.ID)
 	// The creator, even holding an operator identity, cannot review.
 	creatorAsOperator := econ.Actor{Type: security.ActorOperator, ID: f.creator.ID}
 	for _, try := range []func(ctx context.Context, tx pgx.Tx) error{
@@ -178,15 +177,23 @@ func TestIntegration_CreatorCannotApproveOwnListing(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.Equal(t, "MK002", db.SQLState(err))
-	// ... and an APPROVED status with no operator approval behind it.
-	err = f.inTx(func(ctx context.Context, tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, `INSERT INTO marketplace_version_transitions (id, version_id, from_status, to_status, actor_type, actor_id, reason)
-			VALUES ($1,$2,'IN_REVIEW','APPROVED','USER',$3,'self')`, uuid.New(), v.ID, f.creator.ID); err != nil {
+	// ... and an APPROVED status with no operator approval behind it: the
+	// creator cannot even write the transition (MK011), and with anyone
+	// else's the status still needs an approval by an operator (MK002).
+	approveAround := func(actor string) error {
+		return f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+			if _, err := tx.Exec(ctx, `INSERT INTO marketplace_version_transitions (id, version_id, from_status, to_status, actor_type, actor_id, reason)
+				VALUES ($1,$2,'IN_REVIEW','APPROVED','USER',$3,'self')`, uuid.New(), v.ID, actor); err != nil {
+				return err
+			}
+			_, err := tx.Exec(ctx, `UPDATE marketplace_listing_versions SET status = 'APPROVED' WHERE id = $1`, v.ID)
 			return err
-		}
-		_, err := tx.Exec(ctx, `UPDATE marketplace_listing_versions SET status = 'APPROVED' WHERE id = $1`, v.ID)
-		return err
-	})
+		})
+	}
+	err = approveAround(f.creator.ID)
+	require.Error(t, err)
+	assert.Equal(t, "MK011", db.SQLState(err))
+	err = approveAround(uuid.NewString())
 	require.Error(t, err)
 	assert.Equal(t, "MK002", db.SQLState(err))
 
@@ -201,10 +208,7 @@ func TestIntegration_ConcurrentApprovalsApproveOnce(t *testing.T) {
 	f := newFixture(t)
 	_, v := f.draft("momentum")
 	f.step(func(ctx context.Context, tx pgx.Tx) (Version, error) { return f.svc.Submit(ctx, tx, v.ID, f.creator) })
-	f.step(func(ctx context.Context, tx pgx.Tx) (Version, error) {
-		out, _, err := f.svc.Validate(ctx, tx, v.ID, econ.SystemActor("validator"))
-		return out, err
-	})
+	f.validate(v.ID)
 	f.step(func(ctx context.Context, tx pgx.Tx) (Version, error) {
 		return f.svc.StartReview(ctx, tx, v.ID, f.operator)
 	})
@@ -310,7 +314,7 @@ func TestIntegration_InstallIsPaperOnly(t *testing.T) {
 		// And the database refuses the row when Go is not the caller.
 		err = f.inTx(func(ctx context.Context, tx pgx.Tx) error {
 			_, err := tx.Exec(ctx, `INSERT INTO marketplace_installs (id, account_id, version_id, mode, status, installed_by_actor_type, installed_by_actor_id)
-				VALUES ($1,$2,$3,$4,'ACTIVE','USER','u')`, uuid.New(), f.follower, v.ID, string(mode))
+				VALUES ($1,$2,$3,$4,'ACTIVE','USER',$5)`, uuid.New(), f.follower, v.ID, string(mode), f.followerActor.ID)
 			return err
 		})
 		require.Error(t, err, mode)
@@ -368,13 +372,7 @@ func TestIntegration_ValidationRejectsForbiddenAndBrokenSource(t *testing.T) {
 		t.Run(c.strategy, func(t *testing.T) {
 			_, v := f.draft(c.strategy)
 			f.step(func(ctx context.Context, tx pgx.Tx) (Version, error) { return f.svc.Submit(ctx, tx, v.ID, f.creator) })
-			var val Validation
-			out := f.step(func(ctx context.Context, tx pgx.Tx) (Version, error) {
-				var out Version
-				var err error
-				out, val, err = f.svc.Validate(ctx, tx, v.ID, econ.SystemActor("validator"))
-				return out, err
-			})
+			out, val := f.validate(v.ID)
 			assert.Equal(t, StatusRejected, out.Status)
 			assert.Equal(t, c.reason, out.RejectionCode)
 			assert.Equal(t, ValidationFailed, val.Outcome)
@@ -385,6 +383,13 @@ func TestIntegration_ValidationRejectsForbiddenAndBrokenSource(t *testing.T) {
 			require.NoError(t, err)
 			require.True(t, ok)
 			assert.Empty(t, stored.ArtifactDigest, "a refused build is never an artifact")
+			require.NotNil(t, stored.ClaimID, "recorded under its build claim")
+			if c.reason == sandboxrt.BuildFailureCompile {
+				assert.Contains(t, string(stored.BuildLog), "./main.go:", "the author sees what the compiler said")
+				assert.NotContains(t, string(stored.BuildLog), os.TempDir(), "and not where the host built it")
+			} else {
+				assert.Empty(t, stored.BuildLog, "nothing was compiled")
+			}
 		})
 	}
 }
@@ -409,10 +414,7 @@ func TestIntegration_ForkProvenance(t *testing.T) {
 
 	// A fork of the fork: provenance walks the whole chain.
 	f.step(func(ctx context.Context, tx pgx.Tx) (Version, error) { return f.svc.Submit(ctx, tx, fv.ID, forker) })
-	f.step(func(ctx context.Context, tx pgx.Tx) (Version, error) {
-		out, _, err := f.svc.Validate(ctx, tx, fv.ID, econ.SystemActor("validator"))
-		return out, err
-	})
+	f.validate(fv.ID)
 	f.step(func(ctx context.Context, tx pgx.Tx) (Version, error) {
 		return f.svc.StartReview(ctx, tx, fv.ID, f.operator)
 	})
@@ -474,8 +476,292 @@ func TestIntegration_AnAgentCannotTouchTheMarketplace(t *testing.T) {
 	assert.Equal(t, errs.CodeForbidden, errs.CodeOf(err))
 	in := f.install(v)
 	err = f.inTx(func(ctx context.Context, tx pgx.Tx) error {
-		_, err := f.svc.PaperFollow(ctx, tx, FollowRequest{InstallID: in.ID, Input: f.input(f.clk.Now()), Trigger: TriggerExplicit, Actor: agent})
+		_, err := f.svc.PaperFollow(ctx, tx, FollowRequest{InstallID: in.ID, Trigger: TriggerExplicit, Actor: agent})
 		return err
 	})
 	assert.Equal(t, errs.CodeForbidden, errs.CodeOf(err))
+}
+
+// countingBuilder counts builds and can hold one open until released.
+type countingBuilder struct {
+	inner   ArtifactBuilder
+	mu      sync.Mutex
+	builds  int
+	started chan struct{}
+	release chan struct{}
+	fail    error
+}
+
+func (b *countingBuilder) Build(ctx context.Context, src sandboxrt.Source) (sandboxrt.Build, error) {
+	b.mu.Lock()
+	b.builds++
+	started, release, fail := b.started, b.release, b.fail
+	b.mu.Unlock()
+	if started != nil {
+		started <- struct{}{}
+	}
+	if release != nil {
+		<-release
+	}
+	if fail != nil {
+		return sandboxrt.Build{}, fail
+	}
+	return b.inner.Build(ctx, src)
+}
+
+func (b *countingBuilder) count() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.builds
+}
+
+func (f *fixture) withBuilder(b ArtifactBuilder) {
+	f.t.Helper()
+	cfg := f.config(f.sandbox)
+	cfg.Builder = b
+	svc, err := NewService(cfg)
+	require.NoError(f.t, err)
+	f.svc = svc
+}
+
+func (f *fixture) submitted(strategy string, src sandboxrt.Source) Version {
+	f.t.Helper()
+	req := f.versionRequest(strategy)
+	if src != nil {
+		req.Source = src
+	}
+	var v Version
+	require.NoError(f.t, f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+		var err error
+		_, v, err = f.svc.CreateListing(ctx, tx, ListingRequest{CreatorAccountID: f.creatorAccount, Creator: f.creator, Title: "submitted " + strategy,
+			Version: req})
+		return err
+	}))
+	return f.step(func(ctx context.Context, tx pgx.Tx) (Version, error) { return f.svc.Submit(ctx, tx, v.ID, f.creator) })
+}
+
+// blobSource is review-2 M2's source: 547 bytes that fold into a 64 MiB
+// string constant.
+const blobSource = `package main
+
+import sdk "nodal.dev/sdk"
+
+const a0 = "0123456789abcdef"
+const a1 = a0 + a0 + a0 + a0 + a0 + a0 + a0 + a0
+const a2 = a1 + a1 + a1 + a1 + a1 + a1 + a1 + a1
+const a3 = a2 + a2 + a2 + a2 + a2 + a2 + a2 + a2
+const a4 = a3 + a3 + a3 + a3 + a3 + a3 + a3 + a3
+const a5 = a4 + a4 + a4 + a4 + a4 + a4 + a4 + a4
+const a6 = a5 + a5 + a5 + a5 + a5 + a5 + a5 + a5
+const a7 = a6 + a6 + a6 + a6 + a6 + a6 + a6 + a6
+
+var blob = a7 + a7
+
+func main() {
+	sdk.Run(func(s *sdk.Session) error {
+		if len(blob) == 0 {
+			return nil
+		}
+		return nil
+	})
+}
+`
+
+// TestIntegration_AnOversizedBuildIsARecordedRejectionNeverAWedgedSubmission
+// is review-2 F12 (M2): a build past the builder's output bound is the
+// strategy's recorded rejection -- the version moves to REJECTED with the
+// bound as its rejection code and its compiler output kept -- never an
+// INTERNAL error that leaves it SUBMITTED for every retry to recompile.
+func TestIntegration_AnOversizedBuildIsARecordedRejectionNeverAWedgedSubmission(t *testing.T) {
+	f := newFixture(t)
+	counting := &countingBuilder{inner: testBuilder}
+	f.withBuilder(counting)
+	v := f.submitted("momentum", sandboxrt.Source{"main.go": []byte(blobSource)})
+	out, val, err := f.svc.RunValidation(f.ctx, testDB, v.ID, econ.SystemActor("marketplace.validator"))
+	require.NoError(t, err, "a refusal of the strategy is an outcome, not an error")
+	assert.Equal(t, StatusRejected, out.Status)
+	assert.Contains(t, []string{sandboxrt.BuildFailureOutputLimit, sandboxrt.BuildFailureMemoryLimit}, out.RejectionCode)
+	assert.Equal(t, ValidationFailed, val.Outcome)
+	assert.Equal(t, out.RejectionCode, val.FailureReason)
+	assert.Zero(t, f.count(`SELECT count(*) FROM strategy_artifacts a JOIN strategy_artifact_sources s ON s.artifact_digest = a.artifact_digest
+		WHERE s.source_digest = $1`, v.SourceDigest), "nothing of it became an artifact")
+
+	_, _, err = f.svc.RunValidation(f.ctx, testDB, v.ID, econ.SystemActor("marketplace.validator"))
+	assert.Equal(t, errs.CodeInvalidStateTransition, errs.CodeOf(err), "a rejected version is not built again")
+	assert.Equal(t, 1, counting.count())
+
+	// The transactional form of validation builds nothing at all.
+	other := f.submitted("momentum", nil)
+	err = f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+		_, _, err := f.svc.Validate(ctx, tx, other.ID, econ.SystemActor("marketplace.validator"))
+		return err
+	})
+	assert.Equal(t, errs.CodeUnsupported, errs.CodeOf(err))
+	assert.Equal(t, 1, counting.count())
+	back, err := f.svc.Version(f.ctx, testDB, other.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusSubmitted, back.Status)
+}
+
+// TestIntegration_ABuildRunsBetweenTransactionsUnderOneClaim is review-2
+// F12's transaction shape: while a build runs, no transaction holds the
+// version (another may lock it at once), a second validation is refused
+// rather than building again, a build that could not run releases its claim,
+// and a claim whose builder vanished lapses so the version is never wedged.
+func TestIntegration_ABuildRunsBetweenTransactionsUnderOneClaim(t *testing.T) {
+	f := newFixture(t)
+	gate := &countingBuilder{inner: testBuilder, started: make(chan struct{}, 1), release: make(chan struct{})}
+	f.withBuilder(gate)
+	v := f.submitted("momentum", nil)
+	done := make(chan error, 1)
+	go func() {
+		_, _, err := f.svc.RunValidation(f.ctx, testDB, v.ID, econ.SystemActor("validator-1"))
+		done <- err
+	}()
+	<-gate.started
+	// The build is running: the version's row is free ...
+	require.NoError(t, f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `SELECT id FROM marketplace_listing_versions WHERE id = $1 FOR UPDATE NOWAIT`, v.ID)
+		return err
+	}), "no transaction holds the version while it builds")
+	// ... and a second validation is refused, not run.
+	_, _, err := f.svc.RunValidation(f.ctx, testDB, v.ID, econ.SystemActor("validator-2"))
+	assert.Equal(t, errs.CodeConflict, errs.CodeOf(err))
+	close(gate.release)
+	require.NoError(t, <-done)
+	back, err := f.svc.Version(f.ctx, testDB, v.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusValidated, back.Status)
+	assert.Equal(t, 1, gate.count(), "one build for one version")
+
+	// A build that could not run releases its claim at once.
+	broken := &countingBuilder{inner: testBuilder, fail: errs.New(errs.CodeUnsupported, "no toolchain today")}
+	f.withBuilder(broken)
+	w := f.submitted("momentum", nil)
+	_, _, err = f.svc.RunValidation(f.ctx, testDB, w.ID, econ.SystemActor("validator"))
+	assert.Equal(t, errs.CodeUnsupported, errs.CodeOf(err))
+	assert.Equal(t, 1, f.count(`SELECT count(*) FROM marketplace_validation_claim_releases r JOIN marketplace_validation_claims c
+		ON c.id = r.claim_id WHERE c.version_id = $1`, w.ID))
+	f.withBuilder(testBuilder)
+	out, _, err := f.svc.RunValidation(f.ctx, testDB, w.ID, econ.SystemActor("validator"))
+	require.NoError(t, err)
+	assert.Equal(t, StatusValidated, out.Status, "the version was claimed again and built")
+
+	// A claim whose builder vanished lapses with its lease.
+	x := f.submitted("momentum", nil)
+	require.NoError(t, f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+		_, _, err := f.svc.claimValidation(ctx, tx, x.ID, econ.SystemActor("vanished"))
+		return err
+	}))
+	_, _, err = f.svc.RunValidation(f.ctx, testDB, x.ID, econ.SystemActor("validator"))
+	assert.Equal(t, errs.CodeConflict, errs.CodeOf(err), "the lease still holds")
+	f.clk.Advance(16 * time.Minute)
+	out, _, err = f.svc.RunValidation(f.ctx, testDB, x.ID, econ.SystemActor("validator"))
+	require.NoError(t, err)
+	assert.Equal(t, StatusValidated, out.Status)
+}
+
+// TestIntegration_TheDatabaseHoldsTheBuildClaimAndTheBuildLog goes around
+// Go: a validation outside a claim, a second live claim, and a build log that
+// is not the one its digest names are refused.
+func TestIntegration_TheDatabaseHoldsTheBuildClaimAndTheBuildLog(t *testing.T) {
+	f := newFixture(t)
+	v := f.submitted("momentum", nil)
+	claim := func(at time.Time) error {
+		return f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+			_, err := tx.Exec(ctx, `INSERT INTO marketplace_validation_claims (id, version_id, claimed_by_actor_type, claimed_by_actor_id,
+				claimed_at, lease_until) VALUES ($1,$2,'SYSTEM','x',$3,$4)`, uuid.New(), v.ID, at, at.Add(time.Minute))
+			return err
+		})
+	}
+	now := f.clk.Now()
+	require.NoError(t, claim(now))
+	err := claim(now.Add(time.Second))
+	require.Error(t, err)
+	assert.Equal(t, "MK015", db.SQLState(err), "one live claim per version")
+	validation := func(claimID any, log []byte, digest any) error {
+		return f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+			_, err := tx.Exec(ctx, `INSERT INTO marketplace_version_validations (id, version_id, outcome, failure_reason, scan_codes,
+				build_log_digest, toolchain_version, sdk_version, runtime_version, validated_by_actor_type, validated_by_actor_id, validated_at,
+				claim_id, build_log) VALUES ($1,$2,'FAILED','COMPILE_FAILED','{}',$3,'go','sdk','rt','SYSTEM','x',now(),$4,$5)`,
+				uuid.New(), v.ID, digest, claimID, log)
+			return err
+		})
+	}
+	err = validation(nil, []byte{}, nil)
+	require.Error(t, err)
+	assert.Equal(t, "MK015", db.SQLState(err), "a validation outside a claim")
+	var claimID uuid.UUID
+	require.NoError(t, testDB.QueryRow(f.ctx, `SELECT id FROM marketplace_validation_claims WHERE version_id = $1`, v.ID).Scan(&claimID))
+	sum := sha256.Sum256([]byte("what the compiler said"))
+	err = validation(claimID, []byte("something else"), sum[:])
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "marketplace_version_validations_build_log_is_digested")
+	require.NoError(t, validation(claimID, []byte("what the compiler said"), sum[:]))
+}
+
+// TestIntegration_AnOperatorCannotReclearTheirOwnVersion is review-2 F14: an
+// operator who created a strategy may neither take it into review, approve
+// it, nor moderate it -- re-clearing it after another operator flagged it
+// included -- in Go and in SQL.
+func TestIntegration_AnOperatorCannotReclearTheirOwnVersion(t *testing.T) {
+	f := newFixture(t)
+	// An operator who owns a customer account publishes from it.
+	opAccount, opUser := f.account()
+	operatorCreator := econ.Actor{Type: security.ActorOperator, ID: opUser.ID}
+	var v Version
+	require.NoError(t, f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+		var err error
+		_, v, err = f.svc.CreateListing(ctx, tx, ListingRequest{CreatorAccountID: opAccount, Creator: operatorCreator, Title: "the operator's own",
+			Version: f.versionRequest("momentum")})
+		return err
+	}))
+	f.step(func(ctx context.Context, tx pgx.Tx) (Version, error) {
+		return f.svc.Submit(ctx, tx, v.ID, operatorCreator)
+	})
+	f.validate(v.ID)
+	err := f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+		_, err := f.svc.StartReview(ctx, tx, v.ID, operatorCreator)
+		return err
+	})
+	assert.Equal(t, errs.CodeForbidden, errs.CodeOf(err))
+	f.step(func(ctx context.Context, tx pgx.Tx) (Version, error) {
+		return f.svc.StartReview(ctx, tx, v.ID, f.operator)
+	})
+	f.step(func(ctx context.Context, tx pgx.Tx) (Version, error) {
+		return f.svc.Approve(ctx, tx, v.ID, f.operator, "MEETS_POLICY", "")
+	})
+	f.step(func(ctx context.Context, tx pgx.Tx) (Version, error) {
+		return f.svc.Moderate(ctx, tx, v.ID, f.operator2, ModerationFlagged, "reported by a customer")
+	})
+	err = f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+		_, err := f.svc.Moderate(ctx, tx, v.ID, operatorCreator, ModerationCleared, "looks fine to me")
+		return err
+	})
+	require.Error(t, err)
+	assert.Equal(t, errs.CodeForbidden, errs.CodeOf(err), "the creator cannot re-clear their own flagged version")
+	back, err := f.svc.Version(f.ctx, testDB, v.ID)
+	require.NoError(t, err)
+	assert.Equal(t, ModerationFlagged, back.Moderation)
+
+	// Around Go: the moderation row and the review transition of the creator.
+	err = f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `INSERT INTO marketplace_moderation_transitions (id, version_id, from_state, to_state, actor_type, actor_id, reason)
+			VALUES ($1,$2,'FLAGGED','CLEARED','OPERATOR',$3,'self')`, uuid.New(), v.ID, operatorCreator.ID); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `UPDATE marketplace_listing_versions SET moderation_state = 'CLEARED' WHERE id = $1`, v.ID)
+		return err
+	})
+	require.Error(t, err)
+	assert.Equal(t, "MK011", db.SQLState(err))
+	w := f.submitted("momentum", nil)
+	f.validate(w.ID)
+	err = f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `INSERT INTO marketplace_version_transitions (id, version_id, from_status, to_status, actor_type, actor_id, reason)
+			VALUES ($1,$2,'VALIDATED','IN_REVIEW','OPERATOR',$3,'self')`, uuid.New(), w.ID, f.creator.ID)
+		return err
+	})
+	require.Error(t, err)
+	assert.Equal(t, "MK011", db.SQLState(err), "the creator does not take their version into review")
 }

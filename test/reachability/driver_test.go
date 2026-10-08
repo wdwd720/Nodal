@@ -39,7 +39,6 @@ var reachedThroughDriver = map[string]string{
 	// An order runs Accept, Approve, Reserve, Execute and Complete in a
 	// transaction each, through the pipeline the HTTP adapter calls.
 	"internal/orders.Accept":   "Pipeline.Submit",
-	"internal/orders.Approve":  "Pipeline.Submit",
 	"internal/orders.Reserve":  "Pipeline.Submit",
 	"internal/orders.Execute":  "Pipeline.Submit",
 	"internal/orders.Complete": "Pipeline.Submit",

@@ -8,6 +8,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  BUILD_FAILURES,
+  BUILD_FAILURE_MEANING,
   EMPTY_VERSION_DRAFT,
   FOLLOW_OUTCOMES,
   MAX_SIMULATION_SNAPSHOTS,
@@ -34,7 +36,6 @@ import {
   parseInstrumentIds,
   parseList,
   parsePositiveDecimal,
-  parseSnapshot,
   parseSnapshotSet,
   parseWholeNumber,
   toggle,
@@ -51,6 +52,15 @@ test("every enumeration is stated once and every state has a meaning", () => {
   for (const m of STRATEGY_MODERATIONS) assert.ok(MODERATION_MEANING[m].length > 10, m);
   for (const o of FOLLOW_OUTCOMES) assert.ok(OUTCOME_MEANING[o].length > 10, o);
   for (const t of RUN_TERMINATIONS) assert.ok(TERMINATION_MEANING[t].length > 10, t);
+  for (const f of BUILD_FAILURES) assert.ok(BUILD_FAILURE_MEANING[f].length > 10, f);
+});
+
+test("a build past one of the builder's bounds is a refusal with its own reason", () => {
+  assert.deepEqual(
+    BUILD_FAILURES.filter((f) => f.startsWith("BUILD_")),
+    ["BUILD_TIMEOUT", "BUILD_OUTPUT_LIMIT", "BUILD_MEMORY_LIMIT"],
+  );
+  assert.match(BUILD_FAILURE_MEANING.COMPILE_FAILED, /compiler's output/);
 });
 
 test("a strategy may never be granted a kind that moves value out of an account", () => {
@@ -186,20 +196,24 @@ test("a version without source or manifest is refused, and a fork without them i
   assert.equal(buildVersionInput(half, true).ok, false, "a manifest that is started must be complete");
 });
 
-test("a snapshot keeps every figure as typed and is stamped with the moment of confirmation", () => {
-  const raw = JSON.stringify({
-    instruments: [{ instrument_id: INSTRUMENT, kind: "SPOT_PAIR", base_decimals: 6, quote_decimals: 6, mark: "150.25" }],
-    portfolio: { balance: "10000.00", positions: [] },
-  });
-  const parsed = parseSnapshot(raw, "2026-10-07T12:00:00.000Z");
+test("a simulation's snapshot keeps every figure as typed", () => {
+  const raw = JSON.stringify([
+    {
+      as_of: "2026-10-07T12:00:00.000Z",
+      instruments: [{ instrument_id: INSTRUMENT, kind: "SPOT_PAIR", base_decimals: 6, quote_decimals: 6, mark: "150.25" }],
+      portfolio: { balance: "10000.00", positions: [] },
+    },
+  ]);
+  const parsed = parseSnapshotSet(raw);
   assert.ok(parsed.ok);
-  assert.equal(parsed.value.as_of, "2026-10-07T12:00:00.000Z");
-  assert.equal(parsed.value.portfolio.balance, "10000.00");
-  assert.equal(parsed.value.instruments[0]?.mark, "150.25");
-
-  assert.equal(parseSnapshot("{", "t").ok, false);
-  assert.equal(parseSnapshot("[]", "t").ok, false);
-  assert.equal(parseSnapshot(JSON.stringify({ instruments: [], portfolio: { positions: [] } }), "t").ok, false, "a balance is required");
+  assert.equal(parsed.value[0]?.portfolio.balance, "10000.00");
+  assert.equal(parsed.value[0]?.instruments[0]?.mark, "150.25");
+  assert.equal(parseSnapshotSet("{").ok, false);
+  assert.equal(
+    parseSnapshotSet(JSON.stringify([{ as_of: "t", instruments: [], portfolio: { positions: [] } }])).ok,
+    false,
+    "a balance is required",
+  );
 });
 
 test("a simulation's snapshot set keeps each snapshot's own time and is bounded", () => {

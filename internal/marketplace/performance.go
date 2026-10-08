@@ -247,7 +247,12 @@ type PerformanceSnapshot struct {
 }
 
 // RecordPerformance computes an install's paper performance from its follow
-// history and records it, with the digest of the exact history it used.
+// history and records it, with the digest of the exact history it used. Only
+// runs valued from the paper book count: their equity is the install's paper
+// capital moved by its own fills, at reference prices the service read itself
+// -- never a figure a caller wrote (review-2 F10); the database refuses a
+// snapshot that covers anything else (MK013). The account's owner, an
+// operator or the system may record it.
 func (s *Service) RecordPerformance(ctx context.Context, tx pgx.Tx, iid InstallID, by econ.Actor) (PerformanceSnapshot, error) {
 	if err := requireActor(by, TransitionActorTypes(), "record performance"); err != nil {
 		return PerformanceSnapshot{}, err
@@ -256,13 +261,21 @@ func (s *Service) RecordPerformance(ctx context.Context, tx pgx.Tx, iid InstallI
 	if err != nil {
 		return PerformanceSnapshot{}, err
 	}
+	if err := s.requireActsFor(ctx, tx, by, install.AccountID, "record performance"); err != nil {
+		return PerformanceSnapshot{}, err
+	}
 	runs, err := s.FollowRuns(ctx, tx, iid)
 	if err != nil {
 		return PerformanceSnapshot{}, err
 	}
-	points := make([]FollowPoint, len(runs))
-	for i, r := range runs {
-		points[i] = FollowPoint{AsOf: r.AsOf, Equity: r.Equity, Turnover: r.Turnover}
+	var points []FollowPoint
+	for _, r := range runs {
+		if r.BookValued() {
+			points = append(points, FollowPoint{AsOf: r.AsOf, Equity: r.Equity, Turnover: r.Turnover})
+		}
+	}
+	if len(points) == 0 {
+		return PerformanceSnapshot{}, errs.New(errs.CodeValidationFailed, "marketplace: performance needs at least one follow run valued from the paper book")
 	}
 	perf, err := ComputePerformance(points)
 	if err != nil {
@@ -270,8 +283,8 @@ func (s *Service) RecordPerformance(ctx context.Context, tx pgx.Tx, iid InstallI
 	}
 	snap := PerformanceSnapshot{Performance: perf, InstallID: iid, VersionID: install.VersionID, ComputedAt: s.now()}
 	if _, err := tx.Exec(ctx, `INSERT INTO marketplace_performance_snapshots (id, install_id, version_id, follow_runs_count, first_as_of, last_as_of,
-		history_digest, return_bps, max_drawdown_bps, volatility_bps, turnover_bps, computed_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+		history_digest, return_bps, max_drawdown_bps, volatility_bps, turnover_bps, computed_at, from_paper_book)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,true)`,
 		id.New[id.Any](), iid, install.VersionID, perf.Points, perf.FirstAsOf, perf.LastAsOf, perf.HistoryDigest, perf.ReturnBPS,
 		perf.MaxDrawdownBPS, perf.VolatilityBPS, perf.TurnoverBPS, snap.ComputedAt); err != nil {
 		return PerformanceSnapshot{}, dbErr("record performance", err)

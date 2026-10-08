@@ -2831,6 +2831,765 @@ paths:
         "422": { $ref: "#/components/responses/Problem" }
 
   # >>> advanced:treasury paths (insert this subsystem's paths directly below; keep the marker)
+  #
+  # The house book (internal/treasury) and the fee ledger (internal/feeledger),
+  # SIMULATED value only. The treasury is the operator's: every route under
+  # /advanced/treasury/books needs sandbox:operate, and anything that moves value,
+  # changes a policy or a crossing rule a recent step-up. Two treasury reads are a
+  # customer's as well: the crossing disclosures (what customers are told about
+  # the house trading against them) and the trades in which a house book was the
+  # caller's counterparty. Quantities are exact base units of the asset named;
+  # house PnL figures are base units of the book's valuation asset. Prices in a
+  # request are plain decimal strings in the book's valuation asset (or the fee
+  # schedule's quote asset), taken exactly. A refused house action is recorded
+  # by the treasury and answered with its stable code and reason codes.
+  /advanced/treasury/books:
+    get:
+      tags: [advanced]
+      summary: The registered house books, newest first
+      parameters:
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: One page of house books (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/TreasuryBookPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Register a house book with its class, valuation asset and first signing policy
+      description: >-
+        The house book trades only its own house capital. The valuation asset defaults to the
+        sandbox dollar and must be a SIMULATED, USD-pegged asset. A replay of the same name and
+        key returns the book it created; another registration of the name is a CONFLICT.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/TreasuryRegisterRequest" } } }
+      responses:
+        "200":
+          description: The registered house book
+          content: { application/json: { schema: { $ref: "#/components/schemas/TreasuryBookDetail" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/treasury/books/{houseBookId}:
+    get:
+      tags: [advanced]
+      summary: A house book with the signing policy and risk policy in force
+      parameters:
+        - { in: path, name: houseBookId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The house book
+          content: { application/json: { schema: { $ref: "#/components/schemas/TreasuryBookDetail" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/treasury/books/{houseBookId}/actor-policy:
+    post:
+      tags: [advanced]
+      summary: Record who may act for the book, the next version of its signing policy (it holds no keys; custody NONE_SANDBOX)
+      parameters:
+        - { in: path, name: houseBookId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/TreasurySigningPolicyRequest" } } }
+      responses:
+        "200":
+          description: The signing policy version recorded
+          content: { application/json: { schema: { $ref: "#/components/schemas/TreasurySigningPolicy" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/treasury/books/{houseBookId}/limits:
+    post:
+      tags: [advanced]
+      summary: Record the next version of the book's risk limits, stated in its valuation asset
+      description: >-
+        An asset with no inventory limit cannot be accumulated and an instrument with no exposure
+        limit cannot be bought through: the limits fail closed. Neither stops a sale.
+      parameters:
+        - { in: path, name: houseBookId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/TreasuryRiskPolicyRequest" } } }
+      responses:
+        "200":
+          description: The risk policy version recorded
+          content: { application/json: { schema: { $ref: "#/components/schemas/TreasuryRiskPolicy" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/treasury/books/{houseBookId}/fundings:
+    post:
+      tags: [advanced]
+      summary: Inject simulated house capital into the book (HOUSE_FUNDING)
+      description: Funding in any asset but the valuation asset enters the register at a fresh mark, and is refused without one.
+      parameters:
+        - { in: path, name: houseBookId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/TreasuryFundRequest" } } }
+      responses:
+        "200":
+          description: The funding, its journal and the action that recorded it
+          content: { application/json: { schema: { $ref: "#/components/schemas/TreasuryFunding" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/treasury/books/{houseBookId}/orders:
+    post:
+      tags: [advanced]
+      summary: Place a house order on the internal book after every treasury control
+      description: >-
+        The signing policy, the capabilities, the risk policy's limits and Risk Kernel V2 decide
+        under the book's lock; then the order book applies its own rules (house inventory
+        reservations and the house-versus-customer crossing rule, refused by default). A refusal
+        is recorded as a REJECTED action and answered with its code and reason codes.
+      parameters:
+        - { in: path, name: houseBookId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/TreasuryOrderRequest" } } }
+      responses:
+        "200":
+          description: The applied action, the order and the trades it made at once
+          content: { application/json: { schema: { $ref: "#/components/schemas/TreasuryOrderOutcome" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/treasury/books/{houseBookId}/orders/{orderId}/cancel:
+    post:
+      tags: [advanced]
+      summary: Cancel a resting house order (never new risk; no kill switch stops it)
+      parameters:
+        - { in: path, name: houseBookId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/OrderId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: The applied cancel and the order after it
+          content: { application/json: { schema: { $ref: "#/components/schemas/TreasuryOrderOutcome" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/treasury/books/{houseBookId}/quotes:
+    post:
+      tags: [advanced]
+      summary: Quote two-sided (a post-only GTC bid and ask, each its own house action)
+      description: >-
+        The bid is evaluated first, the ask against it. One leg can be refused while the other
+        rests: each leg's action says APPLIED or REJECTED with its reason codes.
+      parameters:
+        - { in: path, name: houseBookId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/TreasuryQuoteRequest" } } }
+      responses:
+        "200":
+          description: Both legs
+          content: { application/json: { schema: { $ref: "#/components/schemas/TreasuryQuoteOutcome" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/treasury/books/{houseBookId}/hedges:
+    post:
+      tags: [advanced]
+      summary: Hedge on the simulated paper venue (an immediate fill at a fresh mark, spread and fee disclosed)
+      parameters:
+        - { in: path, name: houseBookId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/TreasuryHedgeRequest" } } }
+      responses:
+        "200":
+          description: The applied action and the paper fill with its disclosure
+          content: { application/json: { schema: { $ref: "#/components/schemas/TreasuryPaperOutcome" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/treasury/books/{houseBookId}/conversions:
+    post:
+      tags: [advanced]
+      summary: Treasury conversion between the valuation asset and one other sandbox asset
+      parameters:
+        - { in: path, name: houseBookId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/TreasuryConvertRequest" } } }
+      responses:
+        "200":
+          description: The applied action and the paper fill with its disclosure
+          content: { application/json: { schema: { $ref: "#/components/schemas/TreasuryPaperOutcome" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/treasury/books/{houseBookId}/rebalances:
+    post:
+      tags: [advanced]
+      summary: Move the book's holding of an asset to a target on the paper venue
+      description: A holding already at its target needs no fill and records nothing (no_op).
+      parameters:
+        - { in: path, name: houseBookId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/TreasuryRebalanceRequest" } } }
+      responses:
+        "200":
+          description: The rebalance outcome
+          content: { application/json: { schema: { $ref: "#/components/schemas/TreasuryRebalanceOutcome" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/treasury/books/{houseBookId}/paper-fills:
+    get:
+      tags: [advanced]
+      summary: The book's paper-venue fills, newest first, each with its verified disclosure
+      parameters:
+        - { in: path, name: houseBookId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: One page of paper fills
+          content: { application/json: { schema: { $ref: "#/components/schemas/TreasuryPaperFillPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Execute on the paper venue under a named activity the book's strategy permits
+      parameters:
+        - { in: path, name: houseBookId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/TreasuryPaperRequest" } } }
+      responses:
+        "200":
+          description: The applied action and the paper fill with its disclosure
+          content: { application/json: { schema: { $ref: "#/components/schemas/TreasuryPaperOutcome" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/treasury/books/{houseBookId}/sync:
+    post:
+      tags: [advanced]
+      summary: Ingest every internal-book trade of the house book the position register has not recorded (exactly once)
+      parameters:
+        - { in: path, name: houseBookId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: How many trades were ingested
+          content: { application/json: { schema: { $ref: "#/components/schemas/TreasurySyncResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/treasury/books/{houseBookId}/mark-to-market:
+    post:
+      tags: [advanced]
+      summary: Persist the book's PnL report at fresh marks as a hashed snapshot
+      parameters:
+        - { in: path, name: houseBookId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: The snapshot and the action that recorded it
+          content: { application/json: { schema: { $ref: "#/components/schemas/TreasurySnapshot" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/treasury/books/{houseBookId}/report:
+    get:
+      tags: [advanced]
+      summary: Positions, realized and unrealized PnL at fresh marks, and every limit with its use
+      description: >-
+        The treasury syncs the position register first (it ingests any internal-book trade not yet
+        recorded, exactly once) and states PnL at marks no older than the risk policy allows. Each
+        limit is the treasury's own evaluation of a request that adds nothing: its cap, what is
+        already used, and the codes new risk would meet now. A position without a fresh mark has no
+        market value and is named in missing_marks.
+      parameters:
+        - { in: path, name: houseBookId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The PnL report and the limits in use
+          content: { application/json: { schema: { $ref: "#/components/schemas/TreasuryReport" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/treasury/books/{houseBookId}/balances:
+    get:
+      tags: [advanced]
+      summary: Inventory, reservations, fundings and venue flows of the book, asset by asset (read only)
+      parameters:
+        - { in: path, name: houseBookId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The book's balances
+          content: { application/json: { schema: { $ref: "#/components/schemas/TreasuryBalanceList" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/treasury/books/{houseBookId}/reconciliation:
+    get:
+      tags: [advanced]
+      summary: Prove the position register against the ledger, asset by asset (an empty list means the books agree)
+      parameters:
+        - { in: path, name: houseBookId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The reconciliation
+          content: { application/json: { schema: { $ref: "#/components/schemas/TreasuryReconciliation" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/treasury/books/{houseBookId}/events:
+    get:
+      tags: [advanced]
+      summary: The book's position register, newest first
+      parameters:
+        - { in: path, name: houseBookId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: One page of position events
+          content: { application/json: { schema: { $ref: "#/components/schemas/TreasuryPositionEventPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/treasury/books/{houseBookId}/actions:
+    get:
+      tags: [advanced]
+      summary: The register of house actions (who did what for the book, under which policy, with what outcome), newest first
+      parameters:
+        - { in: path, name: houseBookId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: The latest house actions
+          content: { application/json: { schema: { $ref: "#/components/schemas/TreasuryActionList" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/treasury/books/{houseBookId}/risk-decisions:
+    get:
+      tags: [advanced]
+      summary: The book's Risk Kernel V2 decisions with the treasury limit evaluation that fed each, newest first
+      parameters:
+        - { in: path, name: houseBookId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: One page of risk decisions
+          content: { application/json: { schema: { $ref: "#/components/schemas/TreasuryRiskDecisionPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/treasury/crossing-rules:
+    post:
+      tags: [advanced]
+      summary: Change whether house books may trade with customers on one instrument's book, with its customer disclosure
+      description: >-
+        The order book refuses house-versus-customer crossing by default. This is the only way the
+        treasury loosens it, and it is always disclosed: the disclosure must say the activity is
+        simulated, and it is archived with the rule version it describes.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/TreasuryCrossingRuleRequest" } } }
+      responses:
+        "200":
+          description: The disclosure recorded with the new rule version
+          content: { application/json: { schema: { $ref: "#/components/schemas/TreasuryCrossingDisclosure" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/treasury/crossing-disclosures:
+    get:
+      tags: [advanced]
+      summary: What customers are told about house books trading against them on one instrument's book, every rule version
+      parameters:
+        - { in: query, name: instrument_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: Every crossing disclosure of the book, oldest first
+          content: { application/json: { schema: { $ref: "#/components/schemas/TreasuryCrossingDisclosureList" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/treasury/house-trades:
+    get:
+      tags: [advanced]
+      summary: Internal-book trades in which a house book was the account's counterparty, newest first
+      description: Each trade names the crossing rule version that allowed it and that version's disclosure.
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: One page of house trades against the account
+          content: { application/json: { schema: { $ref: "#/components/schemas/TreasuryHouseTradePage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/fees/schedules:
+    get:
+      tags: [advanced]
+      summary: Every published fee schedule key with the version in force now (public to any signed-in customer)
+      parameters:
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: One page of schedule keys
+          content: { application/json: { schema: { $ref: "#/components/schemas/FeeScheduleSummaryPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Publish the next immutable version of a schedule key, effective now or later, never in the past
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/FeePublishRequest" } } }
+      responses:
+        "200":
+          description: The published version
+          content: { application/json: { schema: { $ref: "#/components/schemas/FeeScheduleVersion" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/fees/schedules/history:
+    get:
+      tags: [advanced]
+      summary: Every version of one schedule key, oldest first, and which is in force now
+      parameters:
+        - { in: query, name: key, required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+      responses:
+        "200":
+          description: The schedule's version history
+          content: { application/json: { schema: { $ref: "#/components/schemas/FeeScheduleHistory" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/fees/quote-preview:
+    get:
+      tags: [advanced]
+      summary: Price an order exactly under the schedule in force (nothing is recorded or charged)
+      description: >-
+        The fee engine itemizes the reference notional, the spread, every explicit fee, the network
+        estimate and the effective all-in price, and the disclosure is verified against the
+        schedule before it is returned. The reference price is a decimal string in the schedule's
+        quote asset. A read: it records, reserves and charges nothing.
+      parameters:
+        - { in: query, name: schedule_key, required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        - { in: query, name: side, required: true, schema: { $ref: "#/components/schemas/FeeSide" } }
+        - { in: query, name: base_quantity, required: true, schema: { $ref: "#/components/schemas/Quantity" } }
+        - { in: query, name: base_decimals, required: true, schema: { type: integer, minimum: 0, maximum: 38 } }
+        - { in: query, name: reference_price, required: true, schema: { type: string, pattern: '^[0-9]+(\.[0-9]+)?$' } }
+        - { in: query, name: at, schema: { $ref: "#/components/schemas/Timestamp" } }
+        - { in: query, name: trailing_volume_usd, schema: { $ref: "#/components/schemas/USD" } }
+        - { in: query, name: has_subscription, schema: { type: boolean } }
+        - { in: query, name: strategy_originated, schema: { type: boolean } }
+      responses:
+        "200":
+          description: The verified disclosure the schedule produces
+          content: { application/json: { schema: { $ref: "#/components/schemas/FeeQuotePreview" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/fees/quotes:
+    get:
+      tags: [advanced]
+      summary: The quote disclosures bound to an account, newest first
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: One page of quote disclosures
+          content: { application/json: { schema: { $ref: "#/components/schemas/FeeQuotePage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Record a verified quote disclosure under the schedule in force (bound to its payer when named)
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/FeeQuoteRecordRequest" } } }
+      responses:
+        "200":
+          description: The stored disclosure
+          content: { application/json: { schema: { $ref: "#/components/schemas/FeeQuoteRecord" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/fees/quotes/{feeDisclosureId}:
+    get:
+      tags: [advanced]
+      summary: One stored quote disclosure, re-proved from the record against its schedule
+      parameters:
+        - { in: path, name: feeDisclosureId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The disclosure and its verification
+          content: { application/json: { schema: { $ref: "#/components/schemas/FeeQuoteRecord" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/fees/bookings:
+    get:
+      tags: [advanced]
+      summary: The fees charged to an account, newest first, each with its spread line
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: One page of fee bookings
+          content: { application/json: { schema: { $ref: "#/components/schemas/FeeBookingPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/fees/bookings/{feeBookingId}:
+    get:
+      tags: [advanced]
+      summary: One fee booking with its disclosure, re-proved end to end from the record
+      parameters:
+        - { in: path, name: feeBookingId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The booking, its disclosure and its verification
+          content: { application/json: { schema: { $ref: "#/components/schemas/FeeBookingDetail" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/fees/bookings/{feeBookingId}/reverse:
+    post:
+      tags: [advanced]
+      summary: Reverse a booking by a COMPENSATION journal of exactly its charges, with a reason code
+      parameters:
+        - { in: path, name: feeBookingId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/FeeReverseRequest" } } }
+      responses:
+        "200":
+          description: The reversed booking
+          content: { application/json: { schema: { $ref: "#/components/schemas/FeeBooking" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/fees/spread-audit:
+    get:
+      tags: [advanced]
+      summary: Every charged spread with its disclosure, schedule version, prices and journal, oldest first
+      parameters:
+        - { in: query, name: quote_asset_id, schema: { $ref: "#/components/schemas/UUID" } }
+        - { in: query, name: account_id, schema: { $ref: "#/components/schemas/UUID" } }
+        - { in: query, name: since, schema: { $ref: "#/components/schemas/Timestamp" } }
+        - { in: query, name: until, schema: { $ref: "#/components/schemas/Timestamp" } }
+        - { in: query, name: include_reversed, schema: { type: boolean } }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: The spread lines the filter selects
+          content: { application/json: { schema: { $ref: "#/components/schemas/FeeSpreadAudit" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/fees/spread-totals:
+    get:
+      tags: [advanced]
+      summary: The spread booked and the spread reversed in one quote asset
+      parameters:
+        - { in: query, name: quote_asset_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The spread totals
+          content: { application/json: { schema: { $ref: "#/components/schemas/FeeSpreadTotals" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/fees/periods:
+    get:
+      tags: [advanced]
+      summary: An account's performance-fee periods (sandbox accounting, never charged live), newest first
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { in: query, name: strategy_ref, schema: { type: string, minLength: 1, maxLength: 90 } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: One page of periods with their flows, lines and statements
+          content: { application/json: { schema: { $ref: "#/components/schemas/FeePeriodPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Open the next performance-fee period of an (account, strategy) pair
+      description: >-
+        A pair's first period starts with its high-water mark at its opening NAV; every later one
+        chains from the latest crystallized statement. One period of a pair is open at a time.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/FeeOpenPeriodRequest" } } }
+      responses:
+        "200":
+          description: The opened period
+          content: { application/json: { schema: { $ref: "#/components/schemas/FeePeriod" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/fees/periods/{feePeriodId}:
+    get:
+      tags: [advanced]
+      summary: One performance-fee period with its flows, lines, statement and attribution
+      parameters:
+        - { in: path, name: feePeriodId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The period (a crystallized one re-proved from its terms, flows and valuations)
+          content: { application/json: { schema: { $ref: "#/components/schemas/FeePeriod" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/fees/periods/{feePeriodId}/flows:
+    post:
+      tags: [advanced]
+      summary: Record a deposit (positive) or withdrawal (negative) of an open period; no flow creates or destroys performance
+      parameters:
+        - { in: path, name: feePeriodId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/FeeFlowRequest" } } }
+      responses:
+        "200":
+          description: The recorded flow
+          content: { application/json: { schema: { $ref: "#/components/schemas/FeeFlowResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/fees/periods/{feePeriodId}/accruals:
+    post:
+      tags: [advanced]
+      summary: Value an open period at an instant and book the change in its running accrual
+      description: Nothing accrues below the high-water mark or the hurdle; a fall is a compensating REVERSAL line.
+      parameters:
+        - { in: path, name: feePeriodId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/FeeAccrueRequest" } } }
+      responses:
+        "200":
+          description: The line the valuation booked
+          content: { application/json: { schema: { $ref: "#/components/schemas/FeeLineResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/fees/periods/{feePeriodId}/crystallize:
+    post:
+      tags: [advanced]
+      summary: Crystallize a period once its end has passed, charging the fee to the customer's wallet
+      parameters:
+        - { in: path, name: feePeriodId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/FeeCrystallizeRequest" } } }
+      responses:
+        "200":
+          description: The crystallized period with its statement
+          content: { application/json: { schema: { $ref: "#/components/schemas/FeePeriod" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/fees/periods/{feePeriodId}/cancel:
+    post:
+      tags: [advanced]
+      summary: Cancel an open period, reversing any running accrual
+      parameters:
+        - { in: path, name: feePeriodId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/FeeCancelPeriodRequest" } } }
+      responses:
+        "200":
+          description: The cancelled period
+          content: { application/json: { schema: { $ref: "#/components/schemas/FeePeriod" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/fees/periods/{feePeriodId}/reverse:
+    post:
+      tags: [advanced]
+      summary: Reverse a crystallization by a COMPENSATION of exactly the fee, with a reason code
+      parameters:
+        - { in: path, name: feePeriodId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/FeeReverseRequest" } } }
+      responses:
+        "200":
+          description: The reversed period
+          content: { application/json: { schema: { $ref: "#/components/schemas/FeePeriod" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
 
   # >>> advanced:stable paths (insert this subsystem's paths directly below; keep the marker)
   #
@@ -3886,9 +4645,11 @@ paths:
       description: >-
         The creator's account and operators see every version; anyone else
         sees only the public versions, and a listing with none is NOT_FOUND.
-        Evaluations and performance snapshots are simulated and PAPER results:
-        computed from snapshots supplied by whoever ran them, never from real
-        capital.
+        Evaluations are simulated results over the snapshot set their runner
+        supplied. Performance snapshots are PAPER results computed from each
+        install's paper book -- its paper capital moved by its own fills, valued
+        at reference prices the service read from the price store -- never from
+        a caller's figures, and never a record of real capital.
       parameters:
         - { in: path, name: listingId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
       responses:
@@ -3970,6 +4731,11 @@ paths:
         A simulation proposes nothing: every run's proposals are counted and
         kept in the run log, never submitted. At most 20 snapshots per request;
         the evaluation is reproducible from the dataset version and digests.
+        Every run is charged to the creator's account under the sandbox budget:
+        a request beyond the runs or CPU one call may be granted, or beyond what
+        the account's window has left, is refused before anything runs (429
+        RATE_LIMITED, the budget's reason in the problem's fields, and a
+        Retry-After when the window will have room).
       parameters:
         - { in: path, name: versionId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -3988,17 +4754,23 @@ paths:
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
   /advanced/strategies/versions/{versionId}/validate:
     post:
       tags: [advanced]
       summary: Scan and build a SUBMITTED version (operator; requires step-up)
       description: >-
-        A clean scan and a successful build record the artifact and move the
-        version to VALIDATED; a refused scan, a compile error or a build
-        timeout moves it to REJECTED with the reason. The build holds the
-        version's lock and is bounded by the request's time limit: one that
-        does not finish in time records nothing and leaves the version
-        SUBMITTED. A deployment with no Go toolchain answers UNSUPPORTED.
+        The version is claimed in one transaction, built between transactions
+        and its outcome recorded in another; no transaction is open while it
+        builds. A clean scan and a successful build record the artifact and
+        move the version to VALIDATED; a refused scan, a compile error or a
+        build past one of the builder's bounds -- its time, the size of the
+        module it produces, the memory its compiler and linker hold -- moves it
+        to REJECTED with the reason, and the compiler's bounded output is kept
+        with the validation for the creator to read. A version another build
+        holds a live claim on answers CONFLICT and nothing is built twice; a
+        build that could not run at all (a deployment with no Go toolchain
+        answers UNSUPPORTED) records nothing and frees the version at once.
       parameters:
         - { in: path, name: versionId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -4173,24 +4945,30 @@ paths:
   /advanced/strategies/installs/{installId}/follows:
     post:
       tags: [advanced]
-      summary: Paper-follow one of your installs on one market snapshot
+      summary: Paper-follow one of your installs, now
       description: >-
-        The installed version runs in the sandbox on the snapshot you supply.
-        Every proposal its manifest permits becomes an economic intent (PAPER,
-        STRATEGY_MARKETPLACE) that faces routing and Risk Kernel V2 with
-        sections read from the database, never from the snapshot; only an
-        ALLOW reaches paper execution, exactly once. The snapshot must be no
-        older than five minutes and not in the future, and the manifest's
-        execution frequency bounds how often an install runs. The same snapshot
-        time with the same snapshot returns the recorded run; with a different
-        snapshot it is INVALID_IDEMPOTENCY_REUSE. Equity and turnover come from
-        the snapshot you supplied and are paper figures.
+        The installed version runs in the sandbox on an input the service
+        builds itself: the install's paper book (its paper capital moved by its
+        own earlier fills) and, for every instrument the version names, the
+        freshest reference price in the price store no older than five minutes
+        with its recent history. No snapshot is accepted from the caller. Every
+        proposal the manifest permits -- valued at the reference price, never
+        at a limit price the strategy chose -- becomes an economic intent
+        (PAPER, STRATEGY_MARKETPLACE) that faces routing and Risk Kernel V2,
+        whose balance section is the paper book's uninvested balance; only an ALLOW reaches
+        paper execution, exactly once, and an executed dispatch is a fill of
+        the paper book at its reference price. The manifest's execution
+        frequency bounds how often an install runs, and the run is charged to
+        the account's sandbox budget. A book holding an instrument with no
+        fresh reference price cannot be valued and is refused
+        (STALE_MARKET_DATA). The book's uninvested balance (paper_cash), equity
+        and turnover are paper figures, before the venue's disclosed charges.
       parameters:
         - { in: path, name: installId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
         - { $ref: "#/components/parameters/IdempotencyKey" }
       requestBody:
         required: true
-        content: { application/json: { schema: { $ref: "#/components/schemas/StrategyFollowRequest" } } }
+        content: { application/json: { schema: { $ref: "#/components/schemas/StrategyAccountRequest" } } }
       responses:
         "201":
           description: The follow run with what became of every intent (value domain SIMULATED)
@@ -4208,6 +4986,11 @@ paths:
     post:
       tags: [advanced]
       summary: Compute and record the paper performance of one of your installs from its follow history
+      description: >-
+        Computed exactly from the follow runs valued from the install's paper
+        book (runs recorded before the book existed are not counted); the
+        database refuses a snapshot over anything else. VALIDATION_FAILED until
+        one such run exists.
       parameters:
         - { in: path, name: installId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -4255,6 +5038,348 @@ paths:
         "403": { $ref: "#/components/responses/Problem" }
 
   # >>> advanced:delegation paths (insert this subsystem's paths directly below; keep the marker)
+  #
+  # Delegated agent authority over SIMULATED value (internal/delegation): a customer grants one of the
+  # account's own agents a scoped, expiring capability; the agent's swap requests are signed only after the
+  # transaction inspector proves they are the approved plan; withdrawals go only to allow-listed
+  # destinations under the customer's policy, with a human decision except AUTO_APPROVE in a test
+  # environment. These routes are the account owner's and the operators'. An agent never reaches HTTP:
+  # its swap requests and withdrawal proposals are admitted in-process by the agent runtime, and it never
+  # signs, executes, decides or reads a key. The delegation service decides every rule and refusal.
+  /advanced/delegation/agents:
+    get:
+      tags: [advanced]
+      summary: The account's agents, any of which its owner may grant a capability to
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The account's agents, newest first (bounded; the service decides whether an agent may act)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationAgentList" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/delegation/capabilities:
+    get:
+      tags: [advanced]
+      summary: An account's delegated capabilities with their scope, limits, use and expiry, newest first
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of capabilities (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationCapabilityPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Grant one of the account's agents a scoped, expiring capability (owner only; step-up)
+      description: >-
+        The environment is the deployment's and the strategy is the agent's own; neither is the caller's to
+        choose. The capability is immutable except for revocation. The Idempotency-Key is also the grant's
+        own key: the same key with the same terms returns the existing grant.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DelegationGrantRequest" } } }
+      responses:
+        "200":
+          description: The capability, ACTIVE
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationCapability" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/delegation/capabilities/{capabilityId}:
+    get:
+      tags: [advanced]
+      summary: One capability with every use recorded under it, newest first
+      parameters:
+        - { in: path, name: capabilityId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The capability (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationCapabilityDetail" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/delegation/capabilities/{capabilityId}/revoke:
+    post:
+      tags: [advanced]
+      summary: Revoke a capability (owner only; step-up). Nothing not yet signed under it can be signed afterwards
+      parameters:
+        - { in: path, name: capabilityId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DelegationReasonRequest" } } }
+      responses:
+        "200":
+          description: The capability, REVOKED (revoking a revoked capability returns it unchanged)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationCapability" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/delegation/destinations:
+    get:
+      tags: [advanced]
+      summary: The account's allow-listed withdrawal destinations, newest first
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: Every destination the account allow-listed, active and removed (bounded)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationDestinationList" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Allow-list a withdrawal destination (owner only; step-up). Its age starts now
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DelegationDestinationRequest" } } }
+      responses:
+        "200":
+          description: The destination, ACTIVE
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationDestination" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/delegation/destinations/{destinationId}/remove:
+    post:
+      tags: [advanced]
+      summary: Remove a destination from the allow-list (owner only; step-up). Nothing not yet signed goes to it afterwards
+      parameters:
+        - { in: path, name: destinationId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DelegationReasonRequest" } } }
+      responses:
+        "200":
+          description: The destination, REMOVED
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationDestination" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/delegation/withdrawal-policy:
+    get:
+      tags: [advanced]
+      summary: The account's withdrawal policy in force and every earlier version
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The latest version (absent when the account has none, so nothing can be withdrawn) and its history
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationWithdrawalPolicyState" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Write the account's next withdrawal policy version (owner only; step-up). Versions are immutable
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DelegationWithdrawalPolicyRequest" } } }
+      responses:
+        "200":
+          description: The new version, which applies to every proposal from now on
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationWithdrawalPolicy" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/delegation/swaps:
+    get:
+      tags: [advanced]
+      summary: Signing requests (delegated swaps) of an account with their plan, inspection and decision trail, newest first
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { in: query, name: status, required: false, schema: { $ref: "#/components/schemas/DelegationSwapStatus" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of swaps (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationSwapPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/delegation/swaps/{swapId}:
+    get:
+      tags: [advanced]
+      summary: One signing request with its plan, inspection and decision trail
+      parameters:
+        - { in: path, name: swapId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The swap (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationSwap" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/delegation/swaps/{swapId}/decision:
+    post:
+      tags: [advanced]
+      summary: Approve or decline a swap awaiting approval, bound to the plan hash shown (owner only; step-up)
+      description: >-
+        An approval is executed at once under the service's own authority: compiled, inspected, signed by the
+        delegated wallet and the venue, submitted exactly once and settled. The decision stands whatever the
+        execution then does; `execution` says what it did. A decline cancels the swap and returns its funds.
+      parameters:
+        - { in: path, name: swapId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DelegationDecisionRequest" } } }
+      responses:
+        "200":
+          description: The swap after the decision (and, for an approval, after its execution)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationSwapDecisionResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/delegation/withdrawals:
+    get:
+      tags: [advanced]
+      summary: Withdrawals the account's agents proposed, with destination, policy evaluation and decision trail, newest first
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { in: query, name: status, required: false, schema: { $ref: "#/components/schemas/DelegationWithdrawalStatus" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of withdrawals (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationWithdrawalPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/delegation/withdrawals/{withdrawalId}:
+    get:
+      tags: [advanced]
+      summary: One withdrawal with its plan, policy evaluation, inspection and decision trail
+      parameters:
+        - { in: path, name: withdrawalId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The withdrawal (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationWithdrawal" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/delegation/withdrawals/{withdrawalId}/decision:
+    post:
+      tags: [advanced]
+      summary: Approve or decline a withdrawal awaiting approval, bound to the plan hash shown (owner only; step-up)
+      description: >-
+        An approval past the policy's cooling period is executed at once under the service's own authority:
+        compiled, inspected, signed, submitted exactly once and settled. Before it, the withdrawal stays
+        APPROVED and `execution` carries the refusal; an operator's execution run takes it later. A decline
+        returns the funds.
+      parameters:
+        - { in: path, name: withdrawalId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DelegationDecisionRequest" } } }
+      responses:
+        "200":
+          description: The withdrawal after the decision (and, for an approval, after its execution)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationWithdrawalDecisionResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/delegation/withdrawals/{withdrawalId}/cancel:
+    post:
+      tags: [advanced]
+      summary: Stop a withdrawal that has not been signed (owner only). Cancelling only reduces risk, so it needs no step-up
+      parameters:
+        - { in: path, name: withdrawalId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DelegationReasonRequest" } } }
+      responses:
+        "200":
+          description: The withdrawal, CANCELLED, with its funds returned
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationWithdrawal" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/delegation/venues:
+    get:
+      tags: [advanced]
+      summary: Registered sandbox venues, and the venues this deployment holds a co-signer for
+      responses:
+        "200":
+          description: Venues (bounded) and the deployment's co-signers
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationVenueList" } } }
+  /advanced/delegation/ops/capabilities:
+    get:
+      tags: [advanced]
+      summary: Operator — capabilities across every account, newest first (read only)
+      parameters:
+        - { in: query, name: status, required: false, schema: { $ref: "#/components/schemas/DelegationCapabilityStatus" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of capabilities (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationCapabilityPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/delegation/ops/pending:
+    get:
+      tags: [advanced]
+      summary: Operator — every swap and withdrawal not yet at an end, across accounts, oldest first (read only)
+      description: Awaiting a decision, awaiting execution, or signed and in flight. Bounded by limit per kind.
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Pending swaps and withdrawals (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationPending" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/delegation/ops/venues:
+    post:
+      tags: [advanced]
+      summary: Operator — register a sandbox venue this deployment co-signs for (step-up)
+      description: >-
+        The venue's settlement address is its co-signer's, never the caller's to choose: a name with no
+        co-signer in this deployment is refused. Without a house book, one is created for the venue.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DelegationVenueRequest" } } }
+      responses:
+        "200":
+          description: The venue
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationVenue" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/delegation/ops/execute-pending:
+    post:
+      tags: [advanced]
+      summary: Operator — execute every swap and withdrawal that is ready, oldest first (step-up)
+      description: >-
+        Admitted and approved swaps and approved withdrawals are each executed under the service's own
+        authority: inspected, signed, submitted exactly once and settled. The service refuses what may not go
+        ahead (a revoked capability, a cooling period, a closed gate); each subject's outcome is reported.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DelegationExecuteRequest" } } }
+      responses:
+        "200":
+          description: What the run did to each subject
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationExecutionRun" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
 
   # >>> advanced:operator paths (insert this subsystem's paths directly below; keep the marker)
   #
@@ -8272,6 +9397,1296 @@ components:
         value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
 
     # >>> advanced:treasury schemas (insert this subsystem's schemas directly below; keep the marker)
+    #
+    # The house book (internal/treasury) and the fee ledger (internal/feeledger).
+    # Every enum carries x-enum-varnames so its Go constants never collide with
+    # another schema's (BUY, OPEN, ACTIVE and REJECTED already exist unprefixed).
+    TreasuryClass:
+      type: string
+      enum: [PRINCIPAL, TREASURY]
+      x-enum-varnames: [TreasuryClassPrincipal, TreasuryClassTreasury]
+      description: PRINCIPAL provides liquidity, makes markets and hedges; TREASURY rebalances inventory and converts.
+    TreasuryStrategy:
+      type: string
+      enum: [LIQUIDITY_PROVISION, MARKET_MAKING, HEDGING, INVENTORY_REBALANCING, TREASURY_CONVERSION]
+      x-enum-varnames: [TreasuryStrategyLiquidityProvision, TreasuryStrategyMarketMaking, TreasuryStrategyHedging,
+                        TreasuryStrategyInventoryRebalancing, TreasuryStrategyTreasuryConversion]
+    TreasuryBookStatus:
+      type: string
+      enum: [ACTIVE, KILLED, CLOSED]
+      x-enum-varnames: [TreasuryBookActive, TreasuryBookKilled, TreasuryBookClosed]
+    TreasuryActionKind:
+      type: string
+      enum: [REGISTER, SET_POLICY, SET_SIGNING_POLICY, FUND, PLACE_ORDER, CANCEL_ORDER, PAPER_FILL, MARK_TO_MARKET]
+      x-enum-varnames: [TreasuryActionRegister, TreasuryActionSetPolicy, TreasuryActionSetSigningPolicy, TreasuryActionFund,
+                        TreasuryActionPlaceOrder, TreasuryActionCancelOrder, TreasuryActionPaperFill, TreasuryActionMarkToMarket]
+    TreasuryOutcome:
+      type: string
+      enum: [APPLIED, REJECTED]
+      x-enum-varnames: [TreasuryOutcomeApplied, TreasuryOutcomeRejected]
+    TreasurySide:
+      type: string
+      enum: [BUY, SELL]
+      x-enum-varnames: [TreasurySideBuy, TreasurySideSell]
+    TreasuryOrderType:
+      type: string
+      enum: [LIMIT, MARKET]
+      x-enum-varnames: [TreasuryOrderLimit, TreasuryOrderMarket]
+    TreasuryTimeInForce:
+      type: string
+      enum: [GTC, IOC, FOK]
+      x-enum-varnames: [TreasuryTifGTC, TreasuryTifIOC, TreasuryTifFOK]
+    TreasuryOrderStatus:
+      type: string
+      enum: [PENDING, OPEN, PARTIALLY_FILLED, FILLED, CANCELLED, REJECTED]
+      x-enum-varnames: [TreasuryOrderPending, TreasuryOrderOpen, TreasuryOrderPartiallyFilled, TreasuryOrderFilled,
+                        TreasuryOrderCancelled, TreasuryOrderRejected]
+    TreasuryOwnerType:
+      type: string
+      enum: [CUSTOMER, HOUSE]
+      x-enum-varnames: [TreasuryOwnerCustomer, TreasuryOwnerHouse]
+    TreasuryEventKind:
+      type: string
+      enum: [FUNDING, BOOK_FILL, PAPER_FILL]
+      x-enum-varnames: [TreasuryEventFunding, TreasuryEventBookFill, TreasuryEventPaperFill]
+    TreasuryDirection:
+      type: string
+      enum: [INCREASE, DECREASE]
+      x-enum-varnames: [TreasuryDirectionIncrease, TreasuryDirectionDecrease]
+    TreasuryVerdict:
+      type: string
+      enum: [ALLOW, REJECT]
+      x-enum-varnames: [TreasuryVerdictAllow, TreasuryVerdictReject]
+    TreasuryLimitKind:
+      type: string
+      enum: [DAILY_LOSS, INVENTORY, INSTRUMENT_EXPOSURE]
+      x-enum-varnames: [TreasuryLimitDailyLoss, TreasuryLimitInventory, TreasuryLimitInstrumentExposure]
+    TreasuryAssetRef:
+      type: object
+      required: [asset_id, symbol, decimals]
+      properties:
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        decimals: { type: integer, minimum: 0, maximum: 38 }
+    TreasuryPrice:
+      type: object
+      required: [mantissa, scale]
+      description: The price of one whole unit, exactly mantissa × 10^-scale, in the quote asset named by the record that carries it.
+      properties:
+        mantissa: { $ref: "#/components/schemas/Quantity" }
+        scale: { type: integer }
+        source: { type: string }
+        observed_at: { $ref: "#/components/schemas/Timestamp" }
+    TreasurySigningPolicy:
+      type: object
+      required: [house_account_id, version, key_custody, service_actor_id, operators_allowed, policy_hash, actor_type, actor_id, reason, effective_at]
+      properties:
+        house_account_id: { $ref: "#/components/schemas/UUID" }
+        version: { type: integer, minimum: 1 }
+        key_custody: { type: string, description: "Always NONE_SANDBOX: a sandbox house book holds no keys." }
+        service_actor_id: { type: string, description: "The one SERVICE actor that may act for the book." }
+        operators_allowed: { type: boolean, description: "Whether operators may place orders and fills too (they may always cancel and administer)." }
+        policy_hash: { type: string }
+        actor_type: { type: string }
+        actor_id: { type: string }
+        reason: { type: string }
+        effective_at: { $ref: "#/components/schemas/Timestamp" }
+    TreasuryAssetLimit:
+      type: object
+      required: [asset_id, max_quantity]
+      properties:
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        max_quantity: { $ref: "#/components/schemas/Quantity", description: "base units of the asset, counting every working buy" }
+    TreasuryInstrumentLimit:
+      type: object
+      required: [instrument_id, max_exposure]
+      properties:
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        max_exposure: { $ref: "#/components/schemas/Quantity", description: "valuation-asset base units: the base held at a mark plus the working buy notional" }
+    TreasuryRiskPolicy:
+      type: object
+      required: [house_account_id, version, label, policy_hash, valuation_asset_id, daily_loss_limit, max_mark_age_ms, max_inventory,
+                 max_instrument_exposure, paper_spread_bps, paper_fee_bps, actor_type, actor_id, reason, effective_at]
+      properties:
+        house_account_id: { $ref: "#/components/schemas/UUID" }
+        version: { type: integer, minimum: 1 }
+        label: { type: string }
+        policy_hash: { type: string }
+        valuation_asset_id: { $ref: "#/components/schemas/UUID" }
+        daily_loss_limit: { $ref: "#/components/schemas/Quantity" }
+        max_mark_age_ms: { type: integer, format: int64 }
+        max_inventory: { type: array, items: { $ref: "#/components/schemas/TreasuryAssetLimit" } }
+        max_instrument_exposure: { type: array, items: { $ref: "#/components/schemas/TreasuryInstrumentLimit" } }
+        paper_spread_bps: { $ref: "#/components/schemas/BPS" }
+        paper_fee_bps: { $ref: "#/components/schemas/BPS" }
+        actor_type: { type: string }
+        actor_id: { type: string }
+        reason: { type: string }
+        effective_at: { $ref: "#/components/schemas/Timestamp" }
+    TreasuryBook:
+      type: object
+      required: [value_domain, house_account_id, name, strategy, class, status, valuation_asset, version, permitted_activities,
+                 registered_by_actor_type, registered_by_actor_id, registered_at]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        house_account_id: { $ref: "#/components/schemas/UUID" }
+        name: { type: string }
+        strategy: { $ref: "#/components/schemas/TreasuryStrategy" }
+        class: { $ref: "#/components/schemas/TreasuryClass" }
+        status: { $ref: "#/components/schemas/TreasuryBookStatus" }
+        valuation_asset: { $ref: "#/components/schemas/TreasuryAssetRef" }
+        version: { type: integer, format: int64 }
+        permitted_activities: { type: array, items: { $ref: "#/components/schemas/TreasuryStrategy" } }
+        registered_by_actor_type: { type: string }
+        registered_by_actor_id: { type: string }
+        registered_at: { $ref: "#/components/schemas/Timestamp" }
+    TreasuryBookDetail:
+      allOf:
+        - { $ref: "#/components/schemas/TreasuryBook" }
+        - type: object
+          required: [signing_policy]
+          properties:
+            signing_policy: { $ref: "#/components/schemas/TreasurySigningPolicy" }
+            risk_policy: { $ref: "#/components/schemas/TreasuryRiskPolicy", description: "absent until a risk policy is recorded; without one every house order and fill is refused" }
+    TreasuryBookPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [value_domain, items]
+          properties:
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+            items: { type: array, items: { $ref: "#/components/schemas/TreasuryBook" } }
+    TreasuryRegisterRequest:
+      type: object
+      required: [name, strategy, service_actor_id, operators_allowed, reason]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        strategy: { $ref: "#/components/schemas/TreasuryStrategy" }
+        valuation_asset_id: { $ref: "#/components/schemas/UUID", description: "defaults to the sandbox dollar" }
+        service_actor_id: { type: string, minLength: 1, maxLength: 100 }
+        operators_allowed: { type: boolean }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    TreasurySigningPolicyRequest:
+      type: object
+      required: [service_actor_id, operators_allowed, reason]
+      properties:
+        service_actor_id: { type: string, minLength: 1, maxLength: 100 }
+        operators_allowed: { type: boolean }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    TreasuryRiskPolicyRequest:
+      type: object
+      required: [label, daily_loss_limit, max_mark_age_ms, max_inventory, max_instrument_exposure, paper_spread_bps, paper_fee_bps, reason]
+      properties:
+        label: { type: string, minLength: 1, maxLength: 100 }
+        daily_loss_limit: { $ref: "#/components/schemas/Quantity" }
+        max_mark_age_ms: { type: integer, format: int64, minimum: 1, maximum: 86400000 }
+        max_inventory: { type: array, maxItems: 256, items: { $ref: "#/components/schemas/TreasuryAssetLimit" } }
+        max_instrument_exposure: { type: array, maxItems: 256, items: { $ref: "#/components/schemas/TreasuryInstrumentLimit" } }
+        paper_spread_bps: { $ref: "#/components/schemas/BPS" }
+        paper_fee_bps: { $ref: "#/components/schemas/BPS" }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    TreasuryAction:
+      type: object
+      required: [id, house_account_id, kind, outcome, reason_codes, actor_type, actor_id, signing_policy_version, idempotency_key, occurred_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        house_account_id: { $ref: "#/components/schemas/UUID" }
+        kind: { $ref: "#/components/schemas/TreasuryActionKind" }
+        activity: { $ref: "#/components/schemas/TreasuryStrategy" }
+        outcome: { $ref: "#/components/schemas/TreasuryOutcome" }
+        rejection_code: { type: string }
+        reason_codes: { type: array, items: { type: string } }
+        actor_type: { type: string }
+        actor_id: { type: string }
+        signing_policy_version: { type: integer }
+        risk_policy_version: { type: integer }
+        idempotency_key: { type: string }
+        risk_decision_id: { $ref: "#/components/schemas/UUID" }
+        order_id: { $ref: "#/components/schemas/UUID" }
+        paper_fill_id: { $ref: "#/components/schemas/UUID" }
+        funding_id: { $ref: "#/components/schemas/UUID" }
+        policy_id: { $ref: "#/components/schemas/UUID" }
+        signing_policy_id: { $ref: "#/components/schemas/UUID" }
+        snapshot_id: { $ref: "#/components/schemas/UUID" }
+        effect_id: { $ref: "#/components/schemas/UUID" }
+        evidence_ref: { type: string }
+        evidence_sha256: { type: string }
+        correlation_id: { type: string }
+        occurred_at: { $ref: "#/components/schemas/Timestamp" }
+    TreasuryActionList:
+      type: object
+      required: [value_domain, items]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        items: { type: array, items: { $ref: "#/components/schemas/TreasuryAction" } }
+    TreasuryFundRequest:
+      type: object
+      required: [asset_id, quantity, reason]
+      properties:
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        mode: { $ref: "#/components/schemas/AdvancedMode", description: "PAPER (default) or SANDBOX" }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    TreasuryFunding:
+      type: object
+      required: [value_domain, id, house_account_id, asset, quantity, cost_basis, effect_id, journal_transaction_id, evidence_ref, funded_at, action]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        id: { $ref: "#/components/schemas/UUID" }
+        house_account_id: { $ref: "#/components/schemas/UUID" }
+        asset: { $ref: "#/components/schemas/TreasuryAssetRef" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        cost_basis: { $ref: "#/components/schemas/Quantity", description: "valuation-asset base units the funding entered the register at" }
+        mark: { $ref: "#/components/schemas/TreasuryPrice" }
+        effect_id: { $ref: "#/components/schemas/UUID" }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        evidence_ref: { type: string }
+        funded_at: { $ref: "#/components/schemas/Timestamp" }
+        action: { $ref: "#/components/schemas/TreasuryAction" }
+    TreasuryOrderRequest:
+      type: object
+      required: [instrument_id, activity, side, order_type, time_in_force, price, quantity]
+      properties:
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        activity: { $ref: "#/components/schemas/TreasuryStrategy" }
+        side: { $ref: "#/components/schemas/TreasurySide" }
+        order_type: { $ref: "#/components/schemas/TreasuryOrderType" }
+        time_in_force: { $ref: "#/components/schemas/TreasuryTimeInForce" }
+        price: { type: string, pattern: '^[0-9]+(\.[0-9]+)?$', description: "the limit price (or a market order's protection price) in the book's valuation asset, exactly" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        post_only: { type: boolean }
+        reduce_only: { type: boolean }
+        client_order_id: { type: string, minLength: 1, maxLength: 128 }
+    TreasuryQuoteRequest:
+      type: object
+      required: [instrument_id, activity, bid_price, bid_quantity, ask_price, ask_quantity]
+      properties:
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        activity: { $ref: "#/components/schemas/TreasuryStrategy", description: "MARKET_MAKING or LIQUIDITY_PROVISION" }
+        bid_price: { type: string, pattern: '^[0-9]+(\.[0-9]+)?$' }
+        bid_quantity: { $ref: "#/components/schemas/Quantity" }
+        ask_price: { type: string, pattern: '^[0-9]+(\.[0-9]+)?$' }
+        ask_quantity: { $ref: "#/components/schemas/Quantity" }
+    TreasuryHouseOrder:
+      type: object
+      required: [id, book_id, instrument_id, house_account_id, side, order_type, time_in_force, post_only, reduce_only, mode, price,
+                 quantity, filled_quantity, remaining_quantity, cancelled_quantity, status, created_at, updated_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        book_id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        house_account_id: { $ref: "#/components/schemas/UUID" }
+        client_order_id: { type: string }
+        side: { $ref: "#/components/schemas/TreasurySide" }
+        order_type: { $ref: "#/components/schemas/TreasuryOrderType" }
+        time_in_force: { $ref: "#/components/schemas/TreasuryTimeInForce" }
+        post_only: { type: boolean }
+        reduce_only: { type: boolean }
+        mode: { $ref: "#/components/schemas/AdvancedMode" }
+        price: { type: string, description: "the limit price as the book states it" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        filled_quantity: { $ref: "#/components/schemas/Quantity" }
+        remaining_quantity: { $ref: "#/components/schemas/Quantity" }
+        cancelled_quantity: { $ref: "#/components/schemas/Quantity" }
+        status: { $ref: "#/components/schemas/TreasuryOrderStatus" }
+        reject_reason: { type: string }
+        cancel_reason: { type: string }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+    TreasuryTrade:
+      type: object
+      required: [id, book_id, trade_seq, price, base_quantity, quote_notional, maker_order_id, taker_order_id, maker_owner_type,
+                 taker_owner_type, aggressor_side, maker_fee, taker_fee, crossing_rule_version, journal_transaction_id]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        book_id: { $ref: "#/components/schemas/UUID" }
+        trade_seq: { type: integer, format: int64 }
+        price: { $ref: "#/components/schemas/TreasuryPrice" }
+        base_quantity: { $ref: "#/components/schemas/Quantity" }
+        quote_notional: { $ref: "#/components/schemas/Quantity" }
+        maker_order_id: { $ref: "#/components/schemas/UUID" }
+        taker_order_id: { $ref: "#/components/schemas/UUID" }
+        maker_owner_type: { $ref: "#/components/schemas/TreasuryOwnerType" }
+        taker_owner_type: { $ref: "#/components/schemas/TreasuryOwnerType" }
+        aggressor_side: { $ref: "#/components/schemas/TreasurySide" }
+        maker_fee: { $ref: "#/components/schemas/Quantity" }
+        taker_fee: { $ref: "#/components/schemas/Quantity" }
+        crossing_rule_version: { type: integer, description: "0 when no house book traded with a customer" }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+    TreasuryLimitEvaluation:
+      type: object
+      required: [risk_increasing, codes, circuit_breakers, loss_measure, daily_loss_limit, missing_marks, inventory_after]
+      properties:
+        risk_increasing: { type: boolean }
+        codes: { type: array, items: { type: string } }
+        circuit_breakers: { type: array, items: { type: string } }
+        loss_measure: { $ref: "#/components/schemas/Quantity", description: "realized PnL of the UTC day plus every open loss (negative is a loss)" }
+        daily_loss_limit: { $ref: "#/components/schemas/Quantity" }
+        missing_marks: { type: array, items: { type: string } }
+        inventory_after: { $ref: "#/components/schemas/Quantity" }
+        inventory_cap: { $ref: "#/components/schemas/Quantity" }
+        exposure_after: { $ref: "#/components/schemas/Quantity" }
+        exposure_cap: { $ref: "#/components/schemas/Quantity" }
+    TreasuryRiskDecision:
+      type: object
+      required: [id, verdict, reason_codes, treasury_codes, decision_hash, input_hash]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        verdict: { $ref: "#/components/schemas/TreasuryVerdict" }
+        reason_codes: { type: array, items: { type: string } }
+        treasury_codes: { type: array, items: { type: string } }
+        decision_hash: { type: string }
+        input_hash: { type: string }
+        limits: { $ref: "#/components/schemas/TreasuryLimitEvaluation", description: "present when the decision was just made" }
+    TreasuryOrderOutcome:
+      type: object
+      required: [value_domain, action, trades]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        action: { $ref: "#/components/schemas/TreasuryAction" }
+        order: { $ref: "#/components/schemas/TreasuryHouseOrder" }
+        trades: { type: array, items: { $ref: "#/components/schemas/TreasuryTrade" } }
+        decision: { $ref: "#/components/schemas/TreasuryRiskDecision" }
+    TreasuryQuoteOutcome:
+      type: object
+      required: [value_domain, bid, ask]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        bid: { $ref: "#/components/schemas/TreasuryOrderOutcome" }
+        ask: { $ref: "#/components/schemas/TreasuryOrderOutcome" }
+    TreasuryHedgeRequest:
+      type: object
+      required: [asset_id, side, quantity]
+      properties:
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        side: { $ref: "#/components/schemas/TreasurySide" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        mode: { $ref: "#/components/schemas/AdvancedMode", description: "PAPER (default) or SANDBOX" }
+    TreasuryPaperRequest:
+      type: object
+      required: [activity, asset_id, side, quantity]
+      properties:
+        activity: { $ref: "#/components/schemas/TreasuryStrategy" }
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        side: { $ref: "#/components/schemas/TreasurySide" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        mode: { $ref: "#/components/schemas/AdvancedMode", description: "PAPER (default) or SANDBOX" }
+    TreasuryConvertRequest:
+      type: object
+      required: [from_asset_id, to_asset_id, quantity]
+      properties:
+        from_asset_id: { $ref: "#/components/schemas/UUID" }
+        to_asset_id: { $ref: "#/components/schemas/UUID" }
+        quantity: { $ref: "#/components/schemas/Quantity", description: "base units of the asset that is not the valuation asset" }
+        mode: { $ref: "#/components/schemas/AdvancedMode", description: "PAPER (default) or SANDBOX" }
+    TreasuryRebalanceRequest:
+      type: object
+      required: [asset_id, target]
+      properties:
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        target: { $ref: "#/components/schemas/Quantity", description: "the holding the book should end with, in base units" }
+        mode: { $ref: "#/components/schemas/AdvancedMode", description: "PAPER (default) or SANDBOX" }
+    TreasuryPaperFill:
+      type: object
+      required: [id, house_account_id, activity, venue_label, side, base_asset, quote_asset, base_quantity, reference_price,
+                 notional_at_reference, spread_bps, spread_amount, fee_amount, total_quote, schedule_hash, disclosure_hash, disclosure,
+                 effect_id, journal_transaction_id, evidence_ref, filled_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        house_account_id: { $ref: "#/components/schemas/UUID" }
+        activity: { $ref: "#/components/schemas/TreasuryStrategy" }
+        venue_label: { type: string, description: "Always SIMULATED_PAPER_VENUE." }
+        side: { $ref: "#/components/schemas/TreasurySide" }
+        base_asset: { $ref: "#/components/schemas/TreasuryAssetRef" }
+        quote_asset: { $ref: "#/components/schemas/TreasuryAssetRef" }
+        base_quantity: { $ref: "#/components/schemas/Quantity" }
+        reference_price: { $ref: "#/components/schemas/TreasuryPrice" }
+        notional_at_reference: { $ref: "#/components/schemas/Quantity" }
+        spread_bps: { $ref: "#/components/schemas/BPS" }
+        spread_amount: { $ref: "#/components/schemas/Quantity" }
+        fee_amount: { $ref: "#/components/schemas/Quantity" }
+        total_quote: { $ref: "#/components/schemas/Quantity" }
+        schedule_hash: { type: string }
+        disclosure_hash: { type: string }
+        disclosure: { $ref: "#/components/schemas/FeeDisclosure" }
+        effect_id: { $ref: "#/components/schemas/UUID" }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        evidence_ref: { type: string }
+        filled_at: { $ref: "#/components/schemas/Timestamp" }
+    TreasuryPaperOutcome:
+      type: object
+      required: [value_domain, action]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        action: { $ref: "#/components/schemas/TreasuryAction" }
+        fill: { $ref: "#/components/schemas/TreasuryPaperFill" }
+        decision: { $ref: "#/components/schemas/TreasuryRiskDecision" }
+    TreasuryRebalanceOutcome:
+      type: object
+      required: [value_domain, no_op]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        no_op: { type: boolean, description: "the holding was already at its target: nothing was filled or recorded" }
+        action: { $ref: "#/components/schemas/TreasuryAction" }
+        fill: { $ref: "#/components/schemas/TreasuryPaperFill" }
+        decision: { $ref: "#/components/schemas/TreasuryRiskDecision" }
+    TreasuryPaperFillPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [value_domain, items]
+          properties:
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+            items: { type: array, items: { $ref: "#/components/schemas/TreasuryPaperFill" } }
+    TreasurySyncResult:
+      type: object
+      required: [value_domain, house_account_id, ingested]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        house_account_id: { $ref: "#/components/schemas/UUID" }
+        ingested: { type: integer, minimum: 0 }
+    TreasuryAssetPnL:
+      type: object
+      required: [asset, quantity, cost, realized_total, realized_today]
+      properties:
+        asset: { $ref: "#/components/schemas/TreasuryAssetRef" }
+        quantity: { $ref: "#/components/schemas/Quantity", description: "base units of the asset" }
+        cost: { $ref: "#/components/schemas/Quantity", description: "remaining cost, valuation-asset base units" }
+        mark: { $ref: "#/components/schemas/TreasuryPrice", description: "absent when no fresh mark exists" }
+        market_value: { $ref: "#/components/schemas/Quantity" }
+        unrealized: { $ref: "#/components/schemas/Quantity" }
+        realized_total: { $ref: "#/components/schemas/Quantity" }
+        realized_today: { $ref: "#/components/schemas/Quantity" }
+    TreasuryLimitUse:
+      type: object
+      required: [kind, codes]
+      properties:
+        kind: { $ref: "#/components/schemas/TreasuryLimitKind" }
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        cap: { $ref: "#/components/schemas/Quantity" }
+        used: { $ref: "#/components/schemas/Quantity", description: "DAILY_LOSS: the signed loss measure; INVENTORY: held plus working buys; INSTRUMENT_EXPOSURE: absent without a fresh mark" }
+        codes: { type: array, items: { type: string }, description: "what new risk would meet now; empty means the limit leaves room" }
+    TreasuryReport:
+      type: object
+      required: [value_domain, house_account_id, valuation_asset, at, trading_day, through_event_seq, assets, realized_total, realized_today,
+                 unrealized_total, open_losses, loss_measure, missing_marks, rounding]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        house_account_id: { $ref: "#/components/schemas/UUID" }
+        valuation_asset: { $ref: "#/components/schemas/TreasuryAssetRef" }
+        at: { $ref: "#/components/schemas/Timestamp" }
+        trading_day: { type: string }
+        through_event_seq: { type: integer, format: int64 }
+        assets: { type: array, items: { $ref: "#/components/schemas/TreasuryAssetPnL" } }
+        realized_total: { $ref: "#/components/schemas/Quantity" }
+        realized_today: { $ref: "#/components/schemas/Quantity" }
+        unrealized_total: { $ref: "#/components/schemas/Quantity" }
+        open_losses: { $ref: "#/components/schemas/Quantity" }
+        loss_measure: { $ref: "#/components/schemas/Quantity" }
+        missing_marks: { type: array, items: { $ref: "#/components/schemas/UUID" } }
+        rounding:
+          type: object
+          additionalProperties: { type: string }
+        risk_policy_version: { type: integer, description: "absent when the book has no risk policy (then limits is empty)" }
+        limits: { type: array, items: { $ref: "#/components/schemas/TreasuryLimitUse" } }
+    TreasurySnapshot:
+      type: object
+      required: [value_domain, id, document_hash, report, action]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        id: { $ref: "#/components/schemas/UUID" }
+        document_hash: { type: string }
+        report: { $ref: "#/components/schemas/TreasuryReport" }
+        action: { $ref: "#/components/schemas/TreasuryAction" }
+    TreasuryVenueFlow:
+      type: object
+      required: [bought, sold]
+      properties:
+        bought: { $ref: "#/components/schemas/Quantity" }
+        sold: { $ref: "#/components/schemas/Quantity" }
+    TreasuryBalance:
+      type: object
+      required: [asset, inventory, reserved, available, funded, internal_book, paper_venue, working_buys, working_sells]
+      properties:
+        asset: { $ref: "#/components/schemas/TreasuryAssetRef" }
+        inventory: { $ref: "#/components/schemas/Quantity" }
+        reserved: { $ref: "#/components/schemas/Quantity" }
+        available: { $ref: "#/components/schemas/Quantity" }
+        funded: { $ref: "#/components/schemas/Quantity" }
+        internal_book: { $ref: "#/components/schemas/TreasuryVenueFlow" }
+        paper_venue: { $ref: "#/components/schemas/TreasuryVenueFlow" }
+        working_buys: { $ref: "#/components/schemas/Quantity" }
+        working_sells: { $ref: "#/components/schemas/Quantity" }
+    TreasuryBalanceList:
+      type: object
+      required: [value_domain, house_account_id, items]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        house_account_id: { $ref: "#/components/schemas/UUID" }
+        items: { type: array, items: { $ref: "#/components/schemas/TreasuryBalance" } }
+    TreasuryDiscrepancy:
+      type: object
+      required: [asset_id, what, expected, actual]
+      properties:
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        what: { type: string }
+        expected: { $ref: "#/components/schemas/Quantity" }
+        actual: { $ref: "#/components/schemas/Quantity" }
+    TreasuryReconciliation:
+      type: object
+      required: [value_domain, house_account_id, agrees, discrepancies]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        house_account_id: { $ref: "#/components/schemas/UUID" }
+        agrees: { type: boolean }
+        discrepancies: { type: array, items: { $ref: "#/components/schemas/TreasuryDiscrepancy" } }
+    TreasuryPositionEvent:
+      type: object
+      required: [id, seq, kind, direction, asset, quantity, value, fees, qty_before, qty_after, cost_before, cost_after, cost_removed,
+                 realized_pnl, journal_transaction_id, occurred_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        seq: { type: integer, format: int64 }
+        kind: { $ref: "#/components/schemas/TreasuryEventKind" }
+        direction: { $ref: "#/components/schemas/TreasuryDirection" }
+        asset: { $ref: "#/components/schemas/TreasuryAssetRef" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        value: { $ref: "#/components/schemas/Quantity", description: "the cost added by an increase, the proceeds of a decrease (valuation-asset base units)" }
+        fees: { $ref: "#/components/schemas/Quantity" }
+        qty_before: { $ref: "#/components/schemas/Quantity" }
+        qty_after: { $ref: "#/components/schemas/Quantity" }
+        cost_before: { $ref: "#/components/schemas/Quantity" }
+        cost_after: { $ref: "#/components/schemas/Quantity" }
+        cost_removed: { $ref: "#/components/schemas/Quantity" }
+        realized_pnl: { $ref: "#/components/schemas/Quantity" }
+        book_trade_id: { $ref: "#/components/schemas/UUID" }
+        paper_fill_id: { $ref: "#/components/schemas/UUID" }
+        funding_id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        occurred_at: { $ref: "#/components/schemas/Timestamp" }
+    TreasuryPositionEventPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [value_domain, items]
+          properties:
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+            items: { type: array, items: { $ref: "#/components/schemas/TreasuryPositionEvent" } }
+    TreasuryRiskDecisionRecord:
+      type: object
+      required: [id, house_account_id, intent_kind, asset_id, risk_increasing, stage, verdict, reason_codes, treasury_codes, limits,
+                 input_hash, decision_hash, risk_policy_version, evaluator_version, treasury_policy_version, treasury_policy_hash, evaluated_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        house_account_id: { $ref: "#/components/schemas/UUID" }
+        intent_kind: { type: string }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        risk_increasing: { type: boolean }
+        stage: { type: string }
+        verdict: { $ref: "#/components/schemas/TreasuryVerdict" }
+        reason_codes: { type: array, items: { type: string } }
+        treasury_codes: { type: array, items: { type: string } }
+        limits: { $ref: "#/components/schemas/TreasuryLimitEvaluation" }
+        input_hash: { type: string }
+        decision_hash: { type: string }
+        risk_policy_version: { type: string }
+        evaluator_version: { type: string }
+        treasury_policy_version: { type: integer }
+        treasury_policy_hash: { type: string }
+        evaluated_at: { $ref: "#/components/schemas/Timestamp" }
+    TreasuryRiskDecisionPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [value_domain, items]
+          properties:
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+            items: { type: array, items: { $ref: "#/components/schemas/TreasuryRiskDecisionRecord" } }
+    TreasuryCrossingRuleRequest:
+      type: object
+      required: [instrument_id, allow, disclosure, reason]
+      properties:
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        allow: { type: boolean }
+        disclosure: { type: string, minLength: 20, maxLength: 2000, description: "what customers are told; it must say the activity is simulated" }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    TreasuryCrossingDisclosure:
+      type: object
+      required: [id, instrument_id, book_id, rule_version, allow, disclosure, reason, actor_type, actor_id, evidence_ref, evidence_sha256, disclosed_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        book_id: { $ref: "#/components/schemas/UUID" }
+        rule_version: { type: integer }
+        allow: { type: boolean }
+        disclosure: { type: string }
+        reason: { type: string }
+        actor_type: { type: string }
+        actor_id: { type: string }
+        evidence_ref: { type: string }
+        evidence_sha256: { type: string }
+        disclosed_at: { $ref: "#/components/schemas/Timestamp" }
+    TreasuryCrossingDisclosureList:
+      type: object
+      required: [value_domain, instrument_id, items]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        items: { type: array, items: { $ref: "#/components/schemas/TreasuryCrossingDisclosure" } }
+    TreasuryHouseTrade:
+      type: object
+      required: [trade_id, book_id, instrument_id, trade_seq, house_account_id, house_side, account_side, price, base_asset, quote_asset,
+                 base_quantity, quote_notional, account_fee, crossing_rule_version, journal_transaction_id, traded_at]
+      properties:
+        trade_id: { $ref: "#/components/schemas/UUID" }
+        book_id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        trade_seq: { type: integer, format: int64 }
+        house_account_id: { $ref: "#/components/schemas/UUID" }
+        house_side: { $ref: "#/components/schemas/TreasurySide" }
+        account_side: { $ref: "#/components/schemas/TreasurySide" }
+        price: { $ref: "#/components/schemas/TreasuryPrice" }
+        base_asset: { $ref: "#/components/schemas/TreasuryAssetRef" }
+        quote_asset: { $ref: "#/components/schemas/TreasuryAssetRef" }
+        base_quantity: { $ref: "#/components/schemas/Quantity" }
+        quote_notional: { $ref: "#/components/schemas/Quantity" }
+        account_fee: { $ref: "#/components/schemas/Quantity", description: "the fee the account paid on this trade, in the quote asset" }
+        crossing_rule_version: { type: integer }
+        disclosure: { type: string, description: "the customer disclosure recorded with that crossing rule version" }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        traded_at: { $ref: "#/components/schemas/Timestamp" }
+    TreasuryHouseTradePage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [value_domain, items]
+          properties:
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+            items: { type: array, items: { $ref: "#/components/schemas/TreasuryHouseTrade" } }
+    FeeSide:
+      type: string
+      enum: [BUY, SELL]
+      x-enum-varnames: [FeeSideBuy, FeeSideSell]
+    FeeBookingMode:
+      type: string
+      enum: [POSTED, EMBEDDED]
+      x-enum-varnames: [FeeBookingPosted, FeeBookingEmbedded]
+      description: POSTED is the fee ledger's own journal; EMBEDDED charges were posted inside the trade's journal and verified.
+    FeeBookingStatus:
+      type: string
+      enum: [BOOKED, REVERSED]
+      x-enum-varnames: [FeeBookingBooked, FeeBookingReversed]
+    FeePeriodStatus:
+      type: string
+      enum: [OPEN, CRYSTALLIZED, CANCELLED, REVERSED]
+      x-enum-varnames: [FeePeriodOpen, FeePeriodCrystallized, FeePeriodCancelled, FeePeriodReversed]
+    FeeLineKind:
+      type: string
+      enum: [ACCRUAL, REVERSAL, NO_CHANGE, CRYSTALLIZATION]
+      x-enum-varnames: [FeeLineAccrual, FeeLineReversal, FeeLineNoChange, FeeLineCrystallization]
+    FeeRounding:
+      type: object
+      required: [buy_notional, sell_notional, spread, percentage_fee, venue_pass_through, strategy_fee, fee_cap, slippage_reserve,
+                 allow_platform_favourable]
+      description: Every rounding mode the schedule uses (down, up, half_even, half_up, floor, ceil, exact).
+      properties:
+        buy_notional: { type: string }
+        sell_notional: { type: string }
+        spread: { type: string }
+        percentage_fee: { type: string }
+        venue_pass_through: { type: string }
+        strategy_fee: { type: string }
+        fee_cap: { type: string }
+        slippage_reserve: { type: string }
+        allow_platform_favourable: { type: boolean }
+    FeeTier:
+      type: object
+      required: [min_trailing_volume_usd, overrides_percentage_fee, percentage_fee_bps, overrides_spread, spread_bps]
+      properties:
+        min_trailing_volume_usd: { $ref: "#/components/schemas/USD" }
+        overrides_percentage_fee: { type: boolean }
+        percentage_fee_bps: { $ref: "#/components/schemas/BPS" }
+        overrides_spread: { type: boolean }
+        spread_bps: { $ref: "#/components/schemas/BPS" }
+    FeeSchedule:
+      type: object
+      required: [label, quote_asset_id, quote_decimals, spread_bps, fixed_fee, percentage_fee_bps, venue_pass_through_bps, network_fee_amount,
+                 slippage_reserve_bps, subscription_discount_bps, tiers, strategy_fee_bps, max_total_fee_bps, max_total_fee, min_fee, rounding]
+      description: >-
+        One fee schedule, every component explicit. Amounts are base units of the quote asset (the
+        network fee in its own asset); rates are basis points.
+      properties:
+        label: { type: string, minLength: 1, maxLength: 100, description: "the version label every quote records" }
+        quote_asset_id: { $ref: "#/components/schemas/UUID" }
+        quote_decimals: { type: integer, minimum: 0, maximum: 38 }
+        spread_bps: { $ref: "#/components/schemas/BPS" }
+        fixed_fee: { $ref: "#/components/schemas/Quantity" }
+        percentage_fee_bps: { $ref: "#/components/schemas/BPS" }
+        venue_pass_through_bps: { $ref: "#/components/schemas/BPS" }
+        network_fee_asset_id: { $ref: "#/components/schemas/UUID" }
+        network_fee_amount: { $ref: "#/components/schemas/Quantity" }
+        slippage_reserve_bps: { $ref: "#/components/schemas/BPS" }
+        subscription_discount_bps: { $ref: "#/components/schemas/BPS" }
+        tiers: { type: array, items: { $ref: "#/components/schemas/FeeTier" } }
+        strategy_fee_bps: { $ref: "#/components/schemas/BPS" }
+        max_total_fee_bps: { $ref: "#/components/schemas/BPS" }
+        max_total_fee: { $ref: "#/components/schemas/Quantity" }
+        min_fee: { $ref: "#/components/schemas/Quantity" }
+        rounding: { $ref: "#/components/schemas/FeeRounding" }
+    FeeScheduleVersion:
+      type: object
+      required: [value_domain, id, key, version, schedule, schedule_hash, quote_asset, effective_from, published_at, actor_type, actor_id,
+                 reason, in_force]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        id: { $ref: "#/components/schemas/UUID" }
+        key: { type: string }
+        version: { type: integer, minimum: 1 }
+        schedule: { $ref: "#/components/schemas/FeeSchedule" }
+        schedule_hash: { type: string }
+        quote_asset: { $ref: "#/components/schemas/TreasuryAssetRef" }
+        effective_from: { $ref: "#/components/schemas/Timestamp" }
+        published_at: { $ref: "#/components/schemas/Timestamp" }
+        actor_type: { type: string }
+        actor_id: { type: string }
+        reason: { type: string }
+        in_force: { type: boolean, description: "this version prices orders now" }
+    FeeScheduleSummary:
+      type: object
+      required: [key, latest_version, version_count]
+      properties:
+        key: { type: string }
+        latest_version: { type: integer }
+        version_count: { type: integer }
+        effective: { $ref: "#/components/schemas/FeeScheduleVersion", description: "the version in force now; absent when every version takes effect later" }
+    FeeScheduleSummaryPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [value_domain, items]
+          properties:
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+            items: { type: array, items: { $ref: "#/components/schemas/FeeScheduleSummary" } }
+    FeeScheduleHistory:
+      type: object
+      required: [value_domain, key, versions]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        key: { type: string }
+        effective_version: { type: integer, description: "the version in force now; absent when none is yet" }
+        versions: { type: array, items: { $ref: "#/components/schemas/FeeScheduleVersion" } }
+    FeePublishRequest:
+      type: object
+      required: [key, schedule, reason]
+      properties:
+        key: { type: string, minLength: 1, maxLength: 128, pattern: '^[a-z0-9][a-z0-9_.:/-]{0,127}$' }
+        schedule: { $ref: "#/components/schemas/FeeSchedule" }
+        effective_from: { $ref: "#/components/schemas/Timestamp", description: "now when absent; never in the past" }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    FeePriceRecord:
+      type: object
+      required: [mantissa, scale, quote_asset, source, at]
+      properties:
+        mantissa: { $ref: "#/components/schemas/Quantity" }
+        scale: { type: integer }
+        quote_asset: { type: string }
+        source: { type: string }
+        at: { $ref: "#/components/schemas/Timestamp" }
+    FeeDisclosedInput:
+      type: object
+      required: [side, base_qty, base_decimals, quote_decimals, reference_price, trailing_volume_usd, has_subscription, strategy_originated]
+      properties:
+        side: { $ref: "#/components/schemas/FeeSide" }
+        base_qty: { $ref: "#/components/schemas/Quantity" }
+        base_decimals: { type: integer }
+        quote_decimals: { type: integer }
+        reference_price: { $ref: "#/components/schemas/FeePriceRecord" }
+        trailing_volume_usd: { $ref: "#/components/schemas/USD" }
+        has_subscription: { type: boolean }
+        strategy_originated: { type: boolean }
+    FeeDisclosedFeeLine:
+      type: object
+      required: [component, rate_bps, discount_bps, fixed_amount, rounding, computed, cap_reduction, charged]
+      properties:
+        component: { type: string }
+        rate_bps: { $ref: "#/components/schemas/BPS" }
+        discount_bps: { $ref: "#/components/schemas/BPS" }
+        fixed_amount: { $ref: "#/components/schemas/Quantity" }
+        rounding: { type: string }
+        computed: { $ref: "#/components/schemas/Quantity" }
+        cap_reduction: { $ref: "#/components/schemas/Quantity" }
+        charged: { $ref: "#/components/schemas/Quantity" }
+    FeeDisclosedFees:
+      type: object
+      required: [lines, minimum_fee_top_up, computed_total, total, min_fee, max_total_fee_bps, max_total_fee_bps_amount,
+                 max_total_fee_bps_rounding, max_total_fee, minimum_applied, max_bps_applied, max_absolute_applied]
+      properties:
+        lines: { type: array, items: { $ref: "#/components/schemas/FeeDisclosedFeeLine" } }
+        minimum_fee_top_up: { $ref: "#/components/schemas/Quantity" }
+        computed_total: { $ref: "#/components/schemas/Quantity" }
+        total: { $ref: "#/components/schemas/Quantity" }
+        min_fee: { $ref: "#/components/schemas/Quantity" }
+        max_total_fee_bps: { $ref: "#/components/schemas/BPS" }
+        max_total_fee_bps_amount: { $ref: "#/components/schemas/Quantity" }
+        max_total_fee_bps_rounding: { type: string }
+        max_total_fee: { $ref: "#/components/schemas/Quantity" }
+        minimum_applied: { type: boolean }
+        max_bps_applied: { type: boolean }
+        max_absolute_applied: { type: boolean }
+    FeeDisclosedMode:
+      type: object
+      required: [component, mode, favours_platform]
+      properties:
+        component: { type: string }
+        mode: { type: string }
+        favours_platform: { type: boolean }
+    FeeDisclosure:
+      type: object
+      description: >-
+        The canonical audit record of one quote: everything it charges, itemized, with the inputs
+        and the rounding of every component. Quantities are base units of the quote asset (the
+        network estimate in its own asset); the slippage reserve is held, never charged.
+      required: [kind, schedule_version, schedule_hash, input, quote_asset, tier, reference_price, execution_price, notional_at_reference,
+                 notional_at_execution, spread, fees, network, slippage_reserve, total_debit, total_credit, worst_case_total, effective_price,
+                 rounding]
+      properties:
+        kind: { type: string }
+        schedule_version: { type: string }
+        schedule_hash: { type: string }
+        input: { $ref: "#/components/schemas/FeeDisclosedInput" }
+        quote_asset: { $ref: "#/components/schemas/UUID" }
+        tier:
+          type: object
+          required: [index, min_trailing_volume_usd, percentage_fee_bps, spread_bps]
+          properties:
+            index: { type: integer, description: "-1 is the base schedule" }
+            min_trailing_volume_usd: { $ref: "#/components/schemas/USD" }
+            percentage_fee_bps: { $ref: "#/components/schemas/BPS" }
+            spread_bps: { $ref: "#/components/schemas/BPS" }
+        reference_price: { $ref: "#/components/schemas/FeePriceRecord" }
+        execution_price: { $ref: "#/components/schemas/FeePriceRecord" }
+        notional_at_reference: { $ref: "#/components/schemas/Quantity" }
+        notional_at_execution: { $ref: "#/components/schemas/Quantity" }
+        spread:
+          type: object
+          required: [bps, amount, rounding]
+          properties:
+            bps: { $ref: "#/components/schemas/BPS" }
+            amount: { $ref: "#/components/schemas/Quantity" }
+            rounding: { type: string }
+        fees: { $ref: "#/components/schemas/FeeDisclosedFees" }
+        network:
+          type: object
+          required: [asset, amount, in_quote_asset]
+          properties:
+            asset: { $ref: "#/components/schemas/UUID" }
+            amount: { $ref: "#/components/schemas/Quantity" }
+            in_quote_asset: { type: boolean }
+        slippage_reserve:
+          type: object
+          required: [bps, amount, rounding, held_not_charged]
+          properties:
+            bps: { $ref: "#/components/schemas/BPS" }
+            amount: { $ref: "#/components/schemas/Quantity" }
+            rounding: { type: string }
+            held_not_charged: { type: boolean }
+        total_debit: { $ref: "#/components/schemas/Quantity" }
+        total_credit: { $ref: "#/components/schemas/Quantity" }
+        worst_case_total: { $ref: "#/components/schemas/Quantity" }
+        effective_price: { $ref: "#/components/schemas/FeePriceRecord" }
+        rounding:
+          type: object
+          required: [components, platform_favourable_allowed, any_favours_platform]
+          properties:
+            components: { type: array, items: { $ref: "#/components/schemas/FeeDisclosedMode" } }
+            platform_favourable_allowed: { type: boolean }
+            any_favours_platform: { type: boolean }
+    FeeQuoteInput:
+      type: object
+      required: [schedule_key, side, base_quantity, base_decimals, reference_price]
+      properties:
+        schedule_key: { type: string, minLength: 1, maxLength: 128 }
+        at: { $ref: "#/components/schemas/Timestamp", description: "the instant whose schedule prices the order; now when absent" }
+        side: { $ref: "#/components/schemas/FeeSide" }
+        base_quantity: { $ref: "#/components/schemas/Quantity" }
+        base_decimals: { type: integer, minimum: 0, maximum: 38 }
+        reference_price: { type: string, pattern: '^[0-9]+(\.[0-9]+)?$', description: "price of one whole base unit in the schedule's quote asset, exactly" }
+        trailing_volume_usd: { $ref: "#/components/schemas/USD" }
+        has_subscription: { type: boolean }
+        strategy_originated: { type: boolean }
+    FeeScheduleRef:
+      type: object
+      required: [id, key, version, label, schedule_hash, effective_from]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        key: { type: string }
+        version: { type: integer }
+        label: { type: string }
+        schedule_hash: { type: string }
+        effective_from: { $ref: "#/components/schemas/Timestamp" }
+    FeeQuotePreview:
+      type: object
+      required: [value_domain, schedule, disclosure, disclosure_hash, charges, recorded]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        schedule: { $ref: "#/components/schemas/FeeScheduleRef" }
+        disclosure: { $ref: "#/components/schemas/FeeDisclosure" }
+        disclosure_hash: { type: string }
+        charges: { $ref: "#/components/schemas/FeeCharges" }
+        recorded: { type: boolean, description: "always false: a preview is never stored or charged" }
+    FeeQuoteRecordRequest:
+      allOf:
+        - { $ref: "#/components/schemas/FeeQuoteInput" }
+        - type: object
+          required: [subsystem, mode]
+          properties:
+            subsystem: { type: string, description: "the subsystem the quote belongs to (ORDERS, TRANSFERS, ...)" }
+            mode: { $ref: "#/components/schemas/AdvancedMode", description: "PAPER or SANDBOX" }
+            account_id: { $ref: "#/components/schemas/UUID", description: "binds the quote to its payer: only that account can then be charged it" }
+            base_asset_id: { $ref: "#/components/schemas/UUID" }
+            source: { type: string, minLength: 1, maxLength: 100, description: "where the reference price came from" }
+    FeeCharges:
+      type: object
+      required: [quote_asset_id, spread, platform, strategy, venue, network, network_in_quote]
+      description: Everything a disclosure charges, component by component, as the ledger books it.
+      properties:
+        quote_asset_id: { $ref: "#/components/schemas/UUID" }
+        spread: { $ref: "#/components/schemas/Quantity" }
+        platform: { $ref: "#/components/schemas/Quantity", description: "fixed, percentage and minimum-fee top-up" }
+        strategy: { $ref: "#/components/schemas/Quantity" }
+        venue: { $ref: "#/components/schemas/Quantity" }
+        network: { $ref: "#/components/schemas/Quantity" }
+        network_asset_id: { $ref: "#/components/schemas/UUID" }
+        network_in_quote: { type: boolean }
+    FeeVerification:
+      type: object
+      required: [verified]
+      properties:
+        verified: { type: boolean }
+        code: { type: string, description: "the stable error code when the record does not verify" }
+        reason: { type: string }
+        detail: { type: string }
+    FeeQuoteRecord:
+      type: object
+      required: [value_domain, id, schedule_id, schedule_key, schedule_version, schedule_hash, subsystem, side, disclosure, disclosure_hash,
+                 charges, quoted_at, valid_until]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        id: { $ref: "#/components/schemas/UUID" }
+        schedule_id: { $ref: "#/components/schemas/UUID" }
+        schedule_key: { type: string }
+        schedule_version: { type: integer }
+        schedule_hash: { type: string }
+        subsystem: { type: string }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        base_asset_id: { $ref: "#/components/schemas/UUID" }
+        side: { $ref: "#/components/schemas/FeeSide" }
+        disclosure: { $ref: "#/components/schemas/FeeDisclosure" }
+        disclosure_hash: { type: string }
+        charges: { $ref: "#/components/schemas/FeeCharges" }
+        quoted_at: { $ref: "#/components/schemas/Timestamp" }
+        valid_until: { $ref: "#/components/schemas/Timestamp" }
+        verification: { $ref: "#/components/schemas/FeeVerification", description: "present on a read by id" }
+    FeeQuotePage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [value_domain, items]
+          properties:
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+            items: { type: array, items: { $ref: "#/components/schemas/FeeQuoteRecord" } }
+    FeeSpreadLine:
+      type: object
+      required: [schedule_key, schedule_version, schedule_hash, disclosure_hash, side, base_quantity, reference_price, execution_price,
+                 spread_bps, spread_amount, quote_asset_id]
+      properties:
+        schedule_key: { type: string }
+        schedule_version: { type: integer }
+        schedule_hash: { type: string }
+        disclosure_hash: { type: string }
+        side: { $ref: "#/components/schemas/FeeSide" }
+        base_quantity: { $ref: "#/components/schemas/Quantity" }
+        reference_price: { $ref: "#/components/schemas/TreasuryPrice" }
+        execution_price: { $ref: "#/components/schemas/TreasuryPrice" }
+        spread_bps: { $ref: "#/components/schemas/BPS" }
+        spread_amount: { $ref: "#/components/schemas/Quantity" }
+        quote_asset_id: { $ref: "#/components/schemas/UUID" }
+    FeeBooking:
+      type: object
+      required: [value_domain, id, disclosure_id, account_id, mode, booking_mode, journal_kind, journal_transaction_id, effect_id, charges,
+                 status, evidence_ref, booked_at, spread_line]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        id: { $ref: "#/components/schemas/UUID" }
+        disclosure_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        mode: { $ref: "#/components/schemas/AdvancedMode" }
+        booking_mode: { $ref: "#/components/schemas/FeeBookingMode" }
+        journal_kind: { type: string }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        effect_id: { $ref: "#/components/schemas/UUID" }
+        intent_id: { $ref: "#/components/schemas/UUID" }
+        charges: { $ref: "#/components/schemas/FeeCharges" }
+        status: { $ref: "#/components/schemas/FeeBookingStatus" }
+        evidence_ref: { type: string }
+        booked_at: { $ref: "#/components/schemas/Timestamp" }
+        reversal_journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        reversal_effect_id: { $ref: "#/components/schemas/UUID" }
+        reversal_reason_code: { type: string }
+        reversed_at: { $ref: "#/components/schemas/Timestamp" }
+        spread_line: { $ref: "#/components/schemas/FeeSpreadLine" }
+    FeeBookingDetail:
+      allOf:
+        - { $ref: "#/components/schemas/FeeBooking" }
+        - type: object
+          required: [disclosure, verification]
+          properties:
+            disclosure: { $ref: "#/components/schemas/FeeDisclosure" }
+            verification: { $ref: "#/components/schemas/FeeVerification" }
+    FeeBookingPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [value_domain, items]
+          properties:
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+            items: { type: array, items: { $ref: "#/components/schemas/FeeBooking" } }
+    FeeReverseRequest:
+      type: object
+      required: [reason_code, reason]
+      properties:
+        reason_code: { type: string, pattern: '^[A-Z][A-Z0-9_]{2,63}$' }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    FeeSpreadCharge:
+      type: object
+      required: [booking_id, disclosure_id, account_id, schedule_key, schedule_version, schedule_hash, disclosure_hash, side, base_quantity,
+                 reference_price, execution_price, spread_bps, spread_amount, quote_asset_id, booking_mode, status, journal_transaction_id, booked_at]
+      properties:
+        booking_id: { $ref: "#/components/schemas/UUID" }
+        disclosure_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        schedule_key: { type: string }
+        schedule_version: { type: integer }
+        schedule_hash: { type: string }
+        disclosure_hash: { type: string }
+        side: { $ref: "#/components/schemas/FeeSide" }
+        base_quantity: { $ref: "#/components/schemas/Quantity" }
+        reference_price: { $ref: "#/components/schemas/TreasuryPrice" }
+        execution_price: { $ref: "#/components/schemas/TreasuryPrice" }
+        spread_bps: { $ref: "#/components/schemas/BPS" }
+        spread_amount: { $ref: "#/components/schemas/Quantity" }
+        quote_asset_id: { $ref: "#/components/schemas/UUID" }
+        booking_mode: { $ref: "#/components/schemas/FeeBookingMode" }
+        status: { $ref: "#/components/schemas/FeeBookingStatus" }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        reversal_journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        booked_at: { $ref: "#/components/schemas/Timestamp" }
+    FeeSpreadAudit:
+      type: object
+      required: [value_domain, items]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        items: { type: array, items: { $ref: "#/components/schemas/FeeSpreadCharge" } }
+    FeeSpreadTotals:
+      type: object
+      required: [value_domain, quote_asset_id, booked, reversed]
+      description: Booked less reversed is what SPREAD_REVENUE holds from the fee ledger's bookings.
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        quote_asset_id: { $ref: "#/components/schemas/UUID" }
+        booked: { $ref: "#/components/schemas/Quantity" }
+        reversed: { $ref: "#/components/schemas/Quantity" }
+    FeePeriodTerms:
+      type: object
+      required: [account_ref, terms_version, period_start, period_end, opening_nav, prior_hwm, hurdle_annual_bps, fee_rate_bps, crystallization,
+                 prior_accrued_fee]
+      properties:
+        account_ref: { type: string }
+        terms_version: { type: string }
+        period_start: { $ref: "#/components/schemas/Timestamp" }
+        period_end: { $ref: "#/components/schemas/Timestamp" }
+        opening_nav: { $ref: "#/components/schemas/USD" }
+        prior_hwm: { $ref: "#/components/schemas/USD", description: "the high-water mark the period opened with" }
+        hurdle_annual_bps: { type: integer, format: int64 }
+        fee_rate_bps: { type: integer, format: int64 }
+        crystallization: { type: string }
+        prior_accrued_fee: { $ref: "#/components/schemas/USD" }
+    FeeFlow:
+      type: object
+      required: [id, seq, at, amount, nav_before, actor_type, actor_id]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        seq: { type: integer }
+        at: { $ref: "#/components/schemas/Timestamp" }
+        amount: { $ref: "#/components/schemas/USD", description: "a deposit is positive, a withdrawal negative" }
+        nav_before: { $ref: "#/components/schemas/USD" }
+        actor_type: { type: string }
+        actor_id: { type: string }
+    FeePerformanceLine:
+      type: object
+      required: [id, seq, kind, at, nav, hwm_adjusted, hurdle_threshold, fee_base, amount, accrual_before, accrual_after, effect_id]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        seq: { type: integer }
+        kind: { $ref: "#/components/schemas/FeeLineKind" }
+        at: { $ref: "#/components/schemas/Timestamp" }
+        nav: { $ref: "#/components/schemas/USD" }
+        hwm_adjusted: { $ref: "#/components/schemas/USD" }
+        hurdle_threshold: { $ref: "#/components/schemas/USD" }
+        fee_base: { $ref: "#/components/schemas/USD", description: "what is above the high-water mark and the hurdle; nothing accrues on less" }
+        amount: { $ref: "#/components/schemas/USD" }
+        accrual_before: { $ref: "#/components/schemas/USD" }
+        accrual_after: { $ref: "#/components/schemas/USD" }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        effect_id: { $ref: "#/components/schemas/UUID" }
+    FeeStatementFlow:
+      type: object
+      required: [at, amount, nav_before, nav_after, hwm_before, hwm_after]
+      properties:
+        at: { $ref: "#/components/schemas/Timestamp" }
+        amount: { $ref: "#/components/schemas/USD" }
+        nav_before: { $ref: "#/components/schemas/USD" }
+        nav_after: { $ref: "#/components/schemas/USD" }
+        hwm_before: { $ref: "#/components/schemas/USD" }
+        hwm_after: { $ref: "#/components/schemas/USD" }
+    FeeAttribution:
+      type: object
+      required: [strategy, gross_pnl, eligible, fee_share, remainder_allocated]
+      properties:
+        strategy: { type: string }
+        gross_pnl: { $ref: "#/components/schemas/USD" }
+        eligible: { type: boolean }
+        fee_share: { $ref: "#/components/schemas/USD" }
+        remainder_allocated: { $ref: "#/components/schemas/USD" }
+    FeeStatement:
+      type: object
+      required: [kind, mode, period_start, period_end, opening_nav, flows, net_flows, closing_nav_gross, gross_pnl, hwm_before, hwm_adjusted,
+                 hurdle_annual_bps, hurdle_threshold, fee_base, fee_rate_bps, fee_amount, closing_nav_net, hwm_after, prior_accrued_fee,
+                 attribution, rounding]
+      description: The deterministic statement a crystallization stores with its hash.
+      properties:
+        kind: { type: string }
+        mode: { type: string }
+        period_start: { $ref: "#/components/schemas/Timestamp" }
+        period_end: { $ref: "#/components/schemas/Timestamp" }
+        opening_nav: { $ref: "#/components/schemas/USD" }
+        flows: { type: array, items: { $ref: "#/components/schemas/FeeStatementFlow" } }
+        net_flows: { $ref: "#/components/schemas/USD" }
+        closing_nav_gross: { $ref: "#/components/schemas/USD" }
+        gross_pnl: { $ref: "#/components/schemas/USD" }
+        hwm_before: { $ref: "#/components/schemas/USD" }
+        hwm_adjusted: { $ref: "#/components/schemas/USD" }
+        hurdle_annual_bps: { type: integer, format: int64 }
+        hurdle_threshold: { $ref: "#/components/schemas/USD" }
+        fee_base: { $ref: "#/components/schemas/USD" }
+        fee_rate_bps: { type: integer, format: int64 }
+        fee_amount: { $ref: "#/components/schemas/USD" }
+        closing_nav_net: { $ref: "#/components/schemas/USD" }
+        hwm_after: { $ref: "#/components/schemas/USD", description: "the high-water mark the next period opens with" }
+        prior_accrued_fee: { $ref: "#/components/schemas/USD" }
+        attribution: { type: array, items: { $ref: "#/components/schemas/FeeAttribution" } }
+        rounding:
+          type: object
+          additionalProperties: { type: string }
+    FeePeriod:
+      type: object
+      required: [value_domain, id, account_id, strategy_ref, seq, mode, fee_asset_id, terms, terms_hash, status, accrued, flows, lines]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        strategy_ref: { type: string }
+        seq: { type: integer }
+        previous_period_id: { $ref: "#/components/schemas/UUID" }
+        mode: { $ref: "#/components/schemas/AdvancedMode" }
+        fee_asset_id: { $ref: "#/components/schemas/UUID" }
+        terms: { $ref: "#/components/schemas/FeePeriodTerms" }
+        terms_hash: { type: string }
+        status: { $ref: "#/components/schemas/FeePeriodStatus" }
+        accrued: { $ref: "#/components/schemas/USD", description: "the running accrual of an open period" }
+        last_valuation_at: { $ref: "#/components/schemas/Timestamp" }
+        flows: { type: array, items: { $ref: "#/components/schemas/FeeFlow" } }
+        lines: { type: array, items: { $ref: "#/components/schemas/FeePerformanceLine" } }
+        statement: { $ref: "#/components/schemas/FeeStatement" }
+        statement_hash: { type: string }
+        crystallization_journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        crystallization_effect_id: { $ref: "#/components/schemas/UUID" }
+        crystallized_at: { $ref: "#/components/schemas/Timestamp" }
+        reversal_journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        reversal_reason_code: { type: string }
+        reversed_at: { $ref: "#/components/schemas/Timestamp" }
+        gross_return_bps: { type: integer, format: int64, description: "Modified Dietz return gross of the fee, rounded toward zero" }
+        net_return_bps: { type: integer, format: int64 }
+        verification: { $ref: "#/components/schemas/FeeVerification", description: "present on a read by id of a period with a statement" }
+    FeePeriodPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [value_domain, items]
+          properties:
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+            items: { type: array, items: { $ref: "#/components/schemas/FeePeriod" } }
+    FeeOpenPeriodRequest:
+      type: object
+      required: [account_id, strategy_ref, terms_version, period_end, hurdle_annual_bps, fee_rate_bps]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        strategy_ref: { type: string, minLength: 1, maxLength: 90, pattern: '^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,89}$' }
+        mode: { $ref: "#/components/schemas/AdvancedMode", description: "PAPER (default) or SANDBOX" }
+        fee_asset_id: { $ref: "#/components/schemas/UUID", description: "defaults to the sandbox dollar" }
+        terms_version: { type: string, minLength: 1, maxLength: 100 }
+        period_start: { $ref: "#/components/schemas/Timestamp", description: "the first period of a pair only" }
+        period_end: { $ref: "#/components/schemas/Timestamp" }
+        opening_nav: { $ref: "#/components/schemas/USD", description: "the first period of a pair only" }
+        hurdle_annual_bps: { type: integer, format: int64, minimum: 0 }
+        fee_rate_bps: { type: integer, format: int64, minimum: 0, maximum: 10000 }
+    FeeFlowRequest:
+      type: object
+      required: [at, amount, nav_before]
+      properties:
+        at: { $ref: "#/components/schemas/Timestamp" }
+        amount: { $ref: "#/components/schemas/USD" }
+        nav_before: { $ref: "#/components/schemas/USD" }
+    FeeFlowResult:
+      type: object
+      required: [value_domain, period_id, flow]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        period_id: { $ref: "#/components/schemas/UUID" }
+        flow: { $ref: "#/components/schemas/FeeFlow" }
+    FeeAccrueRequest:
+      type: object
+      required: [at, nav]
+      properties:
+        at: { $ref: "#/components/schemas/Timestamp" }
+        nav: { $ref: "#/components/schemas/USD", description: "the gross NAV at that instant, before any performance fee" }
+    FeeLineResult:
+      type: object
+      required: [value_domain, period_id, line]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        period_id: { $ref: "#/components/schemas/UUID" }
+        line: { $ref: "#/components/schemas/FeePerformanceLine" }
+    FeeContribution:
+      type: object
+      required: [strategy, gross_pnl]
+      properties:
+        strategy: { type: string, minLength: 1, maxLength: 100 }
+        gross_pnl: { $ref: "#/components/schemas/USD" }
+    FeeCrystallizeRequest:
+      type: object
+      required: [closing_nav]
+      properties:
+        closing_nav: { $ref: "#/components/schemas/USD", description: "the gross closing NAV" }
+        contributions: { type: array, maxItems: 64, items: { $ref: "#/components/schemas/FeeContribution" } }
+    FeeCancelPeriodRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 500 }
 
     # >>> advanced:stable schemas (insert this subsystem's schemas directly below; keep the marker)
     #
@@ -9618,8 +12033,9 @@ components:
       x-enum-varnames: [StrategyValidationPassed, StrategyValidationFailed]
     StrategyBuildFailure:
       type: string
-      enum: [SCAN_REJECTED, COMPILE_FAILED, BUILD_TIMEOUT]
-      x-enum-varnames: [StrategyBuildScanRejected, StrategyBuildCompileFailed, StrategyBuildTimeout]
+      enum: [SCAN_REJECTED, COMPILE_FAILED, BUILD_TIMEOUT, BUILD_OUTPUT_LIMIT, BUILD_MEMORY_LIMIT]
+      x-enum-varnames: [StrategyBuildScanRejected, StrategyBuildCompileFailed, StrategyBuildTimeout, StrategyBuildOutputLimit,
+                        StrategyBuildMemoryLimit]
     StrategyReviewDecision:
       type: string
       enum: [APPROVE, REJECT]
@@ -9804,12 +12220,6 @@ components:
       properties:
         account_id: { $ref: "#/components/schemas/UUID" }
         reason: { type: string, maxLength: 1000 }
-    StrategyFollowRequest:
-      type: object
-      required: [account_id, snapshot]
-      properties:
-        account_id: { $ref: "#/components/schemas/UUID" }
-        snapshot: { $ref: "#/components/schemas/StrategySnapshot" }
 
     # --- responses --------------------------------------------------------
     StrategyVersionSummary:
@@ -9897,6 +12307,13 @@ components:
         toolchain_version: { type: string }
         sdk_version: { type: string }
         runtime_version: { type: string }
+        build_log:
+          type: string
+          maxLength: 65536
+          description: >-
+            What the compiler said, at most 64 KiB, with the build directory
+            replaced by $BUILD: why a COMPILE_FAILED version did not build.
+            Shown to the creator's account and to operators only.
     StrategyReview:
       type: object
       required: [decision, reason_code, note, reviewer_actor_type, reviewed_at]
@@ -9972,9 +12389,11 @@ components:
     StrategyPerformanceSnapshot:
       type: object
       description: >-
-        Paper performance computed exactly from a follow history, in basis
-        points. A paper result from caller-supplied snapshots, never a record
-        of money earned or lost.
+        Paper performance computed exactly from an install's paper book, in
+        basis points: each follow run's equity is the install's paper capital
+        moved by its own fills, valued at reference prices the service read,
+        before the venue's disclosed charges. A paper result, never a record of
+        money earned or lost.
       required: [value_domain, version_id, follow_runs_count, first_as_of, last_as_of, history_digest, return_bps,
                  max_drawdown_bps, volatility_bps, turnover_bps, computed_at]
       properties:
@@ -10041,7 +12460,7 @@ components:
     StrategyInstall:
       type: object
       required: [value_domain, id, account_id, version_id, listing_id, listing_title, strategy_ref, version_number, version_status,
-                 version_moderation, mode, status, installed_by_actor_type, created_at]
+                 version_moderation, mode, status, installed_by_actor_type, paper_capital, created_at]
       properties:
         value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
         id: { $ref: "#/components/schemas/UUID" }
@@ -10056,6 +12475,9 @@ components:
         mode: { $ref: "#/components/schemas/AdvancedMode" }
         status: { $ref: "#/components/schemas/StrategyInstallStatus" }
         installed_by_actor_type: { type: string }
+        paper_capital:
+          $ref: "#/components/schemas/StrategyDecimal"
+          description: What the install's paper book started with, in simulated dollars; it never changes.
         created_at: { $ref: "#/components/schemas/Timestamp" }
         latest_performance: { $ref: "#/components/schemas/StrategyPerformanceSnapshot" }
     StrategyInstallPage:
@@ -10074,18 +12496,32 @@ components:
         intent_id: { $ref: "#/components/schemas/UUID" }
         kind: { type: string }
         outcome: { $ref: "#/components/schemas/StrategyFollowOutcome" }
-        notional: { $ref: "#/components/schemas/StrategyDecimal" }
+        notional:
+          $ref: "#/components/schemas/StrategyDecimal"
+          description: The proposal's quantity at reference_price -- what the manifest's cap and Risk Kernel V2 judged.
+        reference_price:
+          $ref: "#/components/schemas/StrategyDecimal"
+          description: The price the service read itself that the notional was computed at, never the strategy's limit price.
         decision_hash: { type: string }
         risk_decision: { $ref: "#/components/schemas/AdvancedRiskDecision" }
         effect_id: { $ref: "#/components/schemas/UUID" }
         effect_status: { type: string }
         effect_failure_code: { type: string }
         external_ref: { type: string }
+    StrategyFollowMark:
+      type: object
+      description: A reference price a follow run valued its paper book and its proposals at, by the price store's observation.
+      required: [instrument_id, price_id, mark, observed_at]
+      properties:
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        price_id: { $ref: "#/components/schemas/UUID" }
+        mark: { $ref: "#/components/schemas/StrategyDecimal" }
+        observed_at: { $ref: "#/components/schemas/Timestamp" }
     StrategyFollowRun:
       type: object
       required: [value_domain, id, install_id, version_id, account_id, sandbox_run_id, trigger, as_of, input_digest, run_digest,
                  termination, proposals_count, accepted_count, violations_count, intents_submitted, intents_dispatched,
-                 intents_risk_rejected, intents_failed, equity, turnover, evidence_ref, evidence_sha256, created_at, intents]
+                 intents_risk_rejected, intents_failed, equity, turnover, evidence_ref, evidence_sha256, created_at, intents, marks]
       properties:
         value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
         id: { $ref: "#/components/schemas/UUID" }
@@ -10105,12 +12541,23 @@ components:
         intents_dispatched: { type: integer }
         intents_risk_rejected: { type: integer }
         intents_failed: { type: integer }
-        equity: { $ref: "#/components/schemas/StrategyDecimal" }
-        turnover: { $ref: "#/components/schemas/StrategyDecimal" }
+        paper_cash:
+          $ref: "#/components/schemas/StrategyDecimal"
+          description: >-
+            The paper book's uninvested balance when the run started. Absent
+            for a run recorded before paper books, whose equity came from a
+            caller's snapshot and counts for no performance.
+        equity:
+          $ref: "#/components/schemas/StrategyDecimal"
+          description: The paper book -- its uninvested balance plus every position at its reference price -- when the run started.
+        turnover:
+          $ref: "#/components/schemas/StrategyDecimal"
+          description: The exact notional the run dispatched.
         evidence_ref: { type: string }
         evidence_sha256: { type: string }
         created_at: { $ref: "#/components/schemas/Timestamp" }
-        replayed: { type: boolean, description: "True when this snapshot time was already followed: nothing ran again" }
+        replayed: { type: boolean, description: "True when the install was already followed at this instant: nothing ran again" }
+        marks: { type: array, items: { $ref: "#/components/schemas/StrategyFollowMark" } }
         intents: { type: array, items: { $ref: "#/components/schemas/StrategyFollowIntent" } }
     StrategyFollowRunPage:
       allOf:
@@ -10162,6 +12609,626 @@ components:
             items: { type: array, items: { $ref: "#/components/schemas/StrategySandboxRun" } }
 
     # >>> advanced:delegation schemas (insert this subsystem's schemas directly below; keep the marker)
+    #
+    # Every enum carries x-enum-varnames so its Go constants can never collide with another schema's
+    # (ACTIVE, APPROVED, REJECTED and FAILED already exist unprefixed). *_usd figures are the sandbox
+    # dollar as an exact two-decimal string; amounts are exact base units. Plans are reported exactly as
+    # they were hashed: the plan hash a decision names must be the one the plan below it carries.
+    DelegationInstrumentClass:
+      type: string
+      enum: [STABLE_VALUE, SPOT_TOKEN, SPECULATIVE_TOKEN]
+      x-enum-varnames: [DelegationClassStableValue, DelegationClassSpotToken, DelegationClassSpeculativeToken]
+    DelegationActionClass:
+      type: string
+      enum: [ACQUIRE_EXPOSURE, REDUCE_EXPOSURE, PROPOSE_WITHDRAWAL]
+      x-enum-varnames: [DelegationActionAcquireExposure, DelegationActionReduceExposure, DelegationActionProposeWithdrawal]
+    DelegationChain:
+      type: string
+      enum: [sbx-solana, sbx-ethereum]
+      x-enum-varnames: [DelegationChainSolana, DelegationChainEthereum]
+    DelegationCapabilityStatus:
+      type: string
+      enum: [ACTIVE, REVOKED]
+      x-enum-varnames: [DelegationCapabilityActive, DelegationCapabilityRevoked]
+    DelegationCapabilityStanding:
+      type: string
+      enum: [ACTIVE, EXPIRED, REVOKED]
+      x-enum-varnames: [DelegationStandingActive, DelegationStandingExpired, DelegationStandingRevoked]
+      description: REVOKED when revoked; EXPIRED when as_of is at or after expires_at; ACTIVE otherwise. Expiry is not a stored status.
+    DelegationSwapStatus:
+      type: string
+      enum: [ADMITTED, AWAITING_APPROVAL, APPROVED, SIGNED, SUBMITTED, UNKNOWN, SETTLED, REJECTED, CANCELLED, FAILED]
+      x-enum-varnames: [DelegationSwapAdmitted, DelegationSwapAwaitingApproval, DelegationSwapApproved, DelegationSwapSigned,
+                        DelegationSwapSubmitted, DelegationSwapUnknown, DelegationSwapSettled, DelegationSwapRejected,
+                        DelegationSwapCancelled, DelegationSwapFailed]
+    DelegationWithdrawalStatus:
+      type: string
+      enum: [PROPOSED, AWAITING_APPROVAL, APPROVED, SIGNED, SUBMITTED, UNKNOWN, SETTLED, REJECTED, DECLINED, CANCELLED, FAILED]
+      x-enum-varnames: [DelegationWithdrawalProposed, DelegationWithdrawalAwaitingApproval, DelegationWithdrawalApproved,
+                        DelegationWithdrawalSigned, DelegationWithdrawalSubmitted, DelegationWithdrawalUnknown,
+                        DelegationWithdrawalSettled, DelegationWithdrawalRejected, DelegationWithdrawalDeclined,
+                        DelegationWithdrawalCancelled, DelegationWithdrawalFailed]
+    DelegationDestinationStatus:
+      type: string
+      enum: [ACTIVE, REMOVED]
+      x-enum-varnames: [DelegationDestinationActive, DelegationDestinationRemoved]
+    DelegationDecision:
+      type: string
+      enum: [APPROVE, DECLINE]
+      x-enum-varnames: [DelegationDecisionApprove, DelegationDecisionDecline]
+    DelegationVerdict:
+      type: string
+      enum: [APPROVED, REJECTED]
+      x-enum-varnames: [DelegationVerdictApproved, DelegationVerdictRejected]
+    DelegationEvaluationOutcome:
+      type: string
+      enum: [AUTO_APPROVE, HUMAN_REQUIRED]
+      x-enum-varnames: [DelegationOutcomeAutoApprove, DelegationOutcomeHumanRequired]
+      description: AUTO_APPROVE exists only in LOCAL, TEST and DEV with every auto bound met; a rejected proposal is never stored as a withdrawal.
+    DelegationSubjectKind:
+      type: string
+      enum: [SWAP, WITHDRAWAL]
+      x-enum-varnames: [DelegationSubjectSwap, DelegationSubjectWithdrawal]
+    DelegationActor:
+      type: object
+      required: [actor_type, actor_id]
+      properties:
+        actor_type: { type: string }
+        actor_id: { type: string }
+    DelegationAgent:
+      type: object
+      required: [id, name, stage, state, strategy_id, created_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        name: { type: string }
+        stage: { type: string }
+        state: { type: string, description: "A PAUSED, FAILED, REVOKED or SUPERSEDED agent may not act; the service refuses a grant to one" }
+        strategy_id: { $ref: "#/components/schemas/UUID" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+    DelegationAgentList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/DelegationAgent" } }
+    DelegationCapabilityUsage:
+      type: object
+      description: >-
+        What the capability has used, measured from its usage rows: on the UTC day of as_of and in all.
+        remaining_* is the limit less the use, never below zero. A use is recorded at admission, so a
+        request that was later refused or failed still counts against the limits.
+      required: [day, uses, used_today_usd, used_total_usd, remaining_today_usd, remaining_total_usd]
+      properties:
+        day: { type: string, pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}$', description: The UTC day used_today_usd counts }
+        uses: { type: integer }
+        used_today_usd: { $ref: "#/components/schemas/USD" }
+        used_total_usd: { $ref: "#/components/schemas/USD" }
+        remaining_today_usd: { $ref: "#/components/schemas/USD" }
+        remaining_total_usd: { $ref: "#/components/schemas/USD" }
+    DelegationCapability:
+      type: object
+      required: [id, account_id, agent_id, strategy_id, environment, mode, instrument_classes, action_classes, max_notional_usd,
+                 max_daily_notional_usd, max_single_trade_usd, destination_allowlist, chain_allowlist, granted_at, expires_at,
+                 requires_human_approval, status, standing, content_hash, granted_by, usage, as_of, value_domain]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        agent_id: { $ref: "#/components/schemas/UUID" }
+        agent_name: { type: string }
+        strategy_id: { $ref: "#/components/schemas/UUID" }
+        environment: { type: string }
+        mode: { $ref: "#/components/schemas/AdvancedMode" }
+        instrument_classes: { type: array, items: { $ref: "#/components/schemas/DelegationInstrumentClass" } }
+        action_classes: { type: array, items: { $ref: "#/components/schemas/DelegationActionClass" } }
+        max_notional_usd: { $ref: "#/components/schemas/USD" }
+        max_daily_notional_usd: { $ref: "#/components/schemas/USD" }
+        max_single_trade_usd: { $ref: "#/components/schemas/USD" }
+        destination_allowlist: { type: array, items: { type: string } }
+        chain_allowlist: { type: array, items: { $ref: "#/components/schemas/DelegationChain" } }
+        granted_at: { $ref: "#/components/schemas/Timestamp" }
+        expires_at: { $ref: "#/components/schemas/Timestamp" }
+        requires_human_approval: { type: boolean }
+        status: { $ref: "#/components/schemas/DelegationCapabilityStatus" }
+        standing: { $ref: "#/components/schemas/DelegationCapabilityStanding" }
+        content_hash: { type: string, description: "SHA-256 of the canonical grant; every plan signed under it names it" }
+        granted_by: { $ref: "#/components/schemas/DelegationActor" }
+        revoked_by: { $ref: "#/components/schemas/DelegationActor" }
+        revocation_reason: { type: string }
+        revoked_at: { $ref: "#/components/schemas/Timestamp" }
+        usage: { $ref: "#/components/schemas/DelegationCapabilityUsage" }
+        as_of: { $ref: "#/components/schemas/Timestamp" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    DelegationCapabilityUse:
+      type: object
+      required: [id, subject_kind, subject_id, action_class, notional_usd, used_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        subject_kind: { $ref: "#/components/schemas/DelegationSubjectKind" }
+        subject_id: { $ref: "#/components/schemas/UUID" }
+        action_class: { $ref: "#/components/schemas/DelegationActionClass" }
+        notional_usd: { $ref: "#/components/schemas/USD" }
+        used_at: { $ref: "#/components/schemas/Timestamp" }
+    DelegationCapabilityDetail:
+      allOf:
+        - { $ref: "#/components/schemas/DelegationCapability" }
+        - type: object
+          required: [uses]
+          properties:
+            uses: { type: array, items: { $ref: "#/components/schemas/DelegationCapabilityUse" }, description: "Newest first, bounded" }
+    DelegationCapabilityPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items, value_domain]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/DelegationCapability" } }
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    DelegationGrantRequest:
+      type: object
+      required: [account_id, agent_id, mode, instrument_classes, action_classes, max_notional_usd, max_daily_notional_usd,
+                 max_single_trade_usd, destination_allowlist, chain_allowlist, expires_at, requires_human_approval]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        agent_id: { $ref: "#/components/schemas/UUID" }
+        mode: { $ref: "#/components/schemas/AdvancedMode" }
+        instrument_classes: { type: array, minItems: 1, maxItems: 3, items: { $ref: "#/components/schemas/DelegationInstrumentClass" } }
+        action_classes: { type: array, minItems: 1, maxItems: 3, items: { $ref: "#/components/schemas/DelegationActionClass" } }
+        max_notional_usd: { $ref: "#/components/schemas/USD" }
+        max_daily_notional_usd: { $ref: "#/components/schemas/USD" }
+        max_single_trade_usd: { $ref: "#/components/schemas/USD" }
+        destination_allowlist:
+          type: array
+          minItems: 1
+          maxItems: 64
+          items: { type: string, minLength: 32, maxLength: 44 }
+          description: Simulated-chain addresses a swap may pay to and a withdrawal may go to; a swap's venue must be among them
+        chain_allowlist: { type: array, minItems: 1, maxItems: 2, items: { $ref: "#/components/schemas/DelegationChain" } }
+        expires_at: { $ref: "#/components/schemas/Timestamp" }
+        requires_human_approval: { type: boolean }
+    DelegationReasonRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    DelegationDestination:
+      type: object
+      required: [id, account_id, chain, address, label, status, added_by, added_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        chain: { $ref: "#/components/schemas/DelegationChain" }
+        address: { type: string }
+        label: { type: string }
+        status: { $ref: "#/components/schemas/DelegationDestinationStatus" }
+        added_by: { $ref: "#/components/schemas/DelegationActor" }
+        added_at: { $ref: "#/components/schemas/Timestamp" }
+        removed_by: { $ref: "#/components/schemas/DelegationActor" }
+        removed_at: { $ref: "#/components/schemas/Timestamp" }
+    DelegationDestinationList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/DelegationDestination" } }
+    DelegationDestinationRequest:
+      type: object
+      required: [account_id, chain, address, label]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        chain: { $ref: "#/components/schemas/DelegationChain" }
+        address: { type: string, minLength: 32, maxLength: 44 }
+        label: { type: string, minLength: 1, maxLength: 120 }
+    DelegationWithdrawalPolicy:
+      type: object
+      required: [id, account_id, version, auto_approve_enabled, auto_approve_max_usd, auto_approve_max_risk_score, max_risk_score,
+                 per_withdrawal_limit_usd, daily_limit_usd, velocity_max_count, min_destination_age_seconds, min_account_age_seconds,
+                 cooling_period_seconds, strong_auth_required, strong_auth_max_age_seconds, policy_hash, created_by, effective_at,
+                 created_at, value_domain]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        version: { type: integer }
+        auto_approve_enabled: { type: boolean, description: "Honoured only in LOCAL, TEST and DEV; everywhere else the owner decides" }
+        auto_approve_max_usd: { $ref: "#/components/schemas/USD" }
+        auto_approve_max_risk_score: { type: integer }
+        max_risk_score: { type: integer }
+        per_withdrawal_limit_usd: { $ref: "#/components/schemas/USD" }
+        daily_limit_usd: { $ref: "#/components/schemas/USD" }
+        velocity_max_count: { type: integer }
+        min_destination_age_seconds: { type: integer, format: int64 }
+        min_account_age_seconds: { type: integer, format: int64 }
+        cooling_period_seconds: { type: integer, format: int64 }
+        strong_auth_required: { type: boolean }
+        strong_auth_max_age_seconds: { type: integer, format: int64 }
+        policy_hash: { type: string }
+        created_by: { $ref: "#/components/schemas/DelegationActor" }
+        effective_at: { $ref: "#/components/schemas/Timestamp" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    DelegationWithdrawalPolicyState:
+      type: object
+      required: [account_id, versions, value_domain]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        current: { $ref: "#/components/schemas/DelegationWithdrawalPolicy" }
+        versions: { type: array, items: { $ref: "#/components/schemas/DelegationWithdrawalPolicy" }, description: "Newest first, bounded" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    DelegationWithdrawalPolicyRequest:
+      type: object
+      required: [account_id, auto_approve_enabled, auto_approve_max_usd, auto_approve_max_risk_score, max_risk_score,
+                 per_withdrawal_limit_usd, daily_limit_usd, velocity_max_count, min_destination_age_seconds, min_account_age_seconds,
+                 cooling_period_seconds, strong_auth_required, strong_auth_max_age_seconds]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        auto_approve_enabled: { type: boolean }
+        auto_approve_max_usd: { $ref: "#/components/schemas/USD" }
+        auto_approve_max_risk_score: { type: integer, minimum: 0, maximum: 100 }
+        max_risk_score: { type: integer, minimum: 0, maximum: 100 }
+        per_withdrawal_limit_usd: { $ref: "#/components/schemas/USD" }
+        daily_limit_usd: { $ref: "#/components/schemas/USD" }
+        velocity_max_count: { type: integer, minimum: 1, maximum: 1000 }
+        min_destination_age_seconds: { type: integer, format: int64, minimum: 0, maximum: 31536000 }
+        min_account_age_seconds: { type: integer, format: int64, minimum: 0, maximum: 31536000 }
+        cooling_period_seconds: { type: integer, format: int64, minimum: 0, maximum: 604800 }
+        strong_auth_required: { type: boolean }
+        strong_auth_max_age_seconds: { type: integer, format: int64, minimum: 1, maximum: 86400 }
+    DelegationAssetRef:
+      type: object
+      required: [id, symbol, decimals]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        decimals: { type: integer, minimum: 0, maximum: 38 }
+    DelegationVenueRef:
+      type: object
+      required: [id, name, address]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        name: { type: string }
+        address: { type: string }
+    DelegationDestinationRef:
+      type: object
+      description: The destination as the allow-list holds it now (its status may have changed since the plan froze it).
+      required: [id, label, status]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        label: { type: string }
+        status: { $ref: "#/components/schemas/DelegationDestinationStatus" }
+    DelegationPlanPrice:
+      type: object
+      description: Whole sandbox dollars per whole unit of the asset, mantissa x 10^-scale. A par price is the registry's USD peg, not an observation.
+      required: [mantissa, scale, source, observed_at, par]
+      properties:
+        mantissa: { type: string }
+        scale: { type: string }
+        source: { type: string }
+        observed_at: { $ref: "#/components/schemas/Timestamp" }
+        par: { type: boolean }
+    DelegationSwapPlan:
+      type: object
+      description: The canonical settlement plan exactly as hashed; numbers are the plan's own decimal strings.
+      required: [version, swap_id, account_id, agent_id, capability_id, capability_hash, intent_id, request_nonce, action_class,
+                 mode, chain, wallet, venue_id, venue_address, pay_asset_id, pay_mint, pay_decimals, receive_asset_id, receive_mint,
+                 receive_decimals, amount_in, amount_out, min_amount_out, pay_price, receive_price, spread_bps, max_slippage_bps,
+                 notional_usd, fee_per_tx, requested_at, quote_expires_at]
+      properties:
+        version: { type: string }
+        swap_id: { type: string }
+        account_id: { type: string }
+        agent_id: { type: string }
+        capability_id: { type: string }
+        capability_hash: { type: string }
+        intent_id: { type: string }
+        request_nonce: { type: string }
+        action_class: { type: string }
+        mode: { type: string }
+        chain: { type: string }
+        wallet: { type: string }
+        venue_id: { type: string }
+        venue_address: { type: string }
+        pay_asset_id: { type: string }
+        pay_mint: { type: string }
+        pay_decimals: { type: string }
+        receive_asset_id: { type: string }
+        receive_mint: { type: string }
+        receive_decimals: { type: string }
+        amount_in: { $ref: "#/components/schemas/Quantity" }
+        amount_out: { $ref: "#/components/schemas/Quantity" }
+        min_amount_out: { $ref: "#/components/schemas/Quantity" }
+        pay_price: { $ref: "#/components/schemas/DelegationPlanPrice" }
+        receive_price: { $ref: "#/components/schemas/DelegationPlanPrice" }
+        spread_bps: { type: string }
+        max_slippage_bps: { type: string }
+        notional_usd: { $ref: "#/components/schemas/USD" }
+        fee_per_tx: { $ref: "#/components/schemas/Quantity" }
+        requested_at: { $ref: "#/components/schemas/Timestamp" }
+        quote_expires_at: { $ref: "#/components/schemas/Timestamp" }
+    DelegationWithdrawalPlan:
+      type: object
+      description: The frozen withdrawal plan exactly as hashed; numbers are the plan's own decimal strings.
+      required: [version, withdrawal_id, account_id, agent_id, capability_id, capability_hash, intent_id, proposal_nonce, mode,
+                 chain, wallet, destination_id, destination_address, asset_id, mint, decimals, amount, notional_usd, price,
+                 policy_id, policy_version, policy_hash, evaluation_outcome, risk_score, fee_per_tx, proposed_at, executable_at,
+                 approval_expires_at]
+      properties:
+        version: { type: string }
+        withdrawal_id: { type: string }
+        account_id: { type: string }
+        agent_id: { type: string }
+        capability_id: { type: string }
+        capability_hash: { type: string }
+        intent_id: { type: string }
+        proposal_nonce: { type: string }
+        mode: { type: string }
+        chain: { type: string }
+        wallet: { type: string }
+        destination_id: { type: string }
+        destination_address: { type: string }
+        asset_id: { type: string }
+        mint: { type: string }
+        decimals: { type: string }
+        amount: { $ref: "#/components/schemas/Quantity" }
+        notional_usd: { $ref: "#/components/schemas/USD" }
+        price: { $ref: "#/components/schemas/DelegationPlanPrice" }
+        policy_id: { type: string }
+        policy_version: { type: string }
+        policy_hash: { type: string }
+        evaluation_outcome: { type: string }
+        risk_score: { type: string }
+        fee_per_tx: { $ref: "#/components/schemas/Quantity" }
+        proposed_at: { $ref: "#/components/schemas/Timestamp" }
+        executable_at: { $ref: "#/components/schemas/Timestamp" }
+        approval_expires_at: { $ref: "#/components/schemas/Timestamp" }
+    DelegationApproval:
+      type: object
+      required: [decision, plan_hash, approver, decided_at, reason]
+      properties:
+        decision: { $ref: "#/components/schemas/DelegationDecision" }
+        plan_hash: { type: string }
+        approver: { $ref: "#/components/schemas/DelegationActor" }
+        authenticated_at: { $ref: "#/components/schemas/Timestamp" }
+        decided_at: { $ref: "#/components/schemas/Timestamp" }
+        reason: { type: string }
+    DelegationInspection:
+      type: object
+      description: >-
+        The signing provider's one decision: the capability validated again, the compiled message inspected
+        field by field against the persisted plan, then the signing policy. REJECTED carries every reason code.
+      required: [id, verdict, reason_codes, signer_public_key, capability_hash, plan_hash, message_sha256, policy_version,
+                 policy_hash, inspector_version, decided_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        verdict: { $ref: "#/components/schemas/DelegationVerdict" }
+        reason_codes: { type: array, items: { type: string } }
+        signer_public_key: { type: string }
+        capability_hash: { type: string }
+        plan_hash: { type: string }
+        message_sha256: { type: string }
+        policy_version: { type: string }
+        policy_hash: { type: string }
+        inspector_version: { type: string }
+        decided_at: { $ref: "#/components/schemas/Timestamp" }
+    DelegationTransition:
+      type: object
+      required: [from_status, to_status, actor, reason, occurred_at]
+      properties:
+        from_status: { type: string }
+        to_status: { type: string }
+        actor: { $ref: "#/components/schemas/DelegationActor" }
+        reason: { type: string }
+        occurred_at: { $ref: "#/components/schemas/Timestamp" }
+    DelegationSwap:
+      type: object
+      required: [id, capability_id, account_id, agent_id, request_nonce, intent_id, reservation_id, venue, mode, action_class, chain,
+                 wallet, pay_asset, receive_asset, amount_in, amount_out, min_amount_out, notional_usd, requested_at,
+                 quote_expires_at, requires_approval, plan, plan_hash, status, transitions, created_at, updated_at, value_domain]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        capability_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        agent_id: { $ref: "#/components/schemas/UUID" }
+        request_nonce: { type: string }
+        intent_id: { $ref: "#/components/schemas/UUID" }
+        reservation_id: { $ref: "#/components/schemas/UUID" }
+        venue: { $ref: "#/components/schemas/DelegationVenueRef" }
+        mode: { $ref: "#/components/schemas/AdvancedMode" }
+        action_class: { $ref: "#/components/schemas/DelegationActionClass" }
+        chain: { $ref: "#/components/schemas/DelegationChain" }
+        wallet: { type: string }
+        pay_asset: { $ref: "#/components/schemas/DelegationAssetRef" }
+        receive_asset: { $ref: "#/components/schemas/DelegationAssetRef" }
+        amount_in: { $ref: "#/components/schemas/Quantity" }
+        amount_out: { $ref: "#/components/schemas/Quantity" }
+        min_amount_out: { $ref: "#/components/schemas/Quantity" }
+        notional_usd: { $ref: "#/components/schemas/USD" }
+        requested_at: { $ref: "#/components/schemas/Timestamp" }
+        quote_expires_at: { $ref: "#/components/schemas/Timestamp" }
+        requires_approval: { type: boolean }
+        plan: { $ref: "#/components/schemas/DelegationSwapPlan" }
+        plan_hash: { type: string }
+        status: { $ref: "#/components/schemas/DelegationSwapStatus" }
+        signed_at: { $ref: "#/components/schemas/Timestamp" }
+        tx_id: { type: string }
+        effect_id: { $ref: "#/components/schemas/UUID" }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        failure_code: { type: string }
+        approval: { $ref: "#/components/schemas/DelegationApproval" }
+        inspection: { $ref: "#/components/schemas/DelegationInspection" }
+        transitions: { type: array, items: { $ref: "#/components/schemas/DelegationTransition" }, description: Oldest first }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    DelegationSwapPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items, value_domain]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/DelegationSwap" } }
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    DelegationWithdrawalEvaluation:
+      type: object
+      description: The withdrawal policy's decision about the proposal, as recorded with it.
+      required: [outcome, risk_score, reason_codes, anomalies, destination_age_seconds, account_age_seconds, day_total_before_usd,
+                 count_last_24h, policy_version, policy_hash, environment, compliance_clear]
+      properties:
+        outcome: { $ref: "#/components/schemas/DelegationEvaluationOutcome" }
+        risk_score: { type: integer }
+        reason_codes: { type: array, items: { type: string } }
+        anomalies: { type: array, items: { type: string } }
+        destination_age_seconds: { type: integer, format: int64 }
+        account_age_seconds: { type: integer, format: int64 }
+        day_total_before_usd: { $ref: "#/components/schemas/USD" }
+        count_last_24h: { type: integer }
+        policy_version: { type: string }
+        policy_hash: { type: string }
+        environment: { type: string }
+        compliance_clear: { type: boolean }
+    DelegationWithdrawal:
+      type: object
+      required: [id, capability_id, account_id, agent_id, proposal_nonce, intent_id, reservation_id, policy_id, destination,
+                 environment, mode, chain, wallet, destination_address, asset, amount, notional_usd, proposed_at,
+                 approval_expires_at, executable_at, evaluation, plan, plan_hash, status, transitions, created_at, updated_at,
+                 value_domain]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        capability_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        agent_id: { $ref: "#/components/schemas/UUID" }
+        proposal_nonce: { type: string }
+        intent_id: { $ref: "#/components/schemas/UUID" }
+        reservation_id: { $ref: "#/components/schemas/UUID" }
+        policy_id: { $ref: "#/components/schemas/UUID" }
+        destination: { $ref: "#/components/schemas/DelegationDestinationRef" }
+        environment: { type: string }
+        mode: { $ref: "#/components/schemas/AdvancedMode" }
+        chain: { $ref: "#/components/schemas/DelegationChain" }
+        wallet: { type: string }
+        destination_address: { type: string }
+        asset: { $ref: "#/components/schemas/DelegationAssetRef" }
+        amount: { $ref: "#/components/schemas/Quantity" }
+        notional_usd: { $ref: "#/components/schemas/USD" }
+        proposed_at: { $ref: "#/components/schemas/Timestamp" }
+        approval_expires_at: { $ref: "#/components/schemas/Timestamp" }
+        executable_at: { $ref: "#/components/schemas/Timestamp", description: "The end of the policy's cooling period; nothing is signed before it" }
+        evaluation: { $ref: "#/components/schemas/DelegationWithdrawalEvaluation" }
+        plan: { $ref: "#/components/schemas/DelegationWithdrawalPlan" }
+        plan_hash: { type: string }
+        status: { $ref: "#/components/schemas/DelegationWithdrawalStatus" }
+        signed_at: { $ref: "#/components/schemas/Timestamp" }
+        tx_id: { type: string }
+        effect_id: { $ref: "#/components/schemas/UUID" }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        failure_code: { type: string }
+        approval: { $ref: "#/components/schemas/DelegationApproval" }
+        inspection: { $ref: "#/components/schemas/DelegationInspection" }
+        transitions: { type: array, items: { $ref: "#/components/schemas/DelegationTransition" }, description: Oldest first }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    DelegationWithdrawalPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items, value_domain]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/DelegationWithdrawal" } }
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    DelegationDecisionRequest:
+      type: object
+      required: [decision, plan_hash, reason]
+      properties:
+        decision: { $ref: "#/components/schemas/DelegationDecision" }
+        plan_hash: { type: string, pattern: '^[0-9a-f]{64}$', description: "The plan hash the owner was shown; any other plan is refused" }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    DelegationExecutionError:
+      type: object
+      required: [code, detail]
+      properties:
+        code: { type: string, description: "The stable error code the execution ended with" }
+        reason: { type: string, description: "The delegation reason code, when the service gave one" }
+        detail: { type: string }
+    DelegationExecution:
+      type: object
+      description: Whether the decision was followed by an execution, and how that ended when it did not run to its end.
+      required: [attempted]
+      properties:
+        attempted: { type: boolean }
+        error: { $ref: "#/components/schemas/DelegationExecutionError" }
+    DelegationSwapDecisionResult:
+      type: object
+      required: [swap, execution, value_domain]
+      properties:
+        swap: { $ref: "#/components/schemas/DelegationSwap" }
+        execution: { $ref: "#/components/schemas/DelegationExecution" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    DelegationWithdrawalDecisionResult:
+      type: object
+      required: [withdrawal, execution, value_domain]
+      properties:
+        withdrawal: { $ref: "#/components/schemas/DelegationWithdrawal" }
+        execution: { $ref: "#/components/schemas/DelegationExecution" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    DelegationVenue:
+      type: object
+      required: [id, name, chain, address, house_account_id, spread_bps, co_signer, created_by, created_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        name: { type: string }
+        chain: { $ref: "#/components/schemas/DelegationChain" }
+        address: { type: string }
+        house_account_id: { $ref: "#/components/schemas/UUID" }
+        spread_bps: { $ref: "#/components/schemas/BPS" }
+        co_signer: { type: boolean, description: "Whether this deployment holds the venue's co-signer; without it no swap there is signed" }
+        created_by: { $ref: "#/components/schemas/DelegationActor" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+    DelegationCoSigner:
+      type: object
+      required: [name, chain, address, registered]
+      properties:
+        name: { type: string }
+        chain: { $ref: "#/components/schemas/DelegationChain" }
+        address: { type: string }
+        registered: { type: boolean }
+    DelegationVenueList:
+      type: object
+      required: [items, co_signers]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/DelegationVenue" } }
+        co_signers: { type: array, items: { $ref: "#/components/schemas/DelegationCoSigner" } }
+    DelegationVenueRequest:
+      type: object
+      required: [name, spread_bps]
+      properties:
+        name: { type: string, pattern: '^[a-z0-9][a-z0-9-]{0,62}$' }
+        house_account_id: { $ref: "#/components/schemas/UUID" }
+        spread_bps: { $ref: "#/components/schemas/BPS" }
+    DelegationPending:
+      type: object
+      required: [swaps, withdrawals, as_of, value_domain]
+      properties:
+        swaps: { type: array, items: { $ref: "#/components/schemas/DelegationSwap" } }
+        withdrawals: { type: array, items: { $ref: "#/components/schemas/DelegationWithdrawal" } }
+        as_of: { $ref: "#/components/schemas/Timestamp" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    DelegationExecuteRequest:
+      type: object
+      properties:
+        limit: { type: integer, minimum: 1, maximum: 50, default: 10 }
+    DelegationExecutionItem:
+      type: object
+      required: [kind, id, account_id, status_before, status]
+      properties:
+        kind: { $ref: "#/components/schemas/DelegationSubjectKind" }
+        id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        status_before: { type: string }
+        status: { type: string }
+        error: { $ref: "#/components/schemas/DelegationExecutionError" }
+    DelegationExecutionRun:
+      type: object
+      required: [items, value_domain]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/DelegationExecutionItem" } }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
 
     # >>> advanced:operator schemas (insert this subsystem's schemas directly below; keep the marker)
     #

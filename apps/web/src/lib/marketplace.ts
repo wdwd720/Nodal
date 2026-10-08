@@ -61,8 +61,18 @@ export type ValidationOutcomesMatchContract = Assert<
   Same<(typeof VALIDATION_OUTCOMES)[number], Schemas["StrategyValidationOutcome"]>
 >;
 
-export const BUILD_FAILURES = ["SCAN_REJECTED", "COMPILE_FAILED", "BUILD_TIMEOUT"] as const;
-export type BuildFailuresMatchContract = Assert<Same<(typeof BUILD_FAILURES)[number], Schemas["StrategyBuildFailure"]>>;
+export type BuildFailure = Schemas["StrategyBuildFailure"];
+export const BUILD_FAILURES = ["SCAN_REJECTED", "COMPILE_FAILED", "BUILD_TIMEOUT", "BUILD_OUTPUT_LIMIT", "BUILD_MEMORY_LIMIT"] as const;
+export type BuildFailuresMatchContract = Assert<Same<(typeof BUILD_FAILURES)[number], BuildFailure>>;
+
+/** Why a version was refused at validation, in words. */
+export const BUILD_FAILURE_MEANING: Readonly<Record<BuildFailure, string>> = {
+  SCAN_REJECTED: "The scanner refused the source before anything was built: see the scan findings.",
+  COMPILE_FAILED: "The source does not compile: the compiler's output is below.",
+  BUILD_TIMEOUT: "The build ran past its time limit and was stopped.",
+  BUILD_OUTPUT_LIMIT: "The build produced a module larger than the builder accepts, and was stopped.",
+  BUILD_MEMORY_LIMIT: "The compiler and linker held more memory than a build may, and were stopped.",
+};
 
 export const REVIEW_DECISIONS = ["APPROVE", "REJECT"] as const;
 export type ReviewDecisionsMatchContract = Assert<
@@ -521,7 +531,12 @@ export function toggle<T extends string>(order: readonly T[], selected: readonly
 }
 
 /* --------------------------------------------------------------------------
- * A market snapshot, as pasted
+ * A simulation's market snapshots, as pasted
+ *
+ * Only a simulation takes snapshots from a person: it evaluates a version on
+ * a fixed historical dataset and proposes nothing. A paper follow takes none:
+ * the backend builds its input from the install's paper book and the
+ * reference prices it reads itself.
  * ------------------------------------------------------------------------ */
 
 export type Snapshot = Schemas["StrategySnapshot"];
@@ -560,17 +575,6 @@ function snapshotOf(value: unknown, asOf: string): Parsed<Snapshot> {
       portfolio: portfolio as Snapshot["portfolio"],
     },
   };
-}
-
-/**
- * The instruments and portfolio a strategy runs on, pasted as JSON, stamped
- * with the moment of confirmation. Only the shape is checked here: every
- * figure stays the string it was typed as, and the backend validates the
- * document exactly as the strategy will read it.
- */
-export function parseSnapshot(raw: string, asOf: string): Parsed<Snapshot> {
-  const parsed = parseJson(raw, "The snapshot");
-  return parsed.ok ? snapshotOf(parsed.value, asOf) : parsed;
 }
 
 /**

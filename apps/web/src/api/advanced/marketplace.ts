@@ -168,7 +168,7 @@ export const validationSpec: Spec = {
     sdk_version: "string",
     runtime_version: "string",
   },
-  optional: { artifact_digest: "string", failure_reason: oneOf(BUILD_FAILURES) },
+  optional: { artifact_digest: "string", failure_reason: oneOf(BUILD_FAILURES), build_log: "string" },
   lists: { scan_codes: { required: true, kind: "string" } },
 };
 
@@ -313,6 +313,7 @@ export const installSpec: Spec = {
     mode: oneOf(["PAPER"]),
     status: oneOf(INSTALL_STATUSES),
     installed_by_actor_type: "string",
+    paper_capital: "decimal",
     created_at: "timestamp",
   },
   objects: { latest_performance: { spec: performanceSpec } },
@@ -327,6 +328,7 @@ export const followIntentSpec: Spec = {
     notional: "decimal",
   },
   optional: {
+    reference_price: "decimal",
     decision_hash: "string",
     effect_id: "uuid",
     effect_status: "string",
@@ -334,6 +336,10 @@ export const followIntentSpec: Spec = {
     external_ref: "string",
   },
   objects: { risk_decision: { spec: riskDecisionSpec } },
+};
+
+export const followMarkSpec: Spec = {
+  required: { instrument_id: "uuid", price_id: "uuid", mark: "decimal", observed_at: "timestamp" },
 };
 
 export const followRunSpec: Spec = {
@@ -362,8 +368,11 @@ export const followRunSpec: Spec = {
     evidence_sha256: "string",
     created_at: "timestamp",
   },
-  optional: { replayed: "boolean" },
-  arrays: { intents: { required: true, spec: followIntentSpec } },
+  optional: { replayed: "boolean", paper_cash: "decimal" },
+  arrays: {
+    intents: { required: true, spec: followIntentSpec },
+    marks: { required: true, spec: followMarkSpec },
+  },
 };
 
 export const sandboxRunSpec: Spec = {
@@ -717,9 +726,12 @@ export function useRemoveInstall(): UseMutationResult<StrategyInstall, unknown, 
   });
 }
 
-export interface FollowInput extends InstallActionInput {
-  readonly snapshot: Snapshot;
-}
+/**
+ * A paper follow names the install and the account, and nothing about the
+ * market or the portfolio: the backend builds the run's input itself from
+ * the install's paper book and the reference prices it reads.
+ */
+export type FollowInput = InstallActionInput;
 
 export function useFollowInstall(): UseMutationResult<StrategyFollowRun, unknown, FollowInput> {
   const invalidate = useInvalidate();
@@ -727,7 +739,7 @@ export function useFollowInstall(): UseMutationResult<StrategyFollowRun, unknown
     mutationFn: async (input: FollowInput) => {
       const { data } = await api.POST("/advanced/strategies/installs/{installId}/follows", {
         ...idempotent(input.idempotencyKey, { path: { installId: input.installId } }),
-        body: { account_id: input.accountId, snapshot: input.snapshot },
+        body: { account_id: input.accountId },
       });
       return validated<StrategyFollowRun>(data, followRunSpec, "/advanced/strategies/installs/{id}/follows");
     },

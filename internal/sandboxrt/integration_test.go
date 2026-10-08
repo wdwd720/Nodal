@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/audit"
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/db"
@@ -76,6 +77,8 @@ type svcFixture struct {
 	svc    *Service
 	engine *countingEngine
 	fx     fixtureSet
+	// account is the account every run of the fixture is charged to.
+	account accounts.AccountID
 }
 
 var operator = econ.Actor{Type: security.ActorOperator, ID: "0193b2e0-0000-7000-8000-00000000aaaa"}
@@ -89,8 +92,26 @@ func newSvcFixture(t *testing.T) *svcFixture {
 	require.NoError(t, err)
 	auth := econ.NewAuthorizer(checker, killswitch.NewChecker(killswitch.Policy{}))
 	engine := &countingEngine{inner: fx.runner}
-	return &svcFixture{t: t, ctx: context.Background(), clk: clk, fx: fx, engine: engine,
+	f := &svcFixture{t: t, ctx: context.Background(), clk: clk, fx: fx, engine: engine,
 		svc: NewService(clk, auth, engine, audit.NewWriterWithBuildVersion("itest"))}
+	f.account = f.newAccount()
+	return f
+}
+
+// newAccount creates a customer account to charge runs to.
+func (f *svcFixture) newAccount() accounts.AccountID {
+	f.t.Helper()
+	repo := accounts.NewRepository()
+	u, err := repo.CreateUser(f.ctx, testDB, "sandboxrt-itest", uuid.NewString(), nil)
+	require.NoError(f.t, err)
+	a, err := repo.CreateAccount(f.ctx, testDB, u.ID, accounts.KindCustomer)
+	require.NoError(f.t, err)
+	return a.ID
+}
+
+func (f *svcFixture) request(digest []byte, in Input) ExecuteRequest {
+	return ExecuteRequest{ArtifactDigest: digest, Input: in, Limits: testLimits(), Manifest: testManifest(),
+		StrategyRef: "0193b2e0-0000-7000-8000-000000000123@1", Actor: operator, AccountID: f.account, Purpose: PurposeSimulation}
 }
 
 func (f *svcFixture) inTx(fn func(ctx context.Context, tx pgx.Tx) error) error {
@@ -111,8 +132,7 @@ func (f *svcFixture) execute(digest []byte, in Input) (Execution, error) {
 	var e Execution
 	err := f.inTx(func(ctx context.Context, tx pgx.Tx) error {
 		var err error
-		e, err = f.svc.Execute(ctx, tx, ExecuteRequest{ArtifactDigest: digest, Input: in, Limits: testLimits(), Manifest: testManifest(),
-			StrategyRef: "0193b2e0-0000-7000-8000-000000000123@1", Actor: operator})
+		e, err = f.svc.Execute(ctx, tx, f.request(digest, in))
 		return err
 	})
 	return e, err
@@ -172,8 +192,7 @@ func TestIntegration_KillSwitchRefusesToRun(t *testing.T) {
 				if _, err := ctl.Activate(security.WithPrincipal(ctx, op), tx, sw.kind, sw.scope, "sandbox escape under investigation"); err != nil {
 					return err
 				}
-				e, err := f.svc.Execute(ctx, tx, ExecuteRequest{ArtifactDigest: digest, Input: testInput(), Limits: testLimits(),
-					Manifest: testManifest(), StrategyRef: "0193b2e0-0000-7000-8000-000000000123@1", Actor: operator})
+				e, err := f.svc.Execute(ctx, tx, f.request(digest, testInput()))
 				if err != nil {
 					return err
 				}
@@ -186,6 +205,11 @@ func TestIntegration_KillSwitchRefusesToRun(t *testing.T) {
 				}
 				assert.Equal(t, TerminationKilledBySwitch, rec.Termination, "the refusal is recorded")
 				assert.Equal(t, int64(0), rec.WallMS)
+				var cpu int64
+				if err := tx.QueryRow(ctx, `SELECT cpu_ms FROM sandbox_usage WHERE run_id = $1`, e.RunID).Scan(&cpu); err != nil {
+					return err
+				}
+				assert.Zero(t, cpu, "a run that never started is charged no CPU")
 				return rollback
 			})
 			require.ErrorIs(t, err, rollback)
@@ -334,6 +358,9 @@ func TestIntegration_TheDatabaseRefusesATamperedArtifactOrRun(t *testing.T) {
 	err = exec(insertRun, uuid.New(), digest, hash32, "OK", out, len(out), outSum[:], good[:], 0, 3)
 	require.Error(t, err)
 	assert.Equal(t, "SX001", db.SQLState(err), "a run cannot declare violations it did not record")
+	err = exec(insertRun, uuid.New(), digest, hash32, "OK", out, len(out), outSum[:], good[:], 0, 0)
+	require.Error(t, err)
+	assert.Equal(t, "SX002", db.SQLState(err), "a run nobody was charged for is refused at COMMIT")
 
 	err = exec(`DELETE FROM sandbox_runs WHERE id = $1`, e.RunID)
 	require.Error(t, err)
@@ -341,4 +368,200 @@ func TestIntegration_TheDatabaseRefusesATamperedArtifactOrRun(t *testing.T) {
 	_, err = owner.Exec(f.ctx, `DELETE FROM sandbox_runs WHERE id = $1`, e.RunID)
 	require.Error(t, err)
 	assert.Equal(t, "P0001", db.SQLState(err), "a run is append-only even for the owner")
+}
+
+// smallBudget allows three runs and 6 s of granted CPU per account per hour,
+// two runs per call.
+func smallBudget() Budget {
+	return Budget{Version: "itest-budget/v1", Window: time.Hour, MaxRunsPerWindow: 3, MaxCPUMSPerWindow: 6000,
+		MaxWallMSPerWindow: 60_000, MaxRunsPerCall: 2, MaxCPUMSPerCall: 4000}
+}
+
+func (f *svcFixture) withBudget(b Budget) {
+	f.t.Helper()
+	svc, err := f.svc.WithBudget(b)
+	require.NoError(f.t, err)
+	f.svc = svc
+}
+
+// TestIntegration_ARunBeyondTheAccountsWindowIsRefusedWithAStableReason is
+// review-2 F13: an account's runs are charged against its window; the run the
+// window has no room for is refused before anything starts, with a stable
+// reason and a retry-after, and nothing of it is recorded. The window rolls.
+func TestIntegration_ARunBeyondTheAccountsWindowIsRefusedWithAStableReason(t *testing.T) {
+	f := newSvcFixture(t)
+	f.withBudget(smallBudget())
+	digest := f.artifact("momentum")
+	for i := 0; i < 3; i++ {
+		_, err := f.execute(digest, testInput())
+		require.NoError(t, err, "run %d", i+1)
+		f.clk.Advance(time.Minute)
+	}
+	u, err := f.svc.UsageOf(f.ctx, testDB, f.account)
+	require.NoError(t, err)
+	assert.Equal(t, 3, u.Runs)
+	assert.Equal(t, int64(3*testLimits().WallTimeMS), u.CPUMS, "each run is charged the wall time it was granted")
+	started := f.engine.runs.Load()
+	runsBefore := countRuns(t)
+	_, err = f.execute(digest, testInput())
+	require.Error(t, err)
+	assert.Equal(t, errs.CodeRateLimited, errs.CodeOf(err))
+	e, _ := errs.As(err)
+	assert.Equal(t, BudgetWindowRuns, e.Fields["reason"])
+	require.NotNil(t, e.RetryAfter)
+	assert.Equal(t, 57*time.Minute, *e.RetryAfter, "when the oldest charge leaves the window")
+	assert.Equal(t, started, f.engine.runs.Load(), "a refused run never starts")
+	assert.Equal(t, runsBefore, countRuns(t), "and nothing of it is recorded")
+
+	// Another account has its own window.
+	other := f.newAccount()
+	req := f.request(digest, testInput())
+	req.AccountID = other
+	require.NoError(t, f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+		_, err := f.svc.Execute(ctx, tx, req)
+		return err
+	}))
+	// The window rolls: an hour after the first run, one run fits again.
+	f.clk.Advance(58 * time.Minute)
+	_, err = f.execute(digest, testInput())
+	require.NoError(t, err)
+}
+
+func countRuns(t *testing.T) int {
+	t.Helper()
+	var n int
+	require.NoError(t, testDB.QueryRow(context.Background(), `SELECT count(*) FROM sandbox_runs`).Scan(&n))
+	return n
+}
+
+// TestIntegration_ACallBeyondItsBoundsIsRefusedBeforeAnythingRuns: a call is
+// admitted whole or not at all -- more runs, or more granted CPU, than one
+// call may have, or more than the account's window has left, is refused
+// before the first run starts.
+func TestIntegration_ACallBeyondItsBoundsIsRefusedBeforeAnythingRuns(t *testing.T) {
+	f := newSvcFixture(t)
+	f.withBudget(smallBudget())
+	digest := f.artifact("momentum")
+	admit := func(runs int, limits Limits) error {
+		return f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+			return f.svc.Admit(ctx, tx, f.account, runs, limits)
+		})
+	}
+	reason := func(err error) any {
+		e, ok := errs.As(err)
+		require.True(t, ok, "%v", err)
+		assert.Equal(t, errs.CodeRateLimited, e.Code)
+		return e.Fields["reason"]
+	}
+	assert.Equal(t, BudgetCallRuns, reason(admit(3, testLimits())))
+	slow := testLimits()
+	slow.WallTimeMS = 2500
+	assert.Equal(t, BudgetCallCPU, reason(admit(2, slow)), "2 x 2500 ms is more CPU than a call may be granted")
+	require.NoError(t, admit(2, testLimits()))
+
+	_, err := f.execute(digest, testInput())
+	require.NoError(t, err)
+	_, err = f.execute(digest, testInput())
+	require.NoError(t, err)
+	assert.Equal(t, BudgetWindowRuns, reason(admit(2, testLimits())), "two more do not fit in what the window has left")
+	require.NoError(t, admit(1, testLimits()))
+	assert.Equal(t, int64(2), f.engine.runs.Load(), "admission starts nothing")
+
+	big := testLimits()
+	big.WallTimeMS = 5000
+	req := f.request(digest, testInput())
+	req.Limits = big
+	err = f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+		_, err := f.svc.Execute(ctx, tx, req)
+		return err
+	})
+	assert.Equal(t, BudgetCallCPU, reason(err), "one run granted more than a call may have is refused")
+}
+
+// TestIntegration_ConcurrentRunsCannotOverspendTheBudget: N concurrent
+// transactions charge the same account; the budget's lock serializes them and
+// exactly the window's room succeeds.
+func TestIntegration_ConcurrentRunsCannotOverspendTheBudget(t *testing.T) {
+	f := newSvcFixture(t)
+	f.withBudget(smallBudget())
+	digest := f.artifact("momentum")
+	const n = 8
+	var wg sync.WaitGroup
+	var ok, refused atomic.Int64
+	for range n {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := f.execute(digest, testInput())
+			switch errs.CodeOf(err) {
+			case "":
+				ok.Add(1)
+			case errs.CodeRateLimited:
+				refused.Add(1)
+			default:
+				t.Errorf("unexpected: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+	assert.Equal(t, int64(3), ok.Load(), "exactly the window's three runs")
+	assert.Equal(t, int64(n-3), refused.Load())
+	u, err := f.svc.UsageOf(f.ctx, testDB, f.account)
+	require.NoError(t, err)
+	assert.Equal(t, 3, u.Runs)
+}
+
+// TestIntegration_TheDatabaseRefusesAChargeThatIsNotTheRunsOrBeyondItsBudget
+// goes around the service: a charge must be the run's own wall time and
+// granted limit, and must fit the budget it states.
+func TestIntegration_TheDatabaseRefusesAChargeThatIsNotTheRunsOrBeyondItsBudget(t *testing.T) {
+	f := newSvcFixture(t)
+	digest := f.artifact("momentum")
+	e, err := f.execute(digest, testInput())
+	require.NoError(t, err)
+	var wall int64
+	require.NoError(t, testDB.QueryRow(f.ctx, `SELECT wall_ms FROM sandbox_runs WHERE id = $1`, e.RunID).Scan(&wall))
+	charge := func(run RunID, cpu, wallMS int64, maxRuns int) error {
+		return f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+			_, err := tx.Exec(ctx, `INSERT INTO sandbox_usage (id, run_id, account_id, purpose, cpu_ms, wall_ms, charged_at, budget_version,
+				window_ms, max_runs, max_cpu_ms, max_wall_ms) VALUES ($1,$2,$3,'SIMULATION',$4,$5,$6,'x',3600000,$7,600000,600000)`,
+				uuid.New(), run, f.account, cpu, wallMS, f.clk.Now(), maxRuns)
+			return err
+		})
+	}
+	// A second charge for the same run is refused by its uniqueness ...
+	err = charge(e.RunID, testLimits().WallTimeMS, wall, 100)
+	require.Error(t, err)
+	assert.True(t, db.IsUniqueViolation(err))
+	// ... and a run recorded around the service needs a charge that is its own.
+	insertRun := `INSERT INTO sandbox_runs (id, artifact_digest, input_digest, limits_version, limits_hash, limits, termination_reason,
+		termination_detail, exit_code, artifact_verified, wall_ms, output, output_bytes, stderr_bytes, stderr_digest, peak_memory_bytes,
+		output_digest, run_digest, proposals_count, accepted_count, violations_count, manifest_hash, strategy_ref, actor_type, actor_id,
+		started_at) VALUES ($1,$2,$3,'v1','` + "0000000000000000000000000000000000000000000000000000000000000000" + `','{"wall_time_ms":2000}','TRAP','',1,true,7,
+		''::bytea,0,0,$3,0,$4,$5,0,0,0,$3,'s@1','SYSTEM','x',now())`
+	in := sha256.Sum256([]byte("an input"))
+	empty := sha256.Sum256(nil)
+	runDigest := sha256.Sum256(append(append([]byte{}, digest...), in[:]...))
+	try := func(cpu, wallMS int64, maxRuns int) error {
+		return f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+			id := uuid.New()
+			if _, err := tx.Exec(ctx, insertRun, id, digest, in[:], empty[:], runDigest[:]); err != nil {
+				return err
+			}
+			_, err := tx.Exec(ctx, `INSERT INTO sandbox_usage (id, run_id, account_id, purpose, cpu_ms, wall_ms, charged_at, budget_version,
+				window_ms, max_runs, max_cpu_ms, max_wall_ms) VALUES ($1,$2,$3,'SIMULATION',$4,$5,$6,'x',3600000,$7,600000,600000)`,
+				uuid.New(), id, f.account, cpu, wallMS, f.clk.Now(), maxRuns)
+			return err
+		})
+	}
+	err = try(0, 7, 100)
+	require.Error(t, err)
+	assert.Equal(t, "SX003", db.SQLState(err), "a run that started is charged the limit it was granted")
+	err = try(2000, 1, 100)
+	require.Error(t, err)
+	assert.Equal(t, "SX003", db.SQLState(err), "and the wall time it took")
+	err = try(2000, 7, 1)
+	require.Error(t, err)
+	assert.Equal(t, "SX003", db.SQLState(err), "a charge beyond the budget it states is refused")
+	require.NoError(t, try(2000, 7, 100), "the run's own charge, within its budget")
 }

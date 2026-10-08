@@ -96,6 +96,11 @@ type Ports struct {
 	TransferReversals TransferReversalsPort
 
 	// >>> advanced:treasury port
+	// Treasury serves the house book (internal/treasury) and Fees the fee
+	// ledger (internal/feeledger); every figure behind them is value domain
+	// SIMULATED. A nil port answers UNSUPPORTED.
+	Treasury TreasuryPort
+	Fees     FeesPort
 
 	// >>> advanced:stable port
 	// Stable serves the sandbox stable asset (internal/stableasset); every
@@ -119,6 +124,10 @@ type Ports struct {
 	Marketplace MarketplacePort
 
 	// >>> advanced:delegation port
+	// Delegation serves delegated agent authority (internal/delegation) to an
+	// account's owner and to operators; no agent reaches it. A nil port
+	// answers UNSUPPORTED.
+	Delegation DelegationPort
 
 	// >>> advanced:operator port
 	// Operator serves the operator console: the overview, sandbox reference

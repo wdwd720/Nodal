@@ -22,24 +22,12 @@ import (
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/instruments"
 	"github.com/nodal/controlplane/internal/marketplace"
+	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/risk"
 	"github.com/nodal/controlplane/internal/sandboxrt"
 	"github.com/nodal/controlplane/internal/security"
+	"github.com/nodal/controlplane/internal/valuation"
 )
-
-// quietSnapshots builds a scheduled run's input in which the strategy sees
-// too little history to propose anything: the follow runs the sandbox and
-// records its run, and no intent reaches execution.
-type quietSnapshots struct{ instrument string }
-
-func (s quietSnapshots) Snapshot(_ context.Context, _ db.Querier, _ marketplace.Install, _ marketplace.Version, asOf time.Time) (sandboxrt.Input, error) {
-	return sandboxrt.Input{
-		AsOf: asOf,
-		Instruments: []sandboxrt.InputInstrument{{InstrumentID: s.instrument, Kind: "SPOT_PAIR", BaseDecimals: 6, QuoteDecimals: 6,
-			Mark: "150.25", Closes: []string{"150.00"}}},
-		Portfolio: sandboxrt.InputPortfolio{Cash: "10000.00"},
-	}, nil
-}
 
 // refusingSections and refusingExecutor stand where no proposal reaches:
 // a quiet run never asks either, so a call is a test failure.
@@ -80,9 +68,10 @@ func strategyToolchain(t *testing.T) (*sandboxrt.Builder, *sandboxrt.Runner) {
 
 // TestIntegration_ScheduledFollowsRunEachDueInstallOnce: a due PAPER install
 // of an approved strategy is followed by the job at the run's instant, once,
-// and is not due again within the manifest's interval. Built as every
-// deployment of this build builds the marketplace -- without a snapshot source
-// -- the same install is deferred and nothing is written.
+// as the system scheduler, on the input the marketplace builds itself -- the
+// install's paper book and the price store's fresh reference price, with too
+// little history for the strategy to propose anything -- and is not due again
+// within the manifest's interval.
 func TestIntegration_ScheduledFollowsRunEachDueInstallOnce(t *testing.T) {
 	w := newWorld(t)
 	builder, runner := strategyToolchain(t)
@@ -96,18 +85,20 @@ func TestIntegration_ScheduledFollowsRunEachDueInstallOnce(t *testing.T) {
 			ActiveFrom: w.clk.Now().Add(-time.Hour)})
 		return err
 	}))
-	build := func(snaps marketplace.SnapshotSource) *marketplace.Service {
-		svc, err := marketplace.NewService(marketplace.Config{
-			Clock: w.clk, Intents: w.intents, Effects: w.effects, Auth: w.authz, Risk: risk.NewStore(),
-			RiskPolicy: risk.DefaultAdvancedPolicy(), Router: w.router,
-			Sandbox: sandboxrt.NewService(w.clk, w.authz, runner, w.audit), Builder: builder,
-			Sections: refusingSections{}, Executor: refusingExecutor{}, Audit: w.audit, Snapshots: snaps,
-		})
-		require.NoError(t, err)
-		return svc
-	}
-	deployed := build(nil)
-	withSnapshots := build(quietSnapshots{instrument: ins.ID.String()})
+	svc, err := marketplace.NewService(marketplace.Config{
+		Clock: w.clk, Intents: w.intents, Effects: w.effects, Auth: w.authz, Risk: risk.NewStore(),
+		RiskPolicy: risk.DefaultAdvancedPolicy(), Router: w.router,
+		Sandbox: sandboxrt.NewService(w.clk, w.authz, runner, w.audit), Builder: builder,
+		Sections: refusingSections{}, Executor: refusingExecutor{}, Audit: w.audit,
+	})
+	require.NoError(t, err)
+	// One observation of the pair: the reference price, and a history of
+	// one close, too little for the momentum strategy to propose anything.
+	price, err := money.PriceFromDecimalString("150.25", usdc.ID.String(), "advancedjobs-itest", w.clk.Now())
+	require.NoError(t, err)
+	_, err = w.prices.RecordPrice(w.ctx, testDB, valuation.PriceObservation{AssetID: base.ID, QuoteAssetID: usdc.ID,
+		Mantissa: price.Mantissa, Scale: price.Scale, Source: "advancedjobs-itest", ObservedAt: w.clk.Now()})
+	require.NoError(t, err)
 
 	creator, follower := w.customer("strategy-creator"), w.customer("strategy-follower")
 	creatorActor := econ.Actor{Type: security.ActorUser, ID: creator.user.String()}
@@ -134,7 +125,7 @@ func TestIntegration_ScheduledFollowsRunEachDueInstallOnce(t *testing.T) {
 		}))
 	}
 	step(func(ctx context.Context, tx pgx.Tx) (marketplace.Version, error) {
-		_, v, err := deployed.CreateListing(ctx, tx, marketplace.ListingRequest{CreatorAccountID: creator.account, Creator: creatorActor,
+		_, v, err := svc.CreateListing(ctx, tx, marketplace.ListingRequest{CreatorAccountID: creator.account, Creator: creatorActor,
 			Title: "Advanced worker momentum " + uuid.NewString()[:8], Version: marketplace.VersionRequest{
 				Description: "the marketplace's momentum test strategy", RiskClass: marketplace.RiskModerate,
 				SupportedInstrumentIDs: []string{ins.ID.String()}, Manifest: manifest, Source: source, SourceCommit: "test-momentum",
@@ -146,23 +137,22 @@ func TestIntegration_ScheduledFollowsRunEachDueInstallOnce(t *testing.T) {
 	})
 	vid := v.ID
 	step(func(ctx context.Context, tx pgx.Tx) (marketplace.Version, error) {
-		return deployed.Submit(ctx, tx, vid, creatorActor)
+		return svc.Submit(ctx, tx, vid, creatorActor)
+	})
+	// A build runs between transactions, never inside one.
+	_, _, err = svc.RunValidation(w.ctx, testDB, vid, econ.SystemActor("marketplace.validator"))
+	require.NoError(t, err)
+	step(func(ctx context.Context, tx pgx.Tx) (marketplace.Version, error) {
+		return svc.StartReview(ctx, tx, vid, operator)
 	})
 	step(func(ctx context.Context, tx pgx.Tx) (marketplace.Version, error) {
-		out, _, err := deployed.Validate(ctx, tx, vid, econ.SystemActor("marketplace.validator"))
-		return out, err
-	})
-	step(func(ctx context.Context, tx pgx.Tx) (marketplace.Version, error) {
-		return deployed.StartReview(ctx, tx, vid, operator)
-	})
-	step(func(ctx context.Context, tx pgx.Tx) (marketplace.Version, error) {
-		return deployed.Approve(ctx, tx, vid, operator, "MEETS_POLICY", "advanced worker integration test")
+		return svc.Approve(ctx, tx, vid, operator, "MEETS_POLICY", "advanced worker integration test")
 	})
 	require.Equal(t, marketplace.StatusApproved, v.Status)
 	var in marketplace.Install
 	require.NoError(t, w.inTx(func(ctx context.Context, tx pgx.Tx) error {
 		var err error
-		in, _, err = deployed.InstallVersion(ctx, tx, marketplace.InstallRequest{VersionID: vid, AccountID: follower.account,
+		in, _, err = svc.InstallVersion(ctx, tx, marketplace.InstallRequest{VersionID: vid, AccountID: follower.account,
 			Mode: gates.ModePaper, Actor: econ.Actor{Type: security.ActorUser, ID: follower.user.String()}})
 		return err
 	}))
@@ -170,21 +160,21 @@ func TestIntegration_ScheduledFollowsRunEachDueInstallOnce(t *testing.T) {
 		return w.count(`SELECT count(*) FROM marketplace_follow_runs WHERE install_id = $1`, in.ID)
 	}
 
-	rep := run(t, w.ctx, NewMarketplaceFollows(testDB, deployed, w.clk, Settings{}))
-	assert.False(t, failedUnit(rep, in.ID.String()), "%+v", rep.Failures)
-	assert.GreaterOrEqual(t, rep.Deferred, 1, "no snapshot source in this build: the follow is refused UNSUPPORTED and deferred")
-	assert.Zero(t, runs(), "a refused follow writes nothing")
-
-	job := NewMarketplaceFollows(testDB, withSnapshots, w.clk, Settings{})
-	rep = run(t, w.ctx, job)
+	job := NewMarketplaceFollows(testDB, svc, w.clk, Settings{})
+	rep := run(t, w.ctx, job)
 	assert.False(t, failedUnit(rep, in.ID.String()), "%+v", rep.Failures)
 	require.Equal(t, 1, runs(), "the due install was followed")
-	var trigger string
+	var trigger, actorType string
 	var asOf time.Time
-	require.NoError(t, testDB.QueryRow(w.ctx, `SELECT trigger, as_of FROM marketplace_follow_runs WHERE install_id = $1`, in.ID).
-		Scan(&trigger, &asOf))
+	require.NoError(t, testDB.QueryRow(w.ctx, `SELECT trigger, actor_type, as_of FROM marketplace_follow_runs WHERE install_id = $1`, in.ID).
+		Scan(&trigger, &actorType, &asOf))
 	assert.Equal(t, string(marketplace.TriggerScheduled), trigger)
+	assert.Equal(t, string(security.ActorSystem), actorType, "a scheduled follow is the system scheduler's")
 	assert.True(t, asOf.Equal(w.clk.Now().Truncate(time.Second)), "at the run's instant")
+	assert.Equal(t, 1, w.count(`SELECT count(*) FROM marketplace_follow_marks m JOIN marketplace_follow_runs f ON f.id = m.follow_run_id
+		WHERE f.install_id = $1`, in.ID), "valued at the price store's reference price, which the run records")
+	assert.Zero(t, w.count(`SELECT count(*) FROM marketplace_follow_intents fi JOIN marketplace_follow_runs f ON f.id = fi.follow_run_id
+		WHERE f.install_id = $1`, in.ID), "a quiet run proposes nothing")
 
 	w.clk.Advance(10 * time.Minute)
 	run(t, w.ctx, job)

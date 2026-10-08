@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -174,7 +175,11 @@ func (s *Server) GetAdvancedStrategiesFollows(ctx context.Context, request api.G
 	}
 	page := api.StrategyFollowRunPage{ValueDomain: api.SIMULATED, Items: make([]api.StrategyFollowRun, 0, len(items)), NextCursor: nextCursor(next)}
 	for _, it := range items {
-		page.Items = append(page.Items, toAPIStrategyFollowRun(it, nil))
+		run, err := toAPIStrategyFollowRun(it, nil)
+		if err != nil {
+			return nil, err
+		}
+		page.Items = append(page.Items, run)
 	}
 	return api.GetAdvancedStrategiesFollows200JSONResponse(page), nil
 }
@@ -444,7 +449,7 @@ func (s *Server) PostAdvancedStrategiesVersionsVersionIdSimulations(ctx context.
 	if err := marketplaceOwnVersion(ctx, port, vid, account); err != nil {
 		return nil, err
 	}
-	cmd := MarketplaceSimulate{VersionID: vid, Actor: actor, DatasetVersion: b.DatasetVersion, Snapshots: snapshots}
+	cmd := MarketplaceSimulate{VersionID: vid, Account: account, Actor: actor, DatasetVersion: b.DatasetVersion, Snapshots: snapshots}
 	res, err := runCommand(ctx, s, request.Params.IdempotencyKey,
 		func(ctx context.Context) (api.StrategyEvaluation, commandMeta, error) {
 			ev, serr := port.Simulate(ctx, cmd)
@@ -561,7 +566,9 @@ func (s *Server) PostAdvancedStrategiesInstallsInstallIdRemove(ctx context.Conte
 }
 
 // PostAdvancedStrategiesInstallsInstallIdFollows paper-follows one of the
-// account's installs on the snapshot the caller supplies.
+// account's installs, now. The service builds the run's input itself -- the
+// install's paper book and the reference prices it reads -- so the request
+// carries the account and nothing else.
 func (s *Server) PostAdvancedStrategiesInstallsInstallIdFollows(ctx context.Context, request api.PostAdvancedStrategiesInstallsInstallIdFollowsRequestObject) (api.PostAdvancedStrategiesInstallsInstallIdFollowsResponseObject, error) {
 	port := s.opts.Ports.Marketplace
 	if port == nil {
@@ -582,14 +589,10 @@ func (s *Server) PostAdvancedStrategiesInstallsInstallIdFollows(ctx context.Cont
 	if err != nil {
 		return nil, err
 	}
-	input, err := marketplaceInput(request.Body.Snapshot)
-	if err != nil {
-		return nil, err
-	}
 	if err := marketplaceOwnInstall(ctx, port, iid, account); err != nil {
 		return nil, err
 	}
-	cmd := MarketplaceFollowRequest{InstallID: iid, Actor: actor, Input: input, CorrelationID: observability.CorrelationID(ctx)}
+	cmd := MarketplaceFollowRequest{InstallID: iid, Actor: actor, CorrelationID: observability.CorrelationID(ctx)}
 	res, err := runCommand(ctx, s, request.Params.IdempotencyKey,
 		func(ctx context.Context) (api.StrategyFollowRun, commandMeta, error) {
 			view, serr := port.Follow(ctx, cmd)
@@ -599,10 +602,14 @@ func (s *Server) PostAdvancedStrategiesInstallsInstallIdFollows(ctx context.Cont
 			replayed := view.Run.Replayed
 			status := http.StatusCreated
 			if replayed {
-				// This snapshot time was already followed: nothing ran again.
+				// This instant was already followed: nothing ran again.
 				status = http.StatusOK
 			}
-			return toAPIStrategyFollowRun(view, &replayed), commandMeta{Status: status, ResourceType: "marketplace_follow_run",
+			run, cerr := toAPIStrategyFollowRun(view, &replayed)
+			if cerr != nil {
+				return api.StrategyFollowRun{}, commandMeta{}, cerr
+			}
+			return run, commandMeta{Status: status, ResourceType: "marketplace_follow_run",
 				ResourceID: view.Run.ID.String()}, nil
 		})
 	if err != nil {
@@ -688,7 +695,8 @@ func (s *Server) PostAdvancedStrategiesVersionsVersionIdValidate(ctx context.Con
 			if cerr != nil {
 				return api.StrategyValidationResult{}, commandMeta{}, cerr
 			}
-			return api.StrategyValidationResult{ValueDomain: api.SIMULATED, Version: version, Validation: toAPIStrategyValidation(val)},
+			return api.StrategyValidationResult{ValueDomain: api.SIMULATED, Version: version,
+					Validation: toAPIStrategyValidation(val, marketplaceOperatorSeesAll(ctx))},
 				commandMeta{Status: http.StatusOK, ResourceType: "marketplace_listing_version", ResourceID: vid.String()}, nil
 		})
 	if err != nil {
@@ -1093,7 +1101,9 @@ func toAPIStrategyVersion(v marketplace.Version, all bool) (api.StrategyVersion,
 	return out, nil
 }
 
-func toAPIStrategyValidation(val marketplace.Validation) api.StrategyValidation {
+// toAPIStrategyValidation renders a validation. The compiler's output is the
+// creator's (and an operator's) to read: it can quote the source.
+func toAPIStrategyValidation(val marketplace.Validation, withLog bool) api.StrategyValidation {
 	out := api.StrategyValidation{
 		Outcome: api.StrategyValidationOutcome(val.Outcome), ArtifactDigest: marketplaceHexPtr(val.ArtifactDigest),
 		ScanCodes: append([]string{}, val.ScanCodes...), ToolchainVersion: val.ToolchainVersion, SdkVersion: val.SDKVersion,
@@ -1102,6 +1112,10 @@ func toAPIStrategyValidation(val marketplace.Validation) api.StrategyValidation 
 	if val.FailureReason != "" {
 		f := api.StrategyBuildFailure(val.FailureReason)
 		out.FailureReason = &f
+	}
+	if withLog {
+		log := strings.ToValidUTF8(string(val.BuildLog), "\uFFFD")
+		out.BuildLog = &log
 	}
 	return out
 }
@@ -1181,7 +1195,7 @@ func toAPIStrategyVersionDetail(vv MarketplaceVersionView, all bool) (api.Strate
 		Performance: make([]api.StrategyPerformanceSnapshot, 0, len(vv.Performance)),
 	}
 	if vv.Validation != nil {
-		val := toAPIStrategyValidation(*vv.Validation)
+		val := toAPIStrategyValidation(*vv.Validation, all)
 		out.Validation = &val
 	}
 	for _, r := range vv.Reviews {
@@ -1234,7 +1248,8 @@ func toAPIStrategyInstall(iv MarketplaceInstallView) api.StrategyInstall {
 		StrategyRef:   marketplace.Version{ListingID: iv.Version.ListingID, Number: iv.Version.Number}.StrategyRef(),
 		VersionNumber: iv.Version.Number, VersionStatus: api.StrategyVersionStatus(iv.Version.Status),
 		VersionModeration: api.StrategyModeration(iv.Version.Moderation), Mode: api.AdvancedMode(in.Mode),
-		Status: api.StrategyInstallStatus(in.Status), InstalledByActorType: string(in.InstalledBy.Type), CreatedAt: in.CreatedAt,
+		Status: api.StrategyInstallStatus(in.Status), InstalledByActorType: string(in.InstalledBy.Type), PaperCapital: in.PaperCapital,
+		CreatedAt: in.CreatedAt,
 	}
 	if iv.LatestPerformance != nil {
 		p := toAPIStrategyPerformance(*iv.LatestPerformance, true)
@@ -1253,9 +1268,9 @@ func toAPIMarketplaceDecision(r risk.AdvancedDecisionRecord) api.AdvancedRiskDec
 }
 
 // toAPIStrategyFollowRun renders a follow run with what became of every
-// intent, from the records the services wrote. replayed is set on the answer
-// to a follow request only.
-func toAPIStrategyFollowRun(v MarketplaceFollowView, replayed *bool) api.StrategyFollowRun {
+// intent and the reference prices it valued at, from the records the services
+// wrote. replayed is set on the answer to a follow request only.
+func toAPIStrategyFollowRun(v MarketplaceFollowView, replayed *bool) (api.StrategyFollowRun, error) {
 	r := v.Run
 	out := api.StrategyFollowRun{
 		ValueDomain: api.SIMULATED, Id: toUUID(r.ID), InstallId: toUUID(r.InstallID), VersionId: toUUID(r.VersionID),
@@ -1265,12 +1280,26 @@ func toAPIStrategyFollowRun(v MarketplaceFollowView, replayed *bool) api.Strateg
 		ViolationsCount: r.ViolationsCount, IntentsSubmitted: r.IntentsSubmitted, IntentsDispatched: r.IntentsDispatched,
 		IntentsRiskRejected: r.IntentsRiskRejected, IntentsFailed: r.IntentsFailed, Equity: r.Equity, Turnover: r.Turnover,
 		EvidenceRef: r.EvidenceRef, EvidenceSha256: marketplaceHex(r.EvidenceSHA256), CreatedAt: r.CreatedAt, Replayed: replayed,
-		Intents: make([]api.StrategyFollowIntent, 0, len(r.Intents)),
+		Intents: make([]api.StrategyFollowIntent, 0, len(r.Intents)), Marks: make([]api.StrategyFollowMark, 0, len(r.Marks)),
+	}
+	if r.PaperCash != "" {
+		out.PaperCash = strPtr(r.PaperCash)
+	}
+	for _, m := range r.Marks {
+		ins, err := uuid.Parse(m.InstrumentID)
+		if err != nil {
+			return api.StrategyFollowRun{}, errs.Wrap(err, errs.CodeInternal, "marketplace read: a recorded mark names a malformed instrument")
+		}
+		out.Marks = append(out.Marks, api.StrategyFollowMark{InstrumentId: ins, PriceId: toUUID(m.PriceID), Mark: m.Mark,
+			ObservedAt: m.ObservedAt})
 	}
 	for _, fi := range r.Intents {
 		item := api.StrategyFollowIntent{
 			ProposalSeq: fi.ProposalSeq, IntentId: toUUID(fi.IntentID), Kind: string(fi.Kind), Outcome: api.StrategyFollowOutcome(fi.Outcome),
 			Notional: fi.Notional, DecisionHash: strPtr(fi.DecisionHash), ExternalRef: strPtr(fi.ExternalRef),
+		}
+		if fi.ReferencePrice != "" {
+			item.ReferencePrice = strPtr(fi.ReferencePrice)
 		}
 		if d, ok := v.Decisions[fi.IntentID]; ok {
 			rd := toAPIMarketplaceDecision(d)
@@ -1288,7 +1317,7 @@ func toAPIStrategyFollowRun(v MarketplaceFollowView, replayed *bool) api.Strateg
 		}
 		out.Intents = append(out.Intents, item)
 	}
-	return out
+	return out, nil
 }
 
 func toAPIStrategySandboxRun(v MarketplaceRunView) api.StrategySandboxRun {

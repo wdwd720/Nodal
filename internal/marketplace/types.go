@@ -168,10 +168,8 @@ func AllValidationOutcomes() []ValidationOutcome {
 }
 
 // AllValidationFailureReasons returns every failure reason
-// (marketplace_version_validations_failure_reason_check).
-func AllValidationFailureReasons() []string {
-	return []string{sandboxrt.BuildFailureScan, sandboxrt.BuildFailureCompile, sandboxrt.BuildFailureTimeout}
-}
+// (marketplace_version_validations_failure_reason_check): the builder's.
+func AllValidationFailureReasons() []string { return sandboxrt.AllBuildFailures() }
 
 // FollowTrigger is what started a follow run.
 type FollowTrigger string
@@ -319,5 +317,8 @@ type Install struct {
 	Mode        gates.Mode
 	Status      InstallStatus
 	InstalledBy econ.Actor
-	CreatedAt   time.Time
+	// PaperCapital is what the install's paper book started with, in
+	// simulated dollars (an exact decimal string).
+	PaperCapital string
+	CreatedAt    time.Time
 }

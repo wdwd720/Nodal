@@ -106,6 +106,12 @@ const (
 	ViolationManifestInstrument ViolationCode = "MANIFEST_INSTRUMENT_NOT_ALLOWED"
 	ViolationManifestNotional   ViolationCode = "MANIFEST_NOTIONAL_EXCEEDED"
 	ViolationManifestMaxIntents ViolationCode = "MANIFEST_MAX_INTENTS_EXCEEDED"
+	// ViolationReferencePriceUnavailable: the host holds no fresh reference
+	// price for the instrument, so the proposal's notional -- the figure the
+	// manifest's cap and Risk V2 judge -- cannot be computed at a price the
+	// host read itself. The proposal is refused rather than valued at a
+	// price the strategy chose (review-2 F11).
+	ViolationReferencePriceUnavailable ViolationCode = "REFERENCE_PRICE_UNAVAILABLE"
 )
 
 var allViolationCodes = []ViolationCode{
@@ -114,6 +120,7 @@ var allViolationCodes = []ViolationCode{
 	ViolationKindNotProposable, ViolationInstrumentInvalid, ViolationInstrumentNotInSnapshot, ViolationSideInvalid,
 	ViolationQuantityInvalid, ViolationLimitPriceInvalid, ViolationLogInvalid,
 	ViolationManifestKind, ViolationManifestInstrument, ViolationManifestNotional, ViolationManifestMaxIntents,
+	ViolationReferencePriceUnavailable,
 }
 
 // AllViolationCodes returns every run violation code (the
@@ -157,6 +164,35 @@ const (
 	SideBuy  Side = "BUY"
 	SideSell Side = "SELL"
 )
+
+// AllSides returns both sides (marketplace_paper_fills_side_check lists
+// exactly these).
+func AllSides() []Side { return []Side{SideBuy, SideSell} }
+
+// RunPurpose is what a sandbox run was for; the budget charges it to an
+// account under that purpose.
+type RunPurpose string
+
+// Run purposes.
+const (
+	// PurposeFollow is a paper-follow run of an install.
+	PurposeFollow RunPurpose = "FOLLOW"
+	// PurposeSimulation is one snapshot of a simulation.
+	PurposeSimulation RunPurpose = "SIMULATION"
+)
+
+// AllRunPurposes returns every purpose (sandbox_usage_purpose_check).
+func AllRunPurposes() []RunPurpose { return []RunPurpose{PurposeFollow, PurposeSimulation} }
+
+// Valid reports whether p is declared.
+func (p RunPurpose) Valid() bool {
+	for _, x := range AllRunPurposes() {
+		if x == p {
+			return true
+		}
+	}
+	return false
+}
 
 type (
 	runKind      struct{}

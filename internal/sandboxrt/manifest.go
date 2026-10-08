@@ -37,8 +37,9 @@ type Manifest struct {
 	// An instrument is allowed when its id is listed or its kind is listed.
 	AllowedInstrumentIDs   []string `json:"allowed_instrument_ids"`
 	AllowedInstrumentKinds []string `json:"allowed_instrument_kinds"`
-	// MaxNotionalPerIntent bounds quantity x price of one proposal, in
-	// simulated dollars (a positive decimal string).
+	// MaxNotionalPerIntent bounds quantity x the host's reference price of
+	// one proposal, in simulated dollars (a positive decimal string). The
+	// strategy's own limit price never enters it.
 	MaxNotionalPerIntent string `json:"max_notional_per_intent"`
 	// MaxIntentsPerRun bounds how many proposals one run may have accepted.
 	MaxIntentsPerRun int `json:"max_intents_per_run"`
@@ -202,23 +203,36 @@ func DecodeManifest(b []byte) (Manifest, error) {
 	return m, nil
 }
 
-// PriceSource names the price a notional was computed at.
-type PriceSource string
+// ReferencePrices are the prices the HOST read itself for the instruments of
+// a run, in simulated dollars per whole base unit, keyed by instrument id. A
+// proposal's notional -- what the manifest's cap and Risk V2 judge -- is only
+// ever computed at one of them: never at a limit price the strategy chose,
+// which could make any position look small (review-2 F11).
+type ReferencePrices map[string]nodalsdk.Decimal
 
-// Price sources.
-const (
-	PriceLimit PriceSource = "LIMIT"
-	PriceMark  PriceSource = "MARK"
-)
+// MarksOf returns a snapshot's own marks as reference prices. They are
+// reference prices only where the host built the snapshot from prices it read
+// itself (a paper follow), or where nothing the run accepts can become an
+// intent (a simulation over a fixed dataset).
+func MarksOf(snap nodalsdk.Snapshot) ReferencePrices {
+	out := make(ReferencePrices, len(snap.Instruments))
+	for _, ins := range snap.Instruments {
+		out[ins.ID] = ins.Mark
+	}
+	return out
+}
 
 // AcceptedProposal is a proposal the manifest permits.
 type AcceptedProposal struct {
 	Proposal
 	// InstrumentKind is the instrument's kind in the snapshot.
 	InstrumentKind string `json:"instrument_kind"`
-	// Notional is quantity x price in simulated dollars, exact.
-	Notional    string      `json:"notional"`
-	PriceSource PriceSource `json:"price_source"`
+	// Notional is quantity x ReferencePrice in simulated dollars, exact.
+	Notional string `json:"notional"`
+	// ReferencePrice is the price the host read itself that Notional was
+	// computed at. The strategy's limit price, if it gave one, is an
+	// instruction to the venue and never a valuation.
+	ReferencePrice string `json:"reference_price"`
 }
 
 // Allows reports whether the manifest allows an instrument.
@@ -235,13 +249,23 @@ func (m Manifest) allowsKind(k econ.IntentKind) bool {
 	return false
 }
 
-// Filter applies the manifest to validated proposals, in record order. A
+// Filter applies the manifest with the snapshot's own marks as the reference
+// prices (see MarksOf for when that is sound). FilterAt is the same with
+// reference prices the host read separately.
+func (m Manifest) Filter(proposals []Proposal, snap nodalsdk.Snapshot) ([]AcceptedProposal, []Violation) {
+	return m.FilterAt(proposals, snap, MarksOf(snap))
+}
+
+// FilterAt applies the manifest to validated proposals, in record order. A
 // proposal beyond the manifest -- a kind or an instrument it does not allow,
 // a notional above its cap, or one more than it permits per run -- is dropped
-// and recorded as a violation. The notional is computed exactly at the limit
-// price when there is one and at the snapshot mark otherwise; a notional that
-// cannot be computed is refused, never assumed small.
-func (m Manifest) Filter(proposals []Proposal, snap nodalsdk.Snapshot) ([]AcceptedProposal, []Violation) {
+// and recorded as a violation. The notional is computed exactly at the host's
+// reference price for the instrument and NEVER at the strategy's limit price:
+// a strategy that quotes a limit of 0.000001 is still valued at the market. A
+// proposal for an instrument the host holds no reference price for is dropped
+// (REFERENCE_PRICE_UNAVAILABLE), and a notional that cannot be computed is
+// refused, never assumed small.
+func (m Manifest) FilterAt(proposals []Proposal, snap nodalsdk.Snapshot, refs ReferencePrices) ([]AcceptedProposal, []Violation) {
 	var accepted []AcceptedProposal
 	var violations []Violation
 	max, maxErr := nodalsdk.ParseDecimal(m.MaxNotionalPerIntent)
@@ -266,18 +290,14 @@ func (m Manifest) Filter(proposals []Proposal, snap nodalsdk.Snapshot) ([]Accept
 			drop(ViolationManifestInstrument, "the manifest does not allow instrument "+ins.ID+" ("+ins.Kind+")")
 			continue
 		}
-		price, source := ins.Mark, PriceMark
-		if p.LimitPrice != "" {
-			lp, err := nodalsdk.ParseDecimal(p.LimitPrice)
-			if err != nil {
-				drop(ViolationLimitPriceInvalid, "limit price unreadable")
-				continue
-			}
-			price, source = lp, PriceLimit
+		price, ok := refs[ins.ID]
+		if !ok || price.Sign() <= 0 {
+			drop(ViolationReferencePriceUnavailable, "no fresh reference price for instrument "+ins.ID)
+			continue
 		}
 		notional, err := Notional(p.Quantity.String(), ins.BaseDecimals, price)
 		if err != nil || maxErr != nil || notional.Cmp(max) > 0 {
-			detail := "notional above the manifest's cap of " + m.MaxNotionalPerIntent
+			detail := "notional at the reference price " + price.String() + " above the manifest's cap of " + m.MaxNotionalPerIntent
 			if err != nil {
 				detail = "notional cannot be computed exactly: " + truncate(err.Error(), 120)
 			}
@@ -288,7 +308,8 @@ func (m Manifest) Filter(proposals []Proposal, snap nodalsdk.Snapshot) ([]Accept
 			drop(ViolationManifestMaxIntents, fmt.Sprintf("the manifest allows %d intents per run", m.MaxIntentsPerRun))
 			continue
 		}
-		accepted = append(accepted, AcceptedProposal{Proposal: p, InstrumentKind: ins.Kind, Notional: notional.String(), PriceSource: source})
+		accepted = append(accepted, AcceptedProposal{Proposal: p, InstrumentKind: ins.Kind, Notional: notional.String(),
+			ReferencePrice: price.String()})
 	}
 	return accepted, violations
 }
