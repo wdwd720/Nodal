@@ -22,6 +22,11 @@ export class ContractViolation extends Error {
   }
 }
 
+/** A closed set of strings: an OpenAPI `enum`. Built with `oneOf`. */
+export interface OneOf {
+  readonly oneOf: readonly string[];
+}
+
 export type FieldKind =
   | "string"
   | "number"
@@ -33,11 +38,27 @@ export type FieldKind =
   | "timestamp"
   | "uuid"
   | "object"
-  | "any";
+  | "any"
+  | OneOf;
+
+/**
+ * The field kind of an OpenAPI enum. A value outside the set is refused, not
+ * shown: a status, mode or verdict the interface has no meaning for is not a
+ * value it can honestly label.
+ */
+export function oneOf(values: readonly string[]): OneOf {
+  return { oneOf: values };
+}
 
 const UUID_PATTERN = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
 function checkField(value: unknown, kind: FieldKind, path: string): void {
+  if (typeof kind === "object") {
+    if (typeof value !== "string" || !kind.oneOf.includes(value)) {
+      throw new ContractViolation(path, `expected one of ${kind.oneOf.join(", ")}`);
+    }
+    return;
+  }
   switch (kind) {
     case "any":
       return;
@@ -95,8 +116,19 @@ export interface Spec {
   readonly required?: Readonly<Record<string, FieldKind>>;
   /** Fields checked only when present and not null. */
   readonly optional?: Readonly<Record<string, FieldKind>>;
+  /**
+   * Fields that must be present but may be null: a nullable OpenAPI field such
+   * as `next_cursor`. Absent is not the same answer as null — "there is no next
+   * page" must be something the backend said, not something a missing key
+   * implied.
+   */
+  readonly nullable?: Readonly<Record<string, FieldKind>>;
   /** Nested arrays of objects, each element validated against its own spec. */
   readonly arrays?: Readonly<Record<string, { readonly required?: boolean; readonly spec: Spec }>>;
+  /** Nested objects, each validated against its own spec. */
+  readonly objects?: Readonly<Record<string, { readonly required?: boolean; readonly spec: Spec }>>;
+  /** Arrays of scalars (codes, modes, tags), every element checked as `kind`. */
+  readonly lists?: Readonly<Record<string, { readonly required?: boolean; readonly kind: FieldKind }>>;
 }
 
 function checkObject(value: unknown, spec: Spec, path: string): void {
@@ -115,6 +147,12 @@ function checkObject(value: unknown, spec: Spec, path: string): void {
     if (present === undefined || present === null || present === "") continue;
     checkField(present, kind, `${path}.${field}`);
   }
+  for (const [field, kind] of Object.entries(spec.nullable ?? {})) {
+    if (!(field in record) || record[field] === undefined) {
+      throw new ContractViolation(`${path}.${field}`, "required field is missing (it may be null, not absent)");
+    }
+    if (record[field] !== null) checkField(record[field], kind, `${path}.${field}`);
+  }
   for (const [field, entry] of Object.entries(spec.arrays ?? {})) {
     const list = record[field];
     if (list === undefined || list === null) {
@@ -126,6 +164,29 @@ function checkObject(value: unknown, spec: Spec, path: string): void {
     if (!Array.isArray(list)) throw new ContractViolation(`${path}.${field}`, "expected an array");
     list.forEach((item, index) => {
       checkObject(item, entry.spec, `${path}.${field}[${String(index)}]`);
+    });
+  }
+  for (const [field, entry] of Object.entries(spec.objects ?? {})) {
+    const nested = record[field];
+    if (nested === undefined || nested === null) {
+      if (entry.required === true) {
+        throw new ContractViolation(`${path}.${field}`, "required object is missing");
+      }
+      continue;
+    }
+    checkObject(nested, entry.spec, `${path}.${field}`);
+  }
+  for (const [field, entry] of Object.entries(spec.lists ?? {})) {
+    const list = record[field];
+    if (list === undefined || list === null) {
+      if (entry.required === true) {
+        throw new ContractViolation(`${path}.${field}`, "required array is missing");
+      }
+      continue;
+    }
+    if (!Array.isArray(list)) throw new ContractViolation(`${path}.${field}`, "expected an array");
+    list.forEach((item, index) => {
+      checkField(item, entry.kind, `${path}.${field}[${String(index)}]`);
     });
   }
 }
@@ -422,6 +483,15 @@ export const sessionSpec: Spec = {
 /** Spec for `{ items, next_cursor }` pages, given the spec of one item. */
 export function pageSpec(item: Spec): Spec {
   return { arrays: { items: { required: true, spec: item } } };
+}
+
+/**
+ * Like `pageSpec`, and also holds the backend to the `Page` contract's
+ * `next_cursor`: present on every page, a string or null. A page whose cursor
+ * is missing is refused rather than read as the last page.
+ */
+export function cursorPageSpec(item: Spec): Spec {
+  return { nullable: { next_cursor: "string" }, arrays: { items: { required: true, spec: item } } };
 }
 
 /* --------------------------------------------------------------------------

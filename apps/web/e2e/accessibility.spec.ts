@@ -25,6 +25,11 @@ const ROUTES = [
   "/lab",
   "/activity",
   "/settings",
+  // The advanced (sandbox) area's core pages (advanced-core.spec.ts).
+  "/advanced/overview",
+  "/advanced/buying-power",
+  "/advanced/activity",
+  "/advanced/instruments",
 ] as const;
 
 for (const route of ROUTES) {

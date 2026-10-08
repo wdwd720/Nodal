@@ -11,6 +11,7 @@ import (
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/econ"
+	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/instruments"
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/risk"
@@ -179,16 +180,22 @@ func (a advancedCoreAdapter) RiskDecisions(ctx context.Context, account accounts
 	return a.deps.Risk.ListAdvancedDecisions(ctx, a.db, account.String(), limit)
 }
 
-func (a advancedCoreAdapter) BuyingPower(ctx context.Context, account accounts.AccountID) (buyingpower.V2, error) {
+func (a advancedCoreAdapter) BuyingPower(ctx context.Context, account accounts.AccountID) (AdvancedBuyingPower, error) {
 	if a.deps.Prices == nil {
-		return buyingpower.V2{}, errNotWired("advanced buying power (no price source)")
+		return AdvancedBuyingPower{}, errNotWired("advanced buying power (no price source)")
 	}
-	var out buyingpower.V2
+	var out AdvancedBuyingPower
 	err := a.snapshot(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		usd, err := econ.SandboxDollar(ctx, tx)
+		if errs.HasCode(err, errs.CodeNotFound) {
+			// Not "no such account": this deployment has no simulated value
+			// at all until the sandbox dollar exists.
+			return errs.New(errs.CodeUnsupported, "the sandbox dollar is not provisioned in this deployment, so there is no simulated value to report")
+		}
 		if err != nil {
 			return err
 		}
+		out.Quote = usd
 		loader, err := buyingpower.NewV2Loader(buyingpower.V2LoaderConfig{
 			Clock: a.clk, Prices: a.deps.Prices, QuoteAssetID: usd.ID, MaxPriceAge: a.deps.MaxPriceAge,
 			Margin: a.deps.Margin, Extra: a.deps.Extra,
@@ -196,7 +203,7 @@ func (a advancedCoreAdapter) BuyingPower(ctx context.Context, account accounts.A
 		if err != nil {
 			return err
 		}
-		out, err = loader.Compute(ctx, tx, string(ledger.OwnerCustomer), account.String())
+		out.V2, err = loader.Compute(ctx, tx, string(ledger.OwnerCustomer), account.String())
 		return err
 	})
 	return out, err

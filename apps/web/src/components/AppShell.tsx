@@ -18,7 +18,8 @@ import { StreamBadge, useEventStream } from "./StreamStatus.tsx";
  * The navigation, grouped so that the three kinds of value stay apart.
  *
  * Nodal Economy, Marketplace and Native Markets are the internal economy;
- * Trade and Portfolio are real capital; the Lab is simulated. They are
+ * Trade and Portfolio are real capital; the Lab is simulated, and so is
+ * everything under Advanced (sandbox), which sits beside it. They are
  * adjacent in the list and never merged into one "balance" destination,
  * because a single entry point would be the first step toward a single total
  * (gola.md PART LII).
@@ -36,6 +37,7 @@ export const NAV_ITEMS: ReadonlyArray<{ readonly to: string; readonly label: str
   { to: "/strategy", label: "Strategy builder" },
   { to: "/agents", label: "Agents" },
   { to: "/lab", label: "Lab" },
+  { to: "/advanced", label: "Advanced (sandbox)" },
   { to: "/activity", label: "Activity" },
   { to: "/settings", label: "Settings and security" },
 ];

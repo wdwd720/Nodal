@@ -84,8 +84,8 @@ func TestValidateMemo(t *testing.T) {
 		strings.Repeat("é", 140):        true,
 		"line\nbreak":                   false,
 		"tab\there":                     false,
-		"bidi ‮ override":               false,
-		"zero​width":                    false,
+		"bidi \u202e override":          false,
+		"zero\u200bwidth":               false,
 		" leading":                      false,
 		"trailing ":                     false,
 		string([]byte{0xff, 0xfe, 'a'}): false,
@@ -105,7 +105,7 @@ func TestValidateMemo(t *testing.T) {
 // FuzzValidateMemo: an accepted memo is valid UTF-8, within the bound, made
 // only of printable characters and fits the column.
 func FuzzValidateMemo(f *testing.F) {
-	for _, s := range []string{"", "hi", "a‮b", "\x00", strings.Repeat("z", 300)} {
+	for _, s := range []string{"", "hi", "a\u202eb", "\x00", strings.Repeat("z", 300)} {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, s string) {

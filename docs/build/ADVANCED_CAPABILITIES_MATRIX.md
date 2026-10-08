@@ -12,7 +12,7 @@ an external provider's sandbox) · `BLOCKED_EXTERNAL` · `LIVE_CAPABLE_BUT_DISAB
 code (`gates.DecideMode` → `LIVE_NOT_IMPLEMENTED`) and unrepresentable in the database (D-049). The live
 column below says what activation would need, never that it is near.
 
-Last updated: 2026-10-07 — foundation committed (`964eadb`); subsystem lanes in progress.
+Last updated: 2026-10-08 — foundation, kernel amendments (00733), transfers + faucet (00744), margin (00740), derivatives (00741), prediction markets (00749), strategy marketplace (00750) and sandboxed runs (00751) merged; other subsystem lanes in progress.
 
 ## Summary
 
@@ -25,26 +25,26 @@ Last updated: 2026-10-07 — foundation committed (`964eadb`); subsystem lanes i
 | 5 | Capability gates + mode policy (§28) | VERIFIED_LOCAL | — | — |
 | 6 | Risk Kernel V2 (§21) | VERIFIED_LOCAL | — | — |
 | 7 | Stable asset subsystem (§5) | IN_PROGRESS | SANDBOX/DEVNET | B-16 |
-| 8 | Margin + leverage engine (§6) | IN_PROGRESS | PAPER/SANDBOX | B-15 |
-| 9 | Derivatives: futures, perps, options (§7) | IN_PROGRESS | PAPER/SANDBOX | B-15, B-17 |
+| 8 | Margin + leverage engine (§6) | VERIFIED_LOCAL (API in progress) | PAPER/SANDBOX | B-15 |
+| 9 | Derivatives: futures, perps, options (§7) | VERIFIED_LOCAL (API in progress) | PAPER/SANDBOX | B-15, B-17 |
 | 10 | Equities abstraction (§8) | IN_PROGRESS | PAPER/SANDBOX | B-15, B-17 |
-| 11 | Internal matching engine (§9) | IN_PROGRESS | internal simulation | B-15 |
-| 12 | Customer-to-customer transfers (§10) | IN_PROGRESS | SANDBOX | B-15 |
+| 11 | Internal matching engine (§9) | IN_PROGRESS (pure engine VERIFIED_LOCAL; persistent book in progress) | internal simulation | B-15 |
+| 12 | Customer-to-customer transfers (§10) | VERIFIED_LOCAL (API in progress) | SANDBOX | B-15 |
 | 13 | Principal / treasury book (§11) | IN_PROGRESS | PAPER/SANDBOX | B-15 |
-| 14 | Transparent spread + fee engine (§12) | IN_PROGRESS | PAPER/SANDBOX | B-15 |
-| 15 | Performance fee engine (§13) | IN_PROGRESS | PAPER/SANDBOX | B-15 |
-| 16 | Strategy marketplace (§14) | IN_PROGRESS | PAPER | B-15 |
-| 17 | Sandboxed user code (§15) | IN_PROGRESS | SANDBOX | B-19 |
+| 14 | Transparent spread + fee engine (§12) | IN_PROGRESS (pure engine VERIFIED_LOCAL; fee ledger pending) | PAPER/SANDBOX | B-15 |
+| 15 | Performance fee engine (§13) | IN_PROGRESS (pure engine VERIFIED_LOCAL; persistence pending) | PAPER/SANDBOX | B-15 |
+| 16 | Strategy marketplace (§14) | VERIFIED_LOCAL (API in progress) | PAPER | B-15 |
+| 17 | Sandboxed user code (§15) | VERIFIED_LOCAL (API in progress) | SANDBOX | B-19 |
 | 18 | Delegated agent signing (§16) | NOT_STARTED | SANDBOX/DEVNET | B-18 |
 | 19 | Delegated agent withdrawals (§17) | NOT_STARTED | SANDBOX/DEVNET | B-18 |
 | 20 | Cross-chain buying power (§18) | NOT_STARTED | SANDBOX/DEVNET | B-20 |
-| 21 | Prediction markets (§19) | NOT_STARTED | PAPER/SANDBOX | B-15, B-17 |
-| 22 | Universal buying power V2 (§20) | NOT_STARTED | — | — |
+| 21 | Prediction markets (§19) | VERIFIED_LOCAL (API in progress) | PAPER/SANDBOX | B-15, B-17 |
+| 22 | Universal buying power V2 (§20) | VERIFIED_LOCAL (margin wired; derivatives, bridge pending) | SIMULATED domain | — |
 | 23 | Provider layer modes (§27) | IN_PROGRESS | fake/sandbox | B-17, B-20 |
 | 24 | Observability (§29) | NOT_STARTED | — | — |
-| 25 | API surface (§25) | NOT_STARTED | — | — |
-| 26 | Web application (§26) | NOT_STARTED | — | — |
-| 27 | Demo scenarios A–I (§34) | NOT_STARTED | — | — |
+| 25 | API surface (§25) | IN_PROGRESS (core reads VERIFIED_LOCAL; per-subsystem lanes running) | — | — |
+| 26 | Web application (§26) | IN_PROGRESS (advanced area lane running) | — | — |
+| 27 | Demo scenarios A–I (§34) | IN_PROGRESS (`make advanced-demo`: transfer prologue and B pass) | — | — |
 
 ## Foundation detail
 
@@ -74,3 +74,38 @@ Last updated: 2026-10-07 — foundation committed (`964eadb`); subsystem lanes i
 - **Implementation:** `internal/risk/advanced.go`.
 - **DB:** `advanced_risk_decisions` (append-only; verdict/reasons CHECK).
 - **Tests:** `internal/risk/advanced_test.go`, `advanced_integration_test.go`.
+
+### 8. Margin, leverage, borrowing, liquidation
+- **Implementation:** `internal/margin` (pure engine: `Evaluate`, `ComputeHaircut`, `PlanLiquidation`, `RunStress`; service: accounts, collateral, borrow/repay with interest-first repayment, accrual, leveraged paper spot buys, mark-to-market, liquidation queue, step-by-step liquidation with a slippage cap and step budget, insurance-fund deficit cover, stress runs); `BuyingPowerReader` feeds buying power V2 from the engine's own evaluation.
+- **DB:** `00740_margin.sql` (MG001–MG006; append-only histories; step budget and slippage caps as constraints; closed-case rule).
+- **Tests:** property tests (`TestProp_LiquidationIsDeterministicReduceOnlyAndTerminates`, `TestProp_NoWithdrawalBreachesMaintenance`, `TestProp_MarginAvailableNeverExceedsCapacity`, `TestProp_LosingLeveragedPositionNeverIncreasesWithdrawableBuyingPower`, `TestProp_StaleMarksBlockNewLeverage`, `TestProp_EquityIdentityHolds`, `TestProp_HaircutIsMonotoneInEachFactor`); integration (`ScenarioB_FromFundingToACoveredDeficit`, `ConcurrentBorrowsCannotSpendTheSameMarginTwice`, `ConcurrentLeveragedBuysCannotSpendTheSameMarginTwice`, `InterestAccrualReplayIsIdempotent`, `StalePriceLiquidationIsRefused`, `DatabaseRefusesInvalidMarginStates`, `BuyingPowerV2SeesTheMarginEngine`); demo scenario B.
+- **Limitations:** one margin account per customer account (ISOLATED margins one position); the service lends only the numeraire; derivatives cases go to MANUAL_REVIEW; deficit cover refuses when the insurance fund is short.
+
+### 12. Customer-to-customer transfers and the sandbox faucet
+- **Implementation:** `internal/transfers` (send with recipient rules, sender modes, handles, compliance screen, velocity and threshold step-up, Risk Kernel V2, reservation, posting template, effect, evidence; operator reversal by compensation; database-only reconciliation), `internal/sandboxfund` (faucet with a rolling per-account cap); one sandbox dollar owned by `econ`.
+- **DB:** `00744_transfers.sql` (PT001–PT005, SF001–SF002), `00733` (multi-step transition binding, reservation ↔ economic intent, transfer notification kinds).
+- **Tests:** `TestProp_TransfersAndReversalsConserveCustomerWallets`, `TestIntegration_ConcurrentTransfersCannotDoubleSpend` (50 goroutines, exactly 10 succeed), `TestIntegration_HundredConcurrentTransfersPreserveInvariants`, `TestIntegration_ADuplicateTransferIsIdempotent`, `TestIntegration_AReversalCompensatesAndNeverEditsHistory`, `TestIntegration_AnAgentNeverTransfersAndTheCompilerAgrees`, bypass tests for AU001/SM002/PT001–PT005, faucet cap and concurrency tests; demo scenario 0.
+- **Limitations:** recipients must be CUSTOMER accounts; the default screen blocks only a configured list (no sanctions feed: B-06); a reversal that cannot proceed answers CONFLICT and records nothing.
+
+### 22. Universal buying power V2
+- **Implementation:** `internal/capital/buyingpower/v2.go`, `v2_load.go` (ledger + reservations + marks, SIMULATED domain only), margin wired through `margin.BuyingPowerReader`; served at `GET /v1/advanced/buying-power`.
+- **Tests:** `v2_test.go`, `v2_integration_test.go`, `TestIntegration_BuyingPowerV2SeesTheMarginEngine`, `TestIntegration_AdvancedReadsServeTheRealStores`.
+
+### 21. Prediction markets
+- **Implementation:** `internal/predmarket` (market lifecycle DRAFT → OPEN → CLOSED → RESOLUTION_PENDING → RESOLVED/DISPUTED → SETTLED or VOIDED; complete-set issuance and redemption against escrow; Ed25519-verified sandbox oracle reports; disputes; settlement that pays winning shares one unit and losing shares nothing; void refunds with a disclosed rounding residual; escrow reconciliation). Positions are a view over the ledger, so they cannot drift from it. The creator can never resolve or void their own market, and a disputer never rules on their dispute.
+- **DB:** `00749_prediction_markets.sql` (PM001–PM005; settlement rows check their own conservation in SQL).
+- **Tests:** `TestProp_SettlementPaysExactlyTheEscrow`, `TestProp_PayoutConservation`, `TestProp_RefundConservesAndBoundsTheResidual`, `TestIntegration_ConcurrentSettlementsSettleOnce`, `TestIntegration_ADisputedMarketCannotSettle`, `TestIntegration_NoSettlementBeforeResolution`, `TestIntegration_OracleReplayIsIdempotentAndAConflictingReportIsRefused`, `TestIntegration_ReconciliationDetectsAnEscrowDivergence`, `TestIntegration_ScenarioH_CreateTradeCloseResolveSettle`, `FuzzDecodeOracleReport`.
+- **Limitations:** settlement is all-or-nothing (a holder Risk V2 refuses blocks it until resolved); shares outside customer wallets or reserved by open orders make settlement refuse with RECONCILIATION_REQUIRED.
+
+### 9. Derivatives: futures, perpetuals, options
+- **Implementation:** `internal/derivatives` (contract specs, positions with fills as the single trade path, variation margin runs once per interval, perpetual funding with a premium index, European/American options with exact payoff grids, exercise and FIFO assignment, expiry settlement, a SIMULATED clearing house that absorbs one-sided books and nets to zero, reference analytics -- price and Greeks from `internal/quant` -- that are labelled and never posted). `MarginReader` feeds buying power V2 through `buyingpower.CombinedMarginReader` (D-054).
+- **DB:** `00741_derivatives.sql` (DV001–DV004; one settlement per instrument, one funding accrual per position and interval).
+- **Tests:** `TestProp_RoundTripRealizedPnLIsExact`, `TestProp_FundingConservesOnABalancedBook`, `TestProp_OptionPayoffIsExactAndPutCallParityHolds`, `TestProp_AssignFIFOConserves`, `TestProp_AnalyticsGreeksAreSane`, `TestProp_EveryPostingTemplateBalancesPerParty`, integration (`FuturesPnLIsExactThroughTheLedger`, `AmericanExerciseAndFIFOAssignmentConserve`, `OptionExpirySettlementIsExact`, `ConcurrentSettlementPostsOnce`, `VariationMarginRunsOncePerInterval`, `StaleOraclePreventsARiskIncreasingOrderButNotClosing`, `ConcurrentOpensCannotOverspendMargin`, `TheClearingHouseNetsToZeroForAMatchedBook`).
+- **Limitations:** only cash-settled, 24x7 instruments with a whole-unit tick value; funding rounds down once per contract per interval; variation margin settles at the mark current when the run happens; every flow-producing derivative operation serializes on one clearing-house lock.
+
+### 16–17. Strategy marketplace and sandboxed user code
+- **Implementation:** `internal/sandboxrt` (static scan of strategy source with forbidden imports refused, a builder that compiles Go to WASM with an embedded SDK and an environment carrying nothing from the parent, a wazero runner with wall-time, memory (metered allocator), output-size and no-network/no-filesystem limits, output parsing into proposals checked against a manifest, proposals converted to economic intents that then go through the normal route/gate/Risk V2 path — untrusted code can only ever produce risk-checked intents, never a transfer or withdrawal) and `internal/marketplace` (listing lifecycle with review by someone other than the creator, immutable manifests, PAPER-only installs, paper-follow producing intents and evidence, forks with provenance, evaluations and performance snapshots).
+- **DB:** `00750_strategy_marketplace.sql` (MK001–MK010), `00751_sandbox_runs.sql` (SX001: a run's violation count matches its violation rows).
+- **Tests:** sandbox escape suite (`TestSandbox_FilesystemEscapeAttemptFails`, `…NetworkAttemptFails`, `…ForkBombBlocked`, `…CPUInfiniteLoopKilled`, `…MemoryBombKilled`, `…OversizedOutputKilled`, `…EnvironmentSecretsAbsent`, `…StrategyCannotConstructALiveSigningCall`), `TestProp_NoStrategyOutputBecomesATransferOrWithdrawal`, `TestSandbox_SameArtifactSameInputIsByteIdentical`, `FuzzScan`, `TestIntegration_Prop_UntrustedOutputOnlyBecomesRiskCheckedIntents`, `TestIntegration_CreatorCannotApproveOwnListing`, `TestIntegration_InstallIsPaperOnly`, `TestIntegration_ConcurrentFollowsOfOneSnapshotDispatchOnce`.
+- **Measured:** cold start (compile) 1.16 s on a quiet machine, per-run p50 7.6 ms, p95 9.2 ms for a 4.9 MB strategy module (lane measurement; the performance report re-measures).
+- **Limitations:** under `-race` the Go-built module tests skip (each compile takes about two minutes); host-side concurrency is still raced with hand-assembled modules. Any violation in a run rejects every intent from that run.

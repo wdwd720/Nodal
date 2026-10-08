@@ -62,12 +62,14 @@ func TestIntegration_AdvancedReadsServeTheRealStores(t *testing.T) {
 	h := newIntegrationHarness(t, d, acct, userID)
 	h.server.opts.Ports.Advanced = ports.Advanced
 
-	// Before the sandbox dollar exists, buying power says so.
+	// Before the sandbox dollar exists, buying power says the deployment has
+	// no simulated value -- not that the account does not exist.
 	var provisioned bool
 	require.NoError(t, d.Pool().QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM assets WHERE id = $1)`, econ.SandboxDollarID()).Scan(&provisioned))
 	if !provisioned {
 		res := h.do(http.MethodGet, "/v1/advanced/buying-power?account_id="+acct.String(), nil)
-		require.Equal(t, http.StatusNotFound, res.Code, "body=%s", res.Body.String())
+		require.Equal(t, http.StatusUnprocessableEntity, res.Code, "body=%s", res.Body.String())
+		assert.Equal(t, errs.CodeUnsupported, res.problem().Code)
 	}
 
 	// Provision and fund 1,000 sandbox dollars.
@@ -141,6 +143,8 @@ func TestIntegration_AdvancedReadsServeTheRealStores(t *testing.T) {
 	var bp api.BuyingPowerV2
 	res.json(&bp)
 	assert.Equal(t, api.SIMULATED, bp.ValueDomain)
+	assert.Equal(t, econ.SandboxDollarSymbol, bp.QuoteSymbol)
+	assert.Equal(t, econ.SandboxDollarID().String(), bp.QuoteAssetId.String())
 	assert.Equal(t, "1000.00", bp.GrossEquity)
 
 	// The intent and the effect, with the journal that backs it.

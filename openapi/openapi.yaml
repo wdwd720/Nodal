@@ -2736,12 +2736,13 @@ components:
         items: { type: array, items: { $ref: "#/components/schemas/AdvancedInstrument" } }
     InstrumentTermsVersion:
       type: object
-      required: [version, terms_hash, reason, actor_type, created_at]
+      required: [version, terms_hash, reason, actor_type, actor_id, created_at]
       properties:
         version: { type: integer }
         terms_hash: { type: string }
         reason: { type: string }
         actor_type: { type: string }
+        actor_id: { type: string, description: Who defined or amended these terms (an operator or service identity) }
         created_at: { $ref: "#/components/schemas/Timestamp" }
     AdvancedInstrumentDetail:
       allOf:
@@ -2777,8 +2778,9 @@ components:
       allOf:
         - { $ref: "#/components/schemas/Page" }
         - type: object
-          required: [items]
+          required: [items, value_domain]
           properties:
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
             items: { type: array, items: { $ref: "#/components/schemas/EconomicIntent" } }
     EconomicEffect:
       type: object
@@ -2846,12 +2848,14 @@ components:
         detail: { type: string }
     BuyingPowerV2:
       type: object
-      required: [value_domain, gross_equity, eligible_collateral, haircuts, borrow_liabilities, initial_margin_used,
+      required: [value_domain, quote_asset_id, quote_symbol, gross_equity, eligible_collateral, haircuts, borrow_liabilities, initial_margin_used,
                  maintenance_margin, open_order_reservations, pending_transfer_reservations, pending_withdrawal_reservations,
                  strategy_reservations, pending_bridge_haircut, eligible_equity, margin_available, withdrawable,
                  trade_buying_power, risk_increasing_buying_power, reasons, lines, policy_version, as_of]
       properties:
         value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        quote_asset_id: { $ref: "#/components/schemas/UUID" }
+        quote_symbol: { type: string, description: The sandbox asset every figure is valued in at par (SBX-USD) }
         gross_equity: { $ref: "#/components/schemas/USD" }
         eligible_collateral: { $ref: "#/components/schemas/USD" }
         haircuts: { $ref: "#/components/schemas/USD" }

@@ -119,7 +119,7 @@ seed-economy: seed ## Seed the internal economy: Credit asset, Credits, a seller
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
-.PHONY: test unit property race fuzz contract integration integration-list integration-race e2e e2e-web chaos load perf-advanced security test-all
+.PHONY: test unit property race fuzz contract integration integration-list integration-race e2e e2e-web chaos load advanced-demo perf-advanced security test-all
 test: unit property race ## Default developer test set
 
 unit: ## Go unit tests
@@ -198,6 +198,9 @@ load: ## k6 load test (SCRIPT=test/load/<name>.js; needs BASE_URL, SESSION, ACCO
 
 load-inspect: ## Validate every k6 script without running it
 	@for f in test/load/*.js; do $(GO) run ./scripts/tool k6 inspect $$f >/dev/null && echo "ok  $$f"; done
+
+advanced-demo: ## Run the end-to-end advanced scenarios on a fresh local database and print where the evidence is (writes dist/advanced-demo.json)
+	$(GO) run ./scripts/advanceddemo -out dist/advanced-demo.json
 
 perf-advanced: ## Measure the advanced capabilities against the goal's performance targets (writes dist/advanced-perf.md)
 	$(GO) run ./scripts/advperf -out dist/advanced-perf.md

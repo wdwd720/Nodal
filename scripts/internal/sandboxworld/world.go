@@ -31,14 +31,18 @@ import (
 	"github.com/nodal/controlplane/internal/compliance"
 	"github.com/nodal/controlplane/internal/config"
 	"github.com/nodal/controlplane/internal/db"
+	"github.com/nodal/controlplane/internal/derivatives"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/event"
 	"github.com/nodal/controlplane/internal/gates"
+	"github.com/nodal/controlplane/internal/instruments"
 	"github.com/nodal/controlplane/internal/killswitch"
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/legalrouter"
+	"github.com/nodal/controlplane/internal/margin"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/notification"
+	"github.com/nodal/controlplane/internal/reconciliation"
 	"github.com/nodal/controlplane/internal/risk"
 	"github.com/nodal/controlplane/internal/sandboxfund"
 	"github.com/nodal/controlplane/internal/security"
@@ -79,8 +83,13 @@ type World struct {
 	Prices     *valuation.PriceStore
 	Capital    *capital.Service
 
-	Transfers *transfers.Service
-	Faucet    *sandboxfund.Faucet
+	Transfers   *transfers.Service
+	Faucet      *sandboxfund.Faucet
+	Margin      *margin.Service
+	Derivatives *derivatives.Service
+	Instruments *instruments.Repository
+	// Identity is the production identity reader (compliance profiles).
+	Identity compliance.AccountVerification
 
 	// USD is the sandbox dollar every scenario settles in.
 	USD assets.Asset
@@ -164,9 +173,34 @@ func wire(d *db.DB, o Options) (*World, error) {
 	}
 	w.Faucet, err = sandboxfund.New(sandboxfund.Deps{
 		Clock: clk, Ledger: led, Effects: w.Effects, Environment: env, Policy: sandboxfund.DefaultPolicy(),
+		KillSwitches: kills,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("sandboxworld: faucet: %w", err)
+	}
+	w.Identity = compliance.NewAccountVerification(clk)
+	w.Margin, err = margin.NewService(margin.Config{
+		Policy: margin.DefaultPolicy(), RiskPolicy: risk.DefaultAdvancedPolicy(),
+		LendingPoolName: "Sandbox lending pool", InsuranceFundName: "Sandbox insurance fund",
+		ServiceActorID: o.Component, MaxQueueScan: 1_000,
+	}, margin.Dependencies{
+		Clock: clk, Ledger: led, Effects: w.Effects, Intents: w.Intents, Authorizer: w.Authorizer,
+		Registry: w.Registry, Risk: w.Risk, Capital: w.Capital, Prices: w.Prices, Router: router,
+		Identity: w.Identity, KillSwitch: kills, Venue: margin.PaperVenue{}, Audit: aw,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("sandboxworld: margin: %w", err)
+	}
+	w.Instruments = instruments.NewRepository()
+	w.Derivatives, err = derivatives.NewService(derivatives.Config{
+		Clock: clk, Intents: w.Intents, Effects: w.Effects, Authorizer: w.Authorizer, Registry: w.Registry,
+		Ledger: led, Capital: w.Capital, RiskStore: w.Risk, RiskPolicy: risk.DefaultAdvancedPolicy(),
+		Policy: derivatives.DefaultPolicy(), Prices: w.Prices, Instruments: w.Instruments, Router: router,
+		KillSwitches: kills, Reconciliation: reconciliation.NewRepository(clk, out, aw),
+		USDAssetID: econ.SandboxDollarID(), ClearingHouseName: "Sandbox clearing house",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("sandboxworld: derivatives: %w", err)
 	}
 	return w, nil
 }
@@ -225,6 +259,19 @@ func (w *World) Operator(role security.Role) security.Principal {
 		SubjectID: "synthetic-operator-" + string(role), ActorType: security.ActorOperator,
 		Roles: []security.Role{role}, AuthTime: w.Clock.Now(), AMR: []string{"pwd", "mfa"},
 	}
+}
+
+// Mark records a sandbox price observation for asset, quoted in the sandbox
+// dollar, at the world's current time. price is an exact decimal string.
+func (w *World) Mark(ctx context.Context, asset assets.AssetID, price, source string) (valuation.RecordedPrice, error) {
+	p, err := money.PriceFromDecimalString(price, w.USD.ID.String(), source, w.Clock.Now())
+	if err != nil {
+		return valuation.RecordedPrice{}, err
+	}
+	return w.Prices.RecordPrice(ctx, w.DB, valuation.PriceObservation{
+		AssetID: asset, QuoteAssetID: w.USD.ID, Mantissa: p.Mantissa, Scale: p.Scale,
+		Source: source, ObservedAt: w.Clock.Now(),
+	})
 }
 
 // SimAsset registers a SIMULATED asset on the sandbox chain. A USD-pegged one
