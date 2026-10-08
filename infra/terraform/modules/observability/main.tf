@@ -509,7 +509,12 @@ locals {
       },
       # Advanced capabilities (ADR-0020). Every figure is SIMULATED-domain;
       # the advanced_ prefix keeps them off every real-capital widget above.
-      # Names match internal/observability/advanced.go.
+      # Names match internal/observability/advanced.go. The advanced worker's
+      # collector records them from the database (internal/advancedmetrics),
+      # except the order and cancel latencies, which the API records on the
+      # request path. advanced_provider_mismatches is recorded by nothing (no
+      # advanced reconciliation compares against an external provider), so no
+      # widget or alarm reads it.
       {
         type = "metric", x = 0, y = 24, width = 12, height = 6
         properties = {
@@ -568,6 +573,51 @@ locals {
             concat([var.custom_metric_namespace, "advanced_unmatched_economic_effects"], local.dims_list),
             concat([var.custom_metric_namespace, "advanced_reserve_mismatches"], local.dims_list),
             concat([var.custom_metric_namespace, "advanced_chain_mismatches"], local.dims_list),
+          ]
+        }
+      },
+      {
+        type = "metric", x = 0, y = 36, width = 12, height = 6
+        properties = {
+          title  = "Advanced: order and cancel latency, slowest per minute (ms)"
+          region = var.aws_region
+          stat   = "Maximum"
+          period = 60
+          metrics = [
+            concat([var.custom_metric_namespace, "advanced_order_latency"], local.dims_list),
+            concat([var.custom_metric_namespace, "advanced_cancel_latency"], local.dims_list),
+          ]
+        }
+      },
+      {
+        # Each rate is its counter pair divided here: numerator over
+        # denominator, both counted from the book's own rows.
+        type = "metric", x = 12, y = 36, width = 12, height = 6
+        properties = {
+          title  = "Advanced: book order fill and rejection rates (%)"
+          region = var.aws_region
+          stat   = "Sum"
+          period = 300
+          metrics = [
+            [{ expression = "100 * filled / fill_orders", label = "Fill rate (%)", id = "fill_rate" }],
+            [{ expression = "100 * rejected / rejection_orders", label = "Rejection rate (%)", id = "rejection_rate" }],
+            concat([var.custom_metric_namespace, "advanced_fill_rate_orders"], local.dims_list, [{ id = "fill_orders", visible = false }]),
+            concat([var.custom_metric_namespace, "advanced_fill_rate_filled"], local.dims_list, [{ id = "filled", visible = false }]),
+            concat([var.custom_metric_namespace, "advanced_rejection_rate_orders"], local.dims_list, [{ id = "rejection_orders", visible = false }]),
+            concat([var.custom_metric_namespace, "advanced_rejection_rate_rejected"], local.dims_list, [{ id = "rejected", visible = false }]),
+          ]
+        }
+      },
+      {
+        type = "metric", x = 0, y = 42, width = 12, height = 6
+        properties = {
+          title  = "Advanced: internal match and external route volume (USD minor)"
+          region = var.aws_region
+          stat   = "Sum"
+          period = 300
+          metrics = [
+            concat([var.custom_metric_namespace, "advanced_internal_match_volume"], local.dims_list),
+            concat([var.custom_metric_namespace, "advanced_external_route_volume"], local.dims_list),
           ]
         }
       },

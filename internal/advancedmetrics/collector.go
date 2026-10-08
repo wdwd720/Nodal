@@ -110,7 +110,8 @@ func NewCollector(cfg Config) (*Collector, error) {
 func (c *Collector) Spec() advancedjobs.Spec {
 	return advancedjobs.Spec{
 		Name: Name, Settings: advancedjobs.Settings{Interval: c.cfg.Interval, Batch: 1},
-		Calls:      "reads ledger holdings, margin.Service.Aggregate, stableasset.Service.ReserveLedger, effects, reconciliation records and new risk, margin, sandbox and trade rows",
+		Calls: "reads ledger holdings, margin.Service.Aggregate, stableasset.Service.ReserveLedger, effects, reconciliation records " +
+			"and new risk, margin, sandbox, order, trade, paper fill, breaker, delegated refusal and scan refusal rows",
 		KillSwitch: "reads only; consults no kill switch",
 	}
 }
@@ -162,6 +163,24 @@ type Counted struct {
 	DeniedIntents       map[string]int64 // per stage: the status an intent was rejected from
 	SigningRequests     map[string]int64 // per verdict of the delegated signing provider
 	WithdrawalProposals map[string]int64 // per evaluation outcome of a delegated withdrawal
+	// Book orders per owner type (CUSTOMER, HOUSE): recorded, filled for the
+	// first time, and rejected.
+	BookOrders         map[string]int64
+	BookOrdersFilled   map[string]int64
+	BookOrdersRejected map[string]int64
+	// ExternalRouteVolume is the paper venue's fill notional at the
+	// reference mark, USD minor units; fills whose quote asset cannot be
+	// valued are counted in UnvaluedRouteFills instead.
+	ExternalRouteVolume int64
+	UnvaluedRouteFills  int64
+	// CircuitBreakerEvents are the breakers that tripped, per (kind, reason).
+	CircuitBreakerEvents map[Pair]int64
+	// AuthorityViolations are the refused delegated requests that violated
+	// authority, per (kind, stage).
+	AuthorityViolations map[Pair]int64
+	// SandboxNetworkViolations are the strategy versions the scanner refused
+	// for an import that would reach the network or another process.
+	SandboxNetworkViolations int64
 }
 
 // Run implements advancedjobs.Job: one collection. Each section is read in a
@@ -318,8 +337,10 @@ func (c *Collector) margin(ctx context.Context, tx pgx.Tx, snap *Snapshot) error
 	if err != nil {
 		return err
 	}
-	f := &MarginFigures{Accounts: int64(agg.Accounts), Unvalued: int64(agg.Unvalued),
-		GrossExposure: agg.GrossExposure.Minor(), LiquidationBuffer: agg.LiquidationBuffer.Minor()}
+	f := &MarginFigures{
+		Accounts: int64(agg.Accounts), Unvalued: int64(agg.Unvalued),
+		GrossExposure: agg.GrossExposure.Minor(), LiquidationBuffer: agg.LiquidationBuffer.Minor(),
+	}
 	if bps, ok := agg.LeverageBPS(); ok {
 		v := int64(bps)
 		f.LeverageBPS = &v
@@ -437,15 +458,20 @@ func (c *Collector) counters(ctx context.Context, tx pgx.Tx, snap *Snapshot) err
 		// A window that has not moved counts nothing.
 		return nil
 	}
-	w := &Counted{From: *from, To: upper, RiskDenies: map[string]int64{}, SandboxKilled: map[string]int64{},
+	w := &Counted{
+		From: *from, To: upper, RiskDenies: map[string]int64{}, SandboxKilled: map[string]int64{},
 		IntentProposals: map[string]int64{}, DeniedIntents: map[string]int64{}, SigningRequests: map[string]int64{},
-		WithdrawalProposals: map[string]int64{}}
+		WithdrawalProposals: map[string]int64{},
+	}
 	for _, x := range []struct {
 		dst map[string]int64
 		sql string
 	}{
-		{w.RiskDenies, riskDeniesSQL}, {w.IntentProposals, intentProposalsSQL}, {w.DeniedIntents, deniedIntentsSQL},
-		{w.SigningRequests, signingRequestsSQL}, {w.WithdrawalProposals, withdrawalProposalsSQL},
+		{w.RiskDenies, riskDeniesSQL},
+		{w.IntentProposals, intentProposalsSQL},
+		{w.DeniedIntents, deniedIntentsSQL},
+		{w.SigningRequests, signingRequestsSQL},
+		{w.WithdrawalProposals, withdrawalProposalsSQL},
 	} {
 		if err := countBy(ctx, tx, x.dst, x.sql, w.From, w.To); err != nil {
 			return err
@@ -481,64 +507,72 @@ func (c *Collector) counters(ctx context.Context, tx pgx.Tx, snap *Snapshot) err
 			w.SandboxMemoryLimit += n
 		}
 	}
-	if err := c.matchVolume(ctx, tx, w); err != nil {
+	var err error
+	if w.InternalMatchVolume, w.UnvaluedMatchTrades, err = c.volume(ctx, tx, internalMatchSQL, w); err != nil {
 		return err
+	}
+	for _, count := range []func(context.Context, pgx.Tx, *Counted) error{c.execution, c.breakers, c.authority, c.network} {
+		if err := count(ctx, tx, w); err != nil {
+			return err
+		}
 	}
 	snap.Counted = w
 	c.pending = &upper
 	return nil
 }
 
-func (c *Collector) matchVolume(ctx context.Context, tx pgx.Tx, w *Counted) error {
-	rows, err := tx.Query(ctx, internalMatchSQL, w.From, w.To)
+// volume values a (quote asset, summed quote notional, rows) query's window
+// in USD minor units, each asset's sum at its quote rounded toward zero, and
+// counts the rows whose quote asset cannot be valued instead.
+func (c *Collector) volume(ctx context.Context, tx pgx.Tx, sql string, w *Counted) (usdMinor, unvalued int64, err error) {
+	rows, err := tx.Query(ctx, sql, w.From, w.To)
 	if err != nil {
-		return err
+		return 0, 0, err
 	}
 	type line struct {
-		asset  assets.AssetID
-		sum    money.Quantity
-		trades int64
+		asset assets.AssetID
+		sum   money.Quantity
+		rows  int64
 	}
 	var lines []line
 	for rows.Next() {
 		var l line
 		var sum string
-		if err := rows.Scan(&l.asset, &sum, &l.trades); err != nil {
+		if err := rows.Scan(&l.asset, &sum, &l.rows); err != nil {
 			rows.Close()
-			return err
+			return 0, 0, err
 		}
 		if l.sum, err = money.ScanQuantity(sum); err != nil {
 			rows.Close()
-			return err
+			return 0, 0, err
 		}
 		lines = append(lines, l)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		return err
+		return 0, 0, err
 	}
 	now := c.cfg.Clock.Now()
 	total := money.USD{}
 	for _, l := range lines {
 		q, err := c.quote(ctx, tx, l.asset, now)
 		if err != nil {
-			return err
+			return 0, 0, err
 		}
 		if q == nil {
-			w.UnvaluedMatchTrades += l.trades
+			unvalued += l.rows
 			continue
 		}
 		v, err := q.USD(l.sum, money.RoundDown)
 		if err != nil {
-			w.UnvaluedMatchTrades += l.trades
+			unvalued += l.rows
 			continue
 		}
 		if total, err = total.Add(v); err != nil {
-			return err
+			return 0, 0, err
 		}
 	}
-	w.InternalMatchVolume = total.Minor()
-	return nil
+	return total.Minor(), unvalued, nil
 }
 
 // countBy adds a (key, count) query's rows into dst.
@@ -619,6 +653,7 @@ func (c *Collector) record(ctx context.Context, s Snapshot) {
 				c.counter.Add(ctx, c.byIt[k], observability.WithSafeAttrs(attribute.String(c.key, k)))
 			}
 		}
+		c.recordEvents(ctx, w)
 	}
 	c.mu.Lock()
 	if c.pending != nil {

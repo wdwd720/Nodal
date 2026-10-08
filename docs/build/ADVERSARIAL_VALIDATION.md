@@ -807,6 +807,16 @@ with a live response.
 
 ### 15.5 SB-007: the Jupiter instruction layout is unverified, so nothing here says anything about real Jupiter transactions
 
+**Update, 2026-09-07, after this section was written.** SB-007 is resolved against the published IDL, though not
+against the chain. The IDL (`jup-ag/jupiter-cpi` at commit `12bc5f67`) is committed as
+`internal/signing/inspect/testdata/jupiter_v6_idl.json`; both account layouts, the route arguments and all 39 Swap
+payload sizes in it matched the inspector, and `jupiter_idl_test.go` derives its expectations from that file, so
+the guard is no longer circular and both of its negative controls make it fail. Still open: proof that the
+deployed program matches the IDL (the on-chain IDL account or a decoded mainnet transaction), which a canary trade
+requires; Swap ordinals 39 and above, newer than that IDL, remain from memory. So the tests named below now exercise
+a layout checked against the published IDL, and are still not evidence about a real Jupiter mainnet transaction.
+See `BLOCKERS.md`, Earlier ids. The rest of this section is as written on 2026-09-06.
+
 `internal/signing/inspect/jupiter.go` states it in its own header:
 
 > *Source: the jup-ag/jupiter-cpi IDL for program JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4 as reproduced here
