@@ -41,8 +41,10 @@ import { TransfersSection } from "./transfers/Transfers.tsx";
 // >>> advanced:treasury import
 
 // >>> advanced:stable import
+import { StableAssetsSection } from "./stable/StableSection.tsx";
 
 // >>> advanced:bridge import
+import { BridgeSection } from "./bridge/BridgeSection.tsx";
 
 // >>> advanced:predmarket import
 import { PredictionMarketsSection } from "./predmarket/PredictionMarkets.tsx";
@@ -132,8 +134,22 @@ export const ADVANCED_SECTIONS: readonly AdvancedSection[] = [
   // >>> advanced:treasury section
 
   // >>> advanced:stable section
+  {
+    path: "stable-assets",
+    title: "Stable assets",
+    description:
+      "The platform's sandbox stable assets on a simulated chain: issuing and redeeming against a fully reserved policy in the sandbox dollar, the reserve and its coverage, signed reserve snapshots anyone can verify, and the operator's controls.",
+    element: <StableAssetsSection />,
+  },
 
   // >>> advanced:bridge section
+  {
+    path: "bridge",
+    title: "Bridge",
+    description:
+      "Simulated holdings by chain, value in flight between the simulated chains and the haircut it counts at, bridge routes and transfers with every leg's progress on both chains, the chains' state, and the operator's controls.",
+    element: <BridgeSection />,
+  },
 
   // >>> advanced:predmarket section
   {
