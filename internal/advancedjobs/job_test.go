@@ -87,7 +87,7 @@ func TestCatalog_EveryJobIsDescribedOnceWithASaneDefault(t *testing.T) {
 		s := spec(d.Name, Settings{})
 		assert.Equal(t, d.Default, s.Settings, "no override means the default")
 	}
-	assert.Len(t, seen, 22)
+	assert.Len(t, seen, 24)
 }
 
 // TestCatalog_OverridesApplyAndAreClamped: an override replaces a default,

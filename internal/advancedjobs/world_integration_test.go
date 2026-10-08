@@ -31,6 +31,7 @@ import (
 	"github.com/nodal/controlplane/internal/event"
 	"github.com/nodal/controlplane/internal/fees"
 	"github.com/nodal/controlplane/internal/gates"
+	"github.com/nodal/controlplane/internal/httpapi"
 	"github.com/nodal/controlplane/internal/instruments"
 	"github.com/nodal/controlplane/internal/killswitch"
 	"github.com/nodal/controlplane/internal/ledger"
@@ -205,24 +206,39 @@ func newWorld(t *testing.T) *world {
 	return w
 }
 
-// newEquities builds the equities service the way the worker does: the
-// deterministic paper venue on the XNYS calendar and the settlement-only fee
-// schedule in the sandbox dollar.
+// newEquities builds the equities service the way the worker (and cmd/api)
+// does: the paper venue NewExecutionAdapter gives LOCAL, on the XNYS calendar
+// with the recorded closures, the sandbox schedule in the sandbox dollar, and
+// the advanced capabilities' one identity rule.
 func newEquities(clk clock.Clock, w *world, aw audit.Writer) (*equities.Service, error) {
-	cal, err := equities.NewCalendar(equities.CalendarXNYS, nil)
+	holidays, err := equities.Holidays(w.ctx, testDB, equities.CalendarXNYS)
 	if err != nil {
 		return nil, err
 	}
-	venue, err := equities.NewPaperVenue(config.ProviderModeFake, equities.PaperConfig{Name: "advancedjobs-itest-paper", Calendar: cal, SlippageBPS: 10})
+	cal, err := equities.NewCalendar(equities.CalendarXNYS, holidays)
 	if err != nil {
 		return nil, err
 	}
-	sch := fees.ZeroSchedule(econ.SandboxDollarID(), 6)
-	sch.Version = "advancedjobs-itest-v1"
+	venue, err := equities.NewExecutionAdapter(config.EnvLocal, config.ProviderModeFake, equities.PaperConfig{
+		Name: "nodal-paper-equities", Calendar: cal, SlippageBPS: 10,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return newEquitiesOver(clk, w, aw, venue)
+}
+
+// newEquitiesOver is newEquities on a venue of the test's choosing.
+func newEquitiesOver(clk clock.Clock, w *world, aw audit.Writer, venue equities.EquitiesExecutionAdapter) (*equities.Service, error) {
 	return equities.NewService(equities.Config{
 		Clock: clk, Intents: w.intents, Effects: w.effects, Authorizer: w.authz, KillSwitches: w.kills, Router: w.router,
 		RiskPolicy: risk.DefaultAdvancedPolicy(), Capital: w.capital, Ledger: w.ledger, Prices: w.prices, Audit: aw,
-		Adapter: venue, Schedules: []fees.Schedule{sch}, MarketCollarBPS: 100, MinOrderNotional: money.USDFromMinor(1_00),
+		Adapter: venue, Schedules: []fees.Schedule{{
+			Version: "equities-sandbox-v1", QuoteAsset: econ.SandboxDollarID(), QuoteDecimals: econ.SandboxDollarDecimals,
+			SpreadBPS: 10, PercentageFeeBPS: 10, StrategyFeeBPS: 5, SlippageReserveBPS: 50, Rounding: fees.DefaultRounding(),
+		}},
+		MarketCollarBPS: 100, MinOrderNotional: money.USDFromMinor(1_00),
+		Verification: httpapi.AdvancedVerificationLevels{Rule: compliance.NewAccountVerification(clk)},
 	})
 }
 
@@ -334,13 +350,21 @@ func (w *world) count(sql string, args ...any) int {
 // way the worker does, with a fresh random seed.
 func (w *world) chain() sandboxchain.Chain {
 	w.t.Helper()
+	c, _ := w.seededChain()
+	return c
+}
+
+// seededChain is chain with the seed it was opened with, from which the
+// delegated signer and the venue co-signers derive too.
+func (w *world) seededChain() (sandboxchain.Chain, sandboxchain.Seed) {
+	w.t.Helper()
 	var seed sandboxchain.Seed
 	_, err := rand.Read(seed[:])
 	require.NoError(w.t, err)
 	network := "ajobs-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:12]
 	c, err := sandboxchain.Open(w.ctx, testDB, w.clk, config.EnvLocal, network, seed)
 	require.NoError(w.t, err)
-	return c
+	return c, seed
 }
 
 // stable builds the stable asset controller over a chain, as the worker does.

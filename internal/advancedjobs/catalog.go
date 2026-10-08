@@ -25,6 +25,7 @@ const (
 	NameOrdersBookProof        = "orders.book_proof"
 	NameEquitiesSettlement     = "equities.settlement"
 	NameEquitiesCorporate      = "equities.corporate_actions"
+	NameEquitiesVenue          = "equities.venue"
 	NameMarketplaceFollows     = "marketplace.scheduled_follows"
 	NameStableMonitor          = "stable.monitor"
 	NameStableSupply           = "stable.supply_reconciliation"
@@ -33,6 +34,7 @@ const (
 	NameBridgeLegs             = "bridge.legs"
 	NameBridgeRoutes           = "bridge.routes"
 	NameTransfersReconcile     = "transfers.reconciliation"
+	NameDelegationUpkeep       = "delegation.upkeep"
 )
 
 // NeedsDevnet is what a deployment configures for the jobs that run on the
@@ -64,6 +66,12 @@ const (
 		"the MARKETPLACE gate is inactive in STAGING/PROD or a kill switch stops it; the job only reports the refusal"
 	ksBridge = "consults no kill switch: completing and reconciling a leg already in flight reduces risk; a new " +
 		"leg is authorized by the bridge, never here"
+	ksEquitiesVenue = "consults no switch itself: the service withholds the mark from an order a kill switch or its " +
+		"instrument's status now blocks, so a blocked order never executes (a resting one keeps resting, a blocked market " +
+		"order is refused) while an unblocked sell still can"
+	ksDelegation = "expiry follows the package's own rule: a pending swap or withdrawal that a kill switch, a closed gate " +
+		"or a lapsed capability now stops is ended and its funds released (that reduces risk); observing and settling a " +
+		"signed or submitted one consults no switch -- what the chain finalized is booked; nothing is signed or submitted"
 )
 
 // maxBatch is the bound on any job's batch.
@@ -115,6 +123,11 @@ func Catalog() []Descriptor {
 		{Name: NameEquitiesCorporate, Default: Settings{Interval: 15 * time.Minute, Batch: 100},
 			Calls:      "equities.Service.ApplyCorporateAction per ANNOUNCED or APPLYING action whose date has come",
 			KillSwitch: ksNone},
+		{Name: NameEquitiesVenue, Default: Settings{Interval: 30 * time.Second, Batch: 200}, MaxBatch: 1000,
+			Calls: "equities.Service.PlaceAtVenue per ACCEPTED order past the placement grace (PollVenue when its submission " +
+				"is unknown; MarkSubmissionUnknown when a placement answers SUBMISSION_STATE_UNKNOWN), PollVenue per OPEN order; " +
+				"each answer applied by ApplyOrderReport in its own transaction",
+			KillSwitch: ksEquitiesVenue},
 		{Name: NameMarketplaceFollows, Default: Settings{Interval: time.Minute, Batch: 100}, MaxBatch: 500,
 			Calls:      "marketplace.Service.FollowScheduled per install marketplace.Service.DueInstalls returns",
 			KillSwitch: ksMarketplace},
@@ -139,6 +152,11 @@ func Catalog() []Descriptor {
 		{Name: NameTransfersReconcile, Default: Settings{Interval: 15 * time.Minute, Batch: 1}, MaxBatch: 1,
 			Calls:      "transfers.Service.Reconcile in a snapshot; a discrepancy opens a reconciliation record",
 			KillSwitch: ksNone},
+		{Name: NameDelegationUpkeep, Default: Settings{Interval: 30 * time.Second, Batch: 100}, MaxBatch: 500,
+			Calls: "delegation.Service.ExpireStaleSwap / ExpireStaleWithdrawal per pending subject past its deadline or no " +
+				"longer standing, one per transaction; then delegation.Service.ReconcilePending (observe by transaction id, " +
+				"produce SANDBOX blocks, never resubmit)",
+			KillSwitch: ksDelegation, Needs: NeedsDevnet},
 	}
 }
 
