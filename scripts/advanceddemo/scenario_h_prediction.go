@@ -43,6 +43,12 @@ func scenarioPrediction(ctx context.Context, w *sandboxworld.World, rec *recorde
 	if err != nil {
 		return err
 	}
+	// The operator who records what the sandbox oracle saw can never resolve
+	// the market: dual control between the oracle's word and the ruling.
+	observer, err := w.OperatorActor(ctx, "oona-oracle-observer")
+	if err != nil {
+		return err
+	}
 	scheduler := econ.SystemActor("predmarket-scheduler")
 
 	spec := predmarket.MarketSpec{
@@ -252,13 +258,30 @@ func scenarioPrediction(ctx context.Context, w *sandboxworld.World, rec *recorde
 		return fmt.Errorf("request resolution: %w", err)
 	}
 	observedAt := m.CloseAt.Add(30 * time.Second)
-	if err := w.Oracle.Observe(m.ID, "YES", observedAt, []byte(`{"certified":"YES","board":"sandbox weather board","city":"sandbox city"}`)); err != nil {
+	var observed predmarket.ObservationResult
+	if err := w.InTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		var err error
+		observed, err = w.Predictions.RecordObservation(ctx, tx, predmarket.ObservationRequest{
+			MarketID: m.ID, Outcome: "YES", ObservedAt: observedAt, Actor: observer,
+			Evidence: []byte(`{"certified":"YES","board":"sandbox weather board","city":"sandbox city"}`),
+		})
 		return err
+	}); err != nil {
+		return fmt.Errorf("record the oracle observation: %w", err)
 	}
-	report, err := w.Predictions.FetchReport(ctx, m.ID)
+	report, err := w.Predictions.FetchReport(ctx, w.DB, m.ID)
 	if err != nil {
 		return fmt.Errorf("fetch the oracle report: %w", err)
 	}
+	var observerRefused error
+	if err := w.InTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		_, observerRefused = w.Predictions.Resolve(ctx, tx, predmarket.ResolveRequest{MarketID: m.ID, Report: report, Actor: observer})
+		return observerRefused
+	}); err == nil {
+		return fmt.Errorf("the operator who recorded the observation resolved the market")
+	}
+	rec.check("the operator who recorded the observation cannot resolve the market",
+		errs.CodeOf(observerRefused) == errs.CodeForbidden, "%v", observerRefused)
 	var resolved predmarket.ResolveResult
 	if err := w.InTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		var err error
@@ -268,7 +291,8 @@ func scenarioPrediction(ctx context.Context, w *sandboxworld.World, rec *recorde
 	}); err != nil {
 		return fmt.Errorf("resolve: %w", err)
 	}
-	rec.step("the sandbox oracle observes the outcome after close and signs a report; a second operator resolves the market to YES with it",
+	rec.step("an operator records the sandbox oracle's observation after close (signed and stored durably); a second operator resolves the market to YES with the stored, verified report",
+		"observation", observed.Observation.ID.String(), "recorded_by", observed.Observation.RecordedBy.ID,
 		"resolution", resolved.Resolution.ID.String(), "kind", string(resolved.Resolution.Kind), "outcome", "YES")
 	rec.check("the market is RESOLVED by the oracle", resolved.Market.Status == predmarket.StatusResolved &&
 		resolved.Resolution.Kind == predmarket.ResolutionOracle, "status %s, kind %s", resolved.Market.Status, resolved.Resolution.Kind)

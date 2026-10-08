@@ -237,26 +237,30 @@ func planLines(escrow money.Quantity, outstanding []money.Quantity, holdings []H
 	return lines, nil
 }
 
-// EscrowBooks is one consistent snapshot of a market's facility books and of
-// the customer holdings of its shares.
+// EscrowBooks is one consistent snapshot of a market's facility books, of the
+// customer holdings of its shares and of the payouts its escrow holds for
+// holders they could not be delivered to.
 type EscrowBooks struct {
 	Escrow            money.Quantity
 	Collateral        money.Quantity
 	SharesIssued      []money.Quantity
 	SharesOutstanding []money.Quantity
 	HeldByCustomers   []money.Quantity
+	// Held is the sum of the market's held payouts not yet claimed: zero
+	// before settlement, and what the escrow still owes named holders after.
+	Held money.Quantity
 }
 
 // Violations returns every way the books break the escrow identity, given the
 // residual a void refund disclosed (zero for any market that has not been
 // refunded). An empty result means the books reconcile:
 //
-//	escrow = collateral = shares outstanding(i) + residual,
+//	escrow = collateral = shares outstanding(i) + residual + held,
 //	shares issued(i) = shares outstanding(i) = held by customers(i), for every i.
 func (b EscrowBooks) Violations(residual money.Quantity) []string {
 	var out []string
-	if b.Escrow.IsNegative() || b.Collateral.IsNegative() {
-		out = append(out, "escrow or collateral is negative")
+	if b.Escrow.IsNegative() || b.Collateral.IsNegative() || b.Held.IsNegative() {
+		out = append(out, "escrow, collateral or held payouts are negative")
 	}
 	if b.Escrow.Cmp(b.Collateral) != 0 {
 		out = append(out, fmt.Sprintf("escrow %s differs from collateral %s", b.Escrow, b.Collateral))
@@ -274,9 +278,9 @@ func (b EscrowBooks) Violations(residual money.Quantity) []string {
 			out = append(out, fmt.Sprintf("outcome %d: customers hold %s shares and %s are outstanding",
 				i, b.HeldByCustomers[i], b.SharesOutstanding[i]))
 		}
-		if b.Escrow.Cmp(b.SharesOutstanding[i].Add(residual)) != 0 {
-			out = append(out, fmt.Sprintf("outcome %d: escrow %s differs from shares outstanding %s plus residual %s",
-				i, b.Escrow, b.SharesOutstanding[i], residual))
+		if implied := b.SharesOutstanding[i].Add(residual).Add(b.Held); b.Escrow.Cmp(implied) != 0 {
+			out = append(out, fmt.Sprintf("outcome %d: escrow %s differs from shares outstanding %s plus residual %s plus held payouts %s",
+				i, b.Escrow, b.SharesOutstanding[i], residual, b.Held))
 		}
 	}
 	return out

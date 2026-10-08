@@ -1,8 +1,9 @@
 /**
  * Prediction markets (internal/predmarket, ADR-0020): reads of markets, their
- * escrow books, the oracle and an account's shares; the customer's
- * complete-set issuance and redemption; and the operator's lifecycle,
- * resolution and settlement actions.
+ * escrow books, the oracle and an account's shares and held payout; the
+ * customer's complete-set issuance and redemption and the claim of a held
+ * payout; and the operator's lifecycle, resolution, void (a proposal and a
+ * second operator's approval) and settlement actions.
  *
  * Follows `core.ts`: every response is checked against a spec before a
  * component sees it (quantities are exact base-unit strings, enums are closed,
@@ -45,6 +46,10 @@ export type PredictionResolutionResult = Schemas["PredictionResolutionResult"];
 export type PredictionDisputeResult = Schemas["PredictionDisputeResult"];
 export type PredictionSettlementResult = Schemas["PredictionSettlementResult"];
 export type PredictionEscrowReconciliation = Schemas["PredictionEscrowReconciliation"];
+export type PredictionVoidProposal = Schemas["PredictionVoidProposal"];
+export type PredictionVoidProposalResult = Schemas["PredictionVoidProposalResult"];
+export type PredictionHeldPayout = Schemas["PredictionHeldPayout"];
+export type PredictionClaimResult = Schemas["PredictionClaimResult"];
 
 /** The service lists at most this many markets per status; the API has no cursor for them. */
 export const MARKET_LIST_LIMIT = 200;
@@ -157,6 +162,7 @@ export const settlementSpec: Spec = {
     rounding_policy: oneOf(ROUNDING_POLICIES),
     escrow_before: "quantity",
     total_paid: "quantity",
+    total_held: "quantity",
     residual: "quantity",
     holder_count: "integer",
     evidence_ref: "string",
@@ -172,6 +178,76 @@ export const settlementSpec: Spec = {
   objects: { settled_by: { required: true, spec: actorSpec } },
 };
 
+export const voidProposalSpec: Spec = {
+  required: {
+    id: "uuid",
+    market_id: "uuid",
+    market_status: STATUS,
+    reason: "string",
+    evidence_ref: "string",
+    evidence_sha256: "string",
+    proposed_at: "timestamp",
+  },
+  optional: { resolution_id: "uuid" },
+  objects: {
+    proposed_by: { required: true, spec: actorSpec },
+    approval: {
+      spec: {
+        required: { id: "uuid", reason: "string", approved_at: "timestamp" },
+        objects: { approved_by: { required: true, spec: actorSpec } },
+      },
+    },
+  },
+};
+
+export const voidProposalResultSpec: Spec = {
+  required: { value_domain: SIMULATED },
+  objects: {
+    market: { required: true, spec: predictionMarketSpec },
+    proposal: { required: true, spec: voidProposalSpec },
+  },
+};
+
+export const heldPayoutSpec: Spec = {
+  required: {
+    id: "uuid",
+    market_id: "uuid",
+    settlement_id: "uuid",
+    account_id: "uuid",
+    kind: oneOf(SETTLEMENT_KINDS),
+    amount: "quantity",
+    refused_intent_id: "uuid",
+    journal_transaction_id: "uuid",
+    held_at: "timestamp",
+    claimed: "boolean",
+  },
+  lists: { reason_codes: { required: true, kind: "string" } },
+  objects: {
+    claim: {
+      spec: {
+        required: {
+          id: "uuid",
+          amount: "quantity",
+          intent_id: "uuid",
+          journal_transaction_id: "uuid",
+          claimed_at: "timestamp",
+        },
+        objects: { claimed_by: { required: true, spec: actorSpec } },
+      },
+    },
+  },
+};
+
+export const claimResultSpec: Spec = {
+  required: { value_domain: SIMULATED, market_id: "uuid", account_id: "uuid", replay: "boolean" },
+  optional: { journal_transaction_id: "uuid", risk_decision_hash: "string" },
+  objects: {
+    held_payout: { required: true, spec: heldPayoutSpec },
+    intent: { required: true, spec: economicIntentSpec },
+    effect: { spec: economicEffectSpec },
+  },
+};
+
 export const marketDetailSpec: Spec = {
   required: { value_domain: SIMULATED },
   objects: {
@@ -181,6 +257,7 @@ export const marketDetailSpec: Spec = {
   arrays: {
     resolutions: { required: true, spec: resolutionSpec },
     disputes: { required: true, spec: disputeSpec },
+    void_proposals: { required: true, spec: voidProposalSpec },
   },
 };
 
@@ -196,6 +273,7 @@ export const booksSpec: Spec = {
     escrow: "quantity",
     collateral: "quantity",
     residual: "quantity",
+    held: "quantity",
     reconciles: "boolean",
   },
   arrays: {
@@ -218,6 +296,7 @@ export const booksSpec: Spec = {
 
 export const positionListSpec: Spec = {
   required: { value_domain: SIMULATED, market_id: "uuid", account_id: "uuid", share_decimals: "integer" },
+  objects: { held_payout: { spec: heldPayoutSpec } },
   arrays: {
     items: {
       required: true,
@@ -253,8 +332,15 @@ export const setResultSpec: Spec = {
 };
 
 export const observationSpec: Spec = {
-  required: { value_domain: SIMULATED, report_hash: "string" },
+  required: {
+    value_domain: SIMULATED,
+    observation_id: "uuid",
+    report_hash: "string",
+    recorded_at: "timestamp",
+    replay: "boolean",
+  },
   objects: {
+    recorded_by: { required: true, spec: actorSpec },
     report: {
       required: true,
       spec: {
@@ -297,13 +383,14 @@ export const settlementResultSpec: Spec = {
     lines: {
       required: true,
       spec: {
-        required: { account_id: "uuid", amount: "quantity", intent_id: "uuid" },
+        required: { account_id: "uuid", amount: "quantity", intent_id: "uuid", held: "boolean" },
         optional: { journal_transaction_id: "uuid" },
         arrays: {
           shares: { required: true, spec: { required: { outcome_symbol: "string", quantity: "quantity" } } },
         },
       },
     },
+    held_payouts: { required: true, spec: heldPayoutSpec },
   },
 };
 
@@ -581,27 +668,89 @@ export function useUpholdResolution(): UseMutationResult<PredictionResolutionRes
   });
 }
 
-/** Settling and voiding move value: every holder's account is affected. */
+/** Settling and approving a void move value: every holder's account is affected. */
 function invalidateAfterSettlement(queryClient: ReturnType<typeof useQueryClient>): void {
   void queryClient.invalidateQueries({ queryKey: predmarketKeys.all });
   void queryClient.invalidateQueries({ queryKey: ["advanced", "account"] });
 }
 
-export function useVoidMarket(): UseMutationResult<PredictionSettlementResult, unknown, EvidenceCommand> {
+export interface ProposeVoidCommand extends ReasonCommand {
+  /** The statement of evidence the proposal rests on; required, and archived. */
+  readonly evidence: string;
+}
+
+/** One operator proposes a void; nothing is refunded until another approves it. */
+export function useProposeVoid(): UseMutationResult<PredictionVoidProposalResult, unknown, ProposeVoidCommand> {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: EvidenceCommand) => {
-      const { data } = await api.POST("/advanced/prediction-markets/{marketId}/void", {
+    mutationFn: async (input: ProposeVoidCommand) => {
+      const { data } = await api.POST("/advanced/prediction-markets/{marketId}/void-proposals", {
         ...idempotent(input.idempotencyKey, { path: { marketId: input.marketId } }),
-        body:
-          input.evidence.trim() === ""
-            ? { reason: input.reason.trim() }
-            : { reason: input.reason.trim(), evidence: evidenceDocument(input.evidence) },
+        body: { reason: input.reason.trim(), evidence: evidenceDocument(input.evidence) },
       });
-      return validated<PredictionSettlementResult>(data, settlementResultSpec, "/advanced/prediction-markets/{id}/void");
+      return validated<PredictionVoidProposalResult>(
+        data,
+        voidProposalResultSpec,
+        "/advanced/prediction-markets/{id}/void-proposals",
+      );
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: predmarketKeys.all });
+    },
+  });
+}
+
+export interface ApproveVoidCommand {
+  readonly marketId: string;
+  readonly proposalId: string;
+  readonly idempotencyKey: string;
+  /** The approver's own note; empty sends none, and the proposal's reason stands. */
+  readonly reason: string;
+}
+
+/** A second operator approves a proposal: the market is voided and every share refunded. */
+export function useApproveVoid(): UseMutationResult<PredictionSettlementResult, unknown, ApproveVoidCommand> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: ApproveVoidCommand) => {
+      const { data } = await api.POST("/advanced/prediction-markets/{marketId}/void-proposals/{proposalId}/approve", {
+        ...idempotent(input.idempotencyKey, { path: { marketId: input.marketId, proposalId: input.proposalId } }),
+        body: input.reason.trim() === "" ? {} : { reason: input.reason.trim() },
+      });
+      return validated<PredictionSettlementResult>(
+        data,
+        settlementResultSpec,
+        "/advanced/prediction-markets/{id}/void-proposals/{proposalId}/approve",
+      );
     },
     onSettled: () => {
       invalidateAfterSettlement(queryClient);
+    },
+  });
+}
+
+export interface ClaimCommand {
+  readonly marketId: string;
+  /** The session's own account: a held payout is claimed only by the account it is held for. */
+  readonly accountId: string;
+  readonly idempotencyKey: string;
+}
+
+/** The holder claims the payout a settled or voided market holds for their account. */
+export function useClaimHeldPayout(): UseMutationResult<PredictionClaimResult, unknown, ClaimCommand> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: ClaimCommand) => {
+      const { data } = await api.POST("/advanced/prediction-markets/{marketId}/held-payouts/claim", {
+        ...idempotent(input.idempotencyKey, { path: { marketId: input.marketId } }),
+        body: { account_id: input.accountId },
+      });
+      return validated<PredictionClaimResult>(data, claimResultSpec, "/advanced/prediction-markets/{id}/held-payouts/claim");
+    },
+    onSettled: (_result, _error, input) => {
+      // A refused claim is still kept on record as a rejected intent.
+      void queryClient.invalidateQueries({ queryKey: predmarketKeys.all });
+      void queryClient.invalidateQueries({ queryKey: advancedKeys.account(input.accountId) });
     },
   });
 }

@@ -17,15 +17,26 @@ import {
   faucetAllowanceSpec,
   faucetGrantSpec,
   handleSpec,
+  reversalDecisionResultSpec,
+  reversalProposalPageSpec,
+  reversalProposalSpec,
   transferKeys,
   transferPageSpec,
   transferSpec,
 } from "../api/advanced/transfers.ts";
 import { ContractViolation, validated, type Spec } from "../api/contract.ts";
 import {
+  REVERSAL_SELF_APPROVAL,
   TRANSFER_MODES,
+  TRANSFER_REVERSAL_MEANING,
+  TRANSFER_REVERSAL_STATUSES,
   TRANSFER_STATUSES,
   TRANSFER_STATUS_MEANING,
+  approvalBlockedReason,
+  checkReasonCode,
+  checkReasonText,
+  pendingProposal,
+  reversalStatusTone,
   checkAccountId,
   checkAmount,
   checkHandle,
@@ -281,4 +292,110 @@ test("a recorded refusal is read from the problem the backend answered with", ()
   assert.equal(recordedRefusal(problem("RISK_REJECTED", 422, { transfer_id: "x", rejection_code: "R" })), undefined);
   assert.equal(recordedRefusal(new Error("network")), undefined);
   assert.equal(recordedRefusal(undefined), undefined);
+});
+
+/* --------------------------------------------------------------------------
+ * Reversal under dual control
+ * ------------------------------------------------------------------------ */
+
+const OPERATOR_A = "01a075f1-f848-7d10-8f3a-1c0e5e2f4a11";
+const OPERATOR_B = "01a075f1-f849-7c2b-9a4d-2d1f6f3e5b22";
+
+/** A PENDING proposal, with the transfer it would reverse as an operator sees it. */
+const PENDING_PROPOSAL = {
+  id: BOB,
+  transfer_id: TRANSFER,
+  seq: 1,
+  status: "PENDING",
+  reason_code: "DISPUTE_UPHELD",
+  reason: "the sender reported the payment as unauthorised",
+  proposed_by: OPERATOR_A,
+  proposed_at: "2026-10-08T12:00:00Z",
+  transfer: { ...SENT_BY_HANDLE, recipient_account_id: BOB },
+  value_domain: "SIMULATED",
+} as const;
+
+test("a reversal proposal is accepted unchanged, pending or decided", () => {
+  assert.doesNotThrow(() => validated(PENDING_PROPOSAL, reversalProposalSpec, "/t"));
+  const approved = {
+    ...PENDING_PROPOSAL,
+    status: "APPROVED",
+    decided_by: OPERATOR_B,
+    decided_at: "2026-10-08T12:05:00Z",
+    transfer: {
+      ...PENDING_PROPOSAL.transfer,
+      status: "REVERSED",
+      reversal_journal_transaction_id: ALICE,
+      reversal_reason_code: "DISPUTE_UPHELD",
+      reversal_proposal_id: BOB,
+      reversed_at: "2026-10-08T12:05:00Z",
+    },
+  };
+  assert.doesNotThrow(() => validated(approved, reversalProposalSpec, "/t"));
+  assert.doesNotThrow(() =>
+    validated({ proposal: approved, replayed: true, value_domain: "SIMULATED" }, reversalDecisionResultSpec, "/t"),
+  );
+  const page = { items: [PENDING_PROPOSAL], next_cursor: null, value_domain: "SIMULATED" };
+  assert.doesNotThrow(() => validated(page, reversalProposalPageSpec, "/t"));
+});
+
+test("a reversal proposal that is not simulated, not a declared state or lacks its transfer is refused", () => {
+  refuses(broken(PENDING_PROPOSAL, (c) => (c["status"] = "CONSUMED")), reversalProposalSpec, /\.status$/);
+  refuses(broken(PENDING_PROPOSAL, (c) => delete c["value_domain"]), reversalProposalSpec, /\.value_domain$/);
+  refuses(broken(PENDING_PROPOSAL, (c) => delete c["transfer"]), reversalProposalSpec, /\.transfer$/);
+  refuses(broken(PENDING_PROPOSAL, (c) => delete c["proposed_by"]), reversalProposalSpec, /\.proposed_by$/);
+  refuses(broken(PENDING_PROPOSAL, (c) => (c["seq"] = "1")), reversalProposalSpec, /\.seq$/);
+  refuses(
+    broken(PENDING_PROPOSAL, (c) => (c["transfer"] = { ...PENDING_PROPOSAL.transfer, quantity: "12.5" })),
+    reversalProposalSpec,
+    /\.transfer\.quantity$/,
+  );
+  refuses(
+    broken(PENDING_PROPOSAL, (c) => (c["transfer"] = { ...PENDING_PROPOSAL.transfer, reversal_proposal_id: "p-1" })),
+    reversalProposalSpec,
+    /\.transfer\.reversal_proposal_id$/,
+  );
+  refuses({ proposal: PENDING_PROPOSAL, value_domain: "SIMULATED" }, reversalDecisionResultSpec, /\.replayed$/);
+  refuses({ items: [PENDING_PROPOSAL], value_domain: "SIMULATED" }, reversalProposalPageSpec, /\.next_cursor$/);
+});
+
+test("every proposal status is named and toned; the reversal keys sit under the advanced prefix", () => {
+  assert.deepEqual([...TRANSFER_REVERSAL_STATUSES], ["PENDING", "APPROVED", "REJECTED"]);
+  for (const status of TRANSFER_REVERSAL_STATUSES) {
+    assert.ok(TRANSFER_REVERSAL_MEANING[status].length > 40, status);
+  }
+  assert.match(TRANSFER_REVERSAL_MEANING.PENDING, /never approve/);
+  assert.match(TRANSFER_REVERSAL_MEANING.APPROVED, /consumed/);
+  assert.equal(reversalStatusTone("PENDING"), "info");
+  assert.equal(reversalStatusTone("SOMETHING_NEW"), "neutral");
+  const prefix = advancedKeys.all;
+  assert.deepEqual(transferKeys.reversals.slice(0, prefix.length), [...prefix]);
+  assert.deepEqual(transferKeys.reversalList(TRANSFER, "PENDING", "").slice(0, transferKeys.reversals.length), [
+    ...transferKeys.reversals,
+  ]);
+});
+
+test("a reason code and a reason are checked for the shape the API accepts", () => {
+  assert.deepEqual(checkReasonCode(" DISPUTE_UPHELD "), { ok: true, value: "DISPUTE_UPHELD", error: "" });
+  for (const raw of ["", "dispute_upheld", "DI", "1DISPUTE", "DISPUTE-UPHELD", `D${"X".repeat(64)}`]) {
+    assert.equal(checkReasonCode(raw).ok, false, raw);
+  }
+  assert.equal(checkReasonCode(`D${"X".repeat(63)}`).ok, true, "64 characters is the bound");
+  assert.equal(checkReasonText("  why  ", "a reason").value, "why");
+  assert.equal(checkReasonText("   ", "a reason").ok, false);
+  assert.equal(checkReasonText("x".repeat(500), "a reason").ok, true);
+  assert.equal(checkReasonText("é".repeat(251), "a reason").ok, false, "the bound is 500 bytes, not characters");
+});
+
+test("at most one proposal is pending, and its proposer is never offered the approval", () => {
+  assert.equal(pendingProposal([]), undefined);
+  assert.equal(
+    pendingProposal([{ status: "REJECTED" }, { status: "PENDING", id: "p2" }, { status: "APPROVED" }])?.status,
+    "PENDING",
+  );
+  const blocked = approvalBlockedReason(OPERATOR_A, OPERATOR_A.toUpperCase());
+  assert.ok(blocked !== undefined && /can never approve/.test(blocked));
+  assert.equal(approvalBlockedReason(OPERATOR_A, OPERATOR_B), undefined);
+  assert.equal(approvalBlockedReason(OPERATOR_A, undefined), undefined, "an unknown principal is left to the backend");
+  assert.equal(REVERSAL_SELF_APPROVAL, "TRANSFER_REVERSAL_SELF_APPROVAL");
 });

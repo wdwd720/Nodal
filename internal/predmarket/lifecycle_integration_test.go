@@ -155,8 +155,12 @@ func TestIntegration_OracleReplayIsIdempotentAndAConflictingReportIsRefused(t *t
 	m := f.openMarket("YES", "NO")
 	f.issue(m, a, 2)
 	first := f.resolve(m, "YES")
-	report, err := f.svc.FetchReport(f.ctx, m.ID)
+	report, err := f.svc.FetchReport(f.ctx, testDB, m.ID)
 	require.NoError(t, err)
+	// The oracle then corrects itself: a later, different observation, which
+	// FetchReport now returns and a RESOLVED market refuses.
+	conflicting := f.report(m, "NO")
+	require.NotEqual(t, report.Hash(), conflicting.Hash())
 
 	snapshot := func() [4]int {
 		return [4]int{
@@ -175,7 +179,6 @@ func TestIntegration_OracleReplayIsIdempotentAndAConflictingReportIsRefused(t *t
 	}
 	assert.Equal(t, before, snapshot(), "a replay records nothing")
 
-	conflicting := f.report(m, "NO")
 	_, err = f.tryResolve(m, conflicting, f.resolver)
 	requireCode(t, err, errs.CodeConflict)
 	assert.Equal(t, before, snapshot())
@@ -338,23 +341,32 @@ func TestIntegration_ADisputeCanBeUpheldOrEndInAVoid(t *testing.T) {
 	requireCode(t, err, errs.CodeForbidden, "the disputer cannot rule")
 	_, err = uphold(upheld, f.creator)
 	requireCode(t, err, errs.CodeForbidden, "the creator cannot rule")
-	ruled, err := uphold(upheld, f.resolver)
+	_, err = uphold(upheld, f.resolver)
+	requireCode(t, err, errs.CodeForbidden, "the operator whose resolution is disputed cannot uphold it")
+	ruler := f.operator()
+	ruled, err := uphold(upheld, ruler)
 	require.NoError(t, err)
 	assert.Equal(t, ResolutionDisputeUpheld, ruled.Resolution.Kind)
 	assert.Equal(t, original.Resolution.OutcomeIndex, ruled.Resolution.OutcomeIndex)
+	assert.Equal(t, ruler.ID, ruled.Resolution.AcceptedBy.ID)
 	_, err = f.trySettle(upheld, f.third)
 	require.NoError(t, err)
 
+	// A void ends a dispute too, approved by an operator who is not the
+	// disputer: the approval is the ruling.
 	voided := f.openMarket("YES", "NO")
 	f.issue(voided, a, 2)
 	f.resolve(voided, "NO")
 	dispute(voided)
-	_, err = f.tryVoid(f.get(voided), f.third)
-	requireCode(t, err, errs.CodeForbidden, "the disputer cannot void what they disputed")
-	out, err := f.tryVoid(f.get(voided), f.resolver)
+	proposal, err := f.tryProposeVoid(f.get(voided), f.third)
+	require.NoError(t, err, "the disputer may propose the void")
+	_, err = f.tryApproveVoid(f.get(voided), proposal, f.third)
+	requireCode(t, err, errs.CodeForbidden, "and cannot approve it")
+	out, err := f.tryApproveVoid(f.get(voided), proposal, f.approver)
 	require.NoError(t, err)
 	assert.Equal(t, StatusVoided, out.Market.Status)
 	assert.Equal(t, "2000000", out.Settlement.TotalPaid.String())
+	assert.Equal(t, f.approver.ID, out.Settlement.SettledBy.ID, "the refund is settled by the approver")
 }
 
 // TestIntegration_RiskRefusesAnUnverifiedIssuerAndTheRefusalIsOnRecord: the

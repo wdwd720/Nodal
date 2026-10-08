@@ -74,7 +74,11 @@ type Service string
 
 // Services, one per cmd/ directory that loads configuration.
 const (
-	ServiceAPI                  Service = "api"
+	ServiceAPI Service = "api"
+	// ServiceAdvancedWorker runs the time-driven work of the advanced
+	// capabilities (cmd/advanced-worker): expiry, interest, marks,
+	// liquidation, settlement, funding and the subsystem reconciliations.
+	ServiceAdvancedWorker       Service = "advanced-worker"
 	ServiceAgentWorker          Service = "agent-worker"
 	ServiceAuditWorker          Service = "audit-worker"
 	ServiceExecutionWorker      Service = "execution-worker"
@@ -116,6 +120,13 @@ var serviceDeps = map[Service][]Dependency{
 	ServiceExecutionWorker:      {},
 	ServiceReconciliationWorker: {},
 
+	// Postgres only. Every advanced subsystem it drives keeps all of its truth
+	// in the database, including the persistent devnet host the sandbox
+	// stable asset and the bridge run on (devnet_events); it publishes nothing
+	// to the event bus (the outbox is drained by the relay), runs no workflow,
+	// writes no archive object and signs no audit chain.
+	ServiceAdvancedWorker: {},
+
 	// Its S3 Object Lock archive is not wired yet -- buildArchive returns a
 	// filesystem archive when CP_AUDIT_ARCHIVE_DIR is set and nil otherwise --
 	// so the archive is declared because that is where it is going and because
@@ -142,7 +153,7 @@ var serviceDeps = map[Service][]Dependency{
 // allServices is declaration order, which is also the order AllServices
 // returns and the order tests iterate in.
 var allServices = []Service{
-	ServiceAPI, ServiceAgentWorker, ServiceAuditWorker, ServiceExecutionWorker,
+	ServiceAPI, ServiceAdvancedWorker, ServiceAgentWorker, ServiceAuditWorker, ServiceExecutionWorker,
 	ServiceMarketIngestWorker, ServiceReconciliationWorker, ServiceRelayWorker,
 	ServiceWorkflowWorker, ServiceTooling,
 }

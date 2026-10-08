@@ -22,7 +22,12 @@ import { useMutation, useQuery, useQueryClient, type UseMutationResult, type Use
 import { idempotent, type Schemas } from "@controlplane/generated-client";
 
 import { VALUE_DOMAIN_SIMULATED } from "../../lib/advanced.ts";
-import { TRANSFER_MODES, TRANSFER_STATUSES } from "../../lib/transfers.ts";
+import {
+  TRANSFER_MODES,
+  TRANSFER_REVERSAL_STATUSES,
+  TRANSFER_STATUSES,
+  type TransferReversalStatus,
+} from "../../lib/transfers.ts";
 import { api } from "../client.ts";
 import { cursorPageSpec, oneOf, validated, type Spec } from "../contract.ts";
 import { advancedKeys, retryTransient, type CursorPage } from "./core.ts";
@@ -31,10 +36,14 @@ export type AdvancedTransfer = Schemas["AdvancedTransfer"];
 export type AdvancedTransferHandle = Schemas["AdvancedTransferHandle"];
 export type AdvancedFaucetGrant = Schemas["AdvancedFaucetGrant"];
 export type AdvancedFaucetAllowance = Schemas["AdvancedFaucetAllowance"];
+export type TransferReversalProposal = Schemas["AdvancedTransferReversalProposal"];
+export type TransferReversalDecisionResult = Schemas["AdvancedTransferReversalDecisionResult"];
 export type TransferMode = (typeof TRANSFER_MODES)[number];
 
 /** Rows per page of the transfer history. */
 export const TRANSFER_PAGE_SIZE = 25;
+/** Proposals per page of the reversal lists. */
+export const REVERSAL_PAGE_SIZE = 50;
 
 /* --------------------------------------------------------------------------
  * Query keys
@@ -45,6 +54,14 @@ export const transferKeys = {
     [...advancedKeys.account(accountId), "transfers", cursor, limit] as const,
   one: (accountId: string, transferId: string) => [...advancedKeys.account(accountId), "transfer", transferId] as const,
   allowance: (accountId: string) => [...advancedKeys.account(accountId), "faucet-allowance"] as const,
+  /**
+   * Reversal proposals are operator reads across accounts, so they sit under
+   * their own prefix rather than one account's; a decision invalidates them
+   * and every advanced read together.
+   */
+  reversals: ["advanced", "transfer-reversals"] as const,
+  reversalList: (transferId: string, status: string, cursor: string) =>
+    ["advanced", "transfer-reversals", "list", transferId, status, cursor] as const,
 };
 
 /* --------------------------------------------------------------------------
@@ -86,6 +103,7 @@ export const transferSpec: Spec = {
     decided_at: "timestamp",
     reversal_journal_transaction_id: "uuid",
     reversal_reason_code: "string",
+    reversal_proposal_id: "uuid",
     reversed_at: "timestamp",
   },
   lists: { reason_codes: { required: true, kind: "string" } },
@@ -135,6 +153,36 @@ export const faucetAllowanceSpec: Spec = {
     environment: "string",
     value_domain: SIMULATED,
   },
+};
+
+/**
+ * One reversal proposal with the transfer it would reverse, as it is now. A
+ * decided proposal names who decided it and when; a PENDING one does not.
+ */
+export const reversalProposalSpec: Spec = {
+  required: {
+    id: "uuid",
+    transfer_id: "uuid",
+    seq: "integer",
+    status: oneOf(TRANSFER_REVERSAL_STATUSES),
+    reason_code: "string",
+    reason: "string",
+    proposed_by: "string",
+    proposed_at: "timestamp",
+    value_domain: SIMULATED,
+  },
+  optional: { decided_by: "string", decided_at: "timestamp", decision_reason: "string" },
+  objects: { transfer: { required: true, spec: transferSpec } },
+};
+
+export const reversalProposalPageSpec: Spec = {
+  ...cursorPageSpec(reversalProposalSpec),
+  required: { value_domain: SIMULATED },
+};
+
+export const reversalDecisionResultSpec: Spec = {
+  required: { replayed: "boolean", value_domain: SIMULATED },
+  objects: { proposal: { required: true, spec: reversalProposalSpec } },
 };
 
 /* --------------------------------------------------------------------------
@@ -289,23 +337,111 @@ export function useRegisterHandle(): UseMutationResult<AdvancedTransferHandle, u
   });
 }
 
-export interface ReverseTransferInput {
+/* --------------------------------------------------------------------------
+ * Reversal under dual control (operators)
+ *
+ * One operator proposes, a second, different operator approves, which
+ * executes the reversal once in the approval's own transaction; anyone with
+ * the permission may reject. Every rule -- who may propose or decide, the
+ * recent strong sign-in, the recipient still holding the funds, a proposer
+ * never approving -- is the backend's, and its refusal reaches the page with
+ * its code. Every decision carries the idempotency key the page created when
+ * the operator confirmed, reused for every retry of that same decision.
+ * ------------------------------------------------------------------------ */
+
+export interface ReversalListFilter {
+  /** Only this transfer's proposals. */
+  readonly transferId?: string;
+  readonly status?: TransferReversalStatus;
+  readonly cursor?: string;
+}
+
+/** Reversal proposals, newest first, exactly as the backend pages them. */
+export function useTransferReversalProposals(
+  filter: ReversalListFilter,
+  enabled = true,
+): UseQueryResult<CursorPage<TransferReversalProposal>> {
+  return useQuery({
+    queryKey: transferKeys.reversalList(filter.transferId ?? "", filter.status ?? "", filter.cursor ?? ""),
+    enabled,
+    // A decision another operator takes is the whole point of the list.
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    retry: retryTransient,
+    queryFn: async () => {
+      const { data } = await api.GET("/advanced/transfers/reversal-proposals", {
+        params: {
+          query: {
+            limit: REVERSAL_PAGE_SIZE,
+            ...(filter.transferId === undefined ? {} : { transfer_id: filter.transferId }),
+            ...(filter.status === undefined ? {} : { status: filter.status }),
+            ...(filter.cursor === undefined ? {} : { cursor: filter.cursor }),
+          },
+        },
+      });
+      const page = validated<Schemas["AdvancedTransferReversalProposalPage"]>(
+        data,
+        reversalProposalPageSpec,
+        "/advanced/transfers/reversal-proposals",
+      );
+      return { items: page.items, nextCursor: page.next_cursor };
+    },
+  });
+}
+
+export interface ProposeReversalInput {
   readonly transferId: string;
   readonly reasonCode: string;
   readonly reason: string;
   readonly idempotencyKey: string;
 }
 
-/** The operator correction. It changes two accounts, so every advanced read is refetched. */
-export function useReverseTransfer(): UseMutationResult<AdvancedTransfer, unknown, ReverseTransferInput> {
+/** The first operator's proposal. Nothing moves; a second operator decides it. */
+export function useProposeTransferReversal(): UseMutationResult<TransferReversalProposal, unknown, ProposeReversalInput> {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: ReverseTransferInput) => {
-      const { data } = await api.POST("/advanced/transfers/{transferId}/reverse", {
+    mutationFn: async (input: ProposeReversalInput) => {
+      const { data } = await api.POST("/advanced/transfers/{transferId}/reversal-proposals", {
         ...idempotent(input.idempotencyKey, { path: { transferId: input.transferId } }),
         body: { reason_code: input.reasonCode, reason: input.reason },
       });
-      return validated<AdvancedTransfer>(data, transferSpec, "/advanced/transfers/{id}/reverse");
+      return validated<TransferReversalProposal>(data, reversalProposalSpec, "/advanced/transfers/{id}/reversal-proposals");
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: transferKeys.reversals });
+    },
+  });
+}
+
+export interface DecideReversalInput {
+  readonly proposalId: string;
+  readonly decision: "approve" | "reject";
+  /** Required for a rejection; optional for an approval. */
+  readonly reason: string | undefined;
+  readonly idempotencyKey: string;
+}
+
+/**
+ * A decision on a proposal. An approval reverses the transfer, changing two
+ * accounts, so every advanced read is refetched whatever the answer was.
+ */
+export function useDecideTransferReversal(): UseMutationResult<TransferReversalDecisionResult, unknown, DecideReversalInput> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: DecideReversalInput) => {
+      const options = {
+        ...idempotent(input.idempotencyKey, { path: { proposalId: input.proposalId } }),
+        body: input.reason === undefined ? {} : { reason: input.reason },
+      };
+      const { data } =
+        input.decision === "approve"
+          ? await api.POST("/advanced/transfers/reversal-proposals/{proposalId}/approve", options)
+          : await api.POST("/advanced/transfers/reversal-proposals/{proposalId}/reject", options);
+      return validated<TransferReversalDecisionResult>(
+        data,
+        reversalDecisionResultSpec,
+        `/advanced/transfers/reversal-proposals/{id}/${input.decision}`,
+      );
     },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: advancedKeys.all });

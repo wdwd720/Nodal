@@ -297,8 +297,12 @@ func TestVars_TableIsWellFormed(t *testing.T) {
 	// joined it. Each of those was read straight from the environment by
 	// cmd/api, which is the one route into production that this table's whole
 	// purpose is to close; test/infra now fails if another appears. The
-	// final 2 is the sandbox chain section: the devnet network and its seed.
-	assert.Equal(t, 3+8+9+2+2+4+2+5+5+4+10+2+11+14*11+4+5+7+6+2, len(seen))
+	// 2 after the retention section is the sandbox chain section: the devnet
+	// network and its seed. The final 5 is cmd/advanced-worker's own section
+	// (the interval and batch overrides, the run and drain timeouts and the
+	// metrics interval), declared here from the start rather than read
+	// straight from the environment like the older workers' backlog.
+	assert.Equal(t, 3+8+9+2+2+4+2+5+5+4+10+2+11+14*11+4+5+7+6+2+5, len(seen))
 }
 
 func TestVars_DocumentedInDocGo(t *testing.T) {

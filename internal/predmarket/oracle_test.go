@@ -2,7 +2,6 @@ package predmarket
 
 import (
 	"bytes"
-	"context"
 	"crypto/ed25519"
 	"testing"
 	"time"
@@ -24,35 +23,57 @@ func sandboxOracle(t testing.TB, b byte) *SandboxOracle {
 
 var observed = time.Date(2026, 11, 3, 23, 59, 0, 0, time.UTC)
 
-func TestSandboxOracle_ReportsAreDeterministicAndVerify(t *testing.T) {
-	ctx := context.Background()
+// TestSandboxOracle_SignaturesAreDeterministicAndVerify: the sandbox oracle
+// is a signing key and nothing else -- the same observation signed twice, or
+// by an oracle rebuilt from the same seed, is the same report byte for byte,
+// and it verifies against the oracle's public key.
+func TestSandboxOracle_SignaturesAreDeterministicAndVerify(t *testing.T) {
 	o := sandboxOracle(t, 7)
 	mid := NewMarketID()
+	obs := OracleReport{MarketID: mid, Outcome: "YES", ObservedAt: observed, Evidence: []byte(`{"source":"election board","winner":"YES"}`)}
 
-	_, err := o.Report(ctx, mid)
-	require.Error(t, err, "no observation yet")
-	assert.Equal(t, errs.CodeNotFound, errs.CodeOf(err))
-
-	require.NoError(t, o.Observe(mid, "YES", observed, []byte(`{"source":"election board","winner":"YES"}`)))
-	a, err := o.Report(ctx, mid)
+	a, err := o.Sign(obs)
 	require.NoError(t, err)
-	b, err := o.Report(ctx, mid)
+	b, err := o.Sign(obs)
 	require.NoError(t, err)
 	assert.Equal(t, a, b, "the same observation is the same report, byte for byte")
 	assert.Equal(t, a.Hash(), b.Hash())
+	assert.Equal(t, o.Source(), a.Source, "the oracle signs under its own source")
 	require.NoError(t, VerifyReport(o.PublicKey(), a))
 
 	// A second oracle built from the same seed is the same oracle.
 	again := sandboxOracle(t, 7)
-	require.NoError(t, again.Observe(mid, "YES", observed, []byte(`{"source":"election board","winner":"YES"}`)))
-	c, err := again.Report(ctx, mid)
+	c, err := again.Sign(obs)
 	require.NoError(t, err)
 	assert.Equal(t, a.Signature, c.Signature)
 
 	_, err = NewSandboxOracle("x", []byte("short"))
 	require.Error(t, err)
-	require.Error(t, o.Observe(mid, "yes!", observed, []byte("e")), "an outcome is a symbol")
-	require.Error(t, o.Observe(mid, "YES", observed, nil), "a report carries evidence")
+	bad := obs
+	bad.Outcome = "yes!"
+	_, err = o.Sign(bad)
+	require.Error(t, err, "an outcome is a symbol")
+	bad = obs
+	bad.Evidence = nil
+	_, err = o.Sign(bad)
+	require.Error(t, err, "a report carries evidence")
+	assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(err))
+}
+
+// TestSandboxOracle_SignsOnlyForTheMarketsThatNamedIt: the service records an
+// observation only for a market that registered this oracle's source and key.
+func TestSandboxOracle_SignsOnlyForTheMarketsThatNamedIt(t *testing.T) {
+	o := sandboxOracle(t, 3)
+	m := Market{OracleSource: o.Source(), OraclePublicKey: o.PublicKey()}
+	assert.True(t, o.signsFor(m))
+	other := m
+	other.OracleSource = "another-board"
+	assert.False(t, o.signsFor(other), "another source")
+	other = m
+	other.OraclePublicKey = sandboxOracle(t, 4).PublicKey()
+	assert.False(t, o.signsFor(other), "another key")
+	var none *SandboxOracle
+	assert.False(t, none.signsFor(m), "no sandbox oracle signs for nothing")
 }
 
 func TestVerifyReport_RefusesEveryTampering(t *testing.T) {

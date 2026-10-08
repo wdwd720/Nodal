@@ -30,10 +30,15 @@ func dbErr(op string, err error) error {
 	if ee, ok := errs.As(err); ok {
 		return ee
 	}
-	switch db.SQLState(err) {
-	case "DV001", "DV002", "DV003", "DV004":
+	switch state := db.SQLState(err); state {
+	case "DV001", "DV002", "DV003", "DV004", "DV005", "DV007", "DV008", "DV009", "DV011":
 		return errs.Wrap(err, errs.CodeConflict, "derivatives: "+op+": the database refused an inconsistent state").
-			WithField("sqlstate", db.SQLState(err))
+			WithField("sqlstate", state)
+	case "DV006", "DV010":
+		// A trade the risk kernel did not allow, an override without a second
+		// operator: refusals of authority, not of shape.
+		return errs.Wrap(err, errs.CodeForbidden, "derivatives: "+op+": the database refused an unauthorized change").
+			WithField("sqlstate", state)
 	}
 	if mapped := ledger.MapError(err); mapped != nil {
 		if ee, ok := errs.As(mapped); ok && ee.Code != errs.CodeInternal {
@@ -41,6 +46,20 @@ func dbErr(op string, err error) error {
 		}
 	}
 	return errs.Wrap(err, errs.CodeInternal, "derivatives: "+op)
+}
+
+// lockSpec share-locks an instrument's terms row and then resolves its
+// terms into a Spec. Every operation that trades, runs, settles or exercises
+// an instrument takes it after the clearing house's lock, so the terms it
+// computes with are the terms in force until it commits: an amendment
+// (instruments.Repository.AmendTerms takes the row FOR UPDATE) waits for it,
+// and finds the positions it opened (the database then refuses the change,
+// DV007); an operation that waited for an amendment reads the amended terms.
+func lockSpec(ctx context.Context, tx pgx.Tx, repo *instruments.Repository, iid instruments.InstrumentID) (Spec, error) {
+	if _, err := tx.Exec(ctx, `SELECT 1 FROM instrument_terms WHERE instrument_id = $1 FOR SHARE`, iid); err != nil {
+		return Spec{}, dbErr("lock the instrument's terms", err)
+	}
+	return loadSpec(ctx, tx, repo, iid)
 }
 
 // loadSpec resolves an instrument's current terms into a Spec.
@@ -339,10 +358,10 @@ func insertFill(ctx context.Context, tx pgx.Tx, f FillRecord) error {
 func insertCashFlow(ctx context.Context, tx pgx.Tx, cf CashFlow, clearing econ.FacilityID, effect *econ.EffectID) error {
 	_, err := tx.Exec(ctx, `INSERT INTO derivative_cash_flows
 		(id, flow_key, position_id, account_id, instrument_id, settlement_asset_id, clearing_house_id, kind, amount, shortfall,
-		 journal_transaction_id, effect_id, reference_type, reference_id, occurred_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+		 journal_transaction_id, effect_id, reservation_id, reference_type, reference_id, occurred_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
 		cf.ID, cf.Key, cf.PositionID, cf.AccountID, cf.InstrumentID, cf.SettlementAssetID, clearing, cf.Kind, cf.Amount,
-		cf.Shortfall, cf.JournalTransactionID, effect, cf.ReferenceType, cf.ReferenceID, cf.OccurredAt.UTC())
+		cf.Shortfall, cf.JournalTransactionID, effect, cf.ReservationID, cf.ReferenceType, cf.ReferenceID, cf.OccurredAt.UTC())
 	if err != nil {
 		return dbErr("insert cash flow", err)
 	}

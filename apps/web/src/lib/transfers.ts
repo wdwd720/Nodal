@@ -110,6 +110,99 @@ export function notReversibleReason(status: string): string {
 }
 
 /* --------------------------------------------------------------------------
+ * Reversal under dual control
+ * ------------------------------------------------------------------------ */
+
+export type TransferReversalStatus = Schemas["AdvancedTransferReversalStatus"];
+/**
+ * Every status of a reversal proposal. It is derived by the backend from the
+ * proposal's one decision and never stored: an APPROVED proposal was executed
+ * in its approval's own transaction, so it is consumed.
+ */
+export const TRANSFER_REVERSAL_STATUSES = ["PENDING", "APPROVED", "REJECTED"] as const;
+export type TransferReversalStatusesMatchContract = Assert<
+  Same<(typeof TRANSFER_REVERSAL_STATUSES)[number], TransferReversalStatus>
+>;
+
+/** What each proposal status means. Two distinct operators are enforced by the backend and its database. */
+export const TRANSFER_REVERSAL_MEANING: Readonly<Record<TransferReversalStatus, string>> = {
+  PENDING:
+    "Proposed by one operator and awaiting a second, different operator: nothing has moved. The proposer can " +
+    "never approve it; anyone holding the permission, the proposer included, may reject it.",
+  APPROVED:
+    "Approved by a second operator and executed in the same transaction: the compensating journal is posted and " +
+    "the transfer is REVERSED. An approved proposal is consumed and can never execute again.",
+  REJECTED: "Rejected with a stated reason. Nothing moved, and a rejected proposal can never be executed.",
+};
+
+export function reversalStatusTone(status: string): Tone {
+  switch (status) {
+    case "PENDING":
+      return "info";
+    case "APPROVED":
+      return "warn";
+    case "REJECTED":
+      return "neutral";
+    default:
+      return "neutral";
+  }
+}
+
+/** The refusal codes the backend names when a reversal decision cannot go ahead. */
+export const REVERSAL_SELF_APPROVAL = "TRANSFER_REVERSAL_SELF_APPROVAL";
+export const REVERSAL_FUNDS_UNAVAILABLE = "TRANSFER_REVERSAL_FUNDS_UNAVAILABLE";
+
+/** The reversal's stable reason code, in the shape the API accepts. */
+const REASON_CODE = /^[A-Z][A-Z0-9_]{2,63}$/;
+
+/**
+ * A reason code as an operator typed it: capitals, digits and underscores,
+ * three to sixty-four characters, starting with a letter. It becomes the
+ * compensating journal's reason code, so it is checked for shape here and
+ * judged by the backend.
+ */
+export function checkReasonCode(raw: string): InputCheck {
+  const value = raw.trim();
+  if (value === "") return { ok: false, value: "", error: "Enter a reason code, such as DISPUTE_UPHELD." };
+  if (!REASON_CODE.test(value)) {
+    return {
+      ok: false,
+      value: "",
+      error: "A reason code is 3 to 64 capitals, digits or underscores, starting with a capital letter.",
+    };
+  }
+  return { ok: true, value, error: "" };
+}
+
+/** Free text the API bounds at 500 bytes: a reversal's reason, a decision's reason. */
+export function checkReasonText(raw: string, what: string): InputCheck {
+  const value = raw.trim();
+  if (value === "") return { ok: false, value: "", error: `Enter ${what}.` };
+  if (new TextEncoder().encode(value).length > 500) {
+    return { ok: false, value: "", error: "Keep it to 500 bytes; the backend refuses anything longer." };
+  }
+  return { ok: true, value, error: "" };
+}
+
+/** The proposal of a transfer that is still awaiting a decision, if any. The backend allows at most one. */
+export function pendingProposal<P extends { readonly status: string }>(proposals: readonly P[]): P | undefined {
+  return proposals.find((proposal) => proposal.status === "PENDING");
+}
+
+/**
+ * Why this operator is not offered the approval of a pending proposal, or
+ * undefined when it may be offered. The backend makes the decision either
+ * way; the interface only declines to offer a button it knows will be refused
+ * for its own principal, and says why.
+ */
+export function approvalBlockedReason(proposedBy: string, subjectId: string | undefined): string | undefined {
+  if (subjectId !== undefined && proposedBy.toLowerCase() === subjectId.toLowerCase()) {
+    return "You proposed this reversal, and the operator who proposed it can never approve it. A second, different operator approves it; you may still reject it.";
+  }
+  return undefined;
+}
+
+/* --------------------------------------------------------------------------
  * What a person typed
  * ------------------------------------------------------------------------ */
 

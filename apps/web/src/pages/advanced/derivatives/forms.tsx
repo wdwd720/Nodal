@@ -11,8 +11,10 @@ import { Link } from "react-router-dom";
 
 import {
   useCloseDerivativePosition,
+  useDecideSettlementOverride,
   useExerciseDerivativePosition,
   useOpenDerivativePosition,
+  useProposeSettlementOverride,
   useRecordDerivativeMark,
   useRunFunding,
   useRunVariationMargin,
@@ -21,6 +23,7 @@ import {
   type DerivativePolicy,
   type DerivativePosition,
   type DerivativeRunResult,
+  type DerivativeSettlementOverride,
   type DerivativeTradeResult,
 } from "../../../api/advanced/derivatives.ts";
 import { Field, FieldGrid, Pill } from "../../../components/Layout.tsx";
@@ -32,9 +35,12 @@ import {
   formatRateE8,
   instantOf,
   latestEndedIntervalStart,
+  mantissaDecimal,
   parseContractsInput,
   parseDecimalInput,
   parseInstantInput,
+  parseReasonInput,
+  parseSha256Input,
   type Availability,
   type DerivativeSide,
   type TradeMode,
@@ -523,48 +529,170 @@ function RunOutcome(props: { readonly result: DerivativeRunResult }): ReactNode 
   );
 }
 
+/**
+ * Settles an expired contract by the settlement rule. The operator does not
+ * type a price: the form confirms the price and source the backend's preview
+ * states, and the backend refuses the settlement if its rule now says
+ * anything else.
+ */
 export function SettleForm(props: { readonly contract: DerivativeContract }): ReactNode {
   const { contract } = props;
-  const ids = { price: useId(), source: useId() };
-  const [price, setPrice] = useState("");
-  const [source, setSource] = useState("");
+  const preview = contract.settlement_preview;
   const action = useActionKey();
   const settle = useSettleDerivative();
-  const given = price.trim() !== "";
-  const parsed = parseDecimalInput(price);
-  const blocked =
-    given && !parsed.ok
-      ? parsed.error
-      : given && source.trim() === ""
-        ? "A given settlement price names its source."
-        : contract.settled
-          ? "The contract has already been settled."
-          : undefined;
+  const confirmed =
+    preview?.reference_price_mantissa === undefined ? undefined : mantissaDecimal(preview.reference_price_mantissa, preview.price_scale);
+  const blocked = contract.settled
+    ? "The contract has already been settled."
+    : preview === undefined
+      ? "The backend stated no settlement preview for this contract."
+      : !preview.expired
+        ? "The contract has not expired."
+        : !preview.has_reference
+          ? "No mark was observed and recorded by expiry, so the rule has no price."
+          : !preview.settleable
+            ? "The last mark at expiry is stale, so the rule does not settle it. An override is the way."
+            : confirmed === undefined
+              ? "The preview's price could not be read."
+              : undefined;
+
+  return (
+    <>
+      <FieldGrid columns={3}>
+        <Field label="The rule's price" note="Confirmed as sent; never typed.">
+          {preview?.reference_price_mantissa === undefined ? (
+            <span className="absent">none</span>
+          ) : (
+            <Price mantissa={preview.reference_price_mantissa} scale={preview.price_scale} />
+          )}
+        </Field>
+        <Field label="Its source">
+          {preview?.price_source === undefined ? <span className="absent">none</span> : <code className="mono-small">{preview.price_source}</code>}
+        </Field>
+        <ActionKey actionKey={action.key} />
+      </FieldGrid>
+      <div className="form-actions">
+        <ConfirmButton
+          blockedReason={blocked}
+          busy={settle.isPending}
+          busyLabel="Settling…"
+          variant="danger"
+          onConfirm={() => {
+            if (blocked !== undefined || confirmed === undefined) return;
+            settle.mutate({
+              instrumentId: contract.id,
+              price: confirmed,
+              priceSource: preview?.price_source,
+              idempotencyKey: action.confirm(),
+            });
+          }}
+        >
+          Confirm: settle by the rule
+        </ConfirmButton>
+      </div>
+      {settle.isError && <CommandFailure error={settle.error} />}
+      {settle.isSuccess && settle.data.settlement !== undefined && (
+        <div className="callout" role="status">
+          <p>
+            {settle.data.settlement.replay ? "The contract had already been settled; this is that settlement." : "Settled."}{" "}
+            {settle.data.settlement.kind} settlement at{" "}
+            <Price mantissa={settle.data.settlement.price_mantissa} scale={settle.data.settlement.price_scale} /> covering{" "}
+            {String(settle.data.settlement.positions)} positions.
+          </p>
+        </div>
+      )}
+    </>
+  );
+}
+
+/**
+ * Proposes, as this operator, a settlement price for an expired contract the
+ * rule cannot settle, within the bound the preview states, with a reason and
+ * evidence. A proposal settles nothing: a second operator decides.
+ */
+export function ProposeOverrideForm(props: { readonly contract: DerivativeContract }): ReactNode {
+  const { contract } = props;
+  const preview = contract.settlement_preview;
+  const ids = { price: useId(), reason: useId(), ref: useId(), digest: useId() };
+  const [price, setPrice] = useState("");
+  const [reason, setReason] = useState("");
+  const [evidenceRef, setEvidenceRef] = useState("");
+  const [digest, setDigest] = useState("");
+  const action = useActionKey();
+  const propose = useProposeSettlementOverride();
+  const parsedPrice = parseDecimalInput(price);
+  const parsedReason = parseReasonInput(reason, 1000);
+  const parsedRef = parseReasonInput(evidenceRef, 500);
+  const parsedDigest = parseSha256Input(digest);
+  const blocked = contract.settled
+    ? "The contract has already been settled."
+    : preview === undefined || !preview.expired
+      ? "Only an expired contract's settlement is overridden."
+      : !preview.has_reference
+        ? "No mark was observed and recorded by expiry, so there is no reference to bound an override by."
+        : !parsedPrice.ok
+          ? price === "" ? "Enter the proposed price." : parsedPrice.error
+          : !parsedReason.ok
+            ? parsedReason.error
+            : !parsedRef.ok
+              ? "Name the evidence the proposal rests on."
+              : !parsedDigest.ok
+                ? parsedDigest.error
+                : undefined;
   const changed = (): void => {
     action.reset();
-    settle.reset();
+    propose.reset();
   };
 
   return (
     <>
+      {preview?.override_min_price_mantissa !== undefined && preview.override_max_price_mantissa !== undefined && (
+        <p className="note">
+          The backend accepts a price on the tick grid from{" "}
+          <Price mantissa={preview.override_min_price_mantissa} scale={preview.price_scale} /> to{" "}
+          <Price mantissa={preview.override_max_price_mantissa} scale={preview.price_scale} />: within{" "}
+          <Bps value={preview.max_deviation_bps} /> of the rule&apos;s reference price.
+        </p>
+      )}
       <div className="form">
         <TextField
           id={ids.price}
-          label="Settlement price (optional)"
+          label="Proposed settlement price"
           value={price}
-          problem={!given || parsed.ok ? undefined : parsed.error}
-          hint="Without it the backend settles at the last fresh mark at or before expiry (an option at that mark's index)."
+          problem={parsedPrice.ok ? undefined : parsedPrice.error}
+          hint="Exact at the contract's price scale and on its tick grid; never rounded."
           onChange={(value) => {
             setPrice(value);
             changed();
           }}
         />
         <TextField
-          id={ids.source}
-          label="Price source"
-          value={source}
+          id={ids.reason}
+          label="Reason"
+          value={reason}
+          problem={parsedReason.ok ? undefined : parsedReason.error}
           onChange={(value) => {
-            setSource(value);
+            setReason(value);
+            changed();
+          }}
+        />
+        <TextField
+          id={ids.ref}
+          label="Evidence reference"
+          value={evidenceRef}
+          hint="Where the document the proposal rests on is kept."
+          onChange={(value) => {
+            setEvidenceRef(value);
+            changed();
+          }}
+        />
+        <TextField
+          id={ids.digest}
+          label="Evidence SHA-256"
+          value={digest}
+          problem={parsedDigest.ok ? undefined : parsedDigest.error}
+          onChange={(value) => {
+            setDigest(value);
             changed();
           }}
         />
@@ -573,31 +701,123 @@ export function SettleForm(props: { readonly contract: DerivativeContract }): Re
       <div className="form-actions">
         <ConfirmButton
           blockedReason={blocked}
-          busy={settle.isPending}
-          busyLabel="Settling…"
-          variant="danger"
+          busy={propose.isPending}
+          busyLabel="Proposing…"
           onConfirm={() => {
             if (blocked !== undefined) return;
-            settle.mutate({
+            propose.mutate({
               instrumentId: contract.id,
-              price: given ? parsed.value : undefined,
-              priceSource: given ? source.trim() : undefined,
+              price: parsedPrice.value,
+              reason: parsedReason.value,
+              evidenceRef: parsedRef.value,
+              evidenceSha256: parsedDigest.value,
               idempotencyKey: action.confirm(),
             });
           }}
         >
-          Confirm: settle the contract
+          Confirm: propose the override
         </ConfirmButton>
       </div>
-      {settle.isError && <CommandFailure error={settle.error} />}
-      {settle.isSuccess && (
-        <div className="callout" role="status">
-          <p>
-            {settle.data.replay ? "The contract had already been settled; this is that settlement." : "Settled."}{" "}
-            {settle.data.kind} settlement at <Price mantissa={settle.data.price_mantissa} scale={settle.data.price_scale} />{" "}
-            covering {String(settle.data.positions)} positions.
-          </p>
-        </div>
+      {propose.isError && <CommandFailure error={propose.error} />}
+      {propose.isSuccess && propose.data.override !== undefined && (
+        <p className="callout" role="status">
+          Proposed <code className="mono-small">{propose.data.override.id}</code> at{" "}
+          <Price mantissa={propose.data.override.price_mantissa} scale={propose.data.override.price_scale} />. Nothing has
+          settled: a second operator approves or rejects it.
+        </p>
+      )}
+    </>
+  );
+}
+
+/**
+ * A second operator's decision on one proposal: approving it settles the
+ * contract at the proposal's price (confirmed, never typed); rejecting it
+ * settles nothing. The backend refuses an approval by the proposer.
+ */
+export function DecideOverrideForm(props: {
+  readonly contract: DerivativeContract;
+  readonly override: DerivativeSettlementOverride;
+}): ReactNode {
+  const { contract, override } = props;
+  const ids = { reason: useId(), decision: useId() };
+  const [decision, setDecision] = useState<"APPROVE_OVERRIDE" | "REJECT_OVERRIDE">("APPROVE_OVERRIDE");
+  const [reason, setReason] = useState("");
+  const action = useActionKey();
+  const decide = useDecideSettlementOverride();
+  const parsedReason = parseReasonInput(reason, 1000);
+  const confirmed = mantissaDecimal(override.price_mantissa, override.price_scale);
+  const blocked =
+    override.status !== "PROPOSED"
+      ? "This proposal has been decided."
+      : contract.settled
+        ? "The contract has already been settled."
+        : !parsedReason.ok
+          ? parsedReason.error
+          : undefined;
+
+  return (
+    <>
+      <div className="form">
+        <ChoiceField
+          id={ids.decision}
+          label="Decision"
+          value={decision}
+          choices={["APPROVE_OVERRIDE", "REJECT_OVERRIDE"] as const}
+          describe={(value) => (value === "APPROVE_OVERRIDE" ? "Approve, and settle at its price" : "Reject")}
+          onChange={(value) => {
+            setDecision(value);
+            action.reset();
+            decide.reset();
+          }}
+        />
+        <TextField
+          id={ids.reason}
+          label="Reason"
+          value={reason}
+          problem={parsedReason.ok ? undefined : parsedReason.error}
+          onChange={(value) => {
+            setReason(value);
+            action.reset();
+            decide.reset();
+          }}
+        />
+        <ActionKey actionKey={action.key} />
+      </div>
+      <div className="form-actions">
+        <ConfirmButton
+          blockedReason={blocked}
+          busy={decide.isPending}
+          busyLabel="Deciding…"
+          variant={decision === "APPROVE_OVERRIDE" ? "danger" : "primary"}
+          onConfirm={() => {
+            if (blocked !== undefined) return;
+            decide.mutate({
+              instrumentId: contract.id,
+              overrideId: override.id,
+              decision,
+              reason: parsedReason.value,
+              price: decision === "APPROVE_OVERRIDE" ? confirmed : undefined,
+              idempotencyKey: action.confirm(),
+            });
+          }}
+        >
+          {decision === "APPROVE_OVERRIDE" ? "Confirm: approve and settle" : "Confirm: reject"}
+        </ConfirmButton>
+      </div>
+      {decide.isError && <CommandFailure error={decide.error} />}
+      {decide.isSuccess && (
+        <p className="callout" role="status">
+          {decide.data.settlement === undefined ? (
+            "Rejected. Nothing settled."
+          ) : (
+            <>
+              Approved: the contract settled at{" "}
+              <Price mantissa={decide.data.settlement.price_mantissa} scale={decide.data.settlement.price_scale} /> covering{" "}
+              {String(decide.data.settlement.positions)} positions.
+            </>
+          )}
+        </p>
       )}
     </>
   );

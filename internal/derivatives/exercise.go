@@ -38,6 +38,8 @@ type exercisePlan struct {
 	evidenceKey   string
 	now           time.Time
 	correlationID string
+	// basis is a final settlement's price basis, archived with its evidence.
+	basis *settlementBasisEvidence
 }
 
 // exerciseResult is what an exercise run did.
@@ -64,7 +66,10 @@ type exerciseEvidence struct {
 	Exercises            []string     `json:"exercise_ids"`
 	Allocations          []Allocation `json:"allocations"`
 	PolicyVersion        string       `json:"policy_version"`
-	Legs                 []postedLeg  `json:"legs"`
+	// Basis is set for the automatic exercise of a final settlement: the
+	// rule or override the underlying's settlement price came from.
+	Basis *settlementBasisEvidence `json:"price_basis,omitempty"`
+	Legs  []postedLeg              `json:"legs"`
 }
 
 // exercise settles exercised contracts in cash and assigns them to writers
@@ -165,7 +170,8 @@ func (s *Service) exercise(ctx context.Context, tx pgx.Tx, ch econ.Facility, spe
 	posted, err := s.executeLegs(ctx, tx, ch, legs, p.evidenceKey, func(pl []postedLeg) any {
 		return exerciseEvidence{
 			InstrumentID: spec.InstrumentID.String(), Kind: p.kind, Underlying: p.underlying.String(), IntrinsicPrice: ip.String(),
-			IntrinsicPerContract: per.String(), Exercises: ids, Allocations: allocs, PolicyVersion: s.policy.Version, Legs: pl,
+			IntrinsicPerContract: per.String(), Exercises: ids, Allocations: allocs, PolicyVersion: s.policy.Version,
+			Basis: p.basis, Legs: pl,
 		}
 	}, p.correlationID)
 	if err != nil {

@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/nodal/controlplane/internal/accounts"
+	"github.com/nodal/controlplane/internal/capital"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/ledger"
@@ -44,6 +45,22 @@ type leg struct {
 	// flow with nothing collected (a pure shortfall) is registered without a
 	// posting.
 	flow *CashFlow
+	// collect is what the leg takes from the customer's wallet, reserved
+	// when the leg was planned; its reservation is consumed as soon as the
+	// leg posts, and the flow names it.
+	collect *collection
+	// reservedBy is a reservation the caller consumes for what this leg takes
+	// from the wallet (an opening fill's margin and premium); the flow and
+	// the effect name it.
+	reservedBy *capital.ReservationID
+}
+
+// reservation is the reservation backing what the leg takes from the wallet.
+func (l leg) reservation() *capital.ReservationID {
+	if l.collect != nil {
+		return l.collect.reservationID()
+	}
+	return l.reservedBy
 }
 
 // postedLeg is a leg after execution.
@@ -54,9 +71,12 @@ type postedLeg struct {
 	Journal *ledger.TransactionID `json:"journal_transaction_id,omitempty"`
 	Effect  *econ.EffectID        `json:"effect_id,omitempty"`
 	Flow    *registeredFlow       `json:"cash_flow,omitempty"`
-	Entries []evidenceEntry       `json:"entries"`
-	replay  bool
-	status  econ.EffectStatus
+	// Reservation is the capital reservation consumed for what the leg took
+	// from the customer's wallet.
+	Reservation *capital.ReservationID `json:"reservation_id,omitempty"`
+	Entries     []evidenceEntry        `json:"entries"`
+	replay      bool
+	status      econ.EffectStatus
 }
 
 type registeredFlow struct {
@@ -64,6 +84,9 @@ type registeredFlow struct {
 	Kind      string `json:"kind"`
 	Amount    string `json:"amount"`
 	Shortfall string `json:"shortfall"`
+	// FromWallet is what the flow took from the customer's available
+	// wallet funds (the rest of a payment came from the position's margin).
+	FromWallet string `json:"from_wallet,omitempty"`
 }
 
 type evidenceEntry struct {
@@ -90,17 +113,21 @@ type legRequest struct {
 
 // executeLegs runs the legs of one operation in order. Each leg claims its
 // effect (a replay of an APPLIED effect posts nothing; an effect in any other
-// recorded state is never retried), posts its journal transaction and
-// registers its cash flow. Then the operation's evidence document is archived
-// once and every effect claimed here is applied with its journal and the
+// recorded state is never retried), posts its journal transaction, consumes
+// the reservation of what it took from the customer's wallet and registers its
+// cash flow. Then the operation's evidence document is archived once and every
+// effect claimed here is applied with its journal, its reservation and the
 // evidence reference -- all inside tx.
 func (s *Service) executeLegs(ctx context.Context, tx pgx.Tx, ch econ.Facility, legs []leg, evidenceKey string,
 	evidence func([]postedLeg) any, correlationID string) ([]postedLeg, error) {
 	now := s.clk.Now().UTC()
 	posted := make([]postedLeg, 0, len(legs))
 	for _, l := range legs {
-		pl := postedLeg{Name: l.name, Kind: l.kind, Key: l.key, Entries: evidenceEntries(l.entries)}
+		pl := postedLeg{Name: l.name, Kind: l.kind, Key: l.key, Entries: evidenceEntries(l.entries), Reservation: l.reservation()}
 		if len(l.entries) == 0 {
+			if l.collect != nil {
+				return nil, errs.New(errs.CodeInternal, "derivatives: a leg that collected from the wallet needs a posting").WithField("leg", l.name)
+			}
 			if l.flow != nil {
 				if !l.flow.Amount.IsZero() {
 					return nil, errs.New(errs.CodeInternal, "derivatives: a cash flow that moved value needs a posting").WithField("leg", l.name)
@@ -108,7 +135,7 @@ func (s *Service) executeLegs(ctx context.Context, tx pgx.Tx, ch econ.Facility, 
 				if err := s.registerFlow(ctx, tx, ch, l.flow, nil, nil, now); err != nil {
 					return nil, err
 				}
-				pl.Flow = flowEvidence(l.flow)
+				pl.Flow = flowEvidence(l.flow, nil)
 				posted = append(posted, pl)
 			}
 			continue
@@ -130,6 +157,11 @@ func (s *Service) executeLegs(ctx context.Context, tx pgx.Tx, ch econ.Facility, 
 		if replay {
 			switch eff.Status {
 			case econ.EffectApplied:
+				// Applied by an earlier attempt: nothing is posted, so
+				// nothing reserved for it now is taken.
+				if err := s.releaseCollection(ctx, tx, l.collect); err != nil {
+					return nil, err
+				}
 				pl.Journal, pl.replay, pl.status = eff.JournalTransactionID, true, eff.Status
 				posted = append(posted, pl)
 				continue
@@ -149,6 +181,9 @@ func (s *Service) executeLegs(ctx context.Context, tx pgx.Tx, ch econ.Facility, 
 		}
 		jid := res.TransactionID
 		pl.Journal, pl.status = &jid, econ.EffectPending
+		if err := s.consumeCollection(ctx, tx, l.collect); err != nil {
+			return nil, err
+		}
 		if l.flow != nil {
 			// A flow that collected nothing (a whole shortfall) names no
 			// journal: the leg posted only what did not involve the
@@ -158,10 +193,11 @@ func (s *Service) executeLegs(ctx context.Context, tx pgx.Tx, ch econ.Facility, 
 			if !l.flow.Amount.IsZero() {
 				fj, fe = &jid, &effID
 			}
+			l.flow.ReservationID = l.reservation()
 			if err := s.registerFlow(ctx, tx, ch, l.flow, fj, fe, now); err != nil {
 				return nil, err
 			}
-			pl.Flow = flowEvidence(l.flow)
+			pl.Flow = flowEvidence(l.flow, l.collect)
 		}
 		posted = append(posted, pl)
 	}
@@ -173,8 +209,12 @@ func (s *Service) executeLegs(ctx context.Context, tx pgx.Tx, ch econ.Facility, 
 		if pl.replay || pl.Effect == nil || pl.Journal == nil {
 			continue
 		}
+		var reservation string
+		if pl.Reservation != nil {
+			reservation = pl.Reservation.String()
+		}
 		if _, err := s.effects.Apply(ctx, tx, *pl.Effect, econ.ApplyRequest{
-			JournalTransactionID: pl.Journal, Evidence: &ref, Actor: s.actor, Reason: pl.Name,
+			JournalTransactionID: pl.Journal, ReservationID: reservation, Evidence: &ref, Actor: s.actor, Reason: pl.Name,
 		}); err != nil {
 			return nil, err
 		}
@@ -193,8 +233,12 @@ func (s *Service) registerFlow(ctx context.Context, tx pgx.Tx, ch econ.Facility,
 	return insertCashFlow(ctx, tx, *f, ch.ID, effect)
 }
 
-func flowEvidence(f *CashFlow) *registeredFlow {
-	return &registeredFlow{ID: f.ID.String(), Kind: string(f.Kind), Amount: f.Amount.String(), Shortfall: f.Shortfall.String()}
+func flowEvidence(f *CashFlow, c *collection) *registeredFlow {
+	out := &registeredFlow{ID: f.ID.String(), Kind: string(f.Kind), Amount: f.Amount.String(), Shortfall: f.Shortfall.String()}
+	if c != nil {
+		out.FromWallet = c.taken().String()
+	}
+	return out
 }
 
 // journals lists the journal transactions of executed legs.

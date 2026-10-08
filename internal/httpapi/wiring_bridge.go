@@ -473,6 +473,41 @@ func (a bridgeAdapter) ReconcileLeg(ctx context.Context, lid bridge.LegID) (Brid
 	return BridgeLegOutcome{View: v, Settled: v.Leg.Status.Terminal()}, nil
 }
 
+// --- a leg in manual review ------------------------------------------------------
+
+func (a bridgeAdapter) ResumeRelay(ctx context.Context, lid bridge.LegID, by econ.Actor, reason string) (BridgeLegView, error) {
+	if err := a.write(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		_, err := a.svc.ResumeRelay(ctx, tx, lid, by, reason)
+		return err
+	}); err != nil {
+		return BridgeLegView{}, err
+	}
+	return a.legView(ctx, lid)
+}
+
+func (a bridgeAdapter) ResolveReview(ctx context.Context, lid bridge.LegID, by econ.Actor, reason string) (BridgeLegView, error) {
+	if err := a.write(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		_, err := a.svc.ResolveReview(ctx, tx, lid, by, reason)
+		return err
+	}); err != nil {
+		return BridgeLegView{}, err
+	}
+	return a.legView(ctx, lid)
+}
+
+func (a bridgeAdapter) Refund(ctx context.Context, lid bridge.LegID, by econ.Actor, reason string) (BridgeLegOutcome, error) {
+	if _, err := a.svc.Refund(ctx, lid, by, reason); err != nil {
+		return BridgeLegOutcome{}, err
+	}
+	// Final once the refund is (the leg ends FAILED, code REFUNDED); a refund
+	// still on its way leaves the leg in review, read as it stands.
+	v, err := a.legView(ctx, lid)
+	if err != nil {
+		return BridgeLegOutcome{}, err
+	}
+	return BridgeLegOutcome{View: v, Settled: v.Leg.Status.Terminal()}, nil
+}
+
 func (a bridgeAdapter) ProduceBlocks(ctx context.Context, chain devnet.ChainID, n uint64) (BridgeChainView, error) {
 	if _, err := a.host.ProduceBlocks(ctx, chain, n); err != nil {
 		return BridgeChainView{}, err

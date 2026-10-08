@@ -72,7 +72,7 @@ func newPMWorld(t *testing.T, d *db.DB) *pmWorld {
 		Clock: clk, Intents: intents, Effects: effects, Authorizer: authz, Registry: econ.NewRegistry(), KillSwitches: kills,
 		Ledger: led, Capital: capital.NewService(clk, capital.OutboxEmitter{Outbox: out, Clock: clk}), Risk: risk.NewStore(),
 		RiskPolicy: risk.DefaultAdvancedPolicy(), Router: router, Instruments: instruments.NewRepository(),
-		Assets: assets.NewRepository(), Reconciliation: reconciliation.NewRepository(clk, out, aw), Audit: aw, Oracle: oracle,
+		Assets: assets.NewRepository(), Reconciliation: reconciliation.NewRepository(clk, out, aw), Audit: aw, SandboxOracle: oracle,
 	})
 	require.NoError(t, err)
 	ports, err := Wire(WireDeps{
@@ -450,18 +450,20 @@ func TestIntegration_PredictionMarketLifecycleOverHTTP(t *testing.T) {
 }
 
 // TestIntegration_PredictionMarketRefusalsReachTheClient: a refused issuance
-// keeps its REJECTED economic intent on record, a disputer may not rule on
-// their own dispute, and the creator may not void the market.
+// keeps its REJECTED economic intent on record, neither the disputer nor the
+// author of the disputed resolution may rule on a dispute, and the creator may
+// not propose to void the market.
 func TestIntegration_PredictionMarketRefusalsReachTheClient(t *testing.T) {
 	d := openTestDB(t)
 	w := newPMWorld(t, d)
-	creator, resolver, disputer := w.user(), w.user(), w.user()
+	creator, resolver, disputer, ruler := w.user(), w.user(), w.user(), w.user()
 	cUser, cAcct := w.customer(1)
 	h := newIntegrationHarness(t, d, cAcct, cUser)
 	h.server.opts.Ports.PredictionMarkets = w.ports.PredictionMarkets
 	opA := pmPrincipal(creator, security.ActorOperator, security.RoleAdmin)
 	opB := pmPrincipal(resolver, security.ActorOperator, security.RoleAdmin)
 	opC := pmPrincipal(disputer, security.ActorOperator, security.RoleAdmin)
+	opD := pmPrincipal(ruler, security.ActorOperator, security.RoleAdmin)
 	cust := pmPrincipal(cUser, security.ActorUser, security.RoleCustomer, cAcct)
 	key := func() string { return "pm-itest-" + uuid.NewString() }
 
@@ -498,9 +500,10 @@ func TestIntegration_PredictionMarketRefusalsReachTheClient(t *testing.T) {
 	h.as(&opA)
 	require.Equal(t, http.StatusOK, h.do(http.MethodPost, base+"/close", nil, "Idempotency-Key", key()).Code)
 	require.Equal(t, http.StatusOK, h.do(http.MethodPost, base+"/request-resolution", nil, "Idempotency-Key", key()).Code)
-	marketID, err := predmarket.ParseMarketID(market.Id.String())
-	require.NoError(t, err)
-	require.NoError(t, w.oracle.Observe(marketID, "YES", closeAt.Add(10*time.Second), []byte(`{"certified":"YES"}`)))
+	res = h.do(http.MethodPost, base+"/oracle-observations", map[string]any{
+		"outcome": "YES", "observed_at": closeAt.Add(10 * time.Second), "evidence": `{"certified":"YES"}`,
+	}, "Idempotency-Key", key())
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
 	h.as(&opB)
 	res = h.do(http.MethodPost, base+"/resolve", map[string]any{}, "Idempotency-Key", key())
 	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
@@ -523,14 +526,21 @@ func TestIntegration_PredictionMarketRefusalsReachTheClient(t *testing.T) {
 	res = h.do(http.MethodPost, base+"/uphold", map[string]any{"reason": "my own dispute is wrong after all"}, "Idempotency-Key", key())
 	require.Equal(t, http.StatusForbidden, res.Code, "body=%s", res.Body.String())
 	assert.Contains(t, res.problem().Detail, "dispute")
-	// ... and the creator cannot void the market.
+	// ... nor can the operator whose resolution is disputed ...
+	h.as(&opB)
+	res = h.do(http.MethodPost, base+"/uphold", map[string]any{"reason": "my own resolution stands, I say"}, "Idempotency-Key", key())
+	require.Equal(t, http.StatusForbidden, res.Code, "body=%s", res.Body.String())
+	assert.Contains(t, res.problem().Detail, "disputed")
+	// ... and the creator cannot propose to void the market.
 	h.as(&opA)
-	res = h.do(http.MethodPost, base+"/void", map[string]any{"reason": "the creator wants out of this market"}, "Idempotency-Key", key())
+	res = h.do(http.MethodPost, base+"/void-proposals", map[string]any{
+		"reason": "the creator wants out of this market", "evidence": map[string]any{"why": "regret"},
+	}, "Idempotency-Key", key())
 	require.Equal(t, http.StatusForbidden, res.Code, "body=%s", res.Body.String())
 	assert.Contains(t, res.problem().Detail, "creator")
 
-	// Another operator upholds it.
-	h.as(&opB)
+	// An independent operator upholds it.
+	h.as(&opD)
 	res = h.do(http.MethodPost, base+"/uphold", map[string]any{"reason": "the recount confirmed the certificate"}, "Idempotency-Key", key())
 	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
 	var upheld api.PredictionResolutionResult

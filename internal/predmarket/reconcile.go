@@ -55,14 +55,15 @@ func (s *Service) ReconcileEscrow(ctx context.Context, tx pgx.Tx, req ReconcileR
 	expectedEscrow := make([]string, 0, len(m.Outcomes))
 	escrowDiff := make([]string, 0, len(m.Outcomes))
 	for _, o := range books.SharesOutstanding {
-		implied := o.Add(residual)
+		implied := o.Add(residual).Add(books.Held)
 		expectedEscrow = append(expectedEscrow, implied.String())
 		escrowDiff = append(escrowDiff, books.Escrow.Sub(implied).String())
 	}
 	expected := map[string]any{
-		"identity":                  "escrow = collateral = shares_outstanding(i) + residual; shares_issued(i) = shares_outstanding(i) = held_by_customers(i)",
+		"identity":                  "escrow = collateral = shares_outstanding(i) + residual + held_unclaimed; shares_issued(i) = shares_outstanding(i) = held_by_customers(i)",
 		"escrow_implied_by_outcome": expectedEscrow,
 		"residual":                  residual.String(),
+		"held_unclaimed":            books.Held.String(),
 		"market_status":             string(m.Status),
 	}
 	observed := map[string]any{

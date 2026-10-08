@@ -24,12 +24,16 @@ import {
   MARGIN_CASE_STATUSES,
   MARGIN_LIQUIDATION_TARGETS,
   MARGIN_PLAN_DECISIONS,
+  MARGIN_RESOLUTION_DECISIONS,
+  MARGIN_RESOLUTION_OUTCOMES,
   MARGIN_RUN_MODES,
   MARGIN_STEP_ACTIONS,
   MARGIN_STRESS_SCENARIOS,
   type ConfirmedAttempt,
   type LeveragedMarginMode,
   type MarginCallStatus,
+  type MarginResolutionDecision,
+  type MarginResolutionOutcome,
 } from "../../lib/margin.ts";
 import { api } from "../client.ts";
 import { cursorPageSpec, oneOf, validated, type Spec } from "../contract.ts";
@@ -60,6 +64,13 @@ export type MarginQueueRunResult = Schemas["MarginQueueRunResult"];
 export type MarginLiquidationResult = Schemas["MarginLiquidationResult"];
 export type MarginDeficitResult = Schemas["MarginDeficitResult"];
 export type MarginFailure = Schemas["MarginFailure"];
+export type MarginCaseResolution = Schemas["MarginCaseResolution"];
+export type MarginReviewItem = Schemas["MarginReviewItem"];
+export type MarginReviewQueue = Schemas["MarginReviewQueue"];
+export type MarginResolutionDecisionResult = Schemas["MarginResolutionDecisionResult"];
+export type MarginDeficitStatus = Schemas["MarginDeficitStatus"];
+export type MarginDeficitRepayment = Schemas["MarginDeficitRepayment"];
+export type MarginDeficitRepaymentResult = Schemas["MarginDeficitRepaymentResult"];
 
 /** Rows per page of the calls, cases and stress-run lists. */
 export const MARGIN_PAGE_SIZE = 25;
@@ -83,6 +94,10 @@ export const marginKeys = {
   operator: ["advanced", "margin-operator"] as const,
   queue: ["advanced", "margin-operator", "queue"] as const,
   operatorCalls: (status: string, cursor: string) => ["advanced", "margin-operator", "calls", status, cursor] as const,
+  /** Cases in MANUAL_REVIEW with their resolutions: an operator read across accounts. */
+  reviews: ["advanced", "margin-operator", "reviews"] as const,
+  /** The covered deficit of the account's latest bankrupt case and its repayments. */
+  deficit: (accountId: string) => [...advancedKeys.account(accountId), "margin", "deficit"] as const,
 };
 
 /* --------------------------------------------------------------------------
@@ -528,6 +543,104 @@ export const marginDeficitResultSpec: Spec = {
   objects: { case: { required: true, spec: marginCaseSpec } },
 };
 
+/**
+ * One operator's proposal for ending a MANUAL_REVIEW and, once made, its
+ * decision. A pending resolution carries no decision fields.
+ */
+export const marginCaseResolutionSpec: Spec = {
+  required: {
+    id: "uuid",
+    case_id: "uuid",
+    review_transition_id: "uuid",
+    outcome: oneOf(MARGIN_RESOLUTION_OUTCOMES),
+    reason: "string",
+    proposed_by: "string",
+    proposed_at: "timestamp",
+    pending: "boolean",
+  },
+  optional: {
+    decision: oneOf(MARGIN_RESOLUTION_DECISIONS),
+    decided_by: "string",
+    decided_at: "timestamp",
+    decision_reason: "string",
+  },
+};
+
+export const marginReviewQueueSpec: Spec = {
+  required: { value_domain: SIMULATED },
+  arrays: {
+    items: {
+      required: true,
+      spec: {
+        required: { current_review_transition_id: "uuid", entered_review_at: "timestamp" },
+        objects: { case: { required: true, spec: marginCaseSpec } },
+        arrays: { resolutions: { required: true, spec: marginCaseResolutionSpec } },
+      },
+    },
+  },
+};
+
+export const marginWaivedAccrualSpec: Spec = {
+  required: { lot_id: "uuid", period_start: "timestamp", period_end: "timestamp", amount: "quantity", waived: "boolean" },
+};
+
+export const marginResolutionDecisionResultSpec: Spec = {
+  required: { value_domain: SIMULATED, account_status: ACCOUNT_STATUS, replayed: "boolean" },
+  objects: {
+    resolution: { required: true, spec: marginCaseResolutionSpec },
+    case: { required: true, spec: marginCaseSpec },
+  },
+  arrays: { waived: { required: true, spec: marginWaivedAccrualSpec } },
+};
+
+export const marginDeficitRepaymentSpec: Spec = {
+  required: {
+    id: "uuid",
+    amount: "quantity",
+    journal_transaction_id: "uuid",
+    effect_id: "uuid",
+    intent_id: "uuid",
+    repaid_at: "timestamp",
+  },
+};
+
+/**
+ * The deficit read. An account without a margin account owes nothing and is
+ * answered without the margin account and its numeraire; the figures are
+ * present together, and only when the latest case's deficit was covered.
+ */
+export const marginDeficitStatusSpec: Spec = {
+  required: { value_domain: SIMULATED, account_id: "uuid" },
+  optional: {
+    margin_account_id: "uuid",
+    numeraire_asset_id: "uuid",
+    numeraire_decimals: "integer",
+    deficit: "quantity",
+    repaid: "quantity",
+    outstanding: "quantity",
+  },
+  objects: { case: { spec: marginCaseSpec } },
+  arrays: { repayments: { required: true, spec: marginDeficitRepaymentSpec } },
+};
+
+export const marginDeficitRepaymentResultSpec: Spec = {
+  required: {
+    value_domain: SIMULATED,
+    margin_account_id: "uuid",
+    account_id: "uuid",
+    case_id: "uuid",
+    repayment_id: "uuid",
+    intent_id: "uuid",
+    journal_transaction_id: "uuid",
+    effect_id: "uuid",
+    repaid: "quantity",
+    outstanding: "quantity",
+    numeraire_asset_id: "uuid",
+    numeraire_decimals: "integer",
+    replayed: "boolean",
+  },
+};
+
 /* --------------------------------------------------------------------------
  * Reads
  * ------------------------------------------------------------------------ */
@@ -662,6 +775,39 @@ export function useMarginOperatorCalls(
       });
       const page = validated<Schemas["MarginCallPage"]>(data, marginCallPageSpec, "/advanced/margin/ops/calls");
       return { items: page.items, nextCursor: page.next_cursor };
+    },
+  });
+}
+
+/**
+ * The covered deficit of the account's latest bankrupt case, what was repaid
+ * of it and what is still owed. A body without a deficit is an answer: the
+ * account owes the insurance fund nothing.
+ */
+export function useMarginDeficit(accountId: string | undefined): UseQueryResult<MarginDeficitStatus> {
+  return useQuery({
+    queryKey: marginKeys.deficit(accountId ?? ""),
+    enabled: accountId !== undefined,
+    staleTime: 0,
+    retry: retryTransient,
+    queryFn: async () => {
+      const { data } = await api.GET("/advanced/margin/deficit", { params: { query: { account_id: accountId ?? "" } } });
+      return validated<MarginDeficitStatus>(data, marginDeficitStatusSpec, "/advanced/margin/deficit");
+    },
+  });
+}
+
+/** Cases in MANUAL_REVIEW, oldest first, each with every resolution proposed for it. */
+export function useMarginReviews(): UseQueryResult<MarginReviewQueue> {
+  return useQuery({
+    queryKey: marginKeys.reviews,
+    // Another operator's proposal or decision is exactly what this list exists to show.
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    retry: retryTransient,
+    queryFn: async () => {
+      const { data } = await api.GET("/advanced/margin/ops/reviews", { params: { query: { limit: MARGIN_QUEUE_LIMIT } } });
+      return validated<MarginReviewQueue>(data, marginReviewQueueSpec, "/advanced/margin/ops/reviews");
     },
   });
 }
@@ -881,5 +1027,58 @@ export function useCoverDeficit(): MarginCommand<CoverRequest, MarginDeficitResu
       ...idempotent(idempotencyKey, { path: { marginCaseId: request.caseId } }),
     });
     return validated<MarginDeficitResult>(data, marginDeficitResultSpec, "/advanced/margin/ops/cases/{id}/cover-deficit");
+  });
+}
+
+/** Repays part or all of a covered deficit from the caller's own wallet. */
+export function useRepayDeficit(): MarginCommand<AmountRequest, MarginDeficitRepaymentResult> {
+  return useAccountCommand(async ({ request, idempotencyKey }) => {
+    const { data } = await api.POST("/advanced/margin/deficit/repayments", {
+      ...idempotent(idempotencyKey),
+      body: { account_id: request.accountId, amount: request.amount },
+    });
+    return validated<MarginDeficitRepaymentResult>(
+      data,
+      marginDeficitRepaymentResultSpec,
+      "/advanced/margin/deficit/repayments",
+    );
+  });
+}
+
+export interface ProposeResolutionRequest {
+  readonly caseId: string;
+  readonly outcome: MarginResolutionOutcome;
+  readonly reason: string;
+}
+
+/** One operator's proposal for ending a case's review. Nothing changes until a second operator approves it. */
+export function useProposeResolution(): MarginCommand<ProposeResolutionRequest, MarginCaseResolution> {
+  return useOperatorCommand(async ({ request, idempotencyKey }) => {
+    const { data } = await api.POST("/advanced/margin/ops/cases/{marginCaseId}/resolutions", {
+      ...idempotent(idempotencyKey, { path: { marginCaseId: request.caseId } }),
+      body: { outcome: request.outcome, reason: request.reason },
+    });
+    return validated<MarginCaseResolution>(data, marginCaseResolutionSpec, "/advanced/margin/ops/cases/{id}/resolutions");
+  });
+}
+
+export interface DecideResolutionRequest {
+  readonly resolutionId: string;
+  readonly decision: MarginResolutionDecision;
+  readonly reason: string;
+}
+
+/** A decision on a proposed resolution; an approval by a second operator applies the outcome. */
+export function useDecideResolution(): MarginCommand<DecideResolutionRequest, MarginResolutionDecisionResult> {
+  return useOperatorCommand(async ({ request, idempotencyKey }) => {
+    const { data } = await api.POST("/advanced/margin/ops/resolutions/{marginResolutionId}/decision", {
+      ...idempotent(idempotencyKey, { path: { marginResolutionId: request.resolutionId } }),
+      body: { decision: request.decision, reason: request.reason },
+    });
+    return validated<MarginResolutionDecisionResult>(
+      data,
+      marginResolutionDecisionResultSpec,
+      "/advanced/margin/ops/resolutions/{id}/decision",
+    );
   });
 }

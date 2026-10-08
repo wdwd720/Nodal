@@ -6,6 +6,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nodal/controlplane/internal/accounts"
+	"github.com/nodal/controlplane/internal/admin"
 	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/audit"
 	"github.com/nodal/controlplane/internal/capital"
@@ -80,16 +82,23 @@ func TestIntegration_TransfersThroughHTTPOverTheRealServices(t *testing.T) {
 		Environment: config.EnvTest, Policy: sandboxfund.DefaultPolicy(), KillSwitches: kills,
 	})
 	require.NoError(t, err)
-	ports, err := Wire(WireDeps{DB: d, Clock: clk, Env: config.EnvTest, Advanced: AdvancedDeps{
+	controller, err := killswitch.NewController(clk, noopKillAudit{}, NewApprovalVerifier(admin.NewService(clk, audit.NewWriter())))
+	require.NoError(t, err)
+	ports, err := Wire(WireDeps{DB: d, Clock: clk, Env: config.EnvTest, KillSwitches: controller, Advanced: AdvancedDeps{
 		Transfers: TransfersDeps{Service: svc, Faucet: faucet},
+		Operator:  OperatorDeps{Prices: valuation.NewPriceStore(clk), Audit: aw, MaxMarkAge: 5 * time.Minute},
 	}})
 	require.NoError(t, err)
 	require.NotNil(t, ports.Transfers, "the transfer service wires its port")
+	require.NotNil(t, ports.TransferReversals, "and the two-operator reversal")
 	require.NotNil(t, ports.SandboxFaucet, "the faucet wires its port")
+	require.NotNil(t, ports.Operator, "the console wires with its price store, audit writer and kill switches")
 
 	h := newIntegrationHarness(t, d, alice, aliceUser)
 	h.server.opts.Ports.Transfers = ports.Transfers
+	h.server.opts.Ports.TransferReversals = ports.TransferReversals
 	h.server.opts.Ports.SandboxFaucet = ports.SandboxFaucet
+	h.server.opts.Ports.Operator = ports.Operator
 	asAlice := transferCustomer(aliceUser, alice)
 	asBob := transferCustomer(bobUser, bob)
 	asCarol := transferCustomer(accounts.NewUserID(), carol)
@@ -235,36 +244,102 @@ func TestIntegration_TransfersThroughHTTPOverTheRealServices(t *testing.T) {
 	res = h.do(http.MethodGet, "/v1/advanced/transfers?account_id="+alice.String(), nil)
 	require.Equal(t, http.StatusForbidden, res.Code, "body=%s", res.Body.String())
 
-	// --- an operator reverses it -------------------------------------------------
+	// --- two operators reverse it ------------------------------------------------
+	// One operator proposes; the proposer cannot approve; a second operator
+	// approves and the reversal executes once; the console counted the
+	// proposal while it waited.
 	h.as(&operator)
-	reverseKey := key("reverse")
-	reverse := func(k string) *response {
-		return h.do(http.MethodPost, "/v1/advanced/transfers/"+sent.Id.String()+"/reverse",
-			map[string]any{"reason_code": "DISPUTE_UPHELD", "reason": "sender disputed the payment"}, "Idempotency-Key", k)
+	pendingNow := func() int64 {
+		t.Helper()
+		r := h.do(http.MethodGet, "/v1/advanced/ops/overview", nil)
+		require.Equal(t, http.StatusOK, r.Code, "body=%s", r.Body.String())
+		var o api.AdvancedOpsOverview
+		r.json(&o)
+		return o.DualControl.TransferReversalsPending
 	}
-	res = reverse(reverseKey)
+	pendingBefore := pendingNow()
+	proposeBody := map[string]any{"reason_code": "DISPUTE_UPHELD", "reason": "sender disputed the payment"}
+	res = h.do(http.MethodPost, "/v1/advanced/transfers/"+sent.Id.String()+"/reversal-proposals", proposeBody,
+		"Idempotency-Key", key("propose"))
+	require.Equal(t, http.StatusCreated, res.Code, "body=%s", res.Body.String())
+	var proposal api.AdvancedTransferReversalProposal
+	res.json(&proposal)
+	assert.Equal(t, api.TransferReversalPending, proposal.Status)
+	assert.Equal(t, operator.SubjectID, proposal.ProposedBy)
+	assert.Equal(t, api.AdvancedTransferStatus("COMPLETED"), proposal.Transfer.Status, "a proposal moves nothing")
+	assert.Equal(t, "987654322", wallet(alice))
+
+	assert.Equal(t, pendingBefore+1, pendingNow(), "the console counts what awaits a second operator")
+
+	decide := func(verb string, as *security.Principal, k string, body map[string]any) *response {
+		h.as(as)
+		return h.do(http.MethodPost, "/v1/advanced/transfers/reversal-proposals/"+proposal.Id.String()+"/"+verb, body, "Idempotency-Key", k)
+	}
+	res = decide("approve", &operator, key("self-approve"), map[string]any{})
+	require.Equal(t, http.StatusForbidden, res.Code, "body=%s", res.Body.String())
+	assert.Equal(t, "TRANSFER_REVERSAL_SELF_APPROVAL", res.problem().Fields["rejection_code"])
+	assert.Zero(t, transferRowCount(t, d, `SELECT count(*) FROM journal_transactions WHERE reversal_of = $1`,
+		sent.JournalTransactionId.String()), "the proposer's approval moved nothing")
+
+	// A customer reaches no step.
+	res = decide("approve", &asAlice, key("customer-approve"), map[string]any{})
+	require.Equal(t, http.StatusForbidden, res.Code, "body=%s", res.Body.String())
+
+	// The second operator is Finance: the correction authority, without sandbox:operate.
+	finance := security.Principal{
+		SubjectID: uuid.NewString(), ActorType: security.ActorOperator, Roles: []security.Role{security.RoleFinance},
+		SessionID: testSessionID, AuthTime: time.Now().UTC(), AMR: []string{"pwd", "mfa"},
+	}
+	approveKey := key("approve")
+	res = decide("approve", &finance, approveKey, map[string]any{"reason": "dispute evidence reviewed"})
 	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
-	var reversed api.AdvancedTransfer
-	res.json(&reversed)
+	var approved api.AdvancedTransferReversalDecisionResult
+	res.json(&approved)
+	assert.False(t, approved.Replayed)
+	assert.Equal(t, api.TransferReversalApproved, approved.Proposal.Status)
+	require.NotNil(t, approved.Proposal.DecidedBy)
+	assert.Equal(t, finance.SubjectID, *approved.Proposal.DecidedBy)
+	reversed := approved.Proposal.Transfer
 	assert.Equal(t, api.AdvancedTransferStatus("REVERSED"), reversed.Status)
 	require.NotNil(t, reversed.ReversalReasonCode)
-	assert.Equal(t, "DISPUTE_UPHELD", *reversed.ReversalReasonCode)
+	assert.Equal(t, "DISPUTE_UPHELD", *reversed.ReversalReasonCode, "the proposal's reason code becomes the journal's")
 	require.NotNil(t, reversed.ReversalJournalTransactionId)
+	require.NotNil(t, reversed.ReversalProposalId)
+	assert.Equal(t, proposal.Id, *reversed.ReversalProposalId, "the reversal names the proposal it executed")
 	require.NotNil(t, reversed.RecipientAccountId, "the operator sees the whole record")
 	assert.Equal(t, bob.String(), reversed.RecipientAccountId.String())
 	assert.Equal(t, "1000000000", wallet(alice))
 	assert.Equal(t, "0", wallet(bob))
 
-	replayed := reverse(reverseKey)
+	replayed := decide("approve", &finance, approveKey, map[string]any{"reason": "dispute evidence reviewed"})
 	require.Equal(t, http.StatusOK, replayed.Code, "body=%s", replayed.Body.String())
 	assert.JSONEq(t, res.Body.String(), replayed.Body.String())
+	// A third operator's approval of the consumed proposal executes nothing.
+	third := operator
+	third.SubjectID = uuid.NewString()
+	res = decide("approve", &third, key("third-approve"), map[string]any{})
+	require.Equal(t, http.StatusConflict, res.Code, "body=%s", res.Body.String())
+	res = decide("reject", &third, key("late-reject"), map[string]any{"reason": "too late"})
+	require.Equal(t, http.StatusConflict, res.Code, "body=%s", res.Body.String())
 	assert.Equal(t, 1, transferRowCount(t, d, `SELECT count(*) FROM journal_transactions WHERE reversal_of = $1`,
 		sent.JournalTransactionId.String()), "one compensation, whatever the retries")
 
-	// A customer cannot reverse anything.
-	h.as(&asAlice)
-	res = reverse(key("reverse-customer"))
-	require.Equal(t, http.StatusForbidden, res.Code, "body=%s", res.Body.String())
+	// A REVERSED transfer takes no new proposal.
+	h.as(&operator)
+	res = h.do(http.MethodPost, "/v1/advanced/transfers/"+sent.Id.String()+"/reversal-proposals", proposeBody, "Idempotency-Key", key("again"))
+	require.Equal(t, http.StatusConflict, res.Code, "body=%s", res.Body.String())
+	assert.Equal(t, errs.CodeInvalidStateTransition, res.problem().Code)
+
+	res = h.do(http.MethodGet, "/v1/advanced/transfers/reversal-proposals?transfer_id="+sent.Id.String(), nil)
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	var listed api.AdvancedTransferReversalProposalPage
+	res.json(&listed)
+	require.Len(t, listed.Items, 1)
+	assert.Equal(t, api.TransferReversalApproved, listed.Items[0].Status)
+	res = h.do(http.MethodGet, "/v1/advanced/transfers/reversal-proposals/"+proposal.Id.String(), nil)
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	h.as(&operator)
+	assert.Equal(t, pendingBefore, pendingNow(), "a consumed proposal awaits nobody")
 
 	// --- and the books agree --------------------------------------------------------
 	h.as(&operator)
@@ -334,6 +409,150 @@ func TestIntegration_TransferStepUpIsTheServicesOwn(t *testing.T) {
 	res = h.do(http.MethodGet, "/v1/advanced/transfers/faucet/allowance?account_id="+alice.String(), nil)
 	require.Equal(t, http.StatusUnprocessableEntity, res.Code, "body=%s", res.Body.String())
 	assert.Equal(t, errs.CodeUnsupported, res.problem().Code)
+}
+
+// TestIntegration_TransferReversalOverHTTPExecutesOnceForTwoOperators: over
+// the real adapter and database, a rejected proposal executes nothing and a
+// later proposal is still possible, and when several distinct operators
+// approve the same proposal at once -- each through its own server, under its
+// own Idempotency-Key -- exactly one approval reverses the transfer.
+func TestIntegration_TransferReversalOverHTTPExecutesOnceForTwoOperators(t *testing.T) {
+	d := openTestDB(t)
+	ctx := t.Context()
+	clk := clock.System()
+	aliceUser, alice := seedAccount(t, d)
+	_, bob := seedAccount(t, d)
+	outbox := event.NewOutbox(clk)
+	aw := audit.NewWriterWithBuildVersion("httpapi-itest")
+	led := ledger.NewService(clk, "httpapi-itest")
+	checker, err := gates.NewChecker("TEST", func(gates.Capability) bool { return false }, clk)
+	require.NoError(t, err)
+	kills := killswitch.NewChecker(killswitch.Policy{})
+	router, err := legalrouter.New(legalrouter.ConservativePolicy())
+	require.NoError(t, err)
+	screen, err := transfers.NewListScreen("transfers-list-screen-v1", nil)
+	require.NoError(t, err)
+	svc, err := transfers.NewService(transfers.Deps{
+		Clock: clk, Ledger: led, Capital: capital.NewService(clk, capital.OutboxEmitter{Outbox: outbox, Clock: clk}),
+		Intents: econ.NewIntentStore(clk, outbox, aw), Effects: econ.NewEffectStore(clk, outbox, aw),
+		Authorizer: econ.NewAuthorizer(checker, kills), KillSwitches: kills, Router: router,
+		Risk: risk.NewStore(), RiskPolicy: risk.DefaultAdvancedPolicy(), Policy: transfers.DefaultPolicy(),
+		Valuer: transfers.RegistryValuer{
+			Prices: valuation.NewPriceStore(clk), Assets: assets.NewRepository(), QuoteAssetID: econ.SandboxDollarID(), MaxMarkAge: 5 * time.Minute,
+		},
+		Screen: screen, Notifier: transfers.NewNotificationNotifier(notification.NewRepository()), Audit: aw,
+	})
+	require.NoError(t, err)
+	faucet, err := sandboxfund.New(sandboxfund.Deps{
+		Clock: clk, Ledger: led, Effects: econ.NewEffectStore(clk, outbox, aw),
+		Environment: config.EnvTest, Policy: sandboxfund.DefaultPolicy(), KillSwitches: kills,
+	})
+	require.NoError(t, err)
+	ports, err := Wire(WireDeps{DB: d, Clock: clk, Env: config.EnvTest, Advanced: AdvancedDeps{
+		Transfers: TransfersDeps{Service: svc, Faucet: faucet},
+	}})
+	require.NoError(t, err)
+	serverAs := func(p security.Principal) *harness {
+		h := newIntegrationHarness(t, d, alice, aliceUser)
+		h.server.opts.Ports.Transfers = ports.Transfers
+		h.server.opts.Ports.TransferReversals = ports.TransferReversals
+		h.server.opts.Ports.SandboxFaucet = ports.SandboxFaucet
+		h.as(&p)
+		return h
+	}
+	newOperator := func() security.Principal {
+		return security.Principal{
+			SubjectID: uuid.NewString(), ActorType: security.ActorOperator, Roles: []security.Role{security.RoleAdmin},
+			SessionID: testSessionID, AuthTime: time.Now().UTC(), AMR: []string{"pwd", "mfa"},
+		}
+	}
+	key := func(name string) string { return "itest-rev-" + name + "-" + uuid.NewString() }
+	usdID := econ.SandboxDollarID()
+	wallet := func(acct accounts.AccountID) string {
+		t.Helper()
+		b, err := led.Balance(ctx, d, ledger.CustomerAccount(acct, ledger.CodeWallet, usdID))
+		require.NoError(t, err)
+		return b.String()
+	}
+
+	// Alice is funded and verified, and pays Bob 25 sandbox dollars.
+	asAlice := serverAs(transferCustomer(aliceUser, alice))
+	res := asAlice.do(http.MethodPost, "/v1/advanced/transfers/faucet/grants",
+		map[string]any{"account_id": alice.String(), "amount": "100"}, "Idempotency-Key", key("grant"))
+	require.Equal(t, http.StatusCreated, res.Code, "body=%s", res.Body.String())
+	transferVerifiedIdentity(t, d, aliceUser)
+	res = asAlice.do(http.MethodPost, "/v1/advanced/transfers", map[string]any{
+		"account_id": alice.String(), "recipient_account_id": bob.String(), "amount": "25", "mode": "SANDBOX",
+	}, "Idempotency-Key", key("send"))
+	require.Equal(t, http.StatusCreated, res.Code, "body=%s", res.Body.String())
+	var sent api.AdvancedTransfer
+	res.json(&sent)
+	require.NotNil(t, sent.JournalTransactionId)
+	compensations := func() int {
+		return transferRowCount(t, d, `SELECT count(*) FROM journal_transactions WHERE reversal_of = $1`, sent.JournalTransactionId.String())
+	}
+	propose := func(by security.Principal, reason string) api.AdvancedTransferReversalProposal {
+		t.Helper()
+		r := serverAs(by).do(http.MethodPost, "/v1/advanced/transfers/"+sent.Id.String()+"/reversal-proposals",
+			map[string]any{"reason_code": "FRAUD_CONFIRMED", "reason": reason}, "Idempotency-Key", key("propose"))
+		require.Equal(t, http.StatusCreated, r.Code, "body=%s", r.Body.String())
+		var p api.AdvancedTransferReversalProposal
+		r.json(&p)
+		return p
+	}
+
+	// --- a rejected proposal executes nothing ----------------------------------
+	proposer := newOperator()
+	first := propose(proposer, "the sender reported a takeover")
+	assert.Equal(t, 1, first.Seq)
+	// A second proposal while the first is pending is refused.
+	res = serverAs(newOperator()).do(http.MethodPost, "/v1/advanced/transfers/"+sent.Id.String()+"/reversal-proposals",
+		map[string]any{"reason_code": "DISPUTE_UPHELD", "reason": "another view"}, "Idempotency-Key", key("second"))
+	require.Equal(t, http.StatusConflict, res.Code, "body=%s", res.Body.String())
+	// The proposer withdraws it.
+	res = serverAs(proposer).do(http.MethodPost, "/v1/advanced/transfers/reversal-proposals/"+first.Id.String()+"/reject",
+		map[string]any{"reason": "the sender withdrew the claim"}, "Idempotency-Key", key("reject"))
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	var rejected api.AdvancedTransferReversalDecisionResult
+	res.json(&rejected)
+	assert.Equal(t, api.TransferReversalRejected, rejected.Proposal.Status)
+	assert.Equal(t, api.AdvancedTransferStatus("COMPLETED"), rejected.Proposal.Transfer.Status)
+	res = serverAs(newOperator()).do(http.MethodPost, "/v1/advanced/transfers/reversal-proposals/"+first.Id.String()+"/approve",
+		map[string]any{}, "Idempotency-Key", key("approve-rejected"))
+	require.Equal(t, http.StatusConflict, res.Code, "a rejected proposal can never be executed; body=%s", res.Body.String())
+	assert.Zero(t, compensations())
+	assert.Equal(t, "25000000", wallet(bob))
+
+	// --- many operators approve the next proposal at once ------------------------
+	second := propose(newOperator(), "the sender reported a takeover again")
+	assert.Equal(t, 2, second.Seq, "a rejected proposal leaves room for the next")
+	const n = 6
+	codes := make(chan int, n)
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		h := serverAs(newOperator())
+		k := key("race")
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			r := h.do(http.MethodPost, "/v1/advanced/transfers/reversal-proposals/"+second.Id.String()+"/approve",
+				map[string]any{}, "Idempotency-Key", k)
+			codes <- r.Code
+		}()
+	}
+	wg.Wait()
+	close(codes)
+	byCode := map[int]int{}
+	for c := range codes {
+		byCode[c]++
+	}
+	assert.Equal(t, 1, byCode[http.StatusOK], "exactly one approval executes: %v", byCode)
+	assert.Equal(t, n-1, byCode[http.StatusConflict], "every other approval finds the proposal decided: %v", byCode)
+	assert.Equal(t, 1, compensations(), "one compensation journal")
+	assert.Equal(t, "100000000", wallet(alice))
+	assert.Equal(t, "0", wallet(bob))
+	assert.Equal(t, 1, transferRowCount(t, d, `SELECT count(*) FROM transfer_reversal_decisions WHERE proposal_id = $1`, second.Id),
+		"one decision per proposal")
 }
 
 func transferCustomer(user accounts.UserID, acct accounts.AccountID) security.Principal {

@@ -70,6 +70,11 @@ var financialPackages = []string{
 	"internal/predmarket",
 	"internal/sandboxrt",
 	"internal/stableasset",
+	"internal/derivatives",
+	"internal/bridge",
+	"internal/margin",
+	"internal/marketplace",
+	"internal/equities",
 }
 
 // reachableFrom are the trees a deployment can actually run. A caller in
@@ -124,6 +129,8 @@ var reachedThroughInterface = map[string]string{
 
 	"internal/transfers.TransferReceived": "transfers.Notifier, called by transfers.Service.Send on completion; NotificationNotifier is wired in cmd/api/wire.go",
 	"internal/transfers.TransferReversed": "transfers.Notifier, called by transfers.Service.Reverse; NotificationNotifier is wired in cmd/api/wire.go",
+
+	"internal/orders.CancelResting": "predmarket.OutcomeBooks, called by predmarket.Service at close, void and settlement; *orders.Service is wired as predmarket.Config.Books in cmd/api/wire.go",
 }
 
 var (

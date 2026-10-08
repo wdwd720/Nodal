@@ -137,9 +137,11 @@ func NewService(cfg Config) (*Service, error) {
 // Policy returns the service's margin, funding and paper-fill policy.
 func (s *Service) Policy() Policy { return s.policy }
 
-// ClearingHouse returns the CLEARING_HOUSE facility, creating it ACTIVE on
-// first use, and refuses one that is not ACTIVE.
-func (s *Service) ClearingHouse(ctx context.Context, tx pgx.Tx) (econ.Facility, error) {
+// clearingHouse returns the CLEARING_HOUSE facility, creating it ACTIVE on
+// first use, and refuses one that is not ACTIVE. Only this package's
+// operations reach it; nothing outside moves value through the clearing
+// house.
+func (s *Service) clearingHouse(ctx context.Context, tx pgx.Tx) (econ.Facility, error) {
 	f, err := s.registry.EnsureFacility(ctx, tx, ledger.FacilityClearingHouse, s.clearingName, s.actor)
 	if err != nil {
 		return econ.Facility{}, err

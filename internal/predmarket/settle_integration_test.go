@@ -267,7 +267,9 @@ func TestIntegration_VoidBeforeCloseHaltsTradingAndRefunds(t *testing.T) {
 	a := f.customer(10)
 	m := f.openMarket("YES", "NO")
 	f.issue(m, a, 4)
-	out, err := f.tryVoid(m, f.resolver)
+	proposal, err := f.tryProposeVoid(m, f.resolver)
+	require.NoError(t, err)
+	out, err := f.tryApproveVoid(m, proposal, f.approver)
 	require.NoError(t, err)
 	assert.Equal(t, "4000000", out.Settlement.TotalPaid.String())
 	assert.Equal(t, units(10).String(), f.wallet(a, f.collateral).String(), "every unit came back")
@@ -278,11 +280,14 @@ func TestIntegration_VoidBeforeCloseHaltsTradingAndRefunds(t *testing.T) {
 	_, err = f.tryIssue(f.positionRequest(m, a, 1))
 	require.Error(t, err, "a voided market issues nothing")
 
-	// Voiding again changes nothing.
-	again, err := f.tryVoid(f.get(m), f.resolver)
+	// Approving the same proposal again changes nothing; proposing another
+	// void of a voided market is refused.
+	again, err := f.tryApproveVoid(f.get(m), proposal, f.approver)
 	require.NoError(t, err)
 	assert.True(t, again.Replay)
 	assert.Equal(t, out.Settlement.ID, again.Settlement.ID)
+	_, err = f.tryProposeVoid(f.get(m), f.third)
+	requireCode(t, err, errs.CodeConflict)
 
 	// The creator may not void (dual control), and a settled market cannot be voided.
 	m2 := f.openMarket("YES", "NO")

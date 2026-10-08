@@ -99,11 +99,7 @@ func (v *usdValuer) value(ctx context.Context, asset assets.AssetID, qty money.Q
 // instrument's own oracle max age and carrying the index the divergence
 // check (and an option's margin) needs.
 func markUsable(s Spec, m Mark, now time.Time) bool {
-	if !m.HasIndex {
-		return false
-	}
-	age := now.Sub(m.ObservedAt)
-	return age >= 0 && age <= s.OracleMaxAge
+	return m.HasIndex && markFresh(s, m, now) && markPriceable(s, m)
 }
 
 // divergenceOf is the mark/index divergence of a mark: a linear contract's

@@ -198,6 +198,62 @@ export function caseStatusTone(status: string): Tone {
   }
 }
 
+/* --------------------------------------------------------------------------
+ * Leaving MANUAL_REVIEW: a resolution under dual control
+ * ------------------------------------------------------------------------ */
+
+export type MarginResolutionOutcome = Schemas["MarginResolutionOutcome"];
+export const MARGIN_RESOLUTION_OUTCOMES = ["RESUME", "DECLARE_BANKRUPT"] as const;
+export type MarginResolutionOutcomesMatchContract = Assert<
+  Same<(typeof MARGIN_RESOLUTION_OUTCOMES)[number], MarginResolutionOutcome>
+>;
+
+export type MarginResolutionDecision = Schemas["MarginResolutionDecision"];
+export const MARGIN_RESOLUTION_DECISIONS = ["APPROVED", "REJECTED"] as const;
+export type MarginResolutionDecisionsMatchContract = Assert<
+  Same<(typeof MARGIN_RESOLUTION_DECISIONS)[number], MarginResolutionDecision>
+>;
+
+export const RESOLUTION_OUTCOME_MEANING: Readonly<Record<MarginResolutionOutcome, string>> = {
+  RESUME: "Return the case to IN_PROGRESS with a fresh budget of trading steps; the liquidation queue takes it up again.",
+  DECLARE_BANKRUPT:
+    "Record the loans the books carry as the case's deficit and make the account BANKRUPT. The backend refuses it " +
+    "while anything is left to sell, apply or sweep.",
+};
+
+export const RESOLUTION_DECISION_MEANING: Readonly<Record<MarginResolutionDecision, string>> = {
+  APPROVED: "Approved by a second, different operator; the outcome was applied in the same transaction.",
+  REJECTED: "Rejected with a stated reason; nothing changed and the case stays in review.",
+};
+
+export function resolutionTone(decision: string | undefined): Tone {
+  switch (decision) {
+    case undefined:
+      return "info";
+    case "APPROVED":
+      return "warn";
+    default:
+      return "neutral";
+  }
+}
+
+/**
+ * A resolution's or a decision's reason as an operator typed it: the API
+ * accepts 1 to 1000 characters. Only emptiness and length are judged here;
+ * everything else is the backend's.
+ */
+export function checkResolutionReason(raw: string): { readonly ok: boolean; readonly value: string; readonly error: string } {
+  const value = raw.trim();
+  if (value === "") return { ok: false, value: "", error: "State the reason; the backend records it with the decision." };
+  if ([...value].length > 1000) return { ok: false, value: "", error: "Keep the reason to 1000 characters." };
+  return { ok: true, value, error: "" };
+}
+
+/** True when the operator reading the queue proposed this resolution and so may not approve it. */
+export function isOwnProposal(proposedBy: string, subjectId: string | undefined): boolean {
+  return subjectId !== undefined && proposedBy.toLowerCase() === subjectId.toLowerCase();
+}
+
 export const PLAN_DECISION_MEANING: Readonly<Record<MarginPlanDecision, string>> = {
   COMPLETE: "No (further) liquidation is needed.",
   AWAIT_PRICE: "A mark is stale or missing; nothing is sold.",

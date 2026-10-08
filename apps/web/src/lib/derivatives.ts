@@ -72,6 +72,23 @@ export type BookStatusesMatchContract = Assert<Same<(typeof BOOK_STATUSES)[numbe
 export const RUN_KINDS = ["VARIATION_MARGIN", "FUNDING"] as const;
 export type RunKindsMatchContract = Assert<Same<(typeof RUN_KINDS)[number], Schemas["DerivativeRunKind"]>>;
 
+export type SettlementMethod = Schemas["DerivativeSettlementMethod"];
+export const SETTLEMENT_METHODS = ["RULE", "PROPOSE_OVERRIDE", "APPROVE_OVERRIDE", "REJECT_OVERRIDE"] as const;
+export type SettlementMethodsMatchContract = Assert<Same<(typeof SETTLEMENT_METHODS)[number], SettlementMethod>>;
+
+export type SettlementPriceRule = Schemas["DerivativeSettlementPriceRule"];
+export const PRICE_RULES = ["EXPIRY_MARK", "OPERATOR_OVERRIDE"] as const;
+export type PriceRulesMatchContract = Assert<Same<(typeof PRICE_RULES)[number], SettlementPriceRule>>;
+
+export type OverrideStatus = Schemas["DerivativeOverrideStatus"];
+export const OVERRIDE_STATUSES = ["PROPOSED", "APPROVED", "REJECTED"] as const;
+export type OverrideStatusesMatchContract = Assert<Same<(typeof OVERRIDE_STATUSES)[number], OverrideStatus>>;
+
+export const OVERRIDE_DECISIONS = ["APPROVED", "REJECTED"] as const;
+export type OverrideDecisionsMatchContract = Assert<
+  Same<(typeof OVERRIDE_DECISIONS)[number], Schemas["DerivativeOverrideDecisionKind"]>
+>;
+
 /**
  * The modes a derivative intent is offered in. The derivatives service runs
  * in PAPER and SANDBOX only; any other mode is the backend's to refuse.
@@ -122,7 +139,21 @@ export const REFERENCE_VALUES_NOTE =
 /** How a paper fill is priced, in the policy's own terms. */
 export const PAPER_FILL_NOTE =
   "A paper fill happens at the contract's latest mark moved against you by the disclosed slippage, then " +
-  "onto the tick grid against you. A buy fills above the mark and a sell below it.";
+  "onto the tick grid against you. A buy fills above the mark and a sell below it. The mark must be fresh: " +
+  "without one there is no price, and an order — a close included — is refused and the refusal recorded.";
+
+/** What decided a final settlement price. */
+export const PRICE_RULE_LABEL: Readonly<Record<SettlementPriceRule, string>> = {
+  EXPIRY_MARK: "The settlement rule: the last mark observed and recorded by expiry, fresh at expiry",
+  OPERATOR_OVERRIDE: "An override one operator proposed within the policy's bound and a second operator approved",
+};
+
+/** What each state of an override proposal means. */
+export const OVERRIDE_STATUS_MEANING: Readonly<Record<OverrideStatus, string>> = {
+  PROPOSED: "Waiting for a second operator's decision. Nothing has settled.",
+  APPROVED: "A second operator approved it, and the contract settled at its price.",
+  REJECTED: "Rejected. It settled nothing.",
+};
 
 /* --------------------------------------------------------------------------
  * Rates
@@ -219,6 +250,37 @@ export function parseBpsInput(raw: string, min: number, max: number): BpsParse {
     return { ok: false, value: 0, error: `Use a value from ${String(min)} to ${String(max)} basis points.` };
   }
   return { ok: true, value, error: "" };
+}
+
+/** A SHA-256 digest as the API takes it: 64 lowercase hexadecimal digits. */
+export function parseSha256Input(raw: string): InputParse {
+  const cleaned = raw.trim().toLowerCase();
+  if (cleaned === "") return { ok: false, value: "", error: "Enter the evidence's SHA-256 digest." };
+  if (!/^[0-9a-f]{64}$/.test(cleaned)) {
+    return { ok: false, value: "", error: "A SHA-256 digest is 64 hexadecimal digits." };
+  }
+  return { ok: true, value: cleaned, error: "" };
+}
+
+/** Required free text, trimmed, within a length the API accepts. */
+export function parseReasonInput(raw: string, max: number): InputParse {
+  const cleaned = raw.trim();
+  if (cleaned === "") return { ok: false, value: "", error: "State the reason." };
+  if (cleaned.length > max) return { ok: false, value: "", error: `Keep it to ${String(max)} characters.` };
+  return { ok: true, value: cleaned, error: "" };
+}
+
+/**
+ * A non-negative price mantissa at a scale as the exact decimal the API takes
+ * back: ("6600000", 2) -> "66000.00". The point is moved through the digit
+ * string; nothing is divided. Undefined for anything that is not a mantissa.
+ */
+export function mantissaDecimal(mantissa: string, scale: number): string | undefined {
+  if (!/^[0-9]+$/.test(mantissa) || !Number.isInteger(scale) || scale < 0 || scale > 38) return undefined;
+  if (scale === 0) return mantissa;
+  const padded = mantissa.padStart(scale + 1, "0");
+  const cut = padded.length - scale;
+  return `${padded.slice(0, cut)}.${padded.slice(cut)}`;
 }
 
 const INSTANT_INPUT = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}(:[0-9]{2}(\.[0-9]{1,3})?)?Z$/;

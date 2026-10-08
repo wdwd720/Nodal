@@ -163,10 +163,18 @@ test("contracts are listed in the simulated domain and drawn as the backend sent
 
   const policy = await page.request.get("/v1/advanced/derivatives/policy");
   expect(policy.status()).toBe(200);
-  const p = (await policy.json()) as { version: string; hash: string; paper_slippage_bps: number };
+  const p = (await policy.json()) as {
+    version: string;
+    hash: string;
+    paper_slippage_bps: number;
+    max_mark_lag_ms: number;
+    settlement_override_max_bps: number;
+  };
   expect(p.version).not.toBe("");
   expect(p.hash).toMatch(/^[0-9a-f]{64}$/);
   expect(Number.isInteger(p.paper_slippage_bps)).toBe(true);
+  expect(Number.isInteger(p.max_mark_lag_ms) && p.max_mark_lag_ms > 0, "marks are recorded within a stated lag").toBe(true);
+  expect(p.settlement_override_max_bps > 0 && p.settlement_override_max_bps <= 10000, "an override is bounded").toBe(true);
 
   await page.goto("/advanced/derivatives");
   await settle(page);
@@ -311,6 +319,48 @@ test("an open is confirmed once, and the page shows exactly what the backend ans
       expect(intent.status()).toBe(200);
       expect(((await intent.json()) as { status: string }).status).toBe("REJECTED");
     }
+  }
+});
+
+test("a dated contract states its settlement rule, and settling or overriding it is an operator's act", async ({ page }) => {
+  const list = (await (await page.request.get("/v1/advanced/derivatives/contracts?limit=200")).json()) as {
+    items: ContractRow[];
+  };
+  for (const item of list.items.filter((row) => row.kind !== "PERPETUAL")) {
+    const one = await page.request.get(`/v1/advanced/derivatives/contracts/${item.id}`);
+    expect(one.status()).toBe(200);
+    const c = (await one.json()) as {
+      settlement_preview?: { rule_statement: string; expired: boolean; settleable: boolean; has_reference: boolean };
+      settlement_overrides?: unknown[];
+    };
+    expect(c.settlement_preview?.rule_statement ?? "", `${item.terms.symbol} states the rule`).toContain("EXPIRY_MARK v1");
+    expect(Array.isArray(c.settlement_overrides), `${item.terms.symbol} lists its override proposals`).toBe(true);
+    if (c.settlement_preview?.expired === false) {
+      expect(c.settlement_preview.settleable, "nothing settles before expiry").toBe(false);
+      expect(c.settlement_preview.has_reference, "the reference is read at expiry").toBe(false);
+    }
+    await page.goto(`/advanced/derivatives/contracts/${item.id}`);
+    await settle(page);
+    await expect(page.getByRole("region", { name: "Settlement rule", exact: true })).toContainText("EXPIRY_MARK v1");
+  }
+
+  await page.goto("/advanced/derivatives");
+  await settle(page);
+  const path = `/advanced/derivatives/contracts/${ABSENT}/settlement`;
+  for (const body of [
+    {},
+    { method: "RULE", price: "65000.00" },
+    {
+      method: "PROPOSE_OVERRIDE",
+      price: "65000.00",
+      reason: "e2e",
+      evidence_ref: "e2e",
+      evidence_sha256: "0".repeat(64),
+    },
+    { method: "APPROVE_OVERRIDE", override_id: ABSENT, reason: "e2e" },
+    { method: "REJECT_OVERRIDE", override_id: ABSENT, reason: "e2e" },
+  ]) {
+    await expectCode(await command(page, path, body), 403, "FORBIDDEN");
   }
 });
 

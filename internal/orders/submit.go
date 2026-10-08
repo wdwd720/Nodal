@@ -406,15 +406,17 @@ func (s *Service) stageStart(ctx context.Context, tx pgx.Tx, oid OrderID) (*book
 	return c, cur, o, in, nil
 }
 
-// Submit carries a customer order through every stage -- Accept, Approve,
-// Reserve, Execute, Complete -- atomically, in the caller's transaction: the
+// submitAtomic carries a customer order through every stage -- Accept,
+// Approve, Reserve, Execute, Complete -- atomically, in the caller's
+// transaction (deployments use Pipeline; this is the tests' single-step
+// form): the
 // order and every refusal are committed together or not at all. It takes the
 // book's row lock first, so every lock it takes afterwards is one a command
 // holding the book may also want, in the same order. A refusal is returned in
 // StageOutcome.Rejection with a nil error: the caller commits it. Pipeline
 // runs the same stages one transaction each, which keeps the book lock only
 // for Execute.
-func (s *Service) Submit(ctx context.Context, tx pgx.Tx, r OrderRequest) (StageOutcome, error) {
+func (s *Service) submitAtomic(ctx context.Context, tx pgx.Tx, r OrderRequest) (StageOutcome, error) {
 	if _, _, err := s.lockBook(ctx, tx, r.InstrumentID); err != nil {
 		return StageOutcome{}, err
 	}

@@ -1399,6 +1399,108 @@ paths:
           content: { application/json: { schema: { $ref: "#/components/schemas/MarginCallPage" } } }
         "400": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
+  /advanced/margin/deficit:
+    get:
+      tags: [advanced]
+      summary: The covered deficit of an account's bankrupt margin case, what was repaid of it and what is still owed
+      description: >-
+        deficit is absent when the account's latest liquidation case left no
+        deficit the insurance fund covered, and margin_account_id with the
+        numeraire when the account has no margin account: in both cases there
+        is nothing to repay.
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The deficit and its repayments (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/MarginDeficitStatus" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/margin/deficit/repayments:
+    post:
+      tags: [advanced]
+      summary: Repay part or all of a covered deficit to the insurance fund that covered it (REPAY, posted as MARGIN_REPAY)
+      description: >-
+        amount is in base units of the numeraire. An economic intent decided by
+        Risk Kernel V2 (balance) and posted exactly once; the repayments of a
+        case never exceed its deficit (VALIDATION_FAILED beyond what is still
+        owed), and an account with no covered deficit is
+        INVALID_STATE_TRANSITION.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/MarginAmountRequest" } } }
+      responses:
+        "200":
+          description: The repayment and what is still owed after it
+          content: { application/json: { schema: { $ref: "#/components/schemas/MarginDeficitRepaymentResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/margin/ops/reviews:
+    get:
+      tags: [advanced]
+      summary: Operator — liquidation cases in MANUAL_REVIEW, oldest first, each with its proposed resolutions
+      description: >-
+        A case leaves MANUAL_REVIEW only by a resolution one operator proposes
+        and a second, distinct operator approves, for the review the case is in
+        now (current_review_transition_id). A resolution without a decision
+        awaits that second operator.
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: The review queue (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/MarginReviewQueue" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/margin/ops/cases/{marginCaseId}/resolutions:
+    post:
+      tags: [advanced]
+      summary: Operator — propose how a case in MANUAL_REVIEW ends (first of two operators; step-up)
+      description: >-
+        RESUME returns the case to IN_PROGRESS with a fresh budget of trading
+        steps; DECLARE_BANKRUPT records the loans as the case's deficit once
+        nothing is left to sell, apply or sweep. Nothing moves until a second
+        operator approves.
+      parameters:
+        - { in: path, name: marginCaseId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/MarginResolutionProposalRequest" } } }
+      responses:
+        "200":
+          description: The proposed resolution
+          content: { application/json: { schema: { $ref: "#/components/schemas/MarginCaseResolution" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/margin/ops/resolutions/{marginResolutionId}/decision:
+    post:
+      tags: [advanced]
+      summary: Operator — approve (a second, distinct operator; applies the outcome) or reject a proposed resolution (step-up)
+      description: >-
+        An approval by the operator who proposed the resolution is FORBIDDEN.
+        A decision is final: the same decision by the same operator again
+        returns it (replayed), any other decision on a decided resolution is a
+        CONFLICT. The interest of the review is waived up to the decision.
+      parameters:
+        - { in: path, name: marginResolutionId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/MarginResolutionDecisionRequest" } } }
+      responses:
+        "200":
+          description: The decided resolution and the case after it
+          content: { application/json: { schema: { $ref: "#/components/schemas/MarginResolutionDecisionResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
 
   # >>> advanced:derivatives paths (insert this subsystem's paths directly below; keep the marker)
   #
@@ -1476,7 +1578,12 @@ paths:
         (and everything that needs an index then refuses). An index given here
         is recorded under the mark's source. The same observation (contract,
         source, observed_at) again returns the stored mark; a different mark or
-        index for it is CONFLICT. Without observed_at the mark is observed now.
+        index for it is CONFLICT. Without observed_at the mark is observed now. A
+        new observation is recorded only in order and on time: never in the
+        future, never older than the policy's max_mark_lag_ms behind now
+        (VALIDATION_FAILED), and never older than the contract's latest recorded
+        observation (CONFLICT). Runs and the final settlement read only marks
+        recorded by their own cutoff.
       parameters:
         - { in: path, name: instrumentId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -1578,13 +1685,22 @@ paths:
   /advanced/derivatives/contracts/{instrumentId}/settlement:
     post:
       tags: [advanced]
-      summary: Settle an expired future or option once and for all (operator; requires step-up)
+      summary: Settle an expired future or option, by the settlement rule or a dual-controlled override (operator; requires step-up)
       description: >-
-        Without price the service settles a future at the last fresh mark at or
-        before expiry and an option at that mark's index (in-the-money longs are
-        exercised automatically and assigned FIFO to writers). A given price
-        must be exact on the contract's tick grid and names its source. Once per
-        contract; a repeat returns the first settlement and says replay.
+        method RULE (the default) settles at the price the settlement rule
+        derives from the recorded marks -- the latest mark observed and recorded
+        at or before expiry, fresh at expiry; a future at that mark, an option at
+        its index aligned to the tick grid half-even -- and refuses with
+        STALE_MARKET_DATA when there is none. price and price_source only
+        confirm what the contract's settlement_preview states: any other refuses
+        the request (CONFLICT) and nothing settles. When the rule cannot settle,
+        one operator may PROPOSE_OVERRIDE a price on the tick grid within the
+        policy's settlement_override_max_bps of the rule's reference price, with
+        a reason and evidence; a second, different operator's APPROVE_OVERRIDE
+        settles the contract at exactly that price in the same transaction;
+        REJECT_OVERRIDE closes a proposal. In-the-money option longs are
+        exercised automatically and assigned FIFO to writers. Once per contract;
+        a repeat returns the first settlement and says replay.
       parameters:
         - { in: path, name: instrumentId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -1593,8 +1709,8 @@ paths:
         content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeSettleRequest" } } }
       responses:
         "200":
-          description: The settlement (value domain SIMULATED)
-          content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeSettlementResult" } } }
+          description: The settlement and/or the override proposal the command produced (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeSettlementCommandResult" } } }
         "400": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
@@ -1666,13 +1782,18 @@ paths:
   /advanced/derivatives/positions/{positionId}/close:
     post:
       tags: [advanced]
-      summary: Reduce or close one of your own open positions (paper fill; never refused for a stale mark)
+      summary: Reduce or close one of your own open positions (paper fill at a fresh mark)
       description: >-
         Without quantity the whole position is closed. Closing never increases
-        risk: a stale mark does not prevent it (it is priced at the last mark
-        there is) and no margin is reserved. A refusal the service reaches is
-        recorded and answered as for opening. Only the account's owner closes;
-        anyone else is told the position does not exist.
+        risk and no margin is reserved; the risk kernel never refuses it for a
+        stale oracle. It is priced at the mark plus the disclosed slippage, so
+        it needs a mark fresh within the contract's oracle max age: with a stale
+        or missing mark it is refused with STALE_MARKET_DATA (reason MARK_STALE
+        or MARK_MISSING), and that refusal is recorded like every other and
+        answered as for opening. A loss is collected from the margin the close
+        frees, then from funds that are neither reserved nor held, then from the
+        margin the position keeps. Only the account's owner closes; anyone else
+        is told the position does not exist.
       parameters:
         - { in: path, name: positionId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -2486,26 +2607,111 @@ paths:
           description: The transfer
           content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedTransfer" } } }
         "404": { $ref: "#/components/responses/Problem" }
-  /advanced/transfers/{transferId}/reverse:
+  /advanced/transfers/{transferId}/reversal-proposals:
     post:
       tags: [advanced]
-      summary: Reverse a COMPLETED transfer with a compensating journal (operator correction; requires step-up)
+      summary: Propose reversing a COMPLETED transfer (operator correction, first of two operators; requires step-up)
       description: >-
-        History is never edited: the reversal is a new COMPENSATION journal
-        naming the original. It is refused (CONFLICT, rejection_code
-        TRANSFER_REVERSAL_FUNDS_UNAVAILABLE) when the recipient no longer holds
-        the funds, and reversing a REVERSED transfer returns it unchanged. The
-        service also requires ledger:post_correction of the operator.
+        A reversal takes two distinct operators. This records one operator's
+        proposal -- a stable reason code and a reason -- and moves nothing. A
+        second operator approves it, which executes the reversal exactly once
+        in the approval's own transaction, or anyone holding the permission
+        rejects it. At most one proposal of a transfer is pending at a time:
+        proposing again on the same terms while it is pending returns it (200),
+        on other terms is a CONFLICT. A transfer that is not COMPLETED is
+        INVALID_STATE_TRANSITION. The service also requires
+        ledger:post_correction and a recent step-up of the operator.
       parameters:
         - { in: path, name: transferId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
         - { $ref: "#/components/parameters/IdempotencyKey" }
       requestBody:
         required: true
-        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedTransferReverseRequest" } } }
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedTransferReversalProposalRequest" } } }
+      responses:
+        "201":
+          description: The proposal, PENDING
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedTransferReversalProposal" } } }
+        "200":
+          description: The pending proposal this request repeats; nothing new was written
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedTransferReversalProposal" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/transfers/reversal-proposals:
+    get:
+      tags: [advanced]
+      summary: Transfer reversal proposals, newest first (operator)
+      description: >-
+        status is derived from the proposal's decision: PENDING has none yet,
+        APPROVED was executed in its approval's transaction, REJECTED moved
+        nothing. Each proposal carries the transfer as it is now.
+      parameters:
+        - { in: query, name: status, schema: { $ref: "#/components/schemas/AdvancedTransferReversalStatus" } }
+        - { in: query, name: transfer_id, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
       responses:
         "200":
-          description: The transfer, REVERSED
-          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedTransfer" } } }
+          description: Page of reversal proposals (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedTransferReversalProposalPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/transfers/reversal-proposals/{proposalId}:
+    get:
+      tags: [advanced]
+      summary: One transfer reversal proposal with its transfer (operator)
+      parameters:
+        - { in: path, name: proposalId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The proposal
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedTransferReversalProposal" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/transfers/reversal-proposals/{proposalId}/approve:
+    post:
+      tags: [advanced]
+      summary: Approve a reversal proposal and execute the reversal (a second, distinct operator; requires step-up)
+      description: >-
+        The approval and the reversal are one transaction: a COMPENSATION
+        journal naming the original, the economic effect COMPENSATED, the
+        transfer REVERSED and bound to this proposal. The proposer can never
+        approve (FORBIDDEN, rejection_code TRANSFER_REVERSAL_SELF_APPROVAL). It
+        is refused, and nothing is recorded, when the recipient no longer holds
+        the funds (CONFLICT, rejection_code TRANSFER_REVERSAL_FUNDS_UNAVAILABLE);
+        the proposal stays PENDING. The same approval by the same operator
+        again returns the outcome; any other decision on a decided proposal is
+        a CONFLICT.
+      parameters:
+        - { in: path, name: proposalId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedTransferReversalDecisionRequest" } } }
+      responses:
+        "200":
+          description: The proposal, APPROVED, and its transfer, REVERSED
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedTransferReversalDecisionResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/transfers/reversal-proposals/{proposalId}/reject:
+    post:
+      tags: [advanced]
+      summary: Reject a reversal proposal (any operator holding the permission, the proposer included; requires step-up)
+      description: A rejection states its reason and moves nothing; a rejected proposal can never be executed.
+      parameters:
+        - { in: path, name: proposalId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedTransferReversalDecisionRequest" } } }
+      responses:
+        "200":
+          description: The proposal, REJECTED, and its transfer, unchanged
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedTransferReversalDecisionResult" } } }
         "400": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
@@ -3199,6 +3405,83 @@ paths:
           content: { application/json: { schema: { $ref: "#/components/schemas/BridgeFaultResult" } } }
         "400": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
+  # A leg whose release attempts are exhausted, or whose released state does
+  # not reconcile, waits in MANUAL_REVIEW for an operator. These three routes
+  # are the operator's ways out; the bridge service decides which one a leg
+  # admits, and each needs a reason and a recent step-up.
+  /advanced/bridge/legs/{bridgeLegId}/resume-relay:
+    post:
+      tags: [advanced]
+      summary: Operator — relay a leg in MANUAL_REVIEW again, with a fresh round of release attempts (step-up)
+      description: >-
+        For instance once a frozen destination mint is unfrozen. Only a leg whose source is final, whose
+        destination never released and whose refund was never requested resumes; it returns to
+        MESSAGE_IN_FLIGHT, and reconciling the leg then relays it. Anything else is INVALID_STATE_TRANSITION.
+      parameters:
+        - { in: path, name: bridgeLegId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/BridgeReasonRequest" } } }
+      responses:
+        "200":
+          description: The leg, relaying again
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeLeg" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/bridge/legs/{bridgeLegId}/resolve-review:
+    post:
+      tags: [advanced]
+      summary: Operator — resolve a released leg in MANUAL_REVIEW as reconciled, after re-checking it against both chains (step-up)
+      description: >-
+        Only a leg whose destination released can be resolved (INVALID_STATE_TRANSITION otherwise). The lock,
+        the release and both postings are checked again on the chains: when they agree the leg is
+        RECONCILED, when they do not the answer is RECONCILIATION_REQUIRED with the problem and the leg stays
+        in review.
+      parameters:
+        - { in: path, name: bridgeLegId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/BridgeReasonRequest" } } }
+      responses:
+        "200":
+          description: The leg, RECONCILED
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeLeg" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/bridge/legs/{bridgeLegId}/refund:
+    post:
+      tags: [advanced]
+      summary: Operator — refund a leg in MANUAL_REVIEW on its source chain (step-up)
+      description: >-
+        Only a leg whose source is final and whose destination never released can be refunded: a leg whose
+        destination released is refused (INVALID_STATE_TRANSITION), and so is one while any release of it can
+        still land or has landed (CONFLICT); an asset whose supply the stable asset controller reconciles is
+        never refunded (FORBIDDEN). The refund is recorded before it is submitted once on the source chain, and
+        BRIDGE_REFUND posts only when it is final: 200 when the leg ended FAILED with code REFUNDED, 202 while
+        the refund is not final yet (repeat to observe it; a refund is never sent twice).
+      parameters:
+        - { in: path, name: bridgeLegId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/BridgeReasonRequest" } } }
+      responses:
+        "200":
+          description: The leg, refunded
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeLegResult" } } }
+        "202":
+          description: The leg, its refund not final yet
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeLegResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
 
   # >>> advanced:predmarket paths (insert this subsystem's paths directly below; keep the marker)
   # Prediction markets (internal/predmarket): complete sets of outcome shares against the sandbox dollar,
@@ -3358,9 +3641,12 @@ paths:
       tags: [advanced]
       summary: Record what the sandbox oracle observed for a market (operator; sandbox oracle only)
       description: >-
-        The sandbox oracle is the stand-in for the world a market asks about. An observation is what it will
-        sign when a resolution asks it for a report; a later observation replaces an earlier one. Observations
-        live in the API process's memory. Without a sandbox oracle this answers PROVIDER_UNAVAILABLE.
+        The sandbox oracle is the stand-in for the world a market asks about. The observation is signed with the
+        sandbox oracle's key and stored durably, with an audit event naming the operator who recorded it; a
+        resolution reads the latest stored observation back and verifies it. Recording the identical observation
+        again is a replay. The operator who records an observation for a market can never resolve that market.
+        Only a market that registered the sandbox oracle can be observed; without a sandbox oracle this answers
+        PROVIDER_UNAVAILABLE.
       parameters:
         - { $ref: "#/components/parameters/MarketId" }
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -3377,12 +3663,14 @@ paths:
   /advanced/prediction-markets/{marketId}/resolve:
     post:
       tags: [advanced]
-      summary: Resolve from the configured oracle's report, verified against the market's oracle key (operator)
+      summary: Resolve from the oracle's report, verified against the market's oracle key (operator)
       description: >-
-        RESOLVING: the report resolves the market. DISPUTED: a report closes the dispute (DISPUTE_OVERTURNED when
-        its outcome differs, DISPUTE_UPHELD when it does not). Replaying an accepted report changes nothing.
-        The market's creator, and for a dispute the operator who raised it, are refused. With no oracle
-        configured this answers PROVIDER_UNAVAILABLE.
+        The report is the latest stored sandbox oracle observation (verified when it is read and again when it is
+        accepted), or the configured external oracle's. RESOLVING: the report resolves the market. DISPUTED: a
+        report closes the dispute (DISPUTE_OVERTURNED when its outcome differs, DISPUTE_UPHELD when it does not).
+        Replaying an accepted report changes nothing. The market's creator, an operator who recorded an oracle
+        observation for it, and for a dispute the operator who raised it and the one whose resolution is disputed,
+        are refused. With no observation and no oracle this answers NOT_FOUND or PROVIDER_UNAVAILABLE.
       parameters:
         - { $ref: "#/components/parameters/MarketId" }
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -3416,7 +3704,7 @@ paths:
   /advanced/prediction-markets/{marketId}/uphold:
     post:
       tags: [advanced]
-      summary: Close a dispute keeping the disputed outcome (operator; not the creator, not the disputer)
+      summary: Close a dispute keeping the disputed outcome (operator; not the creator, the disputer, the disputed resolution's author or an observation recorder)
       parameters:
         - { $ref: "#/components/parameters/MarketId" }
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -3430,30 +3718,85 @@ paths:
         "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
-  /advanced/prediction-markets/{marketId}/void:
+  /advanced/prediction-markets/{marketId}/void-proposals:
     post:
       tags: [advanced]
-      summary: Void a market that has not settled and refund every share (operator; not the creator)
+      summary: Propose voiding a market that has not settled (operator; not the creator, not the author of its resolution)
+      description: >-
+        A void is dual-controlled. This records one operator's proposal, with its reason and archived evidence,
+        against the market as it stands -- its status and its resolution in force -- and refunds nothing: a
+        different operator approves it. A RESOLVED market inside its dispute window is disputed, not voided.
       parameters:
         - { $ref: "#/components/parameters/MarketId" }
         - { $ref: "#/components/parameters/IdempotencyKey" }
       requestBody:
         required: true
-        content: { application/json: { schema: { $ref: "#/components/schemas/PredictionVoidRequest" } } }
+        content: { application/json: { schema: { $ref: "#/components/schemas/PredictionVoidProposalRequest" } } }
+      responses:
+        "201":
+          description: The proposal, awaiting a second operator's approval
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionVoidProposalResult" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/prediction-markets/{marketId}/void-proposals/{proposalId}/approve:
+    post:
+      tags: [advanced]
+      summary: Approve a void proposal, which voids the market and refunds every share (operator; not the proposer)
+      description: >-
+        The approver is neither the proposer, nor the market's creator, nor the author of its resolution in force,
+        nor -- for a DISPUTED market, whose dispute the void rules on -- the operator who raised the dispute. A
+        proposal made before another resolution came into force is refused (409). A holder whose refund cannot be
+        delivered (a frozen or closed account, an unverified identity) has it held in the escrow, to claim once
+        eligible. Approving the proposal that voided the market again returns its refund record (replay true).
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { in: path, name: proposalId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/PredictionVoidApprovalRequest" } } }
       responses:
         "200":
-          description: The refund record, with the residual it discloses
+          description: The refund record, with the residual it discloses and what it held
           content: { application/json: { schema: { $ref: "#/components/schemas/PredictionSettlementResult" } } }
         "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+  /advanced/prediction-markets/{marketId}/held-payouts/claim:
+    post:
+      tags: [advanced]
+      summary: Claim the payout a settled or voided market holds for your account
+      description: >-
+        A payout or refund the platform could not deliver at settlement (a frozen or closed account, an unverified
+        identity) is held in the market's escrow for its holder. Once the account is eligible, its owner claims it
+        here: the claim is evaluated by the risk kernel with the account as it is now, delivers exactly the held
+        amount, and happens once.
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/PredictionClaimRequest" } } }
+      responses:
+        "200":
+          description: The held payout, now claimed, and the economic action that delivered it
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionClaimResult" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
   /advanced/prediction-markets/{marketId}/settle:
     post:
       tags: [advanced]
       summary: Settle a RESOLVED market from its escrow once its dispute window has passed (operator)
       description: >-
-        Every winning share pays exactly one collateral unit and every share is retired; the escrow is empty
-        afterwards. Settling a SETTLED market returns its record and pays nothing (replay true).
+        Every winning share pays exactly one collateral unit and every share is retired. A holder whose payout
+        cannot be delivered (a frozen or closed account, an unverified identity) does not block anyone: their
+        shares are retired and their payout is held in the escrow, to claim once eligible, so afterwards the escrow
+        holds exactly the held payouts. Settling a SETTLED market returns its record and pays nothing (replay
+        true).
       parameters:
         - { $ref: "#/components/parameters/MarketId" }
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -4256,6 +4599,92 @@ paths:
         "403": { $ref: "#/components/responses/Problem" }
 
   # >>> advanced:operator paths (insert this subsystem's paths directly below; keep the marker)
+  #
+  # The operator console (ADR-0020). Reads only, except the sandbox reference
+  # mark: an operator's price observation of a SIMULATED asset in the sandbox
+  # dollar, which margin collateral, prediction-market shares, the stable
+  # asset's peg monitor and bridged twins are valued at. Every figure is read
+  # from the database or the simulated chains at the instant of the request.
+  /advanced/ops/overview:
+    get:
+      tags: [advanced]
+      summary: Operator — one read of what needs an operator now
+      description: >-
+        Active kill switches; every stable asset's status (PAUSED includes a
+        peg breaker's pause) with its latest peg alert and latest supply
+        reconciliation; every bridge route's status and every bridge leg waiting in
+        MANUAL_REVIEW; unresolved reconciliation records of the advanced kinds; the dual-control items awaiting a
+        second operator; the age of the latest reference mark of every
+        SIMULATED asset someone holds; and whether a simulated chain host is
+        configured. Lists are bounded (at most 100 entries each). Capability
+        gates and the liquidation queue have their own reads
+        (/advanced/capabilities, /advanced/margin/ops/queue).
+      responses:
+        "200":
+          description: The overview (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedOpsOverview" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/ops/marks:
+    get:
+      tags: [advanced]
+      summary: Operator — the latest reference marks of an asset in the sandbox dollar, newest first, with their age
+      description: >-
+        Observations of the asset quoted in the sandbox dollar, by observation
+        time. stale is past the deployment's maximum mark age; future is an
+        observation stamped after this read, which every reader ignores.
+      parameters:
+        - { in: query, name: asset_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: The marks (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedReferenceMarkList" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Operator — record a sandbox reference mark of a SIMULATED asset in the sandbox dollar (step-up)
+      description: >-
+        Refused: an asset that is not SIMULATED (FORBIDDEN), the sandbox dollar
+        itself, a quote other than the sandbox dollar, a price that is not
+        positive (VALIDATION_FAILED), a price with more than 18 fractional
+        digits (PRECISION_LOSS), and an observed_at in the future or older
+        than the maximum mark age (VALIDATION_FAILED). Idempotent on (asset,
+        quote, source, observed_at): the same observation again answers 200
+        with duplicate set; a different price for it is a CONFLICT. Every
+        recorded mark writes an audit event.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedReferenceMarkRequest" } } }
+      responses:
+        "201":
+          description: Recorded
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedReferenceMarkRecorded" } } }
+        "200":
+          description: The same observation was already recorded; nothing new was written
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedReferenceMarkRecorded" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/ops/chains:
+    get:
+      tags: [advanced]
+      summary: Operator — the tip of each simulated chain the devnet host runs
+      description: >-
+        UNSUPPORTED when this deployment configures no devnet host. The tip is
+        the chain's canonical head as the host replays it from the persisted
+        history; last_block_produced_at is when the host last produced (or
+        reorganised) blocks on that chain.
+      responses:
+        "200":
+          description: The chain tips
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedOpsChains" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
 
 components:
   securitySchemes:
@@ -6246,6 +6675,124 @@ components:
         journal_transaction_id: { $ref: "#/components/schemas/UUID" }
         replayed: { type: boolean }
         case: { $ref: "#/components/schemas/MarginCase" }
+    MarginResolutionOutcome:
+      type: string
+      enum: [RESUME, DECLARE_BANKRUPT]
+      x-enum-varnames: [MarginResolutionResume, MarginResolutionDeclareBankrupt]
+      description: RESUME returns the case to IN_PROGRESS with a fresh budget of trading steps; DECLARE_BANKRUPT records the loans as its deficit.
+    MarginResolutionDecision:
+      type: string
+      enum: [APPROVED, REJECTED]
+      x-enum-varnames: [MarginResolutionApproved, MarginResolutionRejected]
+    MarginResolutionProposalRequest:
+      type: object
+      required: [outcome, reason]
+      properties:
+        outcome: { $ref: "#/components/schemas/MarginResolutionOutcome" }
+        reason: { type: string, minLength: 1, maxLength: 1000 }
+    MarginResolutionDecisionRequest:
+      type: object
+      required: [decision, reason]
+      properties:
+        decision: { $ref: "#/components/schemas/MarginResolutionDecision" }
+        reason: { type: string, minLength: 1, maxLength: 1000 }
+    MarginCaseResolution:
+      type: object
+      description: One operator's proposal for ending a MANUAL_REVIEW, and its decision once made. pending is true while no decision exists.
+      required: [id, case_id, review_transition_id, outcome, reason, proposed_by, proposed_at, pending]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        case_id: { $ref: "#/components/schemas/UUID" }
+        review_transition_id: { $ref: "#/components/schemas/UUID", description: The transition that put the case in the review this resolution answers }
+        outcome: { $ref: "#/components/schemas/MarginResolutionOutcome" }
+        reason: { type: string }
+        proposed_by: { type: string, description: The proposing operator's user id }
+        proposed_at: { $ref: "#/components/schemas/Timestamp" }
+        pending: { type: boolean }
+        decision: { $ref: "#/components/schemas/MarginResolutionDecision" }
+        decided_by: { type: string, description: The deciding operator's user id }
+        decided_at: { $ref: "#/components/schemas/Timestamp" }
+        decision_reason: { type: string }
+    MarginReviewItem:
+      type: object
+      required: [case, current_review_transition_id, entered_review_at, resolutions]
+      properties:
+        case: { $ref: "#/components/schemas/MarginCase" }
+        current_review_transition_id: { $ref: "#/components/schemas/UUID" }
+        entered_review_at: { $ref: "#/components/schemas/Timestamp" }
+        resolutions: { type: array, items: { $ref: "#/components/schemas/MarginCaseResolution" }, description: "Every resolution of the case, oldest first" }
+    MarginReviewQueue:
+      type: object
+      required: [value_domain, items]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        items: { type: array, items: { $ref: "#/components/schemas/MarginReviewItem" } }
+    MarginWaivedAccrual:
+      type: object
+      required: [lot_id, period_start, period_end, amount, waived]
+      properties:
+        lot_id: { $ref: "#/components/schemas/UUID" }
+        period_start: { $ref: "#/components/schemas/Timestamp" }
+        period_end: { $ref: "#/components/schemas/Timestamp" }
+        amount: { $ref: "#/components/schemas/Quantity", description: "Interest charged for the period: zero for a waived one" }
+        waived: { type: boolean }
+    MarginResolutionDecisionResult:
+      type: object
+      required: [value_domain, resolution, case, account_status, waived, replayed]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        resolution: { $ref: "#/components/schemas/MarginCaseResolution" }
+        case: { $ref: "#/components/schemas/MarginCase" }
+        account_status: { $ref: "#/components/schemas/MarginAccountStatus" }
+        waived: { type: array, items: { $ref: "#/components/schemas/MarginWaivedAccrual" }, description: "The interest periods of the review, recorded at zero" }
+        replayed: { type: boolean }
+    MarginDeficitRepayment:
+      type: object
+      required: [id, amount, journal_transaction_id, effect_id, intent_id, repaid_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        amount: { $ref: "#/components/schemas/Quantity" }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        effect_id: { $ref: "#/components/schemas/UUID" }
+        intent_id: { $ref: "#/components/schemas/UUID" }
+        repaid_at: { $ref: "#/components/schemas/Timestamp" }
+    MarginDeficitStatus:
+      type: object
+      description: >-
+        Quantities are base units of the numeraire. margin_account_id and the
+        numeraire are absent when the account has no margin account; deficit,
+        repaid and outstanding are present only when the latest case's deficit
+        was covered by the insurance fund.
+      required: [value_domain, account_id, repayments]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        margin_account_id: { $ref: "#/components/schemas/UUID" }
+        numeraire_asset_id: { $ref: "#/components/schemas/UUID" }
+        numeraire_decimals: { type: integer }
+        case: { $ref: "#/components/schemas/MarginCase" }
+        deficit: { $ref: "#/components/schemas/Quantity" }
+        repaid: { $ref: "#/components/schemas/Quantity" }
+        outstanding: { $ref: "#/components/schemas/Quantity" }
+        repayments: { type: array, items: { $ref: "#/components/schemas/MarginDeficitRepayment" }, description: Oldest first }
+    MarginDeficitRepaymentResult:
+      type: object
+      required: [value_domain, margin_account_id, account_id, case_id, repayment_id, intent_id, journal_transaction_id, effect_id,
+                 repaid, outstanding, numeraire_asset_id, numeraire_decimals, replayed]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        margin_account_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        case_id: { $ref: "#/components/schemas/UUID" }
+        repayment_id: { $ref: "#/components/schemas/UUID" }
+        intent_id: { $ref: "#/components/schemas/UUID" }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        effect_id: { $ref: "#/components/schemas/UUID" }
+        repaid: { $ref: "#/components/schemas/Quantity" }
+        outstanding: { $ref: "#/components/schemas/Quantity", description: What the case still owes the fund after this repayment }
+        numeraire_asset_id: { $ref: "#/components/schemas/UUID" }
+        numeraire_decimals: { type: integer }
+        replayed: { type: boolean }
 
     # >>> advanced:derivatives schemas (insert this subsystem's schemas directly below; keep the marker)
     #
@@ -6338,7 +6885,7 @@ components:
       type: object
       required: [version, hash, linear, funding_buffer_intervals, max_funding_rate_e8, funding_rate_scale, option_shocks_bps,
                  option_min_margin_bps, option_maintenance_ratio_bps, expiry_gap_window_ms, expiry_gap_shock_bps,
-                 paper_slippage_bps, variation_margin_interval_ms]
+                 paper_slippage_bps, variation_margin_interval_ms, max_mark_lag_ms, settlement_override_max_bps]
       properties:
         version: { type: string }
         hash: { type: string, description: hex sha256 of the policy's canonical JSON }
@@ -6359,6 +6906,8 @@ components:
         expiry_gap_shock_bps: { type: integer, format: int64 }
         paper_slippage_bps: { type: integer, format: int64, description: A paper buy fills this far above the mark and a sell this far below, then onto the tick grid against the customer }
         variation_margin_interval_ms: { type: integer, format: int64 }
+        max_mark_lag_ms: { type: integer, format: int64, description: A mark is recorded within this long of its observation or not at all }
+        settlement_override_max_bps: { type: integer, format: int64, description: "An operator override of a settlement price lies within this many basis points of the settlement rule's reference price" }
     DerivativeMark:
       type: object
       required: [value_domain, id, instrument_id, mark_mantissa, price_scale, has_index, source, observed_at, recorded_at]
@@ -6400,6 +6949,9 @@ components:
         price_mantissa: { $ref: "#/components/schemas/Quantity", description: "A future's final price, or the underlying's price an option settled at" }
         price_scale: { type: integer }
         price_source: { type: string }
+        price_rule: { $ref: "#/components/schemas/DerivativeSettlementPriceRule" }
+        mark_id: { $ref: "#/components/schemas/UUID", description: "The mark the rule settled at, or the reference mark an override was bounded by" }
+        override_id: { $ref: "#/components/schemas/UUID", description: The approved override the contract settled at }
         positions: { type: integer }
         settled_at: { $ref: "#/components/schemas/Timestamp" }
     DerivativeContract:
@@ -6420,6 +6972,13 @@ components:
         latest_mark: { $ref: "#/components/schemas/DerivativeMark" }
         settled: { type: boolean, description: True once the contract has been finally settled; settlement is then present }
         settlement: { $ref: "#/components/schemas/DerivativeSettlement" }
+        settlement_preview: { $ref: "#/components/schemas/DerivativeSettlementPreview" }
+        settlement_overrides:
+          type: array
+          description: >-
+            Present for a dated contract read on its own (not in a listing), with settlement_preview: the override
+            proposals for its final settlement, newest first
+          items: { $ref: "#/components/schemas/DerivativeSettlementOverride" }
     DerivativeContractList:
       type: object
       required: [value_domain, items]
@@ -6680,15 +7239,112 @@ components:
         per_contract_amount: { $ref: "#/components/schemas/Quantity" }
         settlement_asset: { $ref: "#/components/schemas/DerivativeAsset" }
         journal_transaction_ids: { type: array, items: { $ref: "#/components/schemas/UUID" } }
+    DerivativeSettlementMethod:
+      type: string
+      enum: [RULE, PROPOSE_OVERRIDE, APPROVE_OVERRIDE, REJECT_OVERRIDE]
+      x-enum-varnames: [DerivativeSettleByRule, DerivativeSettleProposeOverride, DerivativeSettleApproveOverride,
+                        DerivativeSettleRejectOverride]
+    DerivativeSettlementPriceRule:
+      type: string
+      description: What decided a settlement price; absent only for a settlement recorded before settlements were bound to a rule
+      enum: [EXPIRY_MARK, OPERATOR_OVERRIDE]
+      x-enum-varnames: [DerivativePriceRuleExpiryMark, DerivativePriceRuleOperatorOverride]
+    DerivativeOverrideStatus:
+      type: string
+      enum: [PROPOSED, APPROVED, REJECTED]
+      x-enum-varnames: [DerivativeOverrideProposed, DerivativeOverrideApproved, DerivativeOverrideRejected]
+    DerivativeOverrideDecisionKind:
+      type: string
+      enum: [APPROVED, REJECTED]
+      x-enum-varnames: [DerivativeOverrideDecisionApproved, DerivativeOverrideDecisionRejected]
+    DerivativeActor:
+      type: object
+      required: [actor_type, actor_id]
+      properties:
+        actor_type: { type: string }
+        actor_id: { type: string }
+    DerivativeSettlementOverrideDecision:
+      type: object
+      required: [decision, reason, decided_by, decided_at]
+      properties:
+        decision: { $ref: "#/components/schemas/DerivativeOverrideDecisionKind" }
+        reason: { type: string }
+        decided_by: { $ref: "#/components/schemas/DerivativeActor" }
+        decided_at: { $ref: "#/components/schemas/Timestamp" }
+    DerivativeSettlementOverride:
+      type: object
+      description: >-
+        One operator's proposal to settle an expired contract at a price within the policy's bound of the settlement
+        rule's reference price, and the second operator's decision on it.
+      required: [value_domain, id, instrument_id, status, price_mantissa, price_scale, reference_mark_id, reference_mantissa,
+                 max_deviation_bps, deviation_bps, reason, evidence_ref, evidence_sha256, proposed_by, proposed_at]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        status: { $ref: "#/components/schemas/DerivativeOverrideStatus" }
+        price_mantissa: { $ref: "#/components/schemas/Quantity", description: "The proposed settlement price (an option's: the underlying's)" }
+        price_scale: { type: integer }
+        reference_mark_id: { $ref: "#/components/schemas/UUID" }
+        reference_mantissa: { $ref: "#/components/schemas/Quantity", description: The price the settlement rule derives from the reference mark }
+        max_deviation_bps: { type: integer, format: int64 }
+        deviation_bps: { type: integer, format: int64, description: "|price - reference| / reference in basis points, rounded up" }
+        reason: { type: string }
+        evidence_ref: { type: string }
+        evidence_sha256: { type: string, description: hex sha256 of the evidence }
+        proposed_by: { $ref: "#/components/schemas/DerivativeActor" }
+        proposed_at: { $ref: "#/components/schemas/Timestamp" }
+        decision: { $ref: "#/components/schemas/DerivativeSettlementOverrideDecision" }
+        settlement_id: { $ref: "#/components/schemas/UUID", description: The settlement an approved override settled }
+    DerivativeSettlementPreview:
+      type: object
+      description: >-
+        What the settlement rule says about a dated contract now. Before expiry there is no reference. After it,
+        reference_mark is the latest mark observed and recorded at or before expiry and reference_price_mantissa the
+        price the rule derives from it; settleable says whether that mark is fresh at expiry, so that method RULE
+        settles at that price; an override may propose a price on the tick grid between override_min_price_mantissa
+        and override_max_price_mantissa.
+      required: [expiry, expired, settled, price_scale, has_reference, settleable, max_deviation_bps, rule_statement]
+      properties:
+        expiry: { $ref: "#/components/schemas/Timestamp" }
+        expired: { type: boolean }
+        settled: { type: boolean }
+        price_scale: { type: integer }
+        has_reference: { type: boolean }
+        reference_mark: { $ref: "#/components/schemas/DerivativeMark" }
+        reference_price_mantissa: { $ref: "#/components/schemas/Quantity" }
+        price_source: { type: string, description: The source a RULE settlement would name; confirm it with price_source }
+        settleable: { type: boolean }
+        override_min_price_mantissa: { $ref: "#/components/schemas/Quantity" }
+        override_max_price_mantissa: { $ref: "#/components/schemas/Quantity" }
+        max_deviation_bps: { type: integer, format: int64 }
+        rule_statement: { type: string, description: The settlement rule word for word, as every settlement's evidence records it }
     DerivativeSettleRequest:
       type: object
       properties:
-        price: { $ref: "#/components/schemas/DerivativeDecimal" }
-        price_source: { type: string, description: Required with price }
+        method: { $ref: "#/components/schemas/DerivativeSettlementMethod" }
+        price:
+          $ref: "#/components/schemas/DerivativeDecimal"
+          description: >-
+            RULE and APPROVE_OVERRIDE -- the price the operator confirms (any other refuses the request);
+            PROPOSE_OVERRIDE -- the proposed price, required
+        price_source: { type: string, description: RULE only -- the price source the operator confirms }
+        override_id: { $ref: "#/components/schemas/UUID", description: APPROVE_OVERRIDE and REJECT_OVERRIDE -- the proposal }
+        reason: { type: string, minLength: 1, maxLength: 1000, description: Required for every override method }
+        evidence_ref: { type: string, minLength: 1, maxLength: 500, description: PROPOSE_OVERRIDE -- the document the proposal rests on }
+        evidence_sha256: { type: string, pattern: '^[0-9a-f]{64}$', description: "PROPOSE_OVERRIDE -- the document's hex sha256" }
+    DerivativeSettlementCommandResult:
+      type: object
+      required: [value_domain, method]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        method: { $ref: "#/components/schemas/DerivativeSettlementMethod" }
+        settlement: { $ref: "#/components/schemas/DerivativeSettlementResult" }
+        override: { $ref: "#/components/schemas/DerivativeSettlementOverride" }
     DerivativeSettlementResult:
       type: object
-      required: [value_domain, settlement_id, instrument_id, kind, replay, price_mantissa, price_scale, positions, exercise_ids,
-                 settlement_asset, journal_transaction_ids]
+      required: [value_domain, settlement_id, instrument_id, kind, replay, price_mantissa, price_scale, price_source, positions,
+                 exercise_ids, settlement_asset, journal_transaction_ids]
       properties:
         value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
         settlement_id: { $ref: "#/components/schemas/UUID" }
@@ -6697,6 +7353,10 @@ components:
         replay: { type: boolean }
         price_mantissa: { $ref: "#/components/schemas/Quantity" }
         price_scale: { type: integer }
+        price_rule: { $ref: "#/components/schemas/DerivativeSettlementPriceRule" }
+        price_source: { type: string }
+        mark_id: { $ref: "#/components/schemas/UUID" }
+        override_id: { $ref: "#/components/schemas/UUID" }
         positions: { type: integer }
         paid: { $ref: "#/components/schemas/Quantity", description: "Absent on a replay" }
         received: { $ref: "#/components/schemas/Quantity", description: "Absent on a replay" }
@@ -7725,6 +8385,7 @@ components:
         decided_at: { $ref: "#/components/schemas/Timestamp" }
         reversal_journal_transaction_id: { $ref: "#/components/schemas/UUID" }
         reversal_reason_code: { type: string }
+        reversal_proposal_id: { $ref: "#/components/schemas/UUID", description: The two-operator proposal the reversal executed (absent for a reversal recorded before dual control) }
         reversed_at: { $ref: "#/components/schemas/Timestamp" }
         created_at: { $ref: "#/components/schemas/Timestamp" }
         updated_at: { $ref: "#/components/schemas/Timestamp" }
@@ -7755,12 +8416,60 @@ components:
         quantity: { $ref: "#/components/schemas/Quantity" }
         mode: { $ref: "#/components/schemas/AdvancedMode" }
         memo: { type: string, maxLength: 280, description: Printable text without surrounding whitespace; the transfer policy may bound it lower }
-    AdvancedTransferReverseRequest:
+    AdvancedTransferReversalStatus:
+      type: string
+      enum: [PENDING, APPROVED, REJECTED]
+      x-enum-varnames: [TransferReversalPending, TransferReversalApproved, TransferReversalRejected]
+      description: >-
+        Derived from the proposal's one decision, never stored: PENDING has
+        none; APPROVED was executed in the approval's own transaction (an
+        approved proposal is consumed); REJECTED moved nothing.
+    AdvancedTransferReversalProposalRequest:
       type: object
       required: [reason_code, reason]
       properties:
         reason_code: { type: string, pattern: '^[A-Z][A-Z0-9_]{2,63}$', examples: ["FRAUD_CONFIRMED"] }
         reason: { type: string, minLength: 1, maxLength: 500 }
+    AdvancedTransferReversalDecisionRequest:
+      type: object
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 500, description: Optional for an approval; required for a rejection }
+    AdvancedTransferReversalProposal:
+      type: object
+      description: >-
+        One operator's proposal to reverse one transfer, and its decision once a
+        second operator approved it or anyone rejected it. transfer is the
+        transfer as it is now, as an operator sees it.
+      required: [id, transfer_id, seq, status, reason_code, reason, proposed_by, proposed_at, transfer, value_domain]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        transfer_id: { $ref: "#/components/schemas/UUID" }
+        seq: { type: integer, minimum: 1, description: The proposal's number among the transfer's proposals }
+        status: { $ref: "#/components/schemas/AdvancedTransferReversalStatus" }
+        reason_code: { type: string }
+        reason: { type: string }
+        proposed_by: { type: string, description: The proposing operator's user id }
+        proposed_at: { $ref: "#/components/schemas/Timestamp" }
+        decided_by: { type: string, description: The deciding operator's user id }
+        decided_at: { $ref: "#/components/schemas/Timestamp" }
+        decision_reason: { type: string }
+        transfer: { $ref: "#/components/schemas/AdvancedTransfer" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedTransferReversalProposalPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items, value_domain]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/AdvancedTransferReversalProposal" } }
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedTransferReversalDecisionResult:
+      type: object
+      required: [proposal, replayed, value_domain]
+      properties:
+        proposal: { $ref: "#/components/schemas/AdvancedTransferReversalProposal" }
+        replayed: { type: boolean, description: The same decision by the same operator had already been recorded; nothing new was written }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
     AdvancedTransferHandleRequest:
       type: object
       required: [account_id, handle]
@@ -8902,8 +9611,8 @@ components:
       enum: [EXACT, FLOOR_PER_HOLDER]
     PredictionSettlement:
       type: object
-      required: [id, market_id, kind, outcome_count, unit_quantity, rounding_policy, escrow_before, total_paid, residual, holder_count,
-                 evidence_ref, evidence_sha256, settled_by, settled_at]
+      required: [id, market_id, kind, outcome_count, unit_quantity, rounding_policy, escrow_before, total_paid, total_held, residual,
+                 holder_count, evidence_ref, evidence_sha256, settled_by, settled_at]
       properties:
         id: { $ref: "#/components/schemas/UUID" }
         market_id: { $ref: "#/components/schemas/UUID" }
@@ -8916,7 +9625,8 @@ components:
         refund_rate_per_share: { $ref: "#/components/schemas/Quantity" }
         rounding_policy: { $ref: "#/components/schemas/PredictionRoundingPolicy" }
         escrow_before: { $ref: "#/components/schemas/Quantity" }
-        total_paid: { $ref: "#/components/schemas/Quantity" }
+        total_paid: { $ref: "#/components/schemas/Quantity", description: "Allotted to holders: delivered, or held for them (total_held of it)" }
+        total_held: { $ref: "#/components/schemas/Quantity", description: "Of total_paid, what stays in the escrow for holders it could not be delivered to" }
         residual: { $ref: "#/components/schemas/Quantity", description: "What the escrow keeps; zero after a payout, disclosed after a refund" }
         holder_count: { type: integer }
         evidence_ref: { type: string }
@@ -8925,12 +9635,13 @@ components:
         settled_at: { $ref: "#/components/schemas/Timestamp" }
     PredictionMarketDetail:
       type: object
-      required: [value_domain, market, resolutions, disputes]
+      required: [value_domain, market, resolutions, disputes, void_proposals]
       properties:
         value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
         market: { $ref: "#/components/schemas/PredictionMarket" }
         resolutions: { type: array, items: { $ref: "#/components/schemas/PredictionResolution" }, description: Oldest first }
         disputes: { type: array, items: { $ref: "#/components/schemas/PredictionDispute" }, description: Oldest first }
+        void_proposals: { type: array, items: { $ref: "#/components/schemas/PredictionVoidProposal" }, description: "Oldest first; an approved one voided the market" }
         settlement: { $ref: "#/components/schemas/PredictionSettlement", description: Absent until the market settles or is voided }
     PredictionBookOutcome:
       type: object
@@ -8945,7 +9656,7 @@ components:
     PredictionEscrowBooks:
       type: object
       required: [value_domain, market_id, market_status, collateral_asset_id, collateral_symbol, collateral_decimals, share_decimals,
-                 escrow, collateral, residual, outcomes, reconciles, violations]
+                 escrow, collateral, residual, held, outcomes, reconciles, violations]
       properties:
         value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
         market_id: { $ref: "#/components/schemas/UUID" }
@@ -8957,8 +9668,9 @@ components:
         escrow: { $ref: "#/components/schemas/Quantity" }
         collateral: { $ref: "#/components/schemas/Quantity" }
         residual: { $ref: "#/components/schemas/Quantity", description: The residual the market's settlement record discloses; zero without one }
+        held: { $ref: "#/components/schemas/Quantity", description: "Payouts the escrow holds for holders who have not claimed them yet" }
         outcomes: { type: array, items: { $ref: "#/components/schemas/PredictionBookOutcome" } }
-        reconciles: { type: boolean, description: True when the books satisfy escrow = collateral = outstanding(i) + residual and issued(i) = outstanding(i) = held(i) }
+        reconciles: { type: boolean, description: "True when the books satisfy escrow = collateral = outstanding(i) + residual + held and issued(i) = outstanding(i) = held_by_customers(i)" }
         violations: { type: array, items: { type: string } }
     PredictionPosition:
       type: object
@@ -8978,6 +9690,7 @@ components:
         account_id: { $ref: "#/components/schemas/UUID" }
         share_decimals: { type: integer }
         items: { type: array, items: { $ref: "#/components/schemas/PredictionPosition" } }
+        held_payout: { $ref: "#/components/schemas/PredictionHeldPayout", description: "The payout the market holds for this account, claimed or not; absent when it holds none" }
     PredictionSetRequest:
       type: object
       required: [account_id, quantity]
@@ -9040,11 +9753,15 @@ components:
         signature: { type: string, description: standard base64 Ed25519 signature }
     PredictionOracleObservation:
       type: object
-      required: [value_domain, report, report_hash]
+      required: [value_domain, observation_id, report, report_hash, recorded_by, recorded_at, replay]
       properties:
         value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        observation_id: { $ref: "#/components/schemas/UUID" }
         report: { $ref: "#/components/schemas/PredictionOracleReport" }
         report_hash: { type: string }
+        recorded_by: { $ref: "#/components/schemas/PredictionActor", description: The operator who recorded it, who can never resolve this market }
+        recorded_at: { $ref: "#/components/schemas/Timestamp" }
+        replay: { type: boolean, description: True when the identical observation was already recorded; nothing new was stored }
     PredictionResolveRequest:
       type: object
       properties:
@@ -9076,12 +9793,89 @@ components:
       properties:
         reason: { type: string, description: 8..2000 characters }
         evidence: { type: object, additionalProperties: true }
-    PredictionVoidRequest:
+    PredictionVoidProposalRequest:
       type: object
-      required: [reason]
+      required: [reason, evidence]
       properties:
         reason: { type: string, description: 8..2000 characters }
         evidence: { type: object, additionalProperties: true }
+    PredictionVoidApprovalRequest:
+      type: object
+      properties:
+        reason: { type: string, description: "The approver's note, at most 2000 characters; the proposal's reason when absent" }
+    PredictionVoidApproval:
+      type: object
+      required: [id, approved_by, reason, approved_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        approved_by: { $ref: "#/components/schemas/PredictionActor" }
+        reason: { type: string }
+        approved_at: { $ref: "#/components/schemas/Timestamp" }
+    PredictionVoidProposal:
+      type: object
+      required: [id, market_id, market_status, reason, evidence_ref, evidence_sha256, proposed_by, proposed_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        market_id: { $ref: "#/components/schemas/UUID" }
+        market_status: { $ref: "#/components/schemas/PredictionMarketStatus", description: The market's status when the void was proposed }
+        resolution_id: { $ref: "#/components/schemas/UUID", description: "The resolution in force when it was proposed; absent before resolution" }
+        reason: { type: string }
+        evidence_ref: { type: string }
+        evidence_sha256: { type: string }
+        proposed_by: { $ref: "#/components/schemas/PredictionActor" }
+        proposed_at: { $ref: "#/components/schemas/Timestamp" }
+        approval: { $ref: "#/components/schemas/PredictionVoidApproval", description: "Present once a second operator approved it, which voided the market" }
+    PredictionVoidProposalResult:
+      type: object
+      required: [value_domain, market, proposal]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        market: { $ref: "#/components/schemas/PredictionMarket" }
+        proposal: { $ref: "#/components/schemas/PredictionVoidProposal" }
+    PredictionHeldPayoutClaim:
+      type: object
+      required: [id, amount, intent_id, journal_transaction_id, claimed_by, claimed_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        amount: { $ref: "#/components/schemas/Quantity" }
+        intent_id: { $ref: "#/components/schemas/UUID" }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        claimed_by: { $ref: "#/components/schemas/PredictionActor" }
+        claimed_at: { $ref: "#/components/schemas/Timestamp" }
+    PredictionHeldPayout:
+      type: object
+      required: [id, market_id, settlement_id, account_id, kind, amount, reason_codes, refused_intent_id, journal_transaction_id, held_at, claimed]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        market_id: { $ref: "#/components/schemas/UUID" }
+        settlement_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        kind: { $ref: "#/components/schemas/PredictionSettlementKind" }
+        amount: { $ref: "#/components/schemas/Quantity", description: Collateral base units the escrow holds for the account }
+        reason_codes: { type: array, items: { type: string }, description: Why the payout could not be delivered at settlement }
+        refused_intent_id: { $ref: "#/components/schemas/UUID", description: The payout intent the route or risk kernel refused }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID", description: The journal that retired the account's shares }
+        held_at: { $ref: "#/components/schemas/Timestamp" }
+        claimed: { type: boolean }
+        claim: { $ref: "#/components/schemas/PredictionHeldPayoutClaim", description: Present once claimed }
+    PredictionClaimRequest:
+      type: object
+      required: [account_id]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+    PredictionClaimResult:
+      type: object
+      required: [value_domain, market_id, account_id, held_payout, replay, intent]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        market_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        held_payout: { $ref: "#/components/schemas/PredictionHeldPayout" }
+        replay: { type: boolean, description: True when this request had already claimed the payout; nothing new happened }
+        intent: { $ref: "#/components/schemas/EconomicIntent" }
+        effect: { $ref: "#/components/schemas/EconomicEffect" }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        risk_decision_hash: { type: string }
     PredictionShareCount:
       type: object
       required: [outcome_symbol, quantity]
@@ -9090,21 +9884,23 @@ components:
         quantity: { $ref: "#/components/schemas/Quantity" }
     PredictionPayoutLine:
       type: object
-      required: [account_id, amount, shares, intent_id]
+      required: [account_id, amount, shares, intent_id, held]
       properties:
         account_id: { $ref: "#/components/schemas/UUID" }
         amount: { $ref: "#/components/schemas/Quantity" }
         shares: { type: array, items: { $ref: "#/components/schemas/PredictionShareCount" } }
         intent_id: { $ref: "#/components/schemas/UUID" }
-        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID", description: "The journal that paid the holder, or that retired their shares when held" }
+        held: { type: boolean, description: "True when the amount could not be delivered and is held in the escrow for the holder" }
     PredictionSettlementResult:
       type: object
-      required: [value_domain, market, settlement, lines, replay]
+      required: [value_domain, market, settlement, lines, held_payouts, replay]
       properties:
         value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
         market: { $ref: "#/components/schemas/PredictionMarket" }
         settlement: { $ref: "#/components/schemas/PredictionSettlement" }
         lines: { type: array, items: { $ref: "#/components/schemas/PredictionPayoutLine" }, description: "What this call paid, one line per holder; empty on a replay" }
+        held_payouts: { type: array, items: { $ref: "#/components/schemas/PredictionHeldPayout" }, description: "The payouts this call held for their holders; empty on a replay" }
         replay: { type: boolean, description: True when the market had already settled (or been voided); nothing was paid }
     PredictionEscrowReconciliation:
       type: object
@@ -10330,3 +11126,191 @@ components:
         value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
 
     # >>> advanced:operator schemas (insert this subsystem's schemas directly below; keep the marker)
+    #
+    # The operator console. Statuses of other subsystems are plain strings
+    # here, exactly as their own tables store them.
+    AdvancedReferenceMarkRequest:
+      type: object
+      required: [asset_id, price, source]
+      properties:
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        quote_asset_id: { $ref: "#/components/schemas/UUID", description: Must be the sandbox dollar when given; the sandbox dollar when absent }
+        price:
+          type: string
+          maxLength: 80
+          pattern: '^[0-9]+(\.[0-9]+)?$'
+          description: Sandbox dollars per one whole unit of the asset, written out exactly; positive, at most 18 fractional digits
+          examples: ["2500.125"]
+        source: { type: string, minLength: 1, maxLength: 100, description: Who or what observed the price; a stable asset's peg monitor counts only its own oracle source }
+        observed_at: { $ref: "#/components/schemas/Timestamp", description: When the price was observed; the time of the request when absent }
+    AdvancedReferenceMark:
+      type: object
+      required: [id, asset_id, quote_asset_id, price, mantissa, scale, source, observed_at, received_at, age_ms, stale, future]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        quote_asset_id: { $ref: "#/components/schemas/UUID" }
+        price: { type: string, description: "mantissa × 10^-scale, rendered exactly" }
+        mantissa: { $ref: "#/components/schemas/Quantity" }
+        scale: { type: integer, minimum: 0, maximum: 38 }
+        source: { type: string }
+        observed_at: { $ref: "#/components/schemas/Timestamp" }
+        received_at: { $ref: "#/components/schemas/Timestamp" }
+        age_ms: { type: integer, format: int64, description: Milliseconds from observed_at to the time of the read; negative for a future observation }
+        stale: { type: boolean, description: Older than the maximum mark age }
+        future: { type: boolean, description: Observed after the time of the read; every reader ignores it }
+    AdvancedReferenceMarkRecorded:
+      type: object
+      required: [mark, asset_symbol, quote_asset_symbol, duplicate, max_age_ms, value_domain]
+      properties:
+        mark: { $ref: "#/components/schemas/AdvancedReferenceMark" }
+        asset_symbol: { type: string }
+        quote_asset_symbol: { type: string }
+        duplicate: { type: boolean, description: The same observation was already recorded }
+        max_age_ms: { type: integer, format: int64 }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedReferenceMarkList:
+      type: object
+      required: [asset_id, asset_symbol, asset_kind, quote_asset_id, quote_asset_symbol, max_age_ms, as_of, items, value_domain]
+      properties:
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        asset_symbol: { type: string }
+        asset_kind: { type: string }
+        quote_asset_id: { $ref: "#/components/schemas/UUID" }
+        quote_asset_symbol: { type: string }
+        max_age_ms: { type: integer, format: int64 }
+        as_of: { $ref: "#/components/schemas/Timestamp" }
+        items: { type: array, items: { $ref: "#/components/schemas/AdvancedReferenceMark" } }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedOpsKillSwitch:
+      type: object
+      required: [kind, scope_id, severity]
+      properties:
+        kind: { type: string }
+        scope_id: { type: string }
+        severity: { type: string }
+        reason: { type: string }
+        activated_by: { type: string }
+        activated_at: { $ref: "#/components/schemas/Timestamp" }
+    AdvancedOpsReconciliationRecord:
+      type: object
+      required: [id, kind, status, material, blocks_new_risk, opened_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        kind: { type: string }
+        status: { type: string }
+        material: { type: boolean }
+        blocks_new_risk: { type: boolean }
+        opened_at: { $ref: "#/components/schemas/Timestamp" }
+        resolved_at: { $ref: "#/components/schemas/Timestamp" }
+    AdvancedOpsPegAlert:
+      type: object
+      required: [kind, severity, breaker_tripped, observed_at]
+      properties:
+        kind: { type: string }
+        severity: { type: string }
+        breaker_tripped: { type: boolean }
+        observed_at: { $ref: "#/components/schemas/Timestamp" }
+    AdvancedOpsStableAsset:
+      type: object
+      required: [id, name, asset_id, chain_id, status]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        name: { type: string }
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        chain_id: { type: string }
+        status: { type: string, description: "ACTIVE, PAUSED (by an operator or the peg breaker) or RETIRED" }
+        latest_alert: { $ref: "#/components/schemas/AdvancedOpsPegAlert" }
+        latest_supply_reconciliation: { $ref: "#/components/schemas/AdvancedOpsReconciliationRecord" }
+    AdvancedOpsBridgeRoute:
+      type: object
+      required: [id, name, source_chain, destination_chain, status]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        name: { type: string }
+        source_chain: { type: string }
+        destination_chain: { type: string }
+        status: { type: string, description: "ACTIVE, PAUSED or CLOSED" }
+        open_reconciliation: { $ref: "#/components/schemas/AdvancedOpsReconciliationRecord" }
+    AdvancedOpsReconciliationKind:
+      type: object
+      required: [kind, unresolved, material, blocks_new_risk]
+      properties:
+        kind: { type: string }
+        unresolved: { type: integer, format: int64 }
+        material: { type: integer, format: int64 }
+        blocks_new_risk: { type: integer, format: int64 }
+        oldest_opened_at: { $ref: "#/components/schemas/Timestamp" }
+        oldest_age_ms: { type: integer, format: int64 }
+    AdvancedOpsDualControl:
+      type: object
+      required: [transfer_reversals_pending, margin_cases_in_review, margin_resolutions_pending]
+      properties:
+        transfer_reversals_pending: { type: integer, format: int64, description: Transfer reversal proposals awaiting a second operator }
+        margin_cases_in_review: { type: integer, format: int64 }
+        margin_resolutions_pending: { type: integer, format: int64, description: "Resolutions of the review a case is in now, awaiting a second operator" }
+    AdvancedOpsOracleAsset:
+      type: object
+      required: [asset_id, symbol, stale]
+      properties:
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        observed_at: { $ref: "#/components/schemas/Timestamp" }
+        source: { type: string }
+        age_ms: { type: integer, format: int64 }
+        stale: { type: boolean, description: "No mark at all, or the latest is older than the maximum mark age" }
+    AdvancedOpsBridgeLeg:
+      type: object
+      description: >-
+        A bridge leg waiting in MANUAL_REVIEW for an operator. released says the destination released (only
+        resolve-review applies); otherwise resume-relay or refund may, and refund_requested says a refund is
+        already on its way. quantity is base units of the source asset with decimals.
+      required: [id, route_id, route_name, account_id, quantity, decimals, source_symbol, released, refund_requested]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        route_id: { $ref: "#/components/schemas/UUID" }
+        route_name: { type: string }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        decimals: { type: integer, minimum: 0, maximum: 18 }
+        source_symbol: { type: string }
+        released: { type: boolean }
+        refund_requested: { type: boolean }
+        entered_review_at: { $ref: "#/components/schemas/Timestamp" }
+        review_reason: { type: string }
+    AdvancedOpsOverview:
+      type: object
+      required: [generated_at, environment, max_mark_age_ms, kill_switches, stable_assets, bridge_routes, bridge_legs_in_review,
+                 reconciliation, dual_control, oracle, chains_configured, value_domain]
+      properties:
+        generated_at: { $ref: "#/components/schemas/Timestamp" }
+        environment: { type: string }
+        max_mark_age_ms: { type: integer, format: int64 }
+        kill_switches: { type: array, items: { $ref: "#/components/schemas/AdvancedOpsKillSwitch" }, description: Active ones only }
+        stable_assets: { type: array, items: { $ref: "#/components/schemas/AdvancedOpsStableAsset" } }
+        bridge_routes: { type: array, items: { $ref: "#/components/schemas/AdvancedOpsBridgeRoute" } }
+        bridge_legs_in_review: { type: array, items: { $ref: "#/components/schemas/AdvancedOpsBridgeLeg" }, description: "The longest waiting first; at most 100" }
+        reconciliation: { type: array, items: { $ref: "#/components/schemas/AdvancedOpsReconciliationKind" }, description: One entry per advanced reconciliation kind }
+        dual_control: { $ref: "#/components/schemas/AdvancedOpsDualControl" }
+        oracle: { type: array, items: { $ref: "#/components/schemas/AdvancedOpsOracleAsset" }, description: SIMULATED assets other than the sandbox dollar that someone holds }
+        chains_configured: { type: boolean, description: Whether this deployment runs a devnet host (/advanced/ops/chains) }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedOpsChainTip:
+      type: object
+      required: [chain_id, slot, height, hash, final, finalized_height]
+      properties:
+        chain_id: { type: string }
+        slot: { type: integer, format: int64 }
+        height: { type: integer, format: int64 }
+        hash: { type: string, description: "The tip block's hash, as the simulated chain encodes it (base58)" }
+        final: { type: boolean }
+        finalized_height: { type: integer, format: int64 }
+        last_block_produced_at: { $ref: "#/components/schemas/Timestamp" }
+    AdvancedOpsChains:
+      type: object
+      required: [network, observed_at, items, value_domain]
+      properties:
+        network: { type: string }
+        observed_at: { $ref: "#/components/schemas/Timestamp" }
+        items: { type: array, items: { $ref: "#/components/schemas/AdvancedOpsChainTip" } }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }

@@ -369,7 +369,7 @@ func (f *fixture) clearingHouse() econ.Facility {
 	var ch econ.Facility
 	require.NoError(f.t, f.inTx(func(ctx context.Context, tx pgx.Tx) error {
 		var err error
-		ch, err = f.svc.ClearingHouse(ctx, tx)
+		ch, err = f.svc.clearingHouse(ctx, tx)
 		return err
 	}))
 	return ch

@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/hex"
 	"net/http"
 	"regexp"
 	"sort"
@@ -47,6 +48,7 @@ func (s *Server) GetAdvancedDerivativesPolicy(ctx context.Context, _ api.GetAdva
 		OptionMinMarginBps: int64(p.OptionMinMarginBPS), OptionMaintenanceRatioBps: int64(p.OptionMaintenanceRatioBPS),
 		ExpiryGapWindowMs: p.ExpiryGapWindowMS, ExpiryGapShockBps: int64(p.ExpiryGapShockBPS),
 		PaperSlippageBps: int64(p.PaperSlippageBPS), VariationMarginIntervalMs: p.VariationMarginIntervalMS,
+		MaxMarkLagMs: p.MaxMarkLagMS, SettlementOverrideMaxBps: int64(p.SettlementOverrideMaxBPS),
 	}
 	for _, c := range p.Linear {
 		out.Linear = append(out.Linear, api.DerivativeClassRates{
@@ -590,7 +592,10 @@ func derivativeRunCommand(ctx context.Context, rawID string, body *api.Derivativ
 }
 
 // PostAdvancedDerivativesContractsInstrumentIdSettlement settles an expired
-// future or option once and for all.
+// future or option once and for all: by the settlement rule (RULE, the
+// default), or through the dual-controlled override -- one operator proposes,
+// a second approves (and settles) or rejects. Which fields a method takes is
+// checked here; everything the fields mean is the service's.
 func (s *Server) PostAdvancedDerivativesContractsInstrumentIdSettlement(ctx context.Context, request api.PostAdvancedDerivativesContractsInstrumentIdSettlementRequestObject) (api.PostAdvancedDerivativesContractsInstrumentIdSettlementResponseObject, error) {
 	port := s.opts.Ports.Derivatives
 	if port == nil {
@@ -599,30 +604,133 @@ func (s *Server) PostAdvancedDerivativesContractsInstrumentIdSettlement(ctx cont
 	if request.Body == nil {
 		return nil, validationError("body", "a request body is required")
 	}
+	b := request.Body
 	iid, err := parseDerivativeInstrument(request.InstrumentId.String())
 	if err != nil {
 		return nil, err
 	}
-	cmd := DerivativeSettleCommand{InstrumentID: iid, PriceSource: deref(request.Body.PriceSource), CorrelationID: observability.CorrelationID(ctx)}
-	if request.Body.Price != nil {
-		p, err := parseDerivativePrice("price", *request.Body.Price)
-		if err != nil {
-			return nil, err
+	method := api.DerivativeSettleByRule
+	if b.Method != nil {
+		if !b.Method.Valid() {
+			return nil, validationError("method", "method must be RULE, PROPOSE_OVERRIDE, APPROVE_OVERRIDE or REJECT_OVERRIDE")
 		}
-		cmd.Price = &p
+		method = *b.Method
 	}
-	res, err := runCommand(ctx, s, request.Params.IdempotencyKey, func(ctx context.Context) (api.DerivativeSettlementResult, commandMeta, error) {
-		v, serr := port.SettleExpiry(ctx, cmd)
-		if serr != nil {
-			return api.DerivativeSettlementResult{}, commandMeta{}, serr
-		}
-		out := toAPIDerivativeSettlement(v)
-		return out, commandMeta{Status: http.StatusOK, ResourceType: "derivative_settlement", ResourceID: v.Result.ID.String()}, nil
-	})
+	run, err := derivativeSettleRun(ctx, port, iid, method, b)
+	if err != nil {
+		return nil, err
+	}
+	res, err := runCommand(ctx, s, request.Params.IdempotencyKey, run)
 	if err != nil {
 		return nil, err
 	}
 	return api.PostAdvancedDerivativesContractsInstrumentIdSettlement200JSONResponse(res.Value), nil
+}
+
+// derivativeSettleRun validates a settlement command's fields for its method
+// and returns the run that carries it to the port.
+func derivativeSettleRun(ctx context.Context, port DerivativesPort, iid instruments.InstrumentID, method api.DerivativeSettlementMethod,
+	b *api.DerivativeSettleRequest) (func(context.Context) (api.DerivativeSettlementCommandResult, commandMeta, error), error) {
+	corr := observability.CorrelationID(ctx)
+	present := map[string]bool{
+		"price": b.Price != nil, "price_source": b.PriceSource != nil, "override_id": b.OverrideId != nil,
+		"reason": b.Reason != nil, "evidence_ref": b.EvidenceRef != nil, "evidence_sha256": b.EvidenceSha256 != nil,
+	}
+	allowed := map[api.DerivativeSettlementMethod][]string{
+		api.DerivativeSettleByRule:          {"price", "price_source"},
+		api.DerivativeSettleProposeOverride: {"price", "reason", "evidence_ref", "evidence_sha256"},
+		api.DerivativeSettleApproveOverride: {"price", "override_id", "reason"},
+		api.DerivativeSettleRejectOverride:  {"override_id", "reason"},
+	}[method]
+	for _, field := range []string{"price", "price_source", "override_id", "reason", "evidence_ref", "evidence_sha256"} {
+		if present[field] && !containsString(allowed, field) {
+			return nil, validationError(field, field+" is not a field of method "+string(method))
+		}
+	}
+	var price *DerivativePriceInput
+	if b.Price != nil {
+		p, err := parseDerivativePrice("price", *b.Price)
+		if err != nil {
+			return nil, err
+		}
+		price = &p
+	}
+	result := func(o api.DerivativeSettlementCommandResult) api.DerivativeSettlementCommandResult {
+		o.ValueDomain, o.Method = api.SIMULATED, method
+		return o
+	}
+	if method == api.DerivativeSettleByRule {
+		cmd := DerivativeSettleCommand{InstrumentID: iid, Price: price, PriceSource: deref(b.PriceSource), CorrelationID: corr}
+		return func(ctx context.Context) (api.DerivativeSettlementCommandResult, commandMeta, error) {
+			v, err := port.SettleExpiry(ctx, cmd)
+			if err != nil {
+				return api.DerivativeSettlementCommandResult{}, commandMeta{}, err
+			}
+			st := toAPIDerivativeSettlement(v)
+			return result(api.DerivativeSettlementCommandResult{Settlement: &st}),
+				commandMeta{Status: http.StatusOK, ResourceType: "derivative_settlement", ResourceID: v.Result.ID.String()}, nil
+		}, nil
+	}
+	if b.Reason == nil {
+		return nil, validationError("reason", "an override method states its reason")
+	}
+	if method == api.DerivativeSettleProposeOverride {
+		if price == nil || b.EvidenceRef == nil || b.EvidenceSha256 == nil {
+			return nil, validationError("price", "a proposal names its price, its evidence_ref and its evidence_sha256")
+		}
+		digest, err := hex.DecodeString(*b.EvidenceSha256)
+		if err != nil || len(digest) != 32 {
+			return nil, validationError("evidence_sha256", "evidence_sha256 is 64 lowercase hex digits")
+		}
+		cmd := DerivativeOverrideProposalCommand{InstrumentID: iid, Price: *price, Reason: *b.Reason, EvidenceRef: *b.EvidenceRef,
+			EvidenceSHA256: digest, CorrelationID: corr}
+		return func(ctx context.Context) (api.DerivativeSettlementCommandResult, commandMeta, error) {
+			o, err := port.ProposeSettlementOverride(ctx, cmd)
+			if err != nil {
+				return api.DerivativeSettlementCommandResult{}, commandMeta{}, err
+			}
+			ov := toAPIDerivativeOverride(o)
+			return result(api.DerivativeSettlementCommandResult{Override: &ov}),
+				commandMeta{Status: http.StatusOK, ResourceType: "derivative_settlement_override", ResourceID: o.ID.String()}, nil
+		}, nil
+	}
+	if b.OverrideId == nil {
+		return nil, validationError("override_id", "a decision names the proposal it decides")
+	}
+	oid, err := derivatives.ParseSettlementOverrideID(b.OverrideId.String())
+	if err != nil {
+		return nil, validationError("override_id", "override_id is not a settlement override id")
+	}
+	cmd := DerivativeOverrideDecisionCommand{InstrumentID: iid, OverrideID: oid, Reason: *b.Reason, Price: price, CorrelationID: corr}
+	if method == api.DerivativeSettleApproveOverride {
+		return func(ctx context.Context) (api.DerivativeSettlementCommandResult, commandMeta, error) {
+			v, err := port.ApproveSettlementOverride(ctx, cmd)
+			if err != nil {
+				return api.DerivativeSettlementCommandResult{}, commandMeta{}, err
+			}
+			st, ov := toAPIDerivativeSettlement(v.Settlement), toAPIDerivativeOverride(v.Override)
+			return result(api.DerivativeSettlementCommandResult{Settlement: &st, Override: &ov}),
+				commandMeta{Status: http.StatusOK, ResourceType: "derivative_settlement", ResourceID: v.Settlement.Result.ID.String()}, nil
+		}, nil
+	}
+	return func(ctx context.Context) (api.DerivativeSettlementCommandResult, commandMeta, error) {
+		o, err := port.RejectSettlementOverride(ctx, cmd)
+		if err != nil {
+			return api.DerivativeSettlementCommandResult{}, commandMeta{}, err
+		}
+		ov := toAPIDerivativeOverride(o)
+		return result(api.DerivativeSettlementCommandResult{Override: &ov}),
+			commandMeta{Status: http.StatusOK, ResourceType: "derivative_settlement_override", ResourceID: o.ID.String()}, nil
+	}, nil
+}
+
+func containsString(list []string, s string) bool {
+	for _, x := range list {
+		if x == s {
+			return true
+		}
+	}
+	return false
 }
 
 // PostAdvancedDerivativesClearingHouseFunding capitalizes the clearing house.
@@ -797,10 +905,87 @@ func toAPIDerivativeContract(v DerivativeContractView) (api.DerivativeContract, 
 	if st := v.Settled; st != nil {
 		out.Settlement = &api.DerivativeSettlement{
 			Id: toUUID(st.ID), Kind: api.DerivativeSettlementKind(st.Kind), PriceMantissa: st.PriceMantissa.String(),
-			PriceScale: int(st.PriceScale), PriceSource: st.PriceSource, Positions: st.Positions, SettledAt: st.SettledAt.UTC(),
+			PriceScale: int(st.PriceScale), PriceSource: st.PriceSource, PriceRule: priceRulePtr(st.Rule),
+			MarkId: markIDPtr(st.MarkID), OverrideId: overrideIDPtr(st.OverrideID), Positions: st.Positions,
+			SettledAt: st.SettledAt.UTC(),
 		}
 	}
+	if p := v.Preview; p != nil {
+		pv := toAPIDerivativePreview(*p)
+		out.SettlementPreview = &pv
+		overrides := make([]api.DerivativeSettlementOverride, 0, len(v.Overrides))
+		for _, o := range v.Overrides {
+			overrides = append(overrides, toAPIDerivativeOverride(o))
+		}
+		out.SettlementOverrides = &overrides
+	}
 	return out, nil
+}
+
+// toAPIDerivativePreview shapes what the settlement rule says about a dated
+// contract now.
+func toAPIDerivativePreview(p derivatives.SettlementPreview) api.DerivativeSettlementPreview {
+	out := api.DerivativeSettlementPreview{
+		Expiry: p.Expiry.UTC(), Expired: p.Expired, Settled: p.Settled, PriceScale: int(p.PriceScale),
+		HasReference: p.HasReference, Settleable: p.Settleable, MaxDeviationBps: int64(p.MaxDeviationBPS),
+		RuleStatement: p.RuleStatement,
+	}
+	if p.HasReference {
+		m := toAPIDerivativeMark(p.ReferenceMark)
+		ref, lo, hi, src := p.ReferencePrice.String(), p.OverrideMinPrice.String(), p.OverrideMaxPrice.String(), p.PriceSource
+		out.ReferenceMark, out.ReferencePriceMantissa, out.PriceSource = &m, &ref, &src
+		out.OverrideMinPriceMantissa, out.OverrideMaxPriceMantissa = &lo, &hi
+	}
+	return out
+}
+
+// toAPIDerivativeOverride shapes a settlement override proposal and its
+// decision.
+func toAPIDerivativeOverride(o derivatives.SettlementOverride) api.DerivativeSettlementOverride {
+	out := api.DerivativeSettlementOverride{
+		ValueDomain: api.SIMULATED, Id: toUUID(o.ID), InstrumentId: toUUID(o.InstrumentID),
+		Status: api.DerivativeOverrideStatus(o.Status), PriceMantissa: o.PriceMantissa.String(), PriceScale: int(o.PriceScale),
+		ReferenceMarkId: toUUID(o.ReferenceMarkID), ReferenceMantissa: o.ReferenceMantissa.String(),
+		MaxDeviationBps: int64(o.MaxDeviationBPS), DeviationBps: int64(o.DeviationBPS()), Reason: o.Reason,
+		EvidenceRef: o.EvidenceRef, EvidenceSha256: hex.EncodeToString(o.EvidenceSHA256),
+		ProposedBy: api.DerivativeActor{ActorType: string(o.ProposedBy.Type), ActorId: o.ProposedBy.ID},
+		ProposedAt: o.ProposedAt.UTC(),
+	}
+	if d := o.Decision; d != nil {
+		out.Decision = &api.DerivativeSettlementOverrideDecision{
+			Decision: api.DerivativeOverrideDecisionKind(d.Decision), Reason: d.Reason,
+			DecidedBy: api.DerivativeActor{ActorType: string(d.DecidedBy.Type), ActorId: d.DecidedBy.ID}, DecidedAt: d.DecidedAt.UTC(),
+		}
+	}
+	if o.SettlementID != nil {
+		sid := toUUID(*o.SettlementID)
+		out.SettlementId = &sid
+	}
+	return out
+}
+
+func priceRulePtr(r derivatives.SettlementPriceRule) *api.DerivativeSettlementPriceRule {
+	if r == "" {
+		return nil
+	}
+	out := api.DerivativeSettlementPriceRule(r)
+	return &out
+}
+
+func markIDPtr(m *derivatives.MarkID) *api.UUID {
+	if m == nil {
+		return nil
+	}
+	out := toUUID(*m)
+	return &out
+}
+
+func overrideIDPtr(o *derivatives.SettlementOverrideID) *api.UUID {
+	if o == nil {
+		return nil
+	}
+	out := toUUID(*o)
+	return &out
 }
 
 // toAPIDerivativePosition shapes a position and states, without ambiguity,
@@ -942,6 +1127,7 @@ func toAPIDerivativeSettlement(v DerivativeSettlementView) api.DerivativeSettlem
 	out := api.DerivativeSettlementResult{
 		ValueDomain: api.SIMULATED, SettlementId: toUUID(r.ID), InstrumentId: toUUID(v.InstrumentID),
 		Kind: api.DerivativeSettlementKind(r.Kind), Replay: r.Replay, PriceMantissa: r.Price.String(), PriceScale: int(v.PriceScale),
+		PriceRule: priceRulePtr(r.Rule), PriceSource: r.PriceSource, MarkId: markIDPtr(r.MarkID), OverrideId: overrideIDPtr(r.OverrideID),
 		Positions: r.Positions, ExerciseIds: make([]api.UUID, 0, len(r.Exercises)), SettlementAsset: toAPIDerivativeAsset(v.Settlement),
 		JournalTransactionIds: journalIDs(r.Journals),
 	}

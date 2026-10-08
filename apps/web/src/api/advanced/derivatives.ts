@@ -31,9 +31,13 @@ import {
   FILL_SOURCES,
   FLOW_KINDS,
   FUNDING_DIRECTIONS,
+  OVERRIDE_DECISIONS,
+  OVERRIDE_STATUSES,
   POSITION_STATUSES,
+  PRICE_RULES,
   RUN_KINDS,
   SETTLEMENT_KINDS,
+  SETTLEMENT_METHODS,
   VALUATION_STATUSES,
   type DerivativeKind,
   type DerivativeSide,
@@ -60,6 +64,9 @@ export type DerivativeRunResult = Schemas["DerivativeRunResult"];
 export type DerivativeSettlementResult = Schemas["DerivativeSettlementResult"];
 export type DerivativeClearingFundingResult = Schemas["DerivativeClearingFundingResult"];
 export type DerivativeClearingReport = Schemas["DerivativeClearingReport"];
+export type DerivativeSettlementCommandResult = Schemas["DerivativeSettlementCommandResult"];
+export type DerivativeSettlementOverride = Schemas["DerivativeSettlementOverride"];
+export type DerivativeSettlementPreview = Schemas["DerivativeSettlementPreview"];
 
 /** Rows per page of the derivatives lists. */
 export const DERIVATIVES_PAGE_SIZE = 25;
@@ -124,6 +131,58 @@ export const derivativeSettlementSpec: Spec = {
     positions: "integer",
     settled_at: "timestamp",
   },
+  optional: { price_rule: oneOf(PRICE_RULES), mark_id: "uuid", override_id: "uuid" },
+};
+
+const derivativeActorSpec: Spec = { required: { actor_type: "string", actor_id: "string" } };
+
+export const derivativeOverrideSpec: Spec = {
+  required: {
+    value_domain: SIMULATED,
+    id: "uuid",
+    instrument_id: "uuid",
+    status: oneOf(OVERRIDE_STATUSES),
+    price_mantissa: "quantity",
+    price_scale: "integer",
+    reference_mark_id: "uuid",
+    reference_mantissa: "quantity",
+    max_deviation_bps: "integer",
+    deviation_bps: "integer",
+    reason: "string",
+    evidence_ref: "string",
+    evidence_sha256: "string",
+    proposed_at: "timestamp",
+  },
+  optional: { settlement_id: "uuid" },
+  objects: {
+    proposed_by: { required: true, spec: derivativeActorSpec },
+    decision: {
+      spec: {
+        required: { decision: oneOf(OVERRIDE_DECISIONS), reason: "string", decided_at: "timestamp" },
+        objects: { decided_by: { required: true, spec: derivativeActorSpec } },
+      },
+    },
+  },
+};
+
+export const derivativePreviewSpec: Spec = {
+  required: {
+    expiry: "timestamp",
+    expired: "boolean",
+    settled: "boolean",
+    price_scale: "integer",
+    has_reference: "boolean",
+    settleable: "boolean",
+    max_deviation_bps: "integer",
+    rule_statement: "string",
+  },
+  optional: {
+    reference_price_mantissa: "quantity",
+    price_source: "string",
+    override_min_price_mantissa: "quantity",
+    override_max_price_mantissa: "quantity",
+  },
+  objects: { reference_mark: { spec: derivativeMarkSpec } },
 };
 
 export const derivativeContractSpec: Spec = {
@@ -144,7 +203,9 @@ export const derivativeContractSpec: Spec = {
     settlement_asset: { required: true, spec: derivativeAssetSpec },
     latest_mark: { spec: derivativeMarkSpec },
     settlement: { spec: derivativeSettlementSpec },
+    settlement_preview: { spec: derivativePreviewSpec },
   },
+  arrays: { settlement_overrides: { spec: derivativeOverrideSpec } },
 };
 
 export const derivativeContractListSpec: Spec = {
@@ -167,6 +228,8 @@ export const derivativePolicySpec: Spec = {
     expiry_gap_shock_bps: "integer",
     paper_slippage_bps: "integer",
     variation_margin_interval_ms: "integer",
+    max_mark_lag_ms: "integer",
+    settlement_override_max_bps: "integer",
   },
   arrays: {
     linear: {
@@ -400,11 +463,28 @@ export const derivativeSettlementResultSpec: Spec = {
     replay: "boolean",
     price_mantissa: "quantity",
     price_scale: "integer",
+    price_source: "string",
     positions: "integer",
   },
-  optional: { paid: "quantity", received: "quantity", shortfall: "quantity", intrinsic_per_contract: "quantity" },
+  optional: {
+    paid: "quantity",
+    received: "quantity",
+    shortfall: "quantity",
+    intrinsic_per_contract: "quantity",
+    price_rule: oneOf(PRICE_RULES),
+    mark_id: "uuid",
+    override_id: "uuid",
+  },
   objects: { settlement_asset: { required: true, spec: derivativeAssetSpec } },
   lists: { exercise_ids: { required: true, kind: "uuid" }, journal_transaction_ids: { required: true, kind: "uuid" } },
+};
+
+export const derivativeSettlementCommandSpec: Spec = {
+  required: { value_domain: SIMULATED, method: oneOf(SETTLEMENT_METHODS) },
+  objects: {
+    settlement: { spec: derivativeSettlementResultSpec },
+    override: { spec: derivativeOverrideSpec },
+  },
 };
 
 export const derivativeClearingFundingSpec: Spec = {
@@ -446,7 +526,29 @@ export function checkContract(value: unknown, path: string): DerivativeContract 
   if (c.settled !== (c.settlement !== undefined)) {
     throw new ContractViolation(`${path}.settlement`, "settled and settlement disagree");
   }
+  const preview = c.settlement_preview;
+  if (preview !== undefined && preview.has_reference !== (preview.reference_price_mantissa !== undefined)) {
+    throw new ContractViolation(`${path}.settlement_preview.reference_price_mantissa`, "has_reference and the reference disagree");
+  }
   return c;
+}
+
+/**
+ * A settlement command answers with what its method produced: the settlement
+ * for RULE, the proposal for PROPOSE_OVERRIDE and REJECT_OVERRIDE, both for
+ * APPROVE_OVERRIDE — never anything else.
+ */
+export function checkSettlementCommand(value: unknown, path: string): DerivativeSettlementCommandResult {
+  const r = validated<DerivativeSettlementCommandResult>(value, derivativeSettlementCommandSpec, path);
+  const settles = r.method === "RULE" || r.method === "APPROVE_OVERRIDE";
+  const proposes = r.method !== "RULE";
+  if (settles !== (r.settlement !== undefined)) {
+    throw new ContractViolation(`${path}.settlement`, `a ${r.method} answer ${settles ? "carries" : "carries no"} settlement`);
+  }
+  if (proposes !== (r.override !== undefined)) {
+    throw new ContractViolation(`${path}.override`, `a ${r.method} answer ${proposes ? "carries" : "carries no"} override`);
+  }
+  return r;
 }
 
 /**
@@ -852,26 +954,104 @@ export function useRunFunding(): UseMutationResult<DerivativeRunResult, unknown,
 
 export interface SettleInput {
   readonly instrumentId: string;
-  /** Exact decimal, or undefined for the price the backend derives from the expiry mark. */
+  /**
+   * The price the operator confirms, as the exact decimal the contract's
+   * settlement preview states, and its source. They never choose the price:
+   * the backend settles by its rule and refuses anything else.
+   */
   readonly price: string | undefined;
   readonly priceSource: string | undefined;
   readonly idempotencyKey: string;
 }
 
-export function useSettleDerivative(): UseMutationResult<DerivativeSettlementResult, unknown, SettleInput> {
+const SETTLEMENT_PATH = "/advanced/derivatives/contracts/{id}/settlement";
+
+/** Settles an expired contract by the settlement rule. */
+export function useSettleDerivative(): UseMutationResult<DerivativeSettlementCommandResult, unknown, SettleInput> {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (input: SettleInput) => {
       const { data } = await api.POST("/advanced/derivatives/contracts/{instrumentId}/settlement", {
         ...idempotent(input.idempotencyKey, { path: { instrumentId: input.instrumentId } }),
-        body:
-          input.price === undefined
-            ? {}
-            : { price: input.price, ...(input.priceSource === undefined ? {} : { price_source: input.priceSource }) },
+        body: {
+          method: "RULE",
+          ...(input.price === undefined ? {} : { price: input.price }),
+          ...(input.priceSource === undefined ? {} : { price_source: input.priceSource }),
+        },
       });
-      return validated<DerivativeSettlementResult>(data, derivativeSettlementResultSpec, "/advanced/derivatives/contracts/{id}/settlement");
+      return checkSettlementCommand(data, SETTLEMENT_PATH);
     },
     onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: advancedKeys.all });
+    },
+  });
+}
+
+export interface ProposeOverrideInput {
+  readonly instrumentId: string;
+  /** The proposed settlement price, an exact decimal. */
+  readonly price: string;
+  readonly reason: string;
+  readonly evidenceRef: string;
+  /** 64 lowercase hex digits. */
+  readonly evidenceSha256: string;
+  readonly idempotencyKey: string;
+}
+
+/** Proposes, as this operator, an override of an expired contract's settlement price. */
+export function useProposeSettlementOverride(): UseMutationResult<DerivativeSettlementCommandResult, unknown, ProposeOverrideInput> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: ProposeOverrideInput) => {
+      const { data } = await api.POST("/advanced/derivatives/contracts/{instrumentId}/settlement", {
+        ...idempotent(input.idempotencyKey, { path: { instrumentId: input.instrumentId } }),
+        body: {
+          method: "PROPOSE_OVERRIDE",
+          price: input.price,
+          reason: input.reason,
+          evidence_ref: input.evidenceRef,
+          evidence_sha256: input.evidenceSha256,
+        },
+      });
+      return checkSettlementCommand(data, SETTLEMENT_PATH);
+    },
+    onSuccess: (_result, input) => {
+      void queryClient.invalidateQueries({ queryKey: derivativesKeys.contract(input.instrumentId) });
+    },
+  });
+}
+
+export interface DecideOverrideInput {
+  readonly instrumentId: string;
+  readonly overrideId: string;
+  readonly decision: "APPROVE_OVERRIDE" | "REJECT_OVERRIDE";
+  readonly reason: string;
+  /** On an approval, the proposal's price the operator confirms. */
+  readonly price: string | undefined;
+  readonly idempotencyKey: string;
+}
+
+/**
+ * Approves (and so settles at) or rejects a proposal, as this operator. The
+ * backend refuses an approval by the operator who proposed it.
+ */
+export function useDecideSettlementOverride(): UseMutationResult<DerivativeSettlementCommandResult, unknown, DecideOverrideInput> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: DecideOverrideInput) => {
+      const { data } = await api.POST("/advanced/derivatives/contracts/{instrumentId}/settlement", {
+        ...idempotent(input.idempotencyKey, { path: { instrumentId: input.instrumentId } }),
+        body: {
+          method: input.decision,
+          override_id: input.overrideId,
+          reason: input.reason,
+          ...(input.price === undefined ? {} : { price: input.price }),
+        },
+      });
+      return checkSettlementCommand(data, SETTLEMENT_PATH);
+    },
+    onSuccess: () => {
+      // An approval settles the contract: every account that held it moved.
       void queryClient.invalidateQueries({ queryKey: advancedKeys.all });
     },
   });

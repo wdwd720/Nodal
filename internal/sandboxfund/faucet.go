@@ -207,6 +207,14 @@ func (f *Faucet) Fund(ctx context.Context, tx pgx.Tx, p security.Principal, acco
 	if asset.Status != assets.StatusActive {
 		return Grant{}, errs.Newf(errs.CodeAssetRestricted, "asset is %s", asset.Status)
 	}
+	if share, err := isPredictionShare(ctx, tx, asset.ID); err != nil {
+		return Grant{}, err
+	} else if share {
+		return Grant{}, errs.New(errs.CodeForbidden,
+			"the sandbox faucet never grants a prediction-market outcome share: a share exists only as its market issues it, "+
+				"in complete sets against collateral").
+			WithField("asset_id", asset.ID.String()).WithField("refusal", RefusalPredictionShare)
+	}
 
 	now := f.clk.Now().UTC()
 	used, err := UsedInWindow(ctx, tx, accountID, assetID, now.Add(-f.policy.Window()))
@@ -299,6 +307,26 @@ func (f *Faucet) authorize(ctx context.Context, p security.Principal, accountID 
 	}
 	return errs.Newf(errs.CodeForbidden, "a %s does not use the sandbox faucet", p.ActorType).
 		WithField("actor_type", string(p.ActorType))
+}
+
+// RefusalPredictionShare names the faucet's refusal of a prediction-market
+// outcome share (the refusal field of the error).
+const RefusalPredictionShare = "PREDICTION_MARKET_SHARE"
+
+// isPredictionShare reports whether an asset is a registered prediction-market
+// outcome share (internal/predmarket's prediction_outcomes_registry). A share
+// exists only as its market issues it: one granted unit would leave the
+// market's customer holdings above its outstanding shares, and from then on
+// its escrow would refuse every issuance, redemption, settlement and void for
+// every holder. The database refuses the grant's journal anyway (PM008); this
+// check names the reason before anything is written.
+func isPredictionShare(ctx context.Context, q db.Querier, asset assets.AssetID) (bool, error) {
+	var share bool
+	if err := q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM prediction_outcomes_registry WHERE share_asset_id = $1)`,
+		asset).Scan(&share); err != nil {
+		return false, dbErr("check prediction shares", err)
+	}
+	return share, nil
 }
 
 // UsedInWindow is what an account was granted of an asset after since.

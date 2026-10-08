@@ -191,9 +191,15 @@ type Transfer struct {
 
 	ReversalJournalTransactionID *ledger.TransactionID
 	ReversalReasonCode           string
-	ReversedByActorID            string
-	ReversalEvidenceRef          string
-	ReversedAt                   *time.Time
+	// ReversedByActorID is the operator who approved the reversal (the
+	// second operator of its dual control).
+	ReversedByActorID   string
+	ReversalEvidenceRef string
+	ReversedAt          *time.Time
+	// ReversalProposalID names the approved proposal the reversal executed.
+	// It is nil for a transfer that is not REVERSED, and for a reversal made
+	// before migration 00758 introduced dual control.
+	ReversalProposalID *ReversalProposalID
 
 	CorrelationID string
 	CreatedAt     time.Time

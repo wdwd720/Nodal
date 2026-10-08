@@ -665,7 +665,12 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// from a fixed seed anyone can read, exists only where fake providers are
 	// allowed (LOCAL, TEST, DEV). Everywhere else no oracle is configured, so
 	// resolution answers PROVIDER_UNAVAILABLE instead of trusting a key whose
-	// private half is in the source tree.
+	// private half is in the source tree. The sandbox oracle only signs: every
+	// observation an operator records is stored in the database (shared by
+	// every replica, kept across restarts, audited), and resolution reads it
+	// back from there. OutcomeBooks is not wired yet: until the order book's
+	// adapter is, a settlement or void that finds outcome shares still
+	// reserved by resting orders is refused, naming the reservations.
 	var predmarketOracle *predmarket.SandboxOracle
 	if cfg.Env.AllowsFakeProviders() {
 		predmarketOracle, err = predmarket.NewSandboxOracle("nodal-sandbox-oracle", []byte("nodal.predmarket.sandbox-oracle!"))
@@ -702,11 +707,11 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		Reconciliation: reconciliation.NewRepository(clk, outbox, auditWriter),
 		Audit:          auditWriter,
 	}
-	if predmarketOracle != nil {
-		// Only a real oracle: a nil *SandboxOracle in the interface field
-		// would not compare equal to nil and would be called.
-		predmarketConfig.Oracle = predmarketOracle
-	}
+	predmarketConfig.SandboxOracle = predmarketOracle
+	// The order book cancels the working orders on a market's outcome books
+	// at close, void and settlement, so no reservation still holds a share
+	// when the escrow pays out (review-2 F5).
+	predmarketConfig.Books = ordersSvc
 	predmarketSvc, err := predmarket.NewService(predmarketConfig)
 	if err != nil {
 		return nil, fmt.Errorf("prediction markets: %w", err)
@@ -849,6 +854,19 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	}
 
 	// >>> advanced:operator services
+	//
+	// The operator console reads the database at the instant of each request and
+	// records sandbox reference marks through the same price store every
+	// advanced reader values a SIMULATED asset at, quoted in the sandbox dollar.
+	// A mark is accepted only while it is younger than the bound buying power V2
+	// and the transfer valuer accept one, and the console calls older marks
+	// stale. The chains it reports are the sandbox chain's host, where one is
+	// configured; elsewhere /advanced/ops/chains answers UNSUPPORTED rather than
+	// describing chains that do not exist here.
+	operatorDeps := httpapi.OperatorDeps{Prices: priceStore, Audit: auditWriter, MaxMarkAge: 5 * time.Minute}
+	if sandboxChain != nil {
+		operatorDeps.Chains = sandboxChain.Host
+	}
 
 	advancedDeps := httpapi.AdvancedDeps{
 		Authorizer: econ.NewAuthorizer(gateChecker, killChecker),
@@ -913,6 +931,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		Delegation: delegationDeps,
 
 		// >>> advanced:operator deps
+		Operator: operatorDeps,
 	}
 
 	// --- realtime ----------------------------------------------------------
