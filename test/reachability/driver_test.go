@@ -36,10 +36,19 @@ var reachedThroughDriver = map[string]string{
 	"internal/stableasset.SettleBurn":    "Service.Burn",
 	"internal/stableasset.PayRedemption": "Service.ProcessRedemptions",
 
+	// An order runs Accept, Approve, Reserve, Execute and Complete in a
+	// transaction each, through the pipeline the HTTP adapter calls.
+	"internal/orders.Accept":   "Pipeline.Submit",
+	"internal/orders.Approve":  "Pipeline.Submit",
+	"internal/orders.Reserve":  "Pipeline.Submit",
+	"internal/orders.Execute":  "Pipeline.Submit",
+	"internal/orders.Complete": "Pipeline.Submit",
+	"internal/orders.Cancel":   "Pipeline.Cancel",
+	"internal/orders.Replace":  "Pipeline.Replace",
+
 	// A bridge leg is driven step by step across two chains.
 	"internal/bridge.PrepareLeg":        "Service.Bridge",
 	"internal/bridge.SettleSource":      "Service.Advance",
-	"internal/bridge.ReconcileLeg":      "Service.Advance",
 	"internal/bridge.PrepareRelease":    "Service.Advance",
 	"internal/bridge.SettleDestination": "Service.Advance",
 	// A refund is recorded, submitted once between transactions, and settled
@@ -91,7 +100,10 @@ func (s *Service) helper() { s.Stage() }
 func (s *Service) Stage() {}
 func (s *Service) Other() {}
 func (s *Service) Orphan() { s.Lonely() }
-func (s *Service) Lonely() {}`
+func (s *Service) Lonely() {}
+type Pipe struct{ svc *Service }
+func (p *Pipe) Run() { stages := []func(){p.svc.Valued}; for _, f := range stages { f() } }
+func (s *Service) Valued() {}`
 	funcs := funcsOf(t, src)
 	if !driverReaches(funcs, "Service.Entry", "Stage") {
 		t.Fatal("the walk must follow Entry -> helper -> Stage")
@@ -101,6 +113,9 @@ func (s *Service) Lonely() {}`
 	}
 	if driverReaches(funcs, "Service.Entry", "Lonely") {
 		t.Fatal("Entry does not reach Lonely")
+	}
+	if !driverReaches(funcs, "Pipe.Run", "Valued") {
+		t.Fatal("a stage taken as a method value is reached")
 	}
 }
 
@@ -189,16 +204,19 @@ func driverReaches(funcs map[string]*ast.FuncDecl, driver, mutator string) bool 
 		}
 		found := false
 		ast.Inspect(fd.Body, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
+			// A selector names a method whether it is called (s.Stage(...))
+			// or taken as a value (stages := []func{p.svc.Stage}); a plain
+			// identifier is a call of a package-level function.
 			var name string
-			switch fn := call.Fun.(type) {
+			switch x := n.(type) {
 			case *ast.SelectorExpr:
-				name = fn.Sel.Name
-			case *ast.Ident:
-				name = fn.Name
+				name = x.Sel.Name
+			case *ast.CallExpr:
+				id, ok := x.Fun.(*ast.Ident)
+				if !ok {
+					return true
+				}
+				name = id.Name
 			default:
 				return true
 			}

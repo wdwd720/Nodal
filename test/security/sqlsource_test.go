@@ -537,8 +537,17 @@ func (c *constFn) paramConstant(name string, idx int, v visited, depth int) bool
 				if !isCall {
 					return true
 				}
+				// A generic function is called through its instantiation,
+				// f[T](...) or f[T, U](...): the called name is inside it.
+				fun := call.Fun
+				switch ix := fun.(type) {
+				case *ast.IndexExpr:
+					fun = ix.X
+				case *ast.IndexListExpr:
+					fun = ix.X
+				}
 				var called string
-				switch fx := call.Fun.(type) {
+				switch fx := fun.(type) {
 				case *ast.Ident:
 					called = fx.Name
 				case *ast.SelectorExpr:

@@ -297,6 +297,14 @@
 //	CP_SANDBOX_DEVNET_NETWORK       devnet host network, [a-z0-9-]{1,63}; empty = unwired
 //	CP_SANDBOX_DEVNET_SEED_REF      SecretRef -> 64 hex chars; required with the network
 //
+// Advanced worker (cmd/advanced-worker only; every one optional, empty = the documented default):
+//
+//	CP_ADVANCED_WORKER_INTERVALS        <job>=<duration>,... per-job interval overrides
+//	CP_ADVANCED_WORKER_BATCHES          <job>=<count>,... per-job batch size overrides
+//	CP_ADVANCED_WORKER_RUN_TIMEOUT      bound on one run of any job (default 5m)
+//	CP_ADVANCED_WORKER_DRAIN_TIMEOUT    how long runs in flight may finish after SIGTERM (default 25s)
+//	CP_ADVANCED_WORKER_METRICS_INTERVAL how often the advanced_* metrics are collected (default 1m)
+//
 // Retention (days):
 //
 //	CP_RETENTION_LOGIN_ATTEMPT_DAYS     days a login_attempts row survives its expiry

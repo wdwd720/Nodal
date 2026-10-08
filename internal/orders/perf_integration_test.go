@@ -118,7 +118,7 @@ func TestIntegration_ThroughputOfTheServiceOnOneBook(t *testing.T) {
 		var out StageOutcome
 		err := f.inTx(func(ctx context.Context, tx pgx.Tx) error {
 			var err error
-			out, err = f.svc.Submit(ctx, tx, r)
+			out, err = f.svc.submitAtomic(ctx, tx, r)
 			return err
 		})
 		if err != nil {

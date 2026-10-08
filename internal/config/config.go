@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"maps"
 	"reflect"
 	"slices"
 	"strings"
@@ -79,6 +80,7 @@ type Config struct {
 	Capability        CapabilityConfig
 	Retention         RetentionConfig
 	Sandbox           SandboxConfig
+	AdvancedWorker    AdvancedWorkerConfig
 }
 
 // HTTPConfig configures the public HTTP listener.
@@ -511,6 +513,32 @@ type SandboxConfig struct {
 	DevnetSeedRef SecretRef
 }
 
+// AdvancedWorkerConfig is what cmd/advanced-worker needs and no other binary
+// does: how often each of its jobs runs and how much one run may take on.
+//
+// Every field is optional and its zero value means "the documented default"
+// (`advanced-worker list` prints each job's). The two maps are keyed by job
+// name -- the one place this table holds keys it cannot itself check -- and
+// the worker refuses at startup a name it does not schedule, so a typo is a
+// failed start rather than a silently ignored override. None of them can stop
+// a job: there is deliberately no setting that disables one, because the jobs
+// settle, liquidate, expire and reconcile, and PART 52 requires those to keep
+// running whatever else is switched off.
+type AdvancedWorkerConfig struct {
+	// Intervals overrides a job's run interval (each > 0).
+	Intervals map[string]time.Duration
+	// Batches overrides the most units one run of a job takes on (each > 0).
+	Batches map[string]int
+	// RunTimeout bounds one run of any job; zero takes the default.
+	RunTimeout time.Duration
+	// DrainTimeout bounds how long runs in flight may finish after SIGTERM;
+	// zero takes the default.
+	DrainTimeout time.Duration
+	// MetricsInterval is how often the advanced metrics are collected from
+	// the database; zero takes the default.
+	MetricsInterval time.Duration
+}
+
 // RetentionConfig holds retention in days for each retention class (goal
 // PART 122). Production cannot set the financial or security-audit classes to
 // zero.
@@ -537,6 +565,8 @@ func (c *Config) Clone() *Config {
 	cp.HTTP.CORSOrigins = slices.Clone(c.HTTP.CORSOrigins)
 	cp.HTTP.TrustedProxyCIDRs = slices.Clone(c.HTTP.TrustedProxyCIDRs)
 	cp.Redpanda.Brokers = slices.Clone(c.Redpanda.Brokers)
+	cp.AdvancedWorker.Intervals = maps.Clone(c.AdvancedWorker.Intervals)
+	cp.AdvancedWorker.Batches = maps.Clone(c.AdvancedWorker.Batches)
 	return &cp
 }
 

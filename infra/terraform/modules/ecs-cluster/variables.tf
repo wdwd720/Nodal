@@ -12,7 +12,7 @@ variable "binaries" {
   type        = list(string)
   default = [
     "api", "relay-worker", "execution-worker", "reconciliation-worker", "market-ingest-worker",
-    "agent-worker", "workflow-worker", "audit-worker", "migrate",
+    "agent-worker", "workflow-worker", "audit-worker", "advanced-worker", "migrate",
   ]
 }
 

@@ -3,7 +3,9 @@ package config
 import (
 	"context"
 	"maps"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -340,4 +342,108 @@ func TestService_RedactedKeepsTheService(t *testing.T) {
 	t.Parallel()
 	c := mustLoadAs(t, ServiceRelayWorker, prodEnv())
 	assert.Equal(t, ServiceRelayWorker, c.Redacted().Service)
+}
+
+// TestService_TheAdvancedWorkerStartsInProductionWithPostgresAlone: every
+// subsystem cmd/advanced-worker drives keeps its truth in the database -- the
+// devnet host the sandbox stable asset and bridge run on included -- so it is
+// held to Postgres and nothing else. A production deployment that names no
+// bus, analytics store, workflow engine, object store, KMS key or Redis must
+// still start it.
+func TestService_TheAdvancedWorkerStartsInProductionWithPostgresAlone(t *testing.T) {
+	t.Parallel()
+	env := withoutPrefix(prodEnv(), "CP_REDIS_", "CP_REDPANDA_", "CP_CLICKHOUSE_", "CP_TEMPORAL_", "CP_ARCHIVE_", "CP_KMS_")
+
+	c, err := Load(context.Background(), ServiceAdvancedWorker, LookupFromMap(env))
+	require.NoError(t, err, "the advanced worker must start in PROD with only Postgres")
+	assert.Equal(t, ServiceAdvancedWorker, c.Service)
+	assert.Empty(t, ServiceAdvancedWorker.Dependencies(), "Postgres only")
+	for _, d := range AllDependencies() {
+		assert.False(t, c.RequiresDependency(d), "the advanced worker does not use %s", d)
+	}
+	assert.True(t, c.Database.RequireTLS, "production rules still apply to it")
+	assert.False(t, ServiceAdvancedWorker.ServesHTTP(), "it serves no public HTTP and runs no transport limiter")
+
+	got, err := ParseService("advanced-worker")
+	require.NoError(t, err)
+	assert.Equal(t, ServiceAdvancedWorker, got, "the canonical name is the cmd/ directory name")
+}
+
+// TestService_TheAdvancedWorkerVariablesAreItsOwnAndOptional: the worker's
+// tunables have documented defaults and are required of nobody -- in
+// particular not of the worker itself in PROD, where an absent override means
+// the default and never a refusal to start.
+func TestService_TheAdvancedWorkerVariablesAreItsOwnAndOptional(t *testing.T) {
+	t.Parallel()
+	var names []string
+	for _, v := range Vars() {
+		if !strings.HasPrefix(v.Name, "CP_ADVANCED_WORKER_") {
+			continue
+		}
+		names = append(names, v.Name)
+		assert.Equal(t, ServiceAdvancedWorker, v.Svc, "%s belongs to the advanced worker", v.Name)
+		assert.False(t, v.Required, "%s has a documented default and is never required", v.Name)
+		assert.False(t, v.Secret, "%s is a tunable, not a secret", v.Name)
+	}
+	assert.ElementsMatch(t, []string{
+		"CP_ADVANCED_WORKER_INTERVALS", "CP_ADVANCED_WORKER_BATCHES", "CP_ADVANCED_WORKER_RUN_TIMEOUT",
+		"CP_ADVANCED_WORKER_DRAIN_TIMEOUT", "CP_ADVANCED_WORKER_METRICS_INTERVAL",
+	}, names)
+
+	c := mustLoadAs(t, ServiceAdvancedWorker, prodEnv())
+	assert.Empty(t, c.AdvancedWorker.Intervals, "no override means the documented defaults")
+	assert.Empty(t, c.AdvancedWorker.Batches)
+	assert.Zero(t, c.AdvancedWorker.RunTimeout)
+}
+
+// TestService_TheAdvancedWorkerOverridesParseStrictly: a typo in a schedule
+// is a failed start, never a silently different schedule.
+func TestService_TheAdvancedWorkerOverridesParseStrictly(t *testing.T) {
+	t.Parallel()
+	c := mustLoadAs(t, ServiceAdvancedWorker, withVars(prodEnv(), map[string]string{
+		"CP_ADVANCED_WORKER_INTERVALS":        " margin.interest=30m , derivatives.funding=15s",
+		"CP_ADVANCED_WORKER_BATCHES":          "margin.mark_to_market=200,capital.reservation_expiry=1",
+		"CP_ADVANCED_WORKER_RUN_TIMEOUT":      "2m",
+		"CP_ADVANCED_WORKER_DRAIN_TIMEOUT":    "10s",
+		"CP_ADVANCED_WORKER_METRICS_INTERVAL": "30s",
+	}))
+	assert.Equal(t, map[string]time.Duration{"margin.interest": 30 * time.Minute, "derivatives.funding": 15 * time.Second},
+		c.AdvancedWorker.Intervals)
+	assert.Equal(t, map[string]int{"margin.mark_to_market": 200, "capital.reservation_expiry": 1}, c.AdvancedWorker.Batches)
+	assert.Equal(t, 2*time.Minute, c.AdvancedWorker.RunTimeout)
+	assert.Equal(t, 10*time.Second, c.AdvancedWorker.DrainTimeout)
+	assert.Equal(t, 30*time.Second, c.AdvancedWorker.MetricsInterval)
+
+	clone := c.Clone()
+	clone.AdvancedWorker.Intervals["margin.interest"] = time.Hour
+	clone.AdvancedWorker.Batches["margin.mark_to_market"] = 1
+	assert.Equal(t, 30*time.Minute, c.AdvancedWorker.Intervals["margin.interest"], "Clone copies the maps")
+	assert.Equal(t, 200, c.AdvancedWorker.Batches["margin.mark_to_market"], "Clone copies the maps")
+
+	for _, tc := range []struct {
+		name, variable, value string
+	}{
+		{"pair without a value", "CP_ADVANCED_WORKER_INTERVALS", "margin.interest"},
+		{"empty value", "CP_ADVANCED_WORKER_INTERVALS", "margin.interest="},
+		{"zero interval", "CP_ADVANCED_WORKER_INTERVALS", "margin.interest=0s"},
+		{"negative interval", "CP_ADVANCED_WORKER_INTERVALS", "margin.interest=-1m"},
+		{"unparseable interval", "CP_ADVANCED_WORKER_INTERVALS", "margin.interest=soon"},
+		{"undotted name", "CP_ADVANCED_WORKER_INTERVALS", "interest=1h"},
+		{"upper-case name", "CP_ADVANCED_WORKER_INTERVALS", "Margin.Interest=1h"},
+		{"duplicate name", "CP_ADVANCED_WORKER_INTERVALS", "margin.interest=1h,margin.interest=2h"},
+		{"zero batch", "CP_ADVANCED_WORKER_BATCHES", "margin.interest=0"},
+		{"negative batch", "CP_ADVANCED_WORKER_BATCHES", "margin.interest=-5"},
+		{"fractional batch", "CP_ADVANCED_WORKER_BATCHES", "margin.interest=7.5"},
+		{"negative run timeout", "CP_ADVANCED_WORKER_RUN_TIMEOUT", "-1s"},
+		{"unparseable drain timeout", "CP_ADVANCED_WORKER_DRAIN_TIMEOUT", "a while"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			c, err := Load(context.Background(), ServiceAdvancedWorker,
+				LookupFromMap(withVars(prodEnv(), map[string]string{tc.variable: tc.value})))
+			require.Error(t, err, "%s=%q must be refused", tc.variable, tc.value)
+			assert.Nil(t, c)
+			assert.Contains(t, varErrors(err), tc.variable)
+		})
+	}
 }
