@@ -141,14 +141,14 @@ type MarginSeed struct {
 }
 
 // MarginFacilitiesView is the two facilities margin accounts are wired to
-// and their cash in the sandbox dollar after a seeding.
+// and the sandbox dollars each holds (unlent, undrawn) after a seeding.
 type MarginFacilitiesView struct {
 	AssetID       assets.AssetID
 	AssetDecimals uint8
 	Pool          econ.Facility
 	Fund          econ.Facility
-	PoolCash      money.Quantity
-	FundCash      money.Quantity
+	PoolAvailable money.Quantity
+	FundAvailable money.Quantity
 }
 
 // MarginMarkView is one mark-to-market run. A failure names no account: the

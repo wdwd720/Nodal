@@ -388,9 +388,9 @@ func newFakeMargin(t *testing.T) *fakeMargin {
 			SlippageBPS:    10, Cost: q(800_800_001), BorrowJournal: testMarginJrnl, TradeJournal: testMarginJrnl2, CollateralJrnl: testMarginJrnl3,
 			ReservationID: econ.NewIntentID().String(), Status: margin.StatusNormal, Evaluation: ev},
 		facilities: MarginFacilitiesView{AssetID: testMarginUSD, AssetDecimals: 6,
-			Pool:     econ.Facility{ID: acct.LendingPoolID, Kind: ledger.FacilityLendingPool, Name: "pool", Status: econ.FacilityActive},
-			Fund:     econ.Facility{ID: acct.InsuranceFundID, Kind: ledger.FacilityInsuranceFund, Name: "fund", Status: econ.FacilityActive},
-			PoolCash: q(1_000_000_000_000), FundCash: q(100_000_000_000)},
+			Pool:          econ.Facility{ID: acct.LendingPoolID, Kind: ledger.FacilityLendingPool, Name: "pool", Status: econ.FacilityActive},
+			Fund:          econ.Facility{ID: acct.InsuranceFundID, Kind: ledger.FacilityInsuranceFund, Name: "fund", Status: econ.FacilityActive},
+			PoolAvailable: q(1_000_000_000_000), FundAvailable: q(100_000_000_000)},
 		mark: MarginMarkView{
 			Evaluated: []margin.EvaluateResult{{MarginAccountID: acct.ID, AccountID: testAccountID, Previous: margin.StatusWarning,
 				Status: margin.StatusMarginCall, Evaluation: ev, Call: &call}},
@@ -904,9 +904,9 @@ func TestMarginCommandResults_AreExactAndSimulated(t *testing.T) {
 		"Idempotency-Key", "exact-seed-00001")
 	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
 	raw = res.raw()
-	assert.Equal(t, "1000000000000", raw["lending_pool"].(map[string]any)["cash"])
+	assert.Equal(t, "1000000000000", raw["lending_pool"].(map[string]any)["available"])
 	assert.Equal(t, "LENDING_POOL", raw["lending_pool"].(map[string]any)["kind"])
-	assert.Equal(t, "100000000000", raw["insurance_fund"].(map[string]any)["cash"])
+	assert.Equal(t, "100000000000", raw["insurance_fund"].(map[string]any)["available"])
 
 	res = h.do(http.MethodPost, "/v1/advanced/margin/ops/liquidations", map[string]any{"account_id": testAccountID.String()},
 		"Idempotency-Key", "exact-liq-000001")

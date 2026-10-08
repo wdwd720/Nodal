@@ -379,7 +379,7 @@ func (a marginAdapter) SeedFacilities(ctx context.Context, r MarginSeed) (Margin
 		if err != nil {
 			return err
 		}
-		out = MarginFacilitiesView{AssetID: usd.ID, AssetDecimals: usd.Decimals, Pool: f.Pool, Fund: f.Fund, PoolCash: pool, FundCash: fund}
+		out = MarginFacilitiesView{AssetID: usd.ID, AssetDecimals: usd.Decimals, Pool: f.Pool, Fund: f.Fund, PoolAvailable: pool, FundAvailable: fund}
 		return nil
 	})
 	return out, err

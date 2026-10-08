@@ -1294,7 +1294,7 @@ paths:
         content: { application/json: { schema: { $ref: "#/components/schemas/MarginSeedRequest" } } }
       responses:
         "200":
-          description: The facilities and their cash after funding
+          description: The facilities and the sandbox dollars each holds after funding
           content: { application/json: { schema: { $ref: "#/components/schemas/MarginFacilities" } } }
         "400": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
@@ -3292,13 +3292,13 @@ components:
         evaluation: { $ref: "#/components/schemas/MarginEvaluation" }
     MarginFacility:
       type: object
-      required: [id, kind, name, status, cash]
+      required: [id, kind, name, status, available]
       properties:
         id: { $ref: "#/components/schemas/UUID" }
         kind: { type: string }
         name: { type: string }
         status: { type: string }
-        cash: { $ref: "#/components/schemas/Quantity", description: "POOL_CASH or INSURANCE_FUND_CASH in the sandbox dollar" }
+        available: { $ref: "#/components/schemas/Quantity", description: "sandbox-dollar base units the facility holds unlent (lending pool) or undrawn (insurance fund)" }
     MarginFacilities:
       type: object
       required: [value_domain, asset_id, asset_decimals, lending_pool, insurance_fund]

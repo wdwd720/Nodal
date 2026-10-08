@@ -1638,7 +1638,7 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description The facilities and their cash after funding */
+                /** @description The facilities and the sandbox dollars each holds after funding */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -4916,8 +4916,8 @@ export interface components {
             value_domain: components["schemas"]["ValueDomainSimulated"];
         };
         MarginFacility: {
-            /** @description POOL_CASH or INSURANCE_FUND_CASH in the sandbox dollar */
-            cash: components["schemas"]["Quantity"];
+            /** @description sandbox-dollar base units the facility holds unlent (lending pool) or undrawn (insurance fund) */
+            available: components["schemas"]["Quantity"];
             id: components["schemas"]["UUID"];
             kind: string;
             name: string;

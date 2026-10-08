@@ -178,7 +178,7 @@ func (s *Server) PostAdvancedMarginAccount(ctx context.Context, request api.Post
 	}
 	mm := margin.MarginMode(request.Body.MarginMode)
 	if !mm.Valid() {
-		return nil, validationError("margin_mode", "margin_mode must be CASH, ISOLATED or CROSS")
+		return nil, validationError("margin_mode", "margin_mode is not one of the margin modes the contract declares")
 	}
 	mode := gates.Mode(request.Body.Mode)
 	if !mode.Valid() {
@@ -1101,14 +1101,14 @@ func toAPIMarginLeveragedBuyResult(r margin.SpotResult) (api.MarginLeveragedBuyR
 	return out, nil
 }
 
-func toAPIMarginFacility(f econ.Facility, cash money.Quantity) api.MarginFacility {
-	return api.MarginFacility{Id: toUUID(f.ID), Kind: string(f.Kind), Name: f.Name, Status: string(f.Status), Cash: cash.String()}
+func toAPIMarginFacility(f econ.Facility, available money.Quantity) api.MarginFacility {
+	return api.MarginFacility{Id: toUUID(f.ID), Kind: string(f.Kind), Name: f.Name, Status: string(f.Status), Available: available.String()}
 }
 
 func toAPIMarginFacilities(v MarginFacilitiesView) api.MarginFacilities {
 	return api.MarginFacilities{
 		ValueDomain: api.SIMULATED, AssetId: toUUID(v.AssetID), AssetDecimals: int(v.AssetDecimals),
-		LendingPool: toAPIMarginFacility(v.Pool, v.PoolCash), InsuranceFund: toAPIMarginFacility(v.Fund, v.FundCash),
+		LendingPool: toAPIMarginFacility(v.Pool, v.PoolAvailable), InsuranceFund: toAPIMarginFacility(v.Fund, v.FundAvailable),
 	}
 }
 

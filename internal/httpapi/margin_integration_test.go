@@ -207,8 +207,8 @@ func TestIntegration_MarginOverHTTP(t *testing.T) {
 	res.json(&facilities)
 	assert.Equal(t, api.SIMULATED, facilities.ValueDomain)
 	assert.Equal(t, w.usd.ID.String(), facilities.AssetId.String())
-	assert.Equal(t, "1000000000000", facilities.LendingPool.Cash)
-	assert.Equal(t, "100000000000", facilities.InsuranceFund.Cash)
+	assert.Equal(t, "1000000000000", facilities.LendingPool.Available)
+	assert.Equal(t, "100000000000", facilities.InsuranceFund.Available)
 
 	w.mark(time.Second, "100")
 	t1 := w.clk.Now()
