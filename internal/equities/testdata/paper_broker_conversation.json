@@ -1,0 +1,367 @@
+{
+  "kind": "equities.broker_conversation.v1",
+  "broker": "nodal-paper-equities",
+  "provider_mode": "fake",
+  "description": "a recorded paper broker conversation: quote, market fill, resting limit that fills on a crossing mark, cancel, pre-market refusal, quote without a mark, expiry",
+  "exchanges": [
+    {
+      "call": "QUOTE",
+      "request": {
+        "at": "2026-10-07T14:00:00Z",
+        "exchange_mic": "XNAS",
+        "mark": {
+          "mantissa": "15000",
+          "observed_at": "2026-10-07T13:59:59Z",
+          "scale": 2,
+          "source": "test-feed"
+        },
+        "price_scale": 2,
+        "quantity": "2500000",
+        "quantity_decimals": 6,
+        "side": "BUY",
+        "symbol": "SBXA",
+        "tick_size": "1"
+      },
+      "response": {
+        "at": "2026-10-07T14:00:00Z",
+        "broker": "nodal-paper-equities",
+        "indicative_price": "15015",
+        "mark": {
+          "mantissa": "15000",
+          "observed_at": "2026-10-07T13:59:59Z",
+          "scale": 2,
+          "source": "test-feed"
+        },
+        "price_scale": 2,
+        "session": "REGULAR",
+        "side": "BUY",
+        "slippage_bps": 10,
+        "symbol": "SBXA"
+      }
+    },
+    {
+      "call": "PLACE_ORDER",
+      "request": {
+        "at": "2026-10-07T14:00:00Z",
+        "mark": {
+          "mantissa": "15000",
+          "observed_at": "2026-10-07T13:59:59Z",
+          "scale": 2,
+          "source": "test-feed"
+        },
+        "order": {
+          "client_order_id": "01920000-0000-7000-8000-00000000000a",
+          "exchange_mic": "XNAS",
+          "expires_at": "2026-10-07T20:00:00Z",
+          "extended_hours": false,
+          "order_type": "MARKET",
+          "price_scale": 2,
+          "protection_price": "15165",
+          "quantity": "2500000",
+          "quantity_decimals": 6,
+          "side": "BUY",
+          "symbol": "SBXA",
+          "tick_size": "1"
+        }
+      },
+      "response": {
+        "at": "2026-10-07T14:00:00Z",
+        "broker": "nodal-paper-equities",
+        "broker_order_id": "paper-01920000-0000-7000-8000-00000000000a",
+        "client_order_id": "01920000-0000-7000-8000-00000000000a",
+        "fill": {
+          "executed_at": "2026-10-07T14:00:00Z",
+          "mark": {
+            "mantissa": "15000",
+            "observed_at": "2026-10-07T13:59:59Z",
+            "scale": 2,
+            "source": "test-feed"
+          },
+          "price": "15015",
+          "price_scale": 2,
+          "quantity": "2500000",
+          "slippage_bps": 10,
+          "venue_fill_id": "paper-fill-01920000-0000-7000-8000-00000000000a"
+        },
+        "session": "REGULAR",
+        "status": "FILLED"
+      }
+    },
+    {
+      "call": "PLACE_ORDER",
+      "request": {
+        "at": "2026-10-07T14:00:00Z",
+        "mark": {
+          "mantissa": "15000",
+          "observed_at": "2026-10-07T13:59:59Z",
+          "scale": 2,
+          "source": "test-feed"
+        },
+        "order": {
+          "client_order_id": "01920000-0000-7000-8000-00000000000b",
+          "exchange_mic": "XNAS",
+          "expires_at": "2026-10-07T20:00:00Z",
+          "extended_hours": false,
+          "limit_price": "15100",
+          "order_type": "LIMIT",
+          "price_scale": 2,
+          "quantity": "1000000",
+          "quantity_decimals": 6,
+          "side": "SELL",
+          "symbol": "SBXA",
+          "tick_size": "1"
+        }
+      },
+      "response": {
+        "at": "2026-10-07T14:00:00Z",
+        "broker": "nodal-paper-equities",
+        "broker_order_id": "paper-01920000-0000-7000-8000-00000000000b",
+        "client_order_id": "01920000-0000-7000-8000-00000000000b",
+        "session": "REGULAR",
+        "status": "OPEN"
+      }
+    },
+    {
+      "call": "ORDER_STATUS",
+      "request": {
+        "at": "2026-10-07T15:00:00Z",
+        "broker_order_id": "paper-01920000-0000-7000-8000-00000000000b",
+        "mark": {
+          "mantissa": "15050",
+          "observed_at": "2026-10-07T14:59:59Z",
+          "scale": 2,
+          "source": "test-feed"
+        },
+        "order": {
+          "client_order_id": "01920000-0000-7000-8000-00000000000b",
+          "exchange_mic": "XNAS",
+          "expires_at": "2026-10-07T20:00:00Z",
+          "extended_hours": false,
+          "limit_price": "15100",
+          "order_type": "LIMIT",
+          "price_scale": 2,
+          "quantity": "1000000",
+          "quantity_decimals": 6,
+          "side": "SELL",
+          "symbol": "SBXA",
+          "tick_size": "1"
+        }
+      },
+      "response": {
+        "at": "2026-10-07T15:00:00Z",
+        "broker": "nodal-paper-equities",
+        "broker_order_id": "paper-01920000-0000-7000-8000-00000000000b",
+        "client_order_id": "01920000-0000-7000-8000-00000000000b",
+        "session": "REGULAR",
+        "status": "OPEN"
+      }
+    },
+    {
+      "call": "ORDER_STATUS",
+      "request": {
+        "at": "2026-10-07T16:00:00Z",
+        "broker_order_id": "paper-01920000-0000-7000-8000-00000000000b",
+        "mark": {
+          "mantissa": "15120",
+          "observed_at": "2026-10-07T15:59:59Z",
+          "scale": 2,
+          "source": "test-feed"
+        },
+        "order": {
+          "client_order_id": "01920000-0000-7000-8000-00000000000b",
+          "exchange_mic": "XNAS",
+          "expires_at": "2026-10-07T20:00:00Z",
+          "extended_hours": false,
+          "limit_price": "15100",
+          "order_type": "LIMIT",
+          "price_scale": 2,
+          "quantity": "1000000",
+          "quantity_decimals": 6,
+          "side": "SELL",
+          "symbol": "SBXA",
+          "tick_size": "1"
+        }
+      },
+      "response": {
+        "at": "2026-10-07T16:00:00Z",
+        "broker": "nodal-paper-equities",
+        "broker_order_id": "paper-01920000-0000-7000-8000-00000000000b",
+        "client_order_id": "01920000-0000-7000-8000-00000000000b",
+        "fill": {
+          "executed_at": "2026-10-07T16:00:00Z",
+          "mark": {
+            "mantissa": "15120",
+            "observed_at": "2026-10-07T15:59:59Z",
+            "scale": 2,
+            "source": "test-feed"
+          },
+          "price": "15104",
+          "price_scale": 2,
+          "quantity": "1000000",
+          "slippage_bps": 10,
+          "venue_fill_id": "paper-fill-01920000-0000-7000-8000-00000000000b"
+        },
+        "session": "REGULAR",
+        "status": "FILLED"
+      }
+    },
+    {
+      "call": "PLACE_ORDER",
+      "request": {
+        "at": "2026-10-07T17:00:00Z",
+        "mark": {
+          "mantissa": "15000",
+          "observed_at": "2026-10-07T16:59:59Z",
+          "scale": 2,
+          "source": "test-feed"
+        },
+        "order": {
+          "client_order_id": "01920000-0000-7000-8000-00000000000c",
+          "exchange_mic": "XNAS",
+          "expires_at": "2026-10-07T20:00:00Z",
+          "extended_hours": false,
+          "limit_price": "14900",
+          "order_type": "LIMIT",
+          "price_scale": 2,
+          "quantity": "1000000",
+          "quantity_decimals": 6,
+          "side": "BUY",
+          "symbol": "SBXA",
+          "tick_size": "1"
+        }
+      },
+      "response": {
+        "at": "2026-10-07T17:00:00Z",
+        "broker": "nodal-paper-equities",
+        "broker_order_id": "paper-01920000-0000-7000-8000-00000000000c",
+        "client_order_id": "01920000-0000-7000-8000-00000000000c",
+        "session": "REGULAR",
+        "status": "OPEN"
+      }
+    },
+    {
+      "call": "CANCEL",
+      "request": {
+        "at": "2026-10-07T17:00:00Z",
+        "broker_order_id": "paper-01920000-0000-7000-8000-00000000000c",
+        "mark": {
+          "mantissa": "15000",
+          "observed_at": "2026-10-07T16:59:59Z",
+          "scale": 2,
+          "source": "test-feed"
+        },
+        "order": {
+          "client_order_id": "01920000-0000-7000-8000-00000000000c",
+          "exchange_mic": "XNAS",
+          "expires_at": "2026-10-07T20:00:00Z",
+          "extended_hours": false,
+          "limit_price": "14900",
+          "order_type": "LIMIT",
+          "price_scale": 2,
+          "quantity": "1000000",
+          "quantity_decimals": 6,
+          "side": "BUY",
+          "symbol": "SBXA",
+          "tick_size": "1"
+        }
+      },
+      "response": {
+        "at": "2026-10-07T17:00:00Z",
+        "broker": "nodal-paper-equities",
+        "broker_order_id": "paper-01920000-0000-7000-8000-00000000000c",
+        "client_order_id": "01920000-0000-7000-8000-00000000000c",
+        "reason": "CANCELLED_ON_REQUEST",
+        "session": "REGULAR",
+        "status": "CANCELLED"
+      }
+    },
+    {
+      "call": "PLACE_ORDER",
+      "request": {
+        "at": "2026-10-07T12:00:00Z",
+        "mark": {
+          "mantissa": "15000",
+          "observed_at": "2026-10-07T11:59:59Z",
+          "scale": 2,
+          "source": "test-feed"
+        },
+        "order": {
+          "client_order_id": "01920000-0000-7000-8000-00000000000d",
+          "exchange_mic": "XNAS",
+          "expires_at": "2026-10-07T20:00:00Z",
+          "extended_hours": false,
+          "order_type": "MARKET",
+          "price_scale": 2,
+          "protection_price": "15165",
+          "quantity": "2500000",
+          "quantity_decimals": 6,
+          "side": "BUY",
+          "symbol": "SBXA",
+          "tick_size": "1"
+        }
+      },
+      "response": {
+        "at": "2026-10-07T12:00:00Z",
+        "broker": "nodal-paper-equities",
+        "broker_order_id": "paper-01920000-0000-7000-8000-00000000000d",
+        "client_order_id": "01920000-0000-7000-8000-00000000000d",
+        "reason": "SESSION_CLOSED",
+        "session": "PRE_MARKET",
+        "status": "REJECTED"
+      }
+    },
+    {
+      "call": "QUOTE",
+      "request": {
+        "at": "2026-10-07T14:00:00Z",
+        "exchange_mic": "XNAS",
+        "price_scale": 2,
+        "quantity": "1",
+        "quantity_decimals": 6,
+        "side": "SELL",
+        "symbol": "SBXA",
+        "tick_size": "1"
+      },
+      "error": {
+        "code": "STALE_MARKET_DATA",
+        "detail": "equities: the paper venue quotes only against a fresh mark"
+      }
+    },
+    {
+      "call": "ORDER_STATUS",
+      "request": {
+        "at": "2026-10-07T20:00:00Z",
+        "broker_order_id": "",
+        "mark": {
+          "mantissa": "15000",
+          "observed_at": "2026-10-07T19:59:59Z",
+          "scale": 2,
+          "source": "test-feed"
+        },
+        "order": {
+          "client_order_id": "01920000-0000-7000-8000-00000000000e",
+          "exchange_mic": "XNAS",
+          "expires_at": "2026-10-07T20:00:00Z",
+          "extended_hours": false,
+          "limit_price": "14000",
+          "order_type": "LIMIT",
+          "price_scale": 2,
+          "quantity": "1000000",
+          "quantity_decimals": 6,
+          "side": "BUY",
+          "symbol": "SBXA",
+          "tick_size": "1"
+        }
+      },
+      "response": {
+        "at": "2026-10-07T20:00:00Z",
+        "broker": "nodal-paper-equities",
+        "broker_order_id": "paper-01920000-0000-7000-8000-00000000000e",
+        "client_order_id": "01920000-0000-7000-8000-00000000000e",
+        "reason": "DAY_ORDER_EXPIRED",
+        "session": "AFTER_HOURS",
+        "status": "EXPIRED"
+      }
+    }
+  ]
+}
