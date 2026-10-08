@@ -7319,7 +7319,7 @@ export interface paths {
         };
         /**
          * An account's simulated portfolio — balances, positions, buying power V2 and risk — in one read
-         * @description Account-scoped like every advanced read: the account's owner, or an operator holding account:read_any; anyone else is FORBIDDEN, whether or not the account exists. An account that does not exist is NOT_FOUND to an operator. The balances (ledger balances by code, capital reservations by purpose, withdrawal holds, each asset's mark in the sandbox dollar) and the risk records (unresolved reconciliation records and economic effects whose outcome is UNKNOWN) are read from one database snapshot. Every other section is a subsystem's own read: buying power V2 and the Risk Kernel V2 decisions as /advanced/buying-power and /advanced/risk/decisions answer them, the margin account as /advanced/margin/account, OPEN derivative positions as /advanced/derivatives/positions, the account's shares in each prediction market as its positions route, the equity listings it holds and its PENDING settlements as the equities routes, and its WORKING orders as /advanced/books/orders. Each such section states whether the subsystem runs in this deployment (NOT_CONFIGURED when it does not) and, when its read refused, the refusal's stable code (UNAVAILABLE); the sections are not one snapshot, so under concurrent activity two of them can describe adjacent instants. Lists are bounded and say when they were cut.
+         * @description Account-scoped like every advanced read: the account's owner, or an operator holding account:read_any; anyone else is FORBIDDEN, whether or not the account exists. An account that does not exist is NOT_FOUND to an operator. The balances (ledger balances by code, capital reservations by purpose, withdrawal holds, each asset's mark in the sandbox dollar) and the risk records (unresolved reconciliation records and economic effects whose outcome is UNKNOWN) are read from one database snapshot. Every other section is a subsystem's own read: buying power V2 and the Risk Kernel V2 decisions as /advanced/buying-power and /advanced/risk/decisions answer them, the margin account as /advanced/margin/account, OPEN derivative positions as /advanced/derivatives/positions, the account's shares in each prediction market as its positions route, the equity listings it holds and its PENDING settlements as the equities routes, its WORKING orders as /advanced/books/orders, the authority it delegated to its agents and what of theirs awaits its decision as the agent authority routes, and its performance-fee periods as /advanced/fees/periods. The house book is the platform's own, never an account's position, and is not part of any portfolio. Each such section states whether the subsystem runs in this deployment (NOT_CONFIGURED when it does not) and, when its read refused, the refusal's stable code (UNAVAILABLE); the sections are not one snapshot, so under concurrent activity two of them can describe adjacent instants. Lists are bounded and say when they were cut.
          */
         get: {
             parameters: {
@@ -15016,11 +15016,13 @@ export interface components {
             /** @description Every SIMULATED asset the account holds, by symbol, then chain */
             balances: components["schemas"]["AdvancedPortfolioBalance"][];
             buying_power: components["schemas"]["AdvancedPortfolioBuyingPower"];
+            delegation: components["schemas"]["AdvancedPortfolioDelegation"];
             /**
              * Format: int64
              * @description How old a mark may be and still value an asset: the bound buying power V2 uses
              */
             max_mark_age_ms: number;
+            performance_fees: components["schemas"]["AdvancedPortfolioPerformanceFees"];
             positions: components["schemas"]["AdvancedPortfolioPositions"];
             /** @description The sandbox dollar every value is stated in */
             quote_asset_id: components["schemas"]["UUID"];
@@ -15056,6 +15058,18 @@ export interface components {
             problem?: components["schemas"]["AdvancedPortfolioProblem"];
             state: components["schemas"]["AdvancedPortfolioSectionState"];
             value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @description The authority this account delegated to its own agents and what of theirs waits for the owner. Each page is exactly what its agent authority route answers. */
+        AdvancedPortfolioDelegation: {
+            /** @description PRESENT: the account's delegated capabilities, newest first, with their scope, limits, use and expiry (at most 50) */
+            capabilities?: components["schemas"]["DelegationCapabilityPage"];
+            problem?: components["schemas"]["AdvancedPortfolioProblem"];
+            state: components["schemas"]["AdvancedPortfolioSectionState"];
+            /** @description PRESENT: signing requests waiting for the owner's decision (status AWAITING_APPROVAL; at most 50) */
+            swaps_awaiting_approval?: components["schemas"]["DelegationSwapPage"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            /** @description PRESENT: withdrawals the account's agents proposed that wait for the owner's decision (status AWAITING_APPROVAL; at most 50) */
+            withdrawals_awaiting_approval?: components["schemas"]["DelegationWithdrawalPage"];
         };
         AdvancedPortfolioDerivatives: {
             /** @description PRESENT: the OPEN positions with the book's valuation, exactly as /advanced/derivatives/positions?status=OPEN answers them (at most 50; next_cursor says whether there are more) */
@@ -15116,6 +15130,13 @@ export interface components {
         AdvancedPortfolioOrderBooks: {
             /** @description PRESENT: the WORKING orders on the internal books, exactly as /advanced/books/orders answers them (at most 50) */
             orders?: components["schemas"]["AdvancedBookOrderPage"];
+            problem?: components["schemas"]["AdvancedPortfolioProblem"];
+            state: components["schemas"]["AdvancedPortfolioSectionState"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        AdvancedPortfolioPerformanceFees: {
+            /** @description PRESENT: the account's performance-fee periods, newest first, exactly as /advanced/fees/periods answers them (at most 50); an OPEN period's accrued fee is not charged until it crystallizes */
+            periods?: components["schemas"]["FeePeriodPage"];
             problem?: components["schemas"]["AdvancedPortfolioProblem"];
             state: components["schemas"]["AdvancedPortfolioSectionState"];
             value_domain: components["schemas"]["ValueDomainSimulated"];

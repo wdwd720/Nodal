@@ -137,6 +137,8 @@ type portfolioFakes struct {
 	predmarket  *fakePredmarket
 	equities    *fakeEquities
 	books       *fakeBooks
+	delegation  *dgFake
+	fees        *fakeFees
 }
 
 func newPortfolioHarness(t *testing.T) (*harness, *portfolioFakes) {
@@ -145,10 +147,12 @@ func newPortfolioHarness(t *testing.T) (*harness, *portfolioFakes) {
 	fx := &portfolioFakes{
 		portfolio: &fakePortfolioPort{snap: portfolioSampleSnapshot()}, advanced: newFakeAdvanced(), margin: newFakeMargin(t),
 		derivatives: newFakeDerivatives(), predmarket: newFakePredmarket(t), equities: newFakeEquities(), books: newFakeBooks(),
+		delegation: newDgFake(t), fees: newFakeFees(t),
 	}
 	ports := h.ports.ports()
 	ports.Portfolio, ports.Advanced, ports.Margin, ports.Derivatives = fx.portfolio, fx.advanced, fx.margin, fx.derivatives
 	ports.PredictionMarkets, ports.Equities, ports.Books = fx.predmarket, fx.equities, fx.books
+	ports.Delegation, ports.Fees = fx.delegation, fx.fees
 	h.server.opts.Ports = ports
 	return h, fx
 }
@@ -411,6 +415,15 @@ func TestPortfolio_SectionsAreTheSubsystemsOwnReads(t *testing.T) {
 	same("/v1/advanced/prediction-markets/"+pmMarketID.String()+"/positions?account_id="+acct,
 		"positions", "prediction_markets", "markets", 0, "positions")
 	same("/v1/advanced/books/orders?scope=WORKING&limit=50&account_id="+acct, "positions", "order_books", "orders")
+	same("/v1/advanced/delegation/capabilities?limit=50&account_id="+acct, "delegation", "capabilities")
+	same("/v1/advanced/delegation/swaps?status=AWAITING_APPROVAL&limit=50&account_id="+acct, "delegation", "swaps_awaiting_approval")
+	same("/v1/advanced/delegation/withdrawals?status=AWAITING_APPROVAL&limit=50&account_id="+acct,
+		"delegation", "withdrawals_awaiting_approval")
+	same("/v1/advanced/fees/periods?limit=50&account_id="+acct, "performance_fees", "periods")
+	assert.Equal(t, "AWAITING_APPROVAL", string(fx.delegation.lastSwapStatus), "only what waits for the owner")
+	assert.Equal(t, "AWAITING_APPROVAL", string(fx.delegation.lastWithdrawalStatus))
+	assert.Equal(t, "PRESENT", portfolioAt(t, doc, "delegation", "state"))
+	assert.Equal(t, "PRESENT", portfolioAt(t, doc, "performance_fees", "state"))
 
 	// The equities double mints a fresh journal id for its settled sample on
 	// every call, so that one field is set aside before comparing.
@@ -472,6 +485,8 @@ func TestPortfolio_UnconfiguredSubsystemsAreReportedNotOmitted(t *testing.T) {
 		"prediction markets": {"positions", "prediction_markets"},
 		"equities":           {"positions", "equities"},
 		"order books":        {"positions", "order_books"},
+		"delegation":         {"delegation"},
+		"performance fees":   {"performance_fees"},
 		"risk decisions":     {"risk", "decisions"},
 	}
 	names := make([]string, 0, len(sections))
@@ -483,7 +498,10 @@ func TestPortfolio_UnconfiguredSubsystemsAreReportedNotOmitted(t *testing.T) {
 		section := portfolioAt(t, doc, sections[name]...).(map[string]any)
 		assert.Equal(t, "NOT_CONFIGURED", section["state"], name)
 		assert.NotContains(t, section, "problem", name)
-		for _, payload := range []string{"buying_power", "account", "positions", "pending_settlements", "orders"} {
+		for _, payload := range []string{
+			"buying_power", "account", "positions", "pending_settlements", "orders", "capabilities", "swaps_awaiting_approval",
+			"withdrawals_awaiting_approval", "periods",
+		} {
 			assert.NotContains(t, section, payload, "%s carries no %s it did not read", name, payload)
 		}
 	}
@@ -506,6 +524,8 @@ func TestPortfolio_ARefusalIsTheStateOfItsSectionOnly(t *testing.T) {
 	fx.derivatives.err = errs.New(errs.CodeStaleMarketData, "the contract has no mark within its oracle bound")
 	fx.advanced.err = errs.New(errs.CodeUnsupported, "the sandbox dollar is not provisioned in this deployment")
 	fx.predmarket.err = errs.New(errs.CodeProviderUnavailable, "the prediction market read could not be completed in time")
+	fx.delegation.readErr = errs.New(errs.CodeConflict, "concurrent update; retry the request")
+	fx.fees.err = errs.New(errs.CodeUnsupported, "the fee ledger is not enabled in this deployment")
 
 	res := h.do(http.MethodGet, portfolioPath(testAccountID), nil)
 	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
@@ -524,6 +544,8 @@ func TestPortfolio_ARefusalIsTheStateOfItsSectionOnly(t *testing.T) {
 		"buying power":       {[]any{"buying_power"}, "UNSUPPORTED"},
 		"risk decisions":     {[]any{"risk", "decisions"}, "UNSUPPORTED"},
 		"prediction markets": {[]any{"positions", "prediction_markets"}, "PROVIDER_UNAVAILABLE"},
+		"delegation":         {[]any{"delegation"}, "CONFLICT"},
+		"performance fees":   {[]any{"performance_fees"}, "UNSUPPORTED"},
 	}
 	for name, want := range unavailable {
 		section := portfolioAt(t, doc, want.path...).(map[string]any)
@@ -533,6 +555,10 @@ func TestPortfolio_ARefusalIsTheStateOfItsSectionOnly(t *testing.T) {
 	}
 	assert.Equal(t, []any{}, portfolioAt(t, doc, "positions", "prediction_markets", "markets"),
 		"a section that refused shows nothing it did not read")
+	for _, payload := range []string{"capabilities", "swaps_awaiting_approval", "withdrawals_awaiting_approval"} {
+		assert.NotContains(t, portfolioAt(t, doc, "delegation").(map[string]any), payload,
+			"part of what waits for the owner is not shown as if it were all of it")
+	}
 	assert.Equal(t, "PRESENT", portfolioAt(t, doc, "positions", "equities", "state"))
 	assert.Equal(t, "PRESENT", portfolioAt(t, doc, "positions", "order_books", "state"))
 }
@@ -604,7 +630,8 @@ func TestPortfolio_ComposesOnlyReadsUnderItsOwnPolicy(t *testing.T) {
 	for _, op := range []string{
 		"GetAdvancedBuyingPower", "GetAdvancedRiskDecisions", "GetAdvancedMarginAccount", "GetAdvancedDerivativesPositions",
 		"GetAdvancedPredictionMarketsMarketIdPositions", "GetAdvancedEquitiesListings", "GetAdvancedEquitiesSettlements",
-		"GetAdvancedBooksOrders",
+		"GetAdvancedBooksOrders", "GetAdvancedDelegationCapabilities", "GetAdvancedDelegationSwaps",
+		"GetAdvancedDelegationWithdrawals", "GetAdvancedFeesPeriods",
 	} {
 		pol, ok := policyFor(op)
 		require.True(t, ok, op)

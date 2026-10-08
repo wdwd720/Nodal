@@ -72,6 +72,12 @@ func (s *Server) GetAdvancedPortfolio(ctx context.Context, request api.GetAdvanc
 	if out.Positions.OrderBooks, err = s.portfolioOrderBooks(ctx, id); err != nil {
 		return nil, err
 	}
+	if out.Delegation, err = s.portfolioDelegation(ctx, id); err != nil {
+		return nil, err
+	}
+	if out.PerformanceFees, err = s.portfolioPerformanceFees(ctx, id); err != nil {
+		return nil, err
+	}
 	if out.Risk, err = s.portfolioRisk(ctx, id, snap); err != nil {
 		return nil, err
 	}
@@ -320,6 +326,89 @@ func (s *Server) portfolioOrderBooks(ctx context.Context, id api.UUID) (api.Adva
 	}
 	page := api.AdvancedBookOrderPage(body)
 	out.State, out.Orders = api.PortfolioSectionPresent, &page
+	return out, nil
+}
+
+// portfolioDelegation is the authority the account delegated to its own
+// agents -- its capabilities as /advanced/delegation/capabilities answers
+// them -- and the swaps and withdrawals of those agents that wait for the
+// owner's decision, as their routes answer them with status
+// AWAITING_APPROVAL. Any of the three refusing makes the section UNAVAILABLE:
+// half of what waits for the owner is not shown as if it were all of it.
+func (s *Server) portfolioDelegation(ctx context.Context, id api.UUID) (api.AdvancedPortfolioDelegation, error) {
+	out := api.AdvancedPortfolioDelegation{State: api.PortfolioSectionNotConfigured, ValueDomain: api.SIMULATED}
+	if s.opts.Ports.Delegation == nil {
+		return out, nil
+	}
+	unavailable := func(err error) (api.AdvancedPortfolioDelegation, error) {
+		out := api.AdvancedPortfolioDelegation{State: api.PortfolioSectionUnavailable, ValueDomain: api.SIMULATED}
+		out.Problem, err = portfolioRefusal(ctx, err)
+		return out, err
+	}
+	limit := api.Limit(portfolioListBound)
+	cres, err := s.GetAdvancedDelegationCapabilities(ctx, api.GetAdvancedDelegationCapabilitiesRequestObject{
+		Params: api.GetAdvancedDelegationCapabilitiesParams{AccountId: id, Limit: &limit},
+	})
+	if err != nil {
+		return unavailable(err)
+	}
+	capabilities, err := portfolioAnswer[api.GetAdvancedDelegationCapabilities200JSONResponse]("delegated capabilities", cres)
+	if err != nil {
+		return out, err
+	}
+	swapStatus := api.DelegationSwapAwaitingApproval
+	sres, err := s.GetAdvancedDelegationSwaps(ctx, api.GetAdvancedDelegationSwapsRequestObject{
+		Params: api.GetAdvancedDelegationSwapsParams{AccountId: id, Status: &swapStatus, Limit: &limit},
+	})
+	if err != nil {
+		return unavailable(err)
+	}
+	swaps, err := portfolioAnswer[api.GetAdvancedDelegationSwaps200JSONResponse]("delegated swaps", sres)
+	if err != nil {
+		return out, err
+	}
+	withdrawalStatus := api.DelegationWithdrawalAwaitingApproval
+	wres, err := s.GetAdvancedDelegationWithdrawals(ctx, api.GetAdvancedDelegationWithdrawalsRequestObject{
+		Params: api.GetAdvancedDelegationWithdrawalsParams{AccountId: id, Status: &withdrawalStatus, Limit: &limit},
+	})
+	if err != nil {
+		return unavailable(err)
+	}
+	withdrawals, err := portfolioAnswer[api.GetAdvancedDelegationWithdrawals200JSONResponse]("delegated withdrawals", wres)
+	if err != nil {
+		return out, err
+	}
+	capabilityPage, swapPage, withdrawalPage := api.DelegationCapabilityPage(capabilities), api.DelegationSwapPage(swaps),
+		api.DelegationWithdrawalPage(withdrawals)
+	out.State = api.PortfolioSectionPresent
+	out.Capabilities, out.SwapsAwaitingApproval, out.WithdrawalsAwaitingApproval = &capabilityPage, &swapPage, &withdrawalPage
+	return out, nil
+}
+
+// portfolioPerformanceFees is the account's performance-fee periods as
+// /advanced/fees/periods answers them. The house book (internal/treasury) is
+// the platform's own, never an account's position, and nothing of it is read
+// for a portfolio.
+func (s *Server) portfolioPerformanceFees(ctx context.Context, id api.UUID) (api.AdvancedPortfolioPerformanceFees, error) {
+	out := api.AdvancedPortfolioPerformanceFees{State: api.PortfolioSectionNotConfigured, ValueDomain: api.SIMULATED}
+	if s.opts.Ports.Fees == nil {
+		return out, nil
+	}
+	limit := api.Limit(portfolioListBound)
+	res, err := s.GetAdvancedFeesPeriods(ctx, api.GetAdvancedFeesPeriodsRequestObject{
+		Params: api.GetAdvancedFeesPeriodsParams{AccountId: id, Limit: &limit},
+	})
+	if err != nil {
+		out.State = api.PortfolioSectionUnavailable
+		out.Problem, err = portfolioRefusal(ctx, err)
+		return out, err
+	}
+	body, err := portfolioAnswer[api.GetAdvancedFeesPeriods200JSONResponse]("performance-fee periods", res)
+	if err != nil {
+		return out, err
+	}
+	page := api.FeePeriodPage(body)
+	out.State, out.Periods = api.PortfolioSectionPresent, &page
 	return out, nil
 }
 

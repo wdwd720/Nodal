@@ -5491,7 +5491,10 @@ paths:
         answer them, the margin account as /advanced/margin/account, OPEN derivative positions as
         /advanced/derivatives/positions, the account's shares in each prediction market as its
         positions route, the equity listings it holds and its PENDING settlements as the equities
-        routes, and its WORKING orders as /advanced/books/orders. Each such section states whether the
+        routes, its WORKING orders as /advanced/books/orders, the authority it delegated to its agents
+        and what of theirs awaits its decision as the agent authority routes, and its performance-fee
+        periods as /advanced/fees/periods. The house book is the platform's own, never an account's
+        position, and is not part of any portfolio. Each such section states whether the
         subsystem runs in this deployment (NOT_CONFIGURED when it does not) and, when its read refused,
         the refusal's stable code (UNAVAILABLE); the sections are not one snapshot, so under
         concurrent activity two of them can describe adjacent instants. Lists are bounded and say when
@@ -13639,6 +13642,27 @@ components:
         problem: { $ref: "#/components/schemas/AdvancedPortfolioProblem" }
         orders: { $ref: "#/components/schemas/AdvancedBookOrderPage", description: "PRESENT: the WORKING orders on the internal books, exactly as /advanced/books/orders answers them (at most 50)" }
         value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedPortfolioDelegation:
+      type: object
+      description: >-
+        The authority this account delegated to its own agents and what of theirs waits for the owner. Each
+        page is exactly what its agent authority route answers.
+      required: [state, value_domain]
+      properties:
+        state: { $ref: "#/components/schemas/AdvancedPortfolioSectionState" }
+        problem: { $ref: "#/components/schemas/AdvancedPortfolioProblem" }
+        capabilities: { $ref: "#/components/schemas/DelegationCapabilityPage", description: "PRESENT: the account's delegated capabilities, newest first, with their scope, limits, use and expiry (at most 50)" }
+        swaps_awaiting_approval: { $ref: "#/components/schemas/DelegationSwapPage", description: "PRESENT: signing requests waiting for the owner's decision (status AWAITING_APPROVAL; at most 50)" }
+        withdrawals_awaiting_approval: { $ref: "#/components/schemas/DelegationWithdrawalPage", description: "PRESENT: withdrawals the account's agents proposed that wait for the owner's decision (status AWAITING_APPROVAL; at most 50)" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedPortfolioPerformanceFees:
+      type: object
+      required: [state, value_domain]
+      properties:
+        state: { $ref: "#/components/schemas/AdvancedPortfolioSectionState" }
+        problem: { $ref: "#/components/schemas/AdvancedPortfolioProblem" }
+        periods: { $ref: "#/components/schemas/FeePeriodPage", description: "PRESENT: the account's performance-fee periods, newest first, exactly as /advanced/fees/periods answers them (at most 50); an OPEN period's accrued fee is not charged until it crystallizes" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
     AdvancedPortfolioPositions:
       type: object
       required: [margin, derivatives, prediction_markets, equities, order_books]
@@ -13688,7 +13712,7 @@ components:
     AdvancedPortfolio:
       type: object
       required: [account_id, as_of, quote_asset_id, quote_symbol, quote_decimals, quote_provisioned, max_mark_age_ms, balances,
-                 buying_power, positions, risk, value_domain]
+                 buying_power, positions, delegation, performance_fees, risk, value_domain]
       properties:
         account_id: { $ref: "#/components/schemas/UUID" }
         as_of: { $ref: "#/components/schemas/Timestamp", description: When the balances and the risk records were read }
@@ -13703,5 +13727,7 @@ components:
           items: { $ref: "#/components/schemas/AdvancedPortfolioBalance" }
         buying_power: { $ref: "#/components/schemas/AdvancedPortfolioBuyingPower" }
         positions: { $ref: "#/components/schemas/AdvancedPortfolioPositions" }
+        delegation: { $ref: "#/components/schemas/AdvancedPortfolioDelegation" }
+        performance_fees: { $ref: "#/components/schemas/AdvancedPortfolioPerformanceFees" }
         risk: { $ref: "#/components/schemas/AdvancedPortfolioRisk" }
         value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }

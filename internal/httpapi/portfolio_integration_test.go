@@ -51,7 +51,8 @@ import (
 // them: the real services over the integration database, on one fake clock,
 // sharing one ledger, one capital service, one price store and one set of
 // econ stores, with one verified customer and one operator acting through
-// HTTP. No equities service is configured, so that section must say so.
+// HTTP. No equities service, agent authority service or fee ledger is
+// configured, so those sections must say so.
 type portfolioWorld struct {
 	t        *testing.T
 	d        *db.DB
@@ -626,6 +627,10 @@ func TestIntegration_PortfolioIsTheServicesOwnReads(t *testing.T) {
 	assert.Equal(t, api.PortfolioSectionNotConfigured, pf.Positions.Equities.State, "no equities service runs here")
 	assert.Empty(t, pf.Positions.Equities.Holdings)
 	assert.Nil(t, pf.Positions.Equities.PendingSettlements)
+	assert.Equal(t, api.PortfolioSectionNotConfigured, pf.Delegation.State, "no agent authority service runs here")
+	assert.Nil(t, pf.Delegation.Capabilities)
+	assert.Equal(t, api.PortfolioSectionNotConfigured, pf.PerformanceFees.State, "no fee ledger runs here")
+	assert.Nil(t, pf.PerformanceFees.Periods)
 	require.Equal(t, api.PortfolioSectionPresent, pf.Positions.OrderBooks.State)
 	same("/v1/advanced/books/orders?scope=WORKING&limit=50&account_id="+acct.String(), "positions", "order_books", "orders")
 	require.NotNil(t, pf.Positions.OrderBooks.Orders)
