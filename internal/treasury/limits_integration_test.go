@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/gates"
@@ -159,16 +160,17 @@ func TestIntegration_NoCustomerFundsAreAvailableToTheHouseStrategy(t *testing.T)
 	paper := f.paper(b, econ.HouseHedging, m.base.ID, orders.SideBuy, units(1))
 	requireRefused(t, paper.Rejection, paper.Action, ReasonInsufficientInventory)
 
-	// Bypassing the treasury does not help: the order book reserves only
-	// HOUSE_INVENTORY.
-	out, err := f.pipe.SubmitHouse(f.ctx, orders.HouseOrderRequest{
+	// Bypassing the treasury does not help: a house order exists only as the
+	// result of a treasury action (00759), so an order placed through the
+	// order book alone is refused at COMMIT and leaves nothing behind.
+	bypass := "bypass-" + uuid.NewString()
+	_, err := f.pipe.SubmitHouse(f.ctx, orders.HouseOrderRequest{
 		InstrumentID: m.inst, HouseAccountID: b.HouseAccountID, Side: orders.SideBuy, Type: orders.TypeLimit,
-		TimeInForce: orders.GTC, Price: f.price("100.00"), Quantity: units(1), IdempotencyKey: "bypass-" + uuid.NewString(),
-		Actor: houseRobot,
+		TimeInForce: orders.GTC, Price: f.price("100.00"), Quantity: units(1), IdempotencyKey: bypass, Actor: houseRobot,
 	})
 	require.Error(t, err)
-	assert.Equal(t, orders.ReasonHouseInventory, orders.ReasonOf(err))
-	assert.Equal(t, orders.StatusRejected, out.Order.Status)
+	assert.Equal(t, "TY007", db.SQLState(err), "%v", err)
+	assert.Zero(t, f.count(`SELECT count(*) FROM book_orders WHERE owner_id = $1 AND idempotency_key = $2`, b.HouseAccountID, bypass))
 
 	assert.Equal(t, walletBefore.String(), f.balance(ledger.CustomerAccount(rich, ledger.CodeWallet, f.usd.ID)).String())
 	assert.Zero(t, f.count(`SELECT count(*) FROM asset_reservations WHERE account_id = $1`, rich))

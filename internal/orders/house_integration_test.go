@@ -41,9 +41,9 @@ func TestIntegration_HouseCustomerCrossingIsRejectedByDefault(t *testing.T) {
 	customer, customer2 := customers[0], customers[1]
 
 	// House books trade with each other freely, and pay the platform no fee.
-	_, err := f.pipe.SubmitHouse(f.ctx, f.houseOrder(m, h, SideSell, "105.00", units(1)))
+	_, err := f.submitHouse(f.houseOrder(m, h, SideSell, "105.00", units(1)))
 	require.NoError(t, err)
-	hh, err := f.pipe.SubmitHouse(f.ctx, f.houseOrder(m, h2, SideBuy, "105.00", units(1)))
+	hh, err := f.submitHouse(f.houseOrder(m, h2, SideBuy, "105.00", units(1)))
 	require.NoError(t, err)
 	require.Len(t, hh.Trades, 1)
 	assert.Equal(t, 0, hh.Trades[0].CrossingRuleVersion)
@@ -52,7 +52,7 @@ func TestIntegration_HouseCustomerCrossingIsRejectedByDefault(t *testing.T) {
 	assert.Equal(t, units(9).String(), f.balance(h.Account(ledger.CodeHouseInventory, m.base.ID)).String())
 	assert.Equal(t, units(1).String(), f.balance(h2.Account(ledger.CodeHouseTradingInflow, m.base.ID)).String())
 
-	houseSell, err := f.pipe.SubmitHouse(f.ctx, f.houseOrder(m, h, SideSell, "105.00", units(1)))
+	houseSell, err := f.submitHouse(f.houseOrder(m, h, SideSell, "105.00", units(1)))
 	require.NoError(t, err)
 	assert.Equal(t, StatusOpen, houseSell.Order.Status)
 	customerSell := f.submit(f.limit(m, customer, SideSell, "100.00", units(1)))
@@ -60,7 +60,7 @@ func TestIntegration_HouseCustomerCrossingIsRejectedByDefault(t *testing.T) {
 	// House buy against the customer's resting sell: refused before the book.
 	before, err := f.svc.GetBook(f.ctx, testDB, m.inst)
 	require.NoError(t, err)
-	out, err := f.pipe.SubmitHouse(f.ctx, f.houseOrder(m, h, SideBuy, "100.00", units(1)))
+	out, err := f.submitHouse(f.houseOrder(m, h, SideBuy, "100.00", units(1)))
 	require.Error(t, err)
 	assert.Equal(t, ReasonHouseCrossingForbidden, ReasonOf(err))
 	assert.Equal(t, StatusRejected, out.Order.Status)
@@ -97,7 +97,7 @@ func TestIntegration_HouseCustomerCrossingIsRejectedByDefault(t *testing.T) {
 		assert.Equal(t, 1, r.Version)
 		return err
 	}))
-	crossed, err := f.pipe.SubmitHouse(f.ctx, f.houseOrder(m, h, SideBuy, "100.00", units(1)))
+	crossed, err := f.submitHouse(f.houseOrder(m, h, SideBuy, "100.00", units(1)))
 	require.NoError(t, err)
 	require.Len(t, crossed.Trades, 1)
 	assert.Equal(t, 1, crossed.Trades[0].CrossingRuleVersion)
@@ -115,7 +115,7 @@ func TestIntegration_HouseCustomerCrossingIsRejectedByDefault(t *testing.T) {
 		return err
 	}))
 	f.submit(f.limit(m, customer, SideSell, "100.00", units(1)))
-	_, err = f.pipe.SubmitHouse(f.ctx, f.houseOrder(m, h, SideBuy, "100.00", units(1)))
+	_, err = f.submitHouse(f.houseOrder(m, h, SideBuy, "100.00", units(1)))
 	assert.Equal(t, ReasonHouseCrossingForbidden, ReasonOf(err))
 	f.requireNoCrossedBook(m)
 }
@@ -135,7 +135,7 @@ func TestIntegration_HouseReservationsNeverOverspendInventory(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := f.pipe.SubmitHouse(f.ctx, f.houseOrder(m, h, SideSell, "120.00", money.QuantityFromInt64(1_500_000)))
+			_, err := f.submitHouse(f.houseOrder(m, h, SideSell, "120.00", money.QuantityFromInt64(1_500_000)))
 			results <- err
 		}()
 	}
@@ -167,17 +167,17 @@ func TestIntegration_HouseReservationsNeverOverspendInventory(t *testing.T) {
 	assert.Equal(t, "0", reserved)
 
 	r := f.houseOrder(m, h, SideSell, "120.00", units(1))
-	first, err := f.pipe.SubmitHouse(f.ctx, r)
+	first, err := f.submitHouse(r)
 	require.NoError(t, err)
-	second, err := f.pipe.SubmitHouse(f.ctx, r)
+	second, err := f.submitHouse(r)
 	require.NoError(t, err)
 	assert.Equal(t, first.Order.ID, second.Order.ID, "a replay returns the first order")
 	changed := r
 	changed.Quantity = money.QuantityFromInt64(1_100_000)
-	_, err = f.pipe.SubmitHouse(f.ctx, changed)
+	_, err = f.submitHouse(changed)
 	assert.Equal(t, errs.CodeInvalidIdempotencyReuse, errs.CodeOf(err))
 	agent := f.houseOrder(m, h, SideSell, "120.00", units(1))
 	agent.Actor = econ.Actor{Type: security.ActorAgent, ID: "agent-1"}
-	_, err = f.pipe.SubmitHouse(f.ctx, agent)
+	_, err = f.submitHouse(agent)
 	assert.Equal(t, errs.CodeForbidden, errs.CodeOf(err))
 }

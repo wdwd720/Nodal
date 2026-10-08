@@ -183,6 +183,11 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		"{transferId}": testSessionID,
 
 		// >>> advanced:treasury path parameters
+		"{houseBookId}":     testOrderID.String(),
+		"{feeDisclosureId}": testDepositID.String(),
+		"{feeBookingId}":    testSessionID,
+		"{feePeriodId}":     testIntentID.String(),
+		// {orderId} is mapped above.
 
 		// >>> advanced:stable path parameters
 
@@ -235,6 +240,14 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		"/v1/advanced/transfers/faucet/allowance": "account_id=" + testAccountID.String(),
 
 		// >>> advanced:treasury required query
+		"/v1/advanced/treasury/crossing-disclosures": "instrument_id=" + testInstrument.String(),
+		"/v1/advanced/treasury/house-trades":         "account_id=" + testAccountID.String(),
+		"/v1/advanced/fees/schedules/history":        "key=orders:paper",
+		"/v1/advanced/fees/quotes":                   "account_id=" + testAccountID.String(),
+		"/v1/advanced/fees/quote-preview":            "schedule_key=orders:paper&side=BUY&base_quantity=1000000&base_decimals=6&reference_price=100.25",
+		"/v1/advanced/fees/bookings":                 "account_id=" + testAccountID.String(),
+		"/v1/advanced/fees/spread-totals":            "quote_asset_id=" + testAssetID.String(),
+		"/v1/advanced/fees/periods":                  "account_id=" + testAccountID.String(),
 
 		// >>> advanced:stable required query
 

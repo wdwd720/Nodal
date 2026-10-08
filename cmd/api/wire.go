@@ -39,6 +39,7 @@ import (
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/event"
 	"github.com/nodal/controlplane/internal/execution"
+	"github.com/nodal/controlplane/internal/feeledger"
 	"github.com/nodal/controlplane/internal/funding"
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/httpapi"
@@ -55,6 +56,7 @@ import (
 	"github.com/nodal/controlplane/internal/nativemarket"
 	"github.com/nodal/controlplane/internal/notification"
 	"github.com/nodal/controlplane/internal/observability"
+	"github.com/nodal/controlplane/internal/orders"
 	"github.com/nodal/controlplane/internal/payout"
 	"github.com/nodal/controlplane/internal/positions"
 	"github.com/nodal/controlplane/internal/predmarket"
@@ -67,6 +69,7 @@ import (
 	"github.com/nodal/controlplane/internal/sandboxrt"
 	"github.com/nodal/controlplane/internal/stream"
 	"github.com/nodal/controlplane/internal/transfers"
+	"github.com/nodal/controlplane/internal/treasury"
 	"github.com/nodal/controlplane/internal/valuation"
 	"github.com/nodal/controlplane/internal/withdrawal"
 )
@@ -461,6 +464,54 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	}
 
 	// >>> advanced:treasury services
+	//
+	// The house book (internal/treasury) and the fee ledger (internal/feeledger).
+	// The treasury decides every control itself (its signing policy, the
+	// PRINCIPAL_TRADING and INTERNAL_MATCHING gates and kill switches, its
+	// versioned limits, Risk Kernel V2, the order book's own house rules); this
+	// block hands it its collaborators. It places house orders on the internal
+	// book through an order service of its own, built from the same
+	// collaborators as every other advanced service and judged against the
+	// deployment's legal policy (conservative unless one is configured): the
+	// book itself is the database's, so two services over it agree by
+	// construction.
+	treasuryRouter, err := legalRouterFor(cfg.Env, in.cfg.API.LegalPolicy)
+	if err != nil {
+		return nil, err
+	}
+	if treasuryRouter == nil {
+		if treasuryRouter, err = legalrouter.New(legalrouter.ConservativePolicy()); err != nil {
+			return nil, fmt.Errorf("treasury legal router: %w", err)
+		}
+	}
+	treasuryOrders, err := orders.NewService(orders.Config{
+		Clock: clk, Ledger: ledgerSvc, Capital: capitalSvc, Intents: econ.NewIntentStore(clk, outbox, auditWriter),
+		Effects: econ.NewEffectStore(clk, outbox, auditWriter), Authorizer: econ.NewAuthorizer(gateChecker, killChecker),
+		Registry: econ.NewRegistry(), Risk: risk.NewStore(), RiskPolicy: risk.DefaultAdvancedPolicy(), Router: treasuryRouter,
+		Instruments: instrumentRepo, Assets: assetRepo, Prices: priceStore, KillSwitches: killChecker,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("treasury order service: %w", err)
+	}
+	treasurySvc, err := treasury.NewService(treasury.Config{
+		Clock: clk, Ledger: ledgerSvc, Effects: econ.NewEffectStore(clk, outbox, auditWriter),
+		Authorizer: econ.NewAuthorizer(gateChecker, killChecker), Registry: econ.NewRegistry(), Orders: treasuryOrders,
+		Prices: priceStore, Assets: assetRepo, Instruments: instrumentRepo, KillSwitches: killChecker, Audit: auditWriter,
+		RiskPolicy: risk.DefaultAdvancedPolicy(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("treasury service: %w", err)
+	}
+	// The fee ledger books disclosed fees and performance fees (sandbox
+	// accounting, never charged live) with its package defaults: a two-minute
+	// quote TTL and the SYSTEM fee-ledger service applying its effects.
+	feeLedgerSvc, err := feeledger.NewService(feeledger.Config{
+		Clock: clk, Ledger: ledgerSvc, Capital: capitalSvc, Effects: econ.NewEffectStore(clk, outbox, auditWriter),
+		Authorizer: econ.NewAuthorizer(gateChecker, killChecker), Assets: assetRepo, Audit: auditWriter,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("fee ledger: %w", err)
+	}
 
 	// >>> advanced:stable services
 
@@ -645,6 +696,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		},
 
 		// >>> advanced:treasury deps
+		Treasury: httpapi.TreasuryDeps{Service: treasurySvc, Fees: feeLedgerSvc},
 
 		// >>> advanced:stable deps
 
