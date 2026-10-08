@@ -73,13 +73,9 @@
 // for a caller that commits afterwards.
 //
 // The econ intent lifecycle changes one intent's status several times in one
-// transaction. Until migration 00733 (edges accumulate) reaches this branch,
-// the deferred edge binding keeps one edge per entity per transaction, so the
-// operations that run intents first make exactly the intent and effect
-// bindings IMMEDIATE (bindEconTransitionsImmediately, to be deleted with
-// 00733). That is stricter, never looser: each change must already be
-// described by its transition row when the UPDATE runs. Markets and
-// instruments never change status twice in one transaction.
+// transaction; migration 00733 lets the intent and effect bindings accumulate
+// edges for exactly that, each step still licensed by its own transition row.
+// Markets and instruments never change status twice in one transaction.
 //
 // # What this package must never do
 //

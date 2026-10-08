@@ -70,9 +70,6 @@ func (s *Service) Settle(ctx context.Context, tx pgx.Tx, req SettleRequest) (Set
 	}
 	var out SettleResult
 	err = atomically(ctx, tx, func(tx pgx.Tx) error {
-		if err := bindEconTransitionsImmediately(ctx, tx); err != nil {
-			return err
-		}
 		m, err := s.lockMarket(ctx, tx, req.MarketID, lockUpdate)
 		if err != nil {
 			return err
@@ -177,9 +174,6 @@ func (s *Service) Void(ctx context.Context, tx pgx.Tx, req VoidRequest) (SettleR
 	}
 	var out SettleResult
 	err = atomically(ctx, tx, func(tx pgx.Tx) error {
-		if err := bindEconTransitionsImmediately(ctx, tx); err != nil {
-			return err
-		}
 		m, err := s.lockMarket(ctx, tx, req.MarketID, lockUpdate)
 		if err != nil {
 			return err

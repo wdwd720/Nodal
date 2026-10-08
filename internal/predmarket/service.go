@@ -176,25 +176,6 @@ func (s *Service) FetchReport(ctx context.Context, marketID MarketID) (OracleRep
 	return s.oracle.Report(ctx, marketID)
 }
 
-// bindEconTransitionsImmediately exists only until migration 00733 (on main)
-// reaches this branch, and is deleted with it. On this branch the deferred
-// AU001 binding of economic intents and effects keeps one edge per entity per
-// transaction, so an intent that moves RECEIVED -> ROUTED -> ... -> COMPLETED
-// in one transaction fails at COMMIT although every step wrote its row. Run
-// once at the start of such a transaction, it makes exactly those two
-// bindings check each UPDATE when it runs; econ writes the transition row
-// before the UPDATE, so every step passes, and a change without its row is
-// still refused -- per statement now, which is stricter, never looser. It
-// lasts until the end of the transaction. Nothing else in this package
-// changes one row's status twice in a transaction: markets and instruments
-// move at most once per operation.
-func bindEconTransitionsImmediately(ctx context.Context, tx pgx.Tx) error {
-	if _, err := tx.Exec(ctx, `SET CONSTRAINTS economic_intents_require_transition, economic_effects_require_transition IMMEDIATE`); err != nil {
-		return dbErr("bind economic transitions immediately", err)
-	}
-	return nil
-}
-
 // atomically runs fn in a savepoint of tx and keeps what fn did only when it
 // returns nil. It is what makes an operation all-or-nothing whatever the
 // caller then does with tx: an error rolls back to the savepoint, so even a

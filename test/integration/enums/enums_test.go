@@ -50,6 +50,7 @@ import (
 	"github.com/nodal/controlplane/internal/margin"
 	"github.com/nodal/controlplane/internal/notification"
 	"github.com/nodal/controlplane/internal/prediction"
+	"github.com/nodal/controlplane/internal/predmarket"
 	"github.com/nodal/controlplane/internal/reconciliation"
 	"github.com/nodal/controlplane/internal/risk"
 	"github.com/nodal/controlplane/internal/sandboxfund"
@@ -200,6 +201,14 @@ func registry() []pair {
 		{table: "margin_liquidation_cases", constraint: "margin_liquidation_cases_status_check", source: "margin.AllCaseStatuses()", values: str(margin.AllCaseStatuses())},
 		{table: "margin_liquidation_cases", constraint: "margin_liquidation_cases_target_check", source: "margin.AllLiquidationTargets()", values: str(margin.AllLiquidationTargets())},
 		{table: "margin_liquidation_steps", constraint: "margin_liquidation_steps_action_check", source: "margin.AllStepActions()", values: str(margin.AllStepActions())},
+
+		// Migration 00749 (prediction markets).
+		{table: "prediction_markets", constraint: "prediction_markets_status_check", source: "predmarket.AllMarketStatuses()", values: str(predmarket.AllMarketStatuses())},
+		{table: "prediction_markets", constraint: "prediction_markets_mode_check", source: "predmarket.SupportedModes()", values: str(predmarket.SupportedModes())},
+		{table: "prediction_market_transitions", constraint: "prediction_market_transitions_actor_type_check", source: "predmarket.LifecycleActorTypes()", values: str(predmarket.LifecycleActorTypes())},
+		{table: "prediction_resolutions", constraint: "prediction_resolutions_kind_check", source: "predmarket.AllResolutionKinds()", values: str(predmarket.AllResolutionKinds())},
+		{table: "prediction_settlements", constraint: "prediction_settlements_kind_check", source: "predmarket.AllSettlementKinds()", values: str(predmarket.AllSettlementKinds())},
+		{table: "prediction_settlements", constraint: "prediction_settlements_rounding_policy_check", source: "predmarket.AllRoundingPolicies()", values: str(predmarket.AllRoundingPolicies())},
 	}
 	for _, table := range []string{
 		"agent_runs", "agents", "calibration_snapshots", "cost_accounting", "counterfactuals",

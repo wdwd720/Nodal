@@ -187,7 +187,8 @@ func (s *Service) execute(ctx context.Context, tx pgx.Tx, res ActionResult, a ac
 		// idempotency key, the effect's reservation_id and the evidence.
 		rv, err := s.capital.Reserve(ctx, tx, capital.ReserveRequest{
 			AccountID: it.AccountID.String(), AssetID: r.Asset, Quantity: r.Quantity,
-			ActorType: it.ActorType, ActorID: it.ActorID, IdempotencyKey: key + ":" + r.Suffix,
+			EconomicIntentID: it.ID.String(),
+			ActorType:        it.ActorType, ActorID: it.ActorID, IdempotencyKey: key + ":" + r.Suffix,
 			TTL: ReservationTTL, Reason: a.effectKind + " for economic intent " + it.ID.String(),
 		})
 		if err != nil {

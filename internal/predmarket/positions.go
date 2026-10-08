@@ -140,9 +140,6 @@ func (s *Service) Issue(ctx context.Context, tx pgx.Tx, req PositionRequest) (Ac
 	if err := req.validate(); err != nil {
 		return ActionResult{}, err
 	}
-	if err := bindEconTransitionsImmediately(ctx, tx); err != nil {
-		return ActionResult{}, err
-	}
 	m, err := s.lockMarket(ctx, tx, req.MarketID, lockShare)
 	if err != nil {
 		return ActionResult{}, err
@@ -218,9 +215,6 @@ func (s *Service) Issue(ctx context.Context, tx pgx.Tx, req PositionRequest) (Ac
 // order already holds.
 func (s *Service) Redeem(ctx context.Context, tx pgx.Tx, req PositionRequest) (ActionResult, error) {
 	if err := req.validate(); err != nil {
-		return ActionResult{}, err
-	}
-	if err := bindEconTransitionsImmediately(ctx, tx); err != nil {
 		return ActionResult{}, err
 	}
 	m, err := s.lockMarket(ctx, tx, req.MarketID, lockShare)

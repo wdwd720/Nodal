@@ -12,7 +12,7 @@ an external provider's sandbox) · `BLOCKED_EXTERNAL` · `LIVE_CAPABLE_BUT_DISAB
 code (`gates.DecideMode` → `LIVE_NOT_IMPLEMENTED`) and unrepresentable in the database (D-049). The live
 column below says what activation would need, never that it is near.
 
-Last updated: 2026-10-08 — foundation, kernel amendments (00733), transfers + faucet (00744) and margin (00740) merged; other subsystem lanes in progress.
+Last updated: 2026-10-08 — foundation, kernel amendments (00733), transfers + faucet (00744), margin (00740) and prediction markets (00749) merged; other subsystem lanes in progress.
 
 ## Summary
 
@@ -38,7 +38,7 @@ Last updated: 2026-10-08 — foundation, kernel amendments (00733), transfers + 
 | 18 | Delegated agent signing (§16) | NOT_STARTED | SANDBOX/DEVNET | B-18 |
 | 19 | Delegated agent withdrawals (§17) | NOT_STARTED | SANDBOX/DEVNET | B-18 |
 | 20 | Cross-chain buying power (§18) | NOT_STARTED | SANDBOX/DEVNET | B-20 |
-| 21 | Prediction markets (§19) | NOT_STARTED | PAPER/SANDBOX | B-15, B-17 |
+| 21 | Prediction markets (§19) | VERIFIED_LOCAL (API in progress) | PAPER/SANDBOX | B-15, B-17 |
 | 22 | Universal buying power V2 (§20) | VERIFIED_LOCAL (margin wired; derivatives, bridge pending) | SIMULATED domain | — |
 | 23 | Provider layer modes (§27) | IN_PROGRESS | fake/sandbox | B-17, B-20 |
 | 24 | Observability (§29) | NOT_STARTED | — | — |
@@ -90,3 +90,9 @@ Last updated: 2026-10-08 — foundation, kernel amendments (00733), transfers + 
 ### 22. Universal buying power V2
 - **Implementation:** `internal/capital/buyingpower/v2.go`, `v2_load.go` (ledger + reservations + marks, SIMULATED domain only), margin wired through `margin.BuyingPowerReader`; served at `GET /v1/advanced/buying-power`.
 - **Tests:** `v2_test.go`, `v2_integration_test.go`, `TestIntegration_BuyingPowerV2SeesTheMarginEngine`, `TestIntegration_AdvancedReadsServeTheRealStores`.
+
+### 21. Prediction markets
+- **Implementation:** `internal/predmarket` (market lifecycle DRAFT → OPEN → CLOSED → RESOLUTION_PENDING → RESOLVED/DISPUTED → SETTLED or VOIDED; complete-set issuance and redemption against escrow; Ed25519-verified sandbox oracle reports; disputes; settlement that pays winning shares one unit and losing shares nothing; void refunds with a disclosed rounding residual; escrow reconciliation). Positions are a view over the ledger, so they cannot drift from it. The creator can never resolve or void their own market, and a disputer never rules on their dispute.
+- **DB:** `00749_prediction_markets.sql` (PM001–PM005; settlement rows check their own conservation in SQL).
+- **Tests:** `TestProp_SettlementPaysExactlyTheEscrow`, `TestProp_PayoutConservation`, `TestProp_RefundConservesAndBoundsTheResidual`, `TestIntegration_ConcurrentSettlementsSettleOnce`, `TestIntegration_ADisputedMarketCannotSettle`, `TestIntegration_NoSettlementBeforeResolution`, `TestIntegration_OracleReplayIsIdempotentAndAConflictingReportIsRefused`, `TestIntegration_ReconciliationDetectsAnEscrowDivergence`, `TestIntegration_ScenarioH_CreateTradeCloseResolveSettle`, `FuzzDecodeOracleReport`.
+- **Limitations:** settlement is all-or-nothing (a holder Risk V2 refuses blocks it until resolved); shares outside customer wallets or reserved by open orders make settlement refuse with RECONCILIATION_REQUIRED.
