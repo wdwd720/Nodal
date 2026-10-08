@@ -104,7 +104,7 @@ Every posting of a simulated-only kind **balances per party**: for each `(owner_
 | `FACILITY_FUNDING` | F: Dr <asset code> / Cr <capital code> (e.g. POOL_CASH/POOL_CAPITAL) |
 | `HOUSE_FUNDING` | H: Dr HOUSE_INVENTORY / Cr HOUSE_CAPITAL |
 | `P2P_TRANSFER` | C: Dr TRANSFER_OUT / Cr WALLET; C': Dr WALLET / Cr TRANSFER_IN |
-| `SIM_TRADE` (spot, paper, matched, prediction shares, equities on settlement) | buyer: Cr WALLET(quote) / Dr TRADING_OUTFLOW(quote), Dr WALLET(base) / Cr TRADING_INFLOW(base); seller mirrored; a house side uses the HOUSE_* codes |
+| `SIM_TRADE` (spot, paper, matched, prediction shares, equities on the trade date) | buyer: Cr WALLET(quote) / Dr TRADING_OUTFLOW(quote), Dr WALLET(base) / Cr TRADING_INFLOW(base); seller mirrored; a house side uses the HOUSE_* codes. Equity sell proceeds are booked net of the disclosed charges; a venue fee passed through is not booked to the venue. |
 | disclosed spread inside a trade | C: Dr FEES_SPREAD / Cr WALLET; P: Dr PLATFORM_FEE_RECEIVABLE / Cr SPREAD_REVENUE |
 | explicit fee inside a trade | C: Dr FEES_PLATFORM / Cr WALLET; P: Dr PLATFORM_FEE_RECEIVABLE / Cr PLATFORM_FEE_REVENUE |
 | `MARGIN_COLLATERAL_MOVE` | C: Dr MARGIN_COLLATERAL / Cr WALLET (post); reverse to release |

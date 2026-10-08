@@ -334,11 +334,9 @@ func (s *Service) AcceptOrder(ctx context.Context, tx pgx.Tx, intentID econ.Inte
 	if ttl > capital.MaxReservationTTL {
 		ttl = capital.MaxReservationTTL
 	}
-	// IntentID stays empty: asset_reservations.intent_id references
-	// trade_intents, not economic intents. The idempotency key names the
-	// economic intent; the integrator sets EconomicIntentID at merge.
+	// The reservation names the economic intent it serves (00733).
 	res, err := s.capital.Reserve(ctx, tx, capital.ReserveRequest{
-		AccountID: o.AccountID.String(), AssetID: reserveAsset, Quantity: reserveQty,
+		AccountID: o.AccountID.String(), AssetID: reserveAsset, Quantity: reserveQty, EconomicIntentID: in.ID.String(),
 		ActorType: s.actor.Type, ActorID: s.actor.ID, IdempotencyKey: "equities:order:" + in.ID.String(), TTL: ttl,
 		Reason: "equity " + strings.ToLower(string(o.Side)) + " order " + o.ID.String() + " (economic intent " + in.ID.String() + ")",
 	})

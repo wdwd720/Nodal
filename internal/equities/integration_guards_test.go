@@ -301,6 +301,14 @@ func TestIntegration_DatabaseGuardsTheEquitiesRegisters(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, "equity_corporate_actions_ratio_shape", db.ConstraintName(err), "%v", err)
 	require.NoError(t, rawAction("ANNOUNCED", nil, nil), "the same row carrying only its own fields is accepted")
+	// Cash in lieu belongs to splits only.
+	err = exec(`INSERT INTO equity_corporate_actions (id, instrument_id, action_type, status, effective_date, share_asset_id,
+		cash_asset_id, new_symbol, cash_in_lieu_price, cash_in_lieu_price_scale, rounding_policy, reason, content_hash,
+		announced_by_actor_type, announced_by_actor_id)
+		VALUES ($1,$2,'SYMBOL_CHANGE','ANNOUNCED','2026-10-15',$3,$4,'RAWSYMB',100,2,'SHARES_DOWN_CASH_DOWN','raw',$5,'SYSTEM','raw')`,
+		uuid.New(), l.Instrument.ID, l.ShareAsset.ID, w.cash.ID, make([]byte, 32))
+	require.Error(t, err)
+	assert.Equal(t, "equity_corporate_actions_cash_in_lieu_for_splits", db.ConstraintName(err), "%v", err)
 
 	// Holidays are append-only and never on a weekend.
 	err = exec(`UPDATE equity_calendar_holidays SET name = 'x'`)

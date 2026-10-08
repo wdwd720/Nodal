@@ -12,7 +12,7 @@ an external provider's sandbox) · `BLOCKED_EXTERNAL` · `LIVE_CAPABLE_BUT_DISAB
 code (`gates.DecideMode` → `LIVE_NOT_IMPLEMENTED`) and unrepresentable in the database (D-049). The live
 column below says what activation would need, never that it is near.
 
-Last updated: 2026-10-08 — foundation, kernel amendments (00733), transfers + faucet (00744), margin (00740), derivatives (00741), prediction markets (00749), strategy marketplace (00750), sandboxed runs (00751) the internal order book (00742), the stable asset (00747) and bridges (00748) merged; other subsystem lanes in progress.
+Last updated: 2026-10-08 — foundation, kernel amendments (00733), transfers + faucet (00744), margin (00740), derivatives (00741), prediction markets (00749), strategy marketplace (00750), sandboxed runs (00751) the internal order book (00742), the stable asset (00747), bridges (00748) and equities (00743) merged; other subsystem lanes in progress.
 
 ## Summary
 
@@ -27,7 +27,7 @@ Last updated: 2026-10-08 — foundation, kernel amendments (00733), transfers + 
 | 7 | Stable asset subsystem (§5) | VERIFIED_LOCAL (API in progress) | SANDBOX/DEVNET | B-16 |
 | 8 | Margin + leverage engine (§6) | VERIFIED_LOCAL (API in progress) | PAPER/SANDBOX | B-15 |
 | 9 | Derivatives: futures, perps, options (§7) | VERIFIED_LOCAL (API in progress) | PAPER/SANDBOX | B-15, B-17 |
-| 10 | Equities abstraction (§8) | IN_PROGRESS | PAPER/SANDBOX | B-15, B-17 |
+| 10 | Equities abstraction (§8) | VERIFIED_LOCAL (API in progress) | PAPER/SANDBOX | B-15, B-17 |
 | 11 | Internal matching engine (§9) | VERIFIED_LOCAL (API in progress) | internal simulation | B-15 |
 | 12 | Customer-to-customer transfers (§10) | VERIFIED_LOCAL (API in progress) | SANDBOX | B-15 |
 | 13 | Principal / treasury book (§11) | IN_PROGRESS | PAPER/SANDBOX | B-15 |
@@ -127,3 +127,9 @@ Last updated: 2026-10-08 — foundation, kernel amendments (00733), transfers + 
 - **DB:** `00748_bridges.sql` (BR001–BR005; a requested leg carries its lock).
 - **Tests:** `TestProp_IntegrationNoDoubleCounting`, `TestProp_EachLegIsCountedOnceWhereItsValueIs`, `TestProp_PostingsConserveValueAcrossChains`, `TestIntegration_AFailedLockRestoresTheSourceState`, `TestIntegration_AFailedReleaseIsRefundedAndRestoresTheSourceState`, `TestIntegration_ADelayedBridgeCreatesNoPhantomCapital`, `TestIntegration_AReorgNeverRevertsFinalityOrDoubleCounts`, `TestIntegration_ADuplicateReleaseMintsNothingTwice`, `TestIntegration_ConcurrentDuplicatesSettleOnce`, `TestHaircut_InFlightValueCountsOnlyAtThePolicyFactor`, `TestIntegration_BridgeReconciliationDetectsAnOutOfBandLock`, `TestIntegration_TheDatabaseRefusesBridgeBookkeepingBypasses`, `TestIntegration_ARequestedLegCarriesItsLock`.
 - **Limitations:** DEVNET legs and unknown submissions advance only when `ObservePending` runs (no scheduler yet); every bridge posting serializes on its route's row lock.
+
+### 10. Equities abstraction
+- **Implementation:** `internal/equities` (listings over canonical EQUITY/ETF instruments, exchange calendars with sessions and holidays, order types per session, a paper venue and a replay adapter that agree by contract test and a live adapter that refuses unconditionally, placement as a PENDING submission whose UNKNOWN outcome is resolved by polling, fills applied exactly once, T+1 settlement worked one account per transaction, corporate actions — splits and reverse splits with cash in lieu, cash dividends to holders of record, symbol changes, delistings — announced, cancellable and applied exactly once, fractional shares at six decimals, halts, and every charged spread discoverable from the stored disclosure).
+- **DB:** `00743_equities.sql` (EQ001–EQ005; a corporate action carries only its own type's fields; one action per instrument, type and effective date among non-cancelled ones).
+- **Tests:** `TestProp_SplitPreservesEconomicValueUnderRoundingPolicy`, `TestIntegration_SplitAndReverseSplitPreserveValueWithCashInLieu`, `TestIntegration_DividendPaysHoldersOfRecordOnlyExactAmounts`, `TestProp_DividendIsExactAndNeverOverpays`, `TestIntegration_TradingHaltBlocksNewOrders`, `TestIntegration_SessionRulesAreEnforced`, `TestIntegration_CorporateActionReplayIsIdempotent`, `TestIntegration_UnsettledProceedsAreNotWithdrawable`, `TestIntegration_AllChargedSpreadIsDiscoverableFromTheStoredDisclosure`, `TestIntegration_OrderPlacementIsExactlyOnceUnderConcurrency`, `TestIntegration_ConcurrentSellsCannotSellTheSameSharesTwice`, `TestIntegration_SettlementWorkersAcrossAccountsNeverDeadlock`, `TestContract_PaperAndReplayAdaptersAgree`, `TestProviderMode_LiveIsRefusedUnconditionally`.
+- **Limitations:** orders fill in full with one fill each, DAY orders only; fees use the base tier; holidays are full-day only; sells come only from settled shares.

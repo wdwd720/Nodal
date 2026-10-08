@@ -43,6 +43,7 @@ import (
 	"github.com/nodal/controlplane/internal/derivatives"
 	"github.com/nodal/controlplane/internal/devnethost"
 	"github.com/nodal/controlplane/internal/econ"
+	"github.com/nodal/controlplane/internal/equities"
 	"github.com/nodal/controlplane/internal/execution"
 	"github.com/nodal/controlplane/internal/funding"
 	"github.com/nodal/controlplane/internal/gates"
@@ -257,6 +258,24 @@ func registry() []pair {
 		{table: "book_house_reservation_transitions", constraint: "book_house_reservation_transitions_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
 		{table: "paper_fills", constraint: "paper_fills_side_check", source: "orders.AllSides()", values: str(orders.AllSides())},
 
+		// Migration 00743 (paper and sandbox equities).
+		{table: "corporate_action_applications", constraint: "corporate_action_applications_rounding_policy_check", source: "equities.AllCorporateRoundings()", values: str(equities.AllCorporateRoundings())},
+		{table: "equity_calendar_holidays", constraint: "equity_calendar_holidays_created_by_actor_type_check", source: "equities.AllTransitionActorTypes()", values: str(equities.AllTransitionActorTypes())},
+		{table: "equity_corporate_action_transitions", constraint: "equity_corporate_action_transitions_actor_type_check", source: "equities.AllTransitionActorTypes()", values: str(equities.AllTransitionActorTypes())},
+		{table: "equity_corporate_actions", constraint: "equity_corporate_actions_action_type_check", source: "equities.AllCorporateActionTypes()", values: str(equities.AllCorporateActionTypes())},
+		{table: "equity_corporate_actions", constraint: "equity_corporate_actions_announced_by_actor_type_check", source: "equities.AllTransitionActorTypes()", values: str(equities.AllTransitionActorTypes())},
+		{table: "equity_corporate_actions", constraint: "equity_corporate_actions_rounding_policy_check", source: "equities.AllCorporateRoundings()", values: str(equities.AllCorporateRoundings())},
+		{table: "equity_corporate_actions", constraint: "equity_corporate_actions_status_check", source: "equities.AllCorporateActionStatuses()", values: str(equities.AllCorporateActionStatuses())},
+		{table: "equity_fills", constraint: "equity_fills_side_check", source: "equities.AllSides()", values: str(equities.AllSides())},
+		{table: "equity_order_transitions", constraint: "equity_order_transitions_actor_type_check", source: "equities.AllTransitionActorTypes()", values: str(equities.AllTransitionActorTypes())},
+		{table: "equity_orders", constraint: "equity_orders_actor_type_check", source: "security.AllActorTypes()", values: str(security.AllActorTypes())},
+		{table: "equity_orders", constraint: "equity_orders_mode_check", source: "equities.AllOrderModes()", values: str(equities.AllOrderModes())},
+		{table: "equity_orders", constraint: "equity_orders_order_type_check", source: "equities.AllOrderTypes()", values: str(equities.AllOrderTypes())},
+		{table: "equity_orders", constraint: "equity_orders_rejection_code_check", source: "equities.AllRejectionCodes()", values: str(equities.AllRejectionCodes())},
+		{table: "equity_orders", constraint: "equity_orders_session_check", source: "equities.AllSessions()", values: str(equities.AllSessions())},
+		{table: "equity_orders", constraint: "equity_orders_side_check", source: "equities.AllSides()", values: str(equities.AllSides())},
+		{table: "equity_orders", constraint: "equity_orders_status_check", source: "equities.AllOrderStatuses()", values: str(equities.AllOrderStatuses())},
+
 		// Migrations 00747 and 00748 (devnet host, stable assets, bridges).
 		{table: "devnet_events", constraint: "devnet_events_kind_check", source: "devnethost.AllEventKinds()", values: str(devnethost.AllEventKinds())},
 		{table: "devnet_events", constraint: "devnet_events_outcome_check", source: "devnethost.AllOutcomes()", values: str(devnethost.AllOutcomes())},
@@ -389,6 +408,12 @@ var bespoke = []string{
 	// TIMEOUT and no other kind has one of those. internal/devnethost's
 	// TestIntegration_TheDatabaseRefusesAGapInTheHistory drives it.
 	"devnet_events.devnet_events_submit_outcome",
+	// Rules, not lists of values: a corporate action carries only its own
+	// type's fields (a ratio for splits, cash in lieu for splits).
+	// internal/equities' TestIntegration_DatabaseGuardsTheEquitiesRegisters
+	// drives both.
+	"equity_corporate_actions.equity_corporate_actions_cash_in_lieu_for_splits",
+	"equity_corporate_actions.equity_corporate_actions_ratio_shape",
 }
 
 var (
