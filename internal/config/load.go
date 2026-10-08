@@ -340,6 +340,7 @@ const (
 	secTelemetry  = "Telemetry"
 	secSeed       = "Seed"
 	secRetention  = "Retention (days per retention class)" // #nosec G101 -- config section heading, not a credential
+	secSandbox    = "Sandbox chains (simulated value only)"
 )
 
 func specs() []varSpec {
@@ -567,6 +568,11 @@ func specs() []varSpec {
 
 		req("CP_SEED_ENABLED", secSeed, "Allow seeding clearly-labeled fake users/assets/balances. Must be false in STAGING/PROD.", "false",
 			setBool(func(c *Config) *bool { return &c.Seed.Enabled })),
+
+		opt("CP_SANDBOX_DEVNET_NETWORK", secSandbox, "Network of the persistent simulated chain host (sbx-solana, sbx-ethereum) that the sandbox stable asset and the bridge run on: 1..63 of [a-z0-9-]. Every binary that opens the chain must name the same network. Empty leaves both capabilities unwired.", "nodal-sandbox",
+			setString(func(c *Config) *string { return &c.Sandbox.DevnetNetwork })),
+		secretVar(opt("CP_SANDBOX_DEVNET_SEED_REF", secSandbox, "SecretRef to the 64 hexadecimal characters every platform sandbox chain key derives from (custody, issuer, reserve snapshots, bridge attester). Required when CP_SANDBOX_DEVNET_NETWORK is set; changing it orphans every simulated asset already on that network. The example is a published seed: a plain value is accepted only in LOCAL and TEST.", "8ba28c49ce9db1683cc3976600f4b291512c0d860ac74b76d175b3d72673f374",
+			setSecret(func(c *Config) *SecretRef { return &c.Sandbox.DevnetSeedRef }))),
 
 		req("CP_RETENTION_LOGIN_ATTEMPT_DAYS", secRetention, "Days a login_attempts row is kept after it expired. It holds a plaintext OIDC nonce and PKCE verifier; the durable record of a login is a security_events row. Minimum 1.", "2",
 			setInt(func(c *Config) *int { return &c.Retention.LoginAttemptDays })),

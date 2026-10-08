@@ -804,6 +804,605 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/advanced/books": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Internal books, oldest first, with their terms, disclosed fee schedules and the crossing rule in force */
+        get: {
+            parameters: {
+                query?: {
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of books (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedBookPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /**
+         * Open the internal book of an instrument (operator; requires step-up)
+         * @description A SPOT_PAIR states its terms here (it has no canonical terms row); any other instrument trades on its current canonical terms and refuses spot_terms. The quote asset must be a USD-pegged simulated asset, and each fee schedule is quoted in it and may carry only a percentage fee, a strategy fee, a subscription discount and a basis-point cap (ORDER_SCHEDULE_NOT_ALLOWED_ON_INTERNAL_BOOK otherwise). Opening the same book again with the same terms returns it; different terms are a CONFLICT.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AdvancedBookOpenRequest"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay of the original answer */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedBook"];
+                    };
+                };
+                /** @description The book is open */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedBook"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/books/{instrumentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One internal book */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    instrumentId: components["parameters"]["InstrumentId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The book (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedBook"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/books/{instrumentId}/depth": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The resting book as persisted, aggregated by price level, best level first */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Price levels per side */
+                    levels?: number;
+                };
+                header?: never;
+                path: {
+                    instrumentId: components["parameters"]["InstrumentId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Bids and asks with the journal cursor they were read at */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedBookDepth"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/books/{instrumentId}/journal-verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Prove from the database alone that the book's journal replays to its recorded state (operator; read-only)
+         * @description Replays every journalled command from the empty book, comparing every event byte for byte and every state hash, replays the latest snapshot and the tail to the same state, and compares every order that reached the book with the replayed engine's record of it. It reads one consistent snapshot and changes nothing. A divergence is an INTERNAL error: the journal is the book's truth and must never disagree.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    instrumentId: components["parameters"]["InstrumentId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description What the replay proved */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedBookJournalVerification"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/books/{instrumentId}/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit a limit or market order to an internal book from one of your own accounts
+         * @description The order runs through the staged pipeline -- Accept (intent and settlement compiler), Approve (capability gate and Risk Kernel V2), Reserve (capital), Execute (the book) and Complete -- each stage its own transaction. price is the limit price, or a market order's protection price, which this book requires. A refusal at any stage is recorded before it is answered: the answer is the stable reason (fields carry reason and order_id) and the REJECTED order stays readable. A client order id the account already used is refused (DUPLICATE_CLIENT_ORDER_ID).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    instrumentId: components["parameters"]["InstrumentId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AdvancedBookOrderRequest"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay of the original answer */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedBookCommandResult"];
+                    };
+                };
+                /** @description The order as the pipeline left it, with every fill it made */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedBookCommandResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/books/{instrumentId}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Halt, resume or close a book (operator; requires step-up)
+         * @description A HALTED book accepts cancels only; a CLOSED book accepts nothing and can be closed only once no order works on it. Every change is recorded with its reason and actor.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    instrumentId: components["parameters"]["InstrumentId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AdvancedBookStatusRequest"];
+                };
+            };
+            responses: {
+                /** @description The book in its new status */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedBook"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/books/{instrumentId}/trades/{tradeSeq}/proof": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The audit proof of one trade, to one of its parties or an operator who may read any account
+         * @description The trade's SIM_TRADE journal transaction, the APPLIED effect that names it, the archived evidence document and its digest, the fee schedules that priced it, and the book's journal cursor and latest snapshot. Anyone who is not a party is told the trade does not exist.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    instrumentId: components["parameters"]["InstrumentId"];
+                    tradeSeq: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The trade's audit proof */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedBookTradeProof"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/books/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** An account's orders on the internal books, newest first */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                    /** @description WORKING (the default) lists orders still PENDING, OPEN or PARTIALLY_FILLED; ALL lists every order */
+                    scope?: components["schemas"]["AdvancedBookOrderScope"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of orders */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedBookOrderPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/books/orders/{orderId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One order, to its owner or an operator who may read any account; anyone else is told it does not exist */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orderId: components["parameters"]["OrderId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The order */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedBookOrder"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/books/orders/{orderId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel one of your own orders
+         * @description A resting order is cancelled on the book, serialized with every other command, so a cancel racing a fill has exactly one outcome; an order that has not reached the book is cancelled with its intent. Cancelling a cancelled order returns it unchanged; a filled or rejected order answers ORDER_NOT_OPEN. Another account's order is NOT_FOUND.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    orderId: components["parameters"]["OrderId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AdvancedBookOrderCancelRequest"];
+                };
+            };
+            responses: {
+                /** @description The order after the command */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedBookCommandResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/books/orders/{orderId}/replace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change the price and total quantity of one of your own resting orders
+         * @description quantity is the new TOTAL quantity, fills included. Everything that could refuse the replace -- Risk Kernel V2 for a replace that adds risk, the book's own rules and the crossing policy (both by a dry run), and the resized reservation -- is decided before anything moves; the replace may then trade. A refusal is recorded and answered with its stable reason.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    orderId: components["parameters"]["OrderId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AdvancedBookOrderReplaceRequest"];
+                };
+            };
+            responses: {
+                /** @description The order after the command, with any fills it made */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedBookCommandResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/books/trades": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** An account's fills on the internal books, newest first, each seen from the account's own side */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of fills */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedBookFillPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/advanced/buying-power": {
         parameters: {
             query?: never;
@@ -1757,6 +2356,840 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/equities/calendar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The XNYS calendar now -- session, trade date, T+1 settlement date -- and its recorded holidays */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The calendar */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedEquityCalendar"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/equities/calendar/holidays": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record a full-day XNYS closure (operator; requires step-up)
+         * @description Recording the same closure twice is a replay; a different name for a recorded date is a CONFLICT. A weekend is closed already.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AdvancedEquityHolidayRequest"];
+                };
+            };
+            responses: {
+                /** @description The calendar with the closure recorded */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedEquityCalendar"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/equities/corporate-action-applications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What corporate actions did to an account, newest first */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of applications */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedEquityApplicationPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/equities/corporate-actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Corporate actions, newest effective date first */
+        get: {
+            parameters: {
+                query?: {
+                    cursor?: components["parameters"]["Cursor"];
+                    instrument_id?: components["schemas"]["UUID"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of corporate actions */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedEquityCorporateActionPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /**
+         * Announce a corporate action (operator; requires step-up)
+         * @description Each type carries exactly its own fields: a split or reverse split a ratio (and an in-lieu price when the ratio can leave fractional shares), a dividend its per-share amount and ex, record and pay dates (the ex-date the settlement cycle implies), a symbol change its new symbol, a delisting its final date. Announcing the same action twice is a replay; a different action for the same instrument, type and effective date is a CONFLICT while the first is live.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AdvancedEquityCorporateActionRequest"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay of the original answer */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedEquityCorporateAction"];
+                    };
+                };
+                /** @description The announced action */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedEquityCorporateAction"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/equities/corporate-actions/{actionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One corporate action */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    actionId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The action */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedEquityCorporateAction"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/equities/corporate-actions/{actionId}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply an announced corporate action on or after the day it takes effect (operator; requires step-up)
+         * @description One transaction under the instrument's exclusive lock: a split or reverse split adjusts every settled holding (paying any fractional remainder at the in-lieu price under the action's rounding policy), a dividend pays the holders of record on its pay date, a symbol change writes a new terms version, a delisting moves the instrument to DELISTING and, on a second call on its final date, DELISTED. Applying an applied action is a replay that posts nothing.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    actionId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description What the application did, account by account */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedEquityCorporateActionResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/equities/corporate-actions/{actionId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Withdraw an announced corporate action that has not been applied (operator; requires step-up) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    actionId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AdvancedEquityCorporateActionCancelRequest"];
+                };
+            };
+            responses: {
+                /** @description The action, CANCELLED */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedEquityCorporateAction"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/equities/fills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** An account's equity fills, newest first, each with its disclosed charges and its settlement */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of fills */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedEquityFillPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/equities/listings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Equity and ETF listings with their terms, the latest fresh mark and the calendar's session now */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Listings (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedEquityListingList"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /**
+         * List a simulated equity or ETF (operator; requires step-up)
+         * @description Creates the listing's share asset (one SIMULATED asset per listing, its decimals the fractional-share precision) and the EQUITY or ETF instrument that trades it on the XNYS calendar, settling in settlement_asset_id -- by default the sandbox dollar, which must have a fee schedule in this deployment.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AdvancedEquityListingRequest"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay of the original answer */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedEquityListing"];
+                    };
+                };
+                /** @description The listing */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedEquityListing"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/equities/listings/{instrumentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One listing */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    instrumentId: components["parameters"]["InstrumentId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The listing */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedEquityListing"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/equities/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** An account's equity orders, newest first, each with its fill and settlement */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of orders */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedEquityOrderPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /**
+         * Submit an equity order from one of your own accounts, and place it at the simulated venue
+         * @description The order is recorded as an economic intent and routed (SubmitOrderIntent), then accepted (AcceptOrder: capability gate, session, lots and limit grid, pending corporate actions, mark and fee quote, Risk Kernel V2, capital reservation), each in its own transaction. An ACCEPTED order is then placed at the paper venue at once (PlaceAtVenue, outside any transaction) and the venue's answer applied in a transaction of its own (ApplyOrderReport): it rests OPEN, fills (posted on the trade date, settling T+1) or is refused. placement says what happened; when placement could not complete, the order stays ACCEPTED with its submission PENDING and an operator's venue run places it. A market order is accepted only in the regular session; a limit order also in pre-market and after-hours when extended_hours is set. Every refusal is recorded: the answer is its stable code (fields carry order_id, rejection_code and reason_codes) and the REJECTED order stays readable.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AdvancedEquityOrderRequest"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay of the original answer */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedEquityOrderSubmission"];
+                    };
+                };
+                /** @description The order and what its placement did */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedEquityOrderSubmission"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/equities/orders/{orderId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One equity order, to its owner or an operator who may read any account; anyone else is told it does not exist */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orderId: components["parameters"]["OrderId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The order with its fill and settlement */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedEquityOrder"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/equities/orders/{orderId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask the simulated venue to cancel one of your own ACCEPTED or OPEN orders
+         * @description The venue answers CANCELLED, or with the fill that beat the cancel, and that answer is applied exactly once. Another account's order is NOT_FOUND.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    orderId: components["parameters"]["OrderId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AdvancedEquityOrderCancelRequest"];
+                };
+            };
+            responses: {
+                /** @description The order after the venue's answer */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedEquityOrder"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/equities/settlement-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run due T+1 settlements now (operator; requires step-up)
+         * @description The settlement worker's step, run on request rather than in the background: it settles every settlement due on or before today's New York trade date, one account per transaction, posting EQUITY_SETTLEMENT once per fill, until nothing due is left or the limit is reached.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AdvancedEquitySettlementRunRequest"];
+                };
+            };
+            responses: {
+                /** @description What the run settled */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedEquitySettlementRun"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/equities/settlements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * An account's T+1 settlements, by due date, newest first
+         * @description A PENDING settlement is value bought or sold on its trade date that waits in UNSETTLED_RECEIVABLE: neither spendable nor withdrawable until an operator's settlement run settles it on its due date.
+         */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                    /** @description PENDING, SETTLED or ALL (the default) */
+                    state?: components["schemas"]["AdvancedEquitySettlementFilter"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of settlements */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedEquitySettlementPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/equities/venue-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run the venue worker once (operator; requires step-up)
+         * @description The placement and polling worker's step, run on request rather than in the background. For every order the venue still owes an answer, oldest first: an ACCEPTED order whose submission is PENDING is placed; one whose submission outcome is UNKNOWN is never sent again and is polled instead; an OPEN order is polled (a resting limit order fills when the mark crosses, and every order expires at the end of its day). Each answer is applied in its own transaction, exactly once.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AdvancedEquityVenueRunRequest"];
+                };
+            };
+            responses: {
+                /** @description What the run did to each order */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedEquityVenueRun"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -3717,6 +5150,1077 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Approved strategy listings (an APPROVED, CLEARED version each), newest first */
+        get: {
+            parameters: {
+                query?: {
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of listings with the newest installable version of each */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyListingPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/follows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** An account's paper-follow runs, newest first, with the intents each produced and their Risk V2 decisions */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    install_id?: components["schemas"]["UUID"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of follow runs (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyFollowRunPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/installs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** An account's installs, newest first, each with its latest paper performance snapshot */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of installs (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyInstallPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /**
+         * Install an APPROVED, CLEARED version for one of your accounts, in PAPER mode only
+         * @description PAPER is the only mode an install can have; the service refuses any other explicitly (FORBIDDEN) rather than rewriting it, and the database refuses it too. Installing a version that is already installed returns the existing install.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StrategyInstallRequest"];
+                };
+            };
+            responses: {
+                /** @description The version was already installed, or an idempotent replay */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyInstall"];
+                    };
+                };
+                /** @description The install (PAPER) */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyInstall"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/installs/{installId}/follows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Paper-follow one of your installs on one market snapshot
+         * @description The installed version runs in the sandbox on the snapshot you supply. Every proposal its manifest permits becomes an economic intent (PAPER, STRATEGY_MARKETPLACE) that faces routing and Risk Kernel V2 with sections read from the database, never from the snapshot; only an ALLOW reaches paper execution, exactly once. The snapshot must be no older than five minutes and not in the future, and the manifest's execution frequency bounds how often an install runs. The same snapshot time with the same snapshot returns the recorded run; with a different snapshot it is INVALID_IDEMPOTENCY_REUSE. Equity and turnover come from the snapshot you supplied and are paper figures.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    installId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StrategyFollowRequest"];
+                };
+            };
+            responses: {
+                /** @description The run recorded earlier for this snapshot, or an idempotent replay */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyFollowRun"];
+                    };
+                };
+                /** @description The follow run with what became of every intent (value domain SIMULATED) */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyFollowRun"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+                429: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/installs/{installId}/performance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Compute and record the paper performance of one of your installs from its follow history */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    installId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StrategyAccountRequest"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay of the original answer */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyPerformanceSnapshot"];
+                    };
+                };
+                /** @description The recorded snapshot (paper results) */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyPerformanceSnapshot"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/installs/{installId}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Remove one of your ACTIVE installs */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    installId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StrategyInstallRemoveRequest"];
+                };
+            };
+            responses: {
+                /** @description The install, REMOVED */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyInstall"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/listings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The listings an account created, in every status, newest first */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of listings with the newest version of each */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyListingPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /**
+         * Create a listing with its first version, in DRAFT
+         * @description The version is immutable from here on apart from its lifecycle: its manifest, source and configuration can never change. Source is text, at most 32 files of at most 65536 bytes each and 262144 bytes in all. Nothing is built until an operator validates the submitted version.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StrategyListingCreateRequest"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay of the original answer */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyListingDetail"];
+                    };
+                };
+                /** @description The listing and its DRAFT version (value domain SIMULATED) */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyListingDetail"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/listings/{listingId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One listing with its versions, validations, reviews, provenance, evaluations and paper performance
+         * @description The creator's account and operators see every version; anyone else sees only the public versions, and a listing with none is NOT_FOUND. Evaluations and performance snapshots are simulated and PAPER results: computed from snapshots supplied by whoever ran them, never from real capital.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    listingId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The listing (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyListingDetail"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/listings/{listingId}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Publish the next version of one of your listings, in DRAFT */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    listingId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StrategyVersionCreateRequest"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay of the original answer */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyVersion"];
+                    };
+                };
+                /** @description The new DRAFT version */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyVersion"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/review-queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Versions awaiting validation or review, oldest first (operator) */
+        get: {
+            parameters: {
+                query?: {
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                    /** @description One status to list; by default SUBMITTED, VALIDATED and IN_REVIEW. */
+                    status?: components["schemas"]["StrategyVersionStatus"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of versions with their listings */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyReviewQueuePage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** An account's sandbox runs (its follows, and simulations of its own listings), newest first, with termination and violations */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of sandbox runs */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategySandboxRunPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/versions/{versionId}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve a version IN_REVIEW and clear it for installs (operator other than the creator; requires step-up) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    versionId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StrategyReviewRequest"];
+                };
+            };
+            responses: {
+                /** @description The version, APPROVED and CLEARED */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyVersion"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/versions/{versionId}/deprecate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retire an APPROVED version; no new installs, and existing installs can no longer be followed (operator; requires step-up) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    versionId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StrategyDeprecateRequest"];
+                };
+            };
+            responses: {
+                /** @description The version, DEPRECATED */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyVersion"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/versions/{versionId}/forks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Fork an APPROVED or DEPRECATED version into a new listing of your own
+         * @description The fork starts at DRAFT and goes through the whole lifecycle again; its provenance names the parent. Leaving out source or manifest takes the parent's as a starting point.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    versionId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StrategyForkRequest"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay of the original answer */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyListingDetail"];
+                    };
+                };
+                /** @description The new listing with its DRAFT version */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyListingDetail"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/versions/{versionId}/moderation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Flag, take down or re-clear a version (operator; requires step-up) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    versionId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StrategyModerationRequest"];
+                };
+            };
+            responses: {
+                /** @description The version with its new moderation state */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyVersion"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/versions/{versionId}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject a SUBMITTED, VALIDATED or IN_REVIEW version (operator other than the creator; requires step-up) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    versionId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StrategyReviewRequest"];
+                };
+            };
+            responses: {
+                /** @description The version, REJECTED with the reason code */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyVersion"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/versions/{versionId}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Take a VALIDATED version into review (operator other than the creator; requires step-up) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    versionId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The version, IN_REVIEW */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyVersion"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/versions/{versionId}/simulations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run one of your built versions against a fixed set of snapshots and record the evaluation
+         * @description A simulation proposes nothing: every run's proposals are counted and kept in the run log, never submitted. At most 20 snapshots per request; the evaluation is reproducible from the dataset version and digests.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    versionId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StrategySimulationRequest"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay of the original answer */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyEvaluation"];
+                    };
+                };
+                /** @description The recorded evaluation (simulated results) */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyEvaluation"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/versions/{versionId}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit one of your DRAFT versions for validation and review */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    versionId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StrategyAccountRequest"];
+                };
+            };
+            responses: {
+                /** @description The version, SUBMITTED */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyVersion"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/strategies/versions/{versionId}/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Scan and build a SUBMITTED version (operator; requires step-up)
+         * @description A clean scan and a successful build record the artifact and move the version to VALIDATED; a refused scan, a compile error or a build timeout moves it to REJECTED with the reason. The build holds the version's lock and is bounded by the request's time limit: one that does not finish in time records nothing and leaves the version SUBMITTED. A deployment with no Go toolchain answers UNSUPPORTED.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    versionId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The version and its validation */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyValidationResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+                503: components["responses"]["Problem"];
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -6249,6 +8753,334 @@ export interface components {
             target_id: string;
             target_type: string;
         };
+        /** @description One internal book: its instrument and assets, the exact grid it trades on, the fee schedules that price every fill, the crossing rule in force and its journal cursor. */
+        AdvancedBook: {
+            base_asset_id: components["schemas"]["UUID"];
+            base_decimals: number;
+            base_symbol: string;
+            crossing_rule: components["schemas"]["AdvancedBookCrossingRule"];
+            id: components["schemas"]["UUID"];
+            instrument_id: components["schemas"]["UUID"];
+            instrument_kind: components["schemas"]["InstrumentKind"];
+            /** Format: int64 */
+            last_command_seq: number;
+            /** Format: int64 */
+            last_event_seq: number;
+            /** Format: int64 */
+            last_trade_seq: number;
+            lot_size: components["schemas"]["Quantity"];
+            maker_fee: components["schemas"]["AdvancedBookFeeSchedule"];
+            max_price: components["schemas"]["AdvancedBookPrice"];
+            min_quantity: components["schemas"]["Quantity"];
+            mode: components["schemas"]["AdvancedBookMode"];
+            price_scale: number;
+            quote_asset_id: components["schemas"]["UUID"];
+            quote_decimals: number;
+            quote_symbol: string;
+            /** Format: int64 */
+            snapshot_interval: number;
+            /** @description hex sha256 of the book's state after its last command */
+            state_hash: string;
+            status: components["schemas"]["AdvancedBookStatus"];
+            taker_fee: components["schemas"]["AdvancedBookFeeSchedule"];
+            terms_source: components["schemas"]["AdvancedBookTermsSource"];
+            /** @description The canonical terms version the book was opened on (absent for BOOK_SPOT) */
+            terms_version?: number;
+            tick_price: components["schemas"]["AdvancedBookPrice"];
+            trading_calendar: string;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            venue_label: components["schemas"]["AdvancedBookVenueLabel"];
+        };
+        /** @description The order after a command, with the fills that command made for it. command_seq and state_hash are absent when the command never reached the book. */
+        AdvancedBookCommandResult: {
+            /** Format: int64 */
+            command_seq?: number;
+            fills: components["schemas"]["AdvancedBookFill"][];
+            /** @description The order's economic intent status after a submission */
+            intent_status?: string;
+            order: components["schemas"]["AdvancedBookOrder"];
+            state_hash?: string;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @description The house-versus-customer crossing rule in force. Version 0 is the default, in force until a rule is recorded: a house (principal) book never trades with a customer. */
+        AdvancedBookCrossingRule: {
+            actor_id?: string;
+            actor_type?: string;
+            allow_house_customer_crossing: boolean;
+            book_id: components["schemas"]["UUID"];
+            created_at?: components["schemas"]["Timestamp"];
+            /** @description True when no rule was ever recorded and the default applies */
+            is_default: boolean;
+            reason?: string;
+            version: number;
+        };
+        AdvancedBookDepth: {
+            asks: components["schemas"]["AdvancedBookDepthLevel"][];
+            base_decimals: number;
+            bids: components["schemas"]["AdvancedBookDepthLevel"][];
+            book_id: components["schemas"]["UUID"];
+            instrument_id: components["schemas"]["UUID"];
+            /** Format: int64 */
+            last_command_seq: number;
+            quote_decimals: number;
+            state_hash: string;
+            status: components["schemas"]["AdvancedBookStatus"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        AdvancedBookDepthLevel: {
+            orders: number;
+            price: components["schemas"]["AdvancedBookPrice"];
+            /** Format: int64 */
+            price_ticks: number;
+            quantity: components["schemas"]["Quantity"];
+        };
+        /** @description The fee schedule a book prices one side of every fill with, as recorded on the book, and its hash */
+        AdvancedBookFeeSchedule: {
+            /** @description The schedule's hash */
+            hash: string;
+            max_total_fee_bps: components["schemas"]["BPS"];
+            percentage_fee_bps: components["schemas"]["BPS"];
+            quote_asset_id: components["schemas"]["UUID"];
+            quote_decimals: number;
+            strategy_fee_bps: components["schemas"]["BPS"];
+            subscription_discount_bps: components["schemas"]["BPS"];
+            version: string;
+        };
+        /** @description The explicit fee one side of every fill pays, in the book's quote asset: a percentage of the fill's notional, an extra percentage for a strategy-originated order, a subscription discount on the percentage fee, and a cap in basis points of notional (0 disables it). The internal book charges nothing else -- no spread, no fixed or minimum fee, no venue pass-through -- and rounds in the customer's favour. */
+        AdvancedBookFeeScheduleRequest: {
+            max_total_fee_bps?: components["schemas"]["BPS"];
+            percentage_fee_bps: components["schemas"]["BPS"];
+            quote_asset_id: components["schemas"]["UUID"];
+            quote_decimals: number;
+            strategy_fee_bps?: components["schemas"]["BPS"];
+            subscription_discount_bps?: components["schemas"]["BPS"];
+            version: string;
+        };
+        /** @description One trade seen from one account's side: the account's own order, side, role and fee. The counterparty is named only by its owner type; its account is never shown. */
+        AdvancedBookFill: {
+            base_decimals: number;
+            base_symbol?: string;
+            book_id: components["schemas"]["UUID"];
+            /** Format: int64 */
+            command_seq: number;
+            counterparty_owner_type: components["schemas"]["AdvancedBookOwnerType"];
+            crossing_rule_version: number;
+            effect_id: components["schemas"]["UUID"];
+            evidence_ref: string;
+            evidence_sha256: string;
+            executed_at: components["schemas"]["Timestamp"];
+            fee: components["schemas"]["Quantity"];
+            instrument_id: components["schemas"]["UUID"];
+            journal_transaction_id: components["schemas"]["UUID"];
+            liquidity: components["schemas"]["AdvancedBookLiquidity"];
+            order_id: components["schemas"]["UUID"];
+            price: components["schemas"]["AdvancedBookPrice"];
+            /** Format: int64 */
+            price_ticks: number;
+            quantity: components["schemas"]["Quantity"];
+            quote_decimals: number;
+            quote_notional: components["schemas"]["Quantity"];
+            quote_symbol?: string;
+            side: components["schemas"]["AdvancedBookSide"];
+            /** Format: int64 */
+            trade_seq: number;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        AdvancedBookFillPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["AdvancedBookFill"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @description What replaying the book's journal from the database proved. Every hash is hex sha256. */
+        AdvancedBookJournalVerification: {
+            book_id: components["schemas"]["UUID"];
+            /** Format: int64 */
+            commands: number;
+            /** Format: int64 */
+            events: number;
+            full_replay_hash: string;
+            genesis_hash: string;
+            instrument_id: components["schemas"]["UUID"];
+            orders_checked: number;
+            snapshot_replay_hash: string;
+            /** Format: int64 */
+            snapshot_seq: number;
+            state_hash: string;
+            /** Format: int64 */
+            trades: number;
+            verified_at: components["schemas"]["Timestamp"];
+        };
+        /**
+         * @description The role the account's order played in the fill
+         * @enum {string}
+         */
+        AdvancedBookLiquidity: "MAKER" | "TAKER";
+        /** @enum {string} */
+        AdvancedBookLiquidityIntent: "TAKE_LIQUIDITY" | "PROVIDE_LIQUIDITY";
+        /** @enum {string} */
+        AdvancedBookMode: "PAPER" | "SANDBOX";
+        /** @description spot_terms is required for a SPOT_PAIR and refused for every other instrument. */
+        AdvancedBookOpenRequest: {
+            instrument_id: components["schemas"]["UUID"];
+            maker_fee: components["schemas"]["AdvancedBookFeeScheduleRequest"];
+            mode: components["schemas"]["AdvancedBookMode"];
+            /** @description Commands between snapshots (default 64) */
+            snapshot_interval?: number;
+            spot_terms?: components["schemas"]["InstrumentTerms"];
+            taker_fee: components["schemas"]["AdvancedBookFeeScheduleRequest"];
+        };
+        AdvancedBookOrder: {
+            /** Format: int64 */
+            accepted_command_seq?: number;
+            account_id: components["schemas"]["UUID"];
+            base_decimals: number;
+            base_symbol?: string;
+            book_id: components["schemas"]["UUID"];
+            cancel_reason?: string;
+            cancelled_quantity: components["schemas"]["Quantity"];
+            client_order_id?: string;
+            created_at: components["schemas"]["Timestamp"];
+            filled_quantity: components["schemas"]["Quantity"];
+            id: components["schemas"]["UUID"];
+            instrument_id: components["schemas"]["UUID"];
+            intent_id?: components["schemas"]["UUID"];
+            /** Format: int64 */
+            last_command_seq?: number;
+            liquidity_intent: components["schemas"]["AdvancedBookLiquidityIntent"];
+            mode: components["schemas"]["AdvancedBookMode"];
+            order_type: components["schemas"]["AdvancedBookOrderType"];
+            post_only: boolean;
+            price: components["schemas"]["AdvancedBookPrice"];
+            /** Format: int64 */
+            price_ticks: number;
+            quantity: components["schemas"]["Quantity"];
+            quote_decimals: number;
+            quote_symbol?: string;
+            reduce_only: boolean;
+            reject_reason?: string;
+            remaining_quantity: components["schemas"]["Quantity"];
+            reservation_id?: components["schemas"]["UUID"];
+            side: components["schemas"]["AdvancedBookSide"];
+            status: components["schemas"]["AdvancedBookOrderStatus"];
+            stp: components["schemas"]["AdvancedBookSTP"];
+            strategy_originated: boolean;
+            time_in_force: components["schemas"]["AdvancedBookTimeInForce"];
+            updated_at: components["schemas"]["Timestamp"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            venue_label: components["schemas"]["AdvancedBookVenueLabel"];
+        };
+        AdvancedBookOrderCancelRequest: {
+            account_id: components["schemas"]["UUID"];
+        };
+        AdvancedBookOrderPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["AdvancedBookOrder"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @description quantity is the new TOTAL quantity in base units, fills included. */
+        AdvancedBookOrderReplaceRequest: {
+            account_id: components["schemas"]["UUID"];
+            price: components["schemas"]["AdvancedBookPrice"];
+            quantity: components["schemas"]["Quantity"];
+        };
+        /** @description price is the limit price, or a market order's protection price, which this book requires; quantity is base units of the base asset. */
+        AdvancedBookOrderRequest: {
+            account_id: components["schemas"]["UUID"];
+            client_order_id?: string;
+            mode?: components["schemas"]["AdvancedBookMode"];
+            order_type: components["schemas"]["AdvancedBookOrderType"];
+            post_only?: boolean;
+            price: components["schemas"]["AdvancedBookPrice"];
+            quantity: components["schemas"]["Quantity"];
+            reduce_only?: boolean;
+            side: components["schemas"]["AdvancedBookSide"];
+            stp?: components["schemas"]["AdvancedBookSTP"];
+            time_in_force: components["schemas"]["AdvancedBookTimeInForce"];
+        };
+        /** @enum {string} */
+        AdvancedBookOrderScope: "WORKING" | "ALL";
+        /** @enum {string} */
+        AdvancedBookOrderStatus: "PENDING" | "OPEN" | "PARTIALLY_FILLED" | "FILLED" | "CANCELLED" | "REJECTED";
+        /** @enum {string} */
+        AdvancedBookOrderType: "LIMIT" | "MARKET";
+        /** @enum {string} */
+        AdvancedBookOwnerType: "CUSTOMER" | "HOUSE";
+        AdvancedBookPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["AdvancedBook"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /**
+         * @description An exact decimal price in the book's quote asset per whole base unit
+         * @example 2500.00
+         */
+        AdvancedBookPrice: string;
+        /** @enum {string} */
+        AdvancedBookSide: "BUY" | "SELL";
+        /** @enum {string} */
+        AdvancedBookStatus: "OPEN" | "HALTED" | "CLOSED";
+        AdvancedBookStatusRequest: {
+            reason: string;
+            status: components["schemas"]["AdvancedBookStatus"];
+        };
+        /**
+         * @description Self-trade prevention when the order takes liquidity; two orders of one account never trade
+         * @enum {string}
+         */
+        AdvancedBookSTP: "CANCEL_TAKER" | "CANCEL_MAKER" | "CANCEL_BOTH";
+        /**
+         * @description CANONICAL is the instrument's versioned terms; BOOK_SPOT is spot-pair terms stated when the book was opened
+         * @enum {string}
+         */
+        AdvancedBookTermsSource: "CANONICAL" | "BOOK_SPOT";
+        /** @enum {string} */
+        AdvancedBookTimeInForce: "GTC" | "IOC" | "FOK";
+        /** @description The audit proof of one trade: the SIM_TRADE journal transaction (which the database balances per party), the APPLIED effect that names it, the write-once evidence document and its digest, the hashes of the fee schedules that priced it, and the book's journal cursor and latest snapshot, which the operator's journal verification replays. */
+        AdvancedBookTradeProof: {
+            aggressor_side: components["schemas"]["AdvancedBookSide"];
+            base_decimals: number;
+            base_symbol?: string;
+            book_id: components["schemas"]["UUID"];
+            /** Format: int64 */
+            book_last_command_seq: number;
+            book_state_hash: string;
+            /** Format: int64 */
+            command_seq: number;
+            crossing_rule_version: number;
+            effect_id: components["schemas"]["UUID"];
+            /** Format: int64 */
+            event_seq: number;
+            evidence_ref: string;
+            /** @description hex sha256 of the archived canonical evidence document */
+            evidence_sha256: string;
+            executed_at: components["schemas"]["Timestamp"];
+            instrument_id: components["schemas"]["UUID"];
+            journal_transaction_id: components["schemas"]["UUID"];
+            maker_fee: components["schemas"]["Quantity"];
+            maker_order_id: components["schemas"]["UUID"];
+            maker_owner_type: components["schemas"]["AdvancedBookOwnerType"];
+            maker_schedule_hash: string;
+            price: components["schemas"]["AdvancedBookPrice"];
+            /** Format: int64 */
+            price_ticks: number;
+            quantity: components["schemas"]["Quantity"];
+            quote_decimals: number;
+            quote_notional: components["schemas"]["Quantity"];
+            quote_symbol?: string;
+            snapshot_hash?: string;
+            /**
+             * Format: int64
+             * @description Command sequence of the book's latest snapshot (0 when none)
+             */
+            snapshot_seq: number;
+            taker_fee: components["schemas"]["Quantity"];
+            taker_order_id: components["schemas"]["UUID"];
+            taker_owner_type: components["schemas"]["AdvancedBookOwnerType"];
+            taker_schedule_hash: string;
+            /** Format: int64 */
+            trade_seq: number;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            venue_label: components["schemas"]["AdvancedBookVenueLabel"];
+        };
+        /** @enum {string} */
+        AdvancedBookVenueLabel: "SIMULATED_INTERNAL_BOOK";
         AdvancedCapability: {
             capability: string;
             decisions: components["schemas"]["AdvancedModeDecision"][];
@@ -6271,6 +9103,384 @@ export interface components {
             items: components["schemas"]["AdvancedCapability"][];
             value_domain: components["schemas"]["ValueDomainSimulated"];
         };
+        /**
+         * @description APPLYING is used only by a delisting, between DELISTING and DELISTED
+         * @enum {string}
+         */
+        AdvancedEquityActionStatus: "ANNOUNCED" | "APPLYING" | "APPLIED" | "CANCELLED";
+        /** @enum {string} */
+        AdvancedEquityActionType: "SPLIT" | "REVERSE_SPLIT" | "CASH_DIVIDEND" | "SYMBOL_CHANGE" | "DELISTING";
+        /** @description One account's share of one corporate action, applied once. shares_delta is base units of the share asset (negative for a reverse split); settlement_amount is base units of the settlement asset paid for a fractional remainder or as a dividend, exactly exact_amount_numerator / exact_amount_denominator before rounding. */
+        AdvancedEquityApplication: {
+            account_id: components["schemas"]["UUID"];
+            action_id: components["schemas"]["UUID"];
+            action_type?: components["schemas"]["AdvancedEquityActionType"];
+            created_at: components["schemas"]["Timestamp"];
+            effect_id?: components["schemas"]["UUID"];
+            entitled_quantity: components["schemas"]["Quantity"];
+            exact_amount_denominator: components["schemas"]["Quantity"];
+            exact_amount_numerator: components["schemas"]["Quantity"];
+            id: components["schemas"]["UUID"];
+            instrument_id?: components["schemas"]["UUID"];
+            journal_transaction_id?: components["schemas"]["UUID"];
+            rounding: components["schemas"]["AdvancedEquityRounding"];
+            settlement_amount: components["schemas"]["Quantity"];
+            settlement_decimals: number;
+            settlement_symbol: string;
+            share_decimals: number;
+            share_symbol: string;
+            shares_delta: components["schemas"]["Quantity"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        AdvancedEquityApplicationPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["AdvancedEquityApplication"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        AdvancedEquityCalendar: {
+            holidays: components["schemas"]["AdvancedEquityHoliday"][];
+            settlement_cycle_days: number;
+            state: components["schemas"]["AdvancedEquitySessionState"];
+        };
+        AdvancedEquityCorporateAction: {
+            announced_by_actor_id: string;
+            announced_by_actor_type: string;
+            applied_at?: components["schemas"]["Timestamp"];
+            content_hash: string;
+            created_at: components["schemas"]["Timestamp"];
+            dividend_per_share?: components["schemas"]["AdvancedEquityPrice"];
+            effective_date: components["schemas"]["AdvancedEquityDate"];
+            ex_date?: components["schemas"]["AdvancedEquityDate"];
+            final_date?: components["schemas"]["AdvancedEquityDate"];
+            id: components["schemas"]["UUID"];
+            in_lieu_price?: components["schemas"]["AdvancedEquityPrice"];
+            instrument_id: components["schemas"]["UUID"];
+            new_symbol?: string;
+            pay_date?: components["schemas"]["AdvancedEquityDate"];
+            ratio?: components["schemas"]["AdvancedEquityRatio"];
+            reason: string;
+            record_date?: components["schemas"]["AdvancedEquityDate"];
+            rounding: components["schemas"]["AdvancedEquityRounding"];
+            settlement_asset_id: components["schemas"]["UUID"];
+            share_asset_id: components["schemas"]["UUID"];
+            status: components["schemas"]["AdvancedEquityActionStatus"];
+            type: components["schemas"]["AdvancedEquityActionType"];
+        };
+        AdvancedEquityCorporateActionCancelRequest: {
+            reason: string;
+        };
+        AdvancedEquityCorporateActionPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["AdvancedEquityCorporateAction"][];
+        };
+        /** @description effective_date is the first trading day of a split, reverse split or symbol change, or the day a delisting begins; a dividend's is its ex-date and may be left out. dividend_per_share and in_lieu_price are exact amounts of the settlement asset per whole share (in_lieu_price per whole new share). */
+        AdvancedEquityCorporateActionRequest: {
+            dividend_per_share?: components["schemas"]["AdvancedEquityPrice"];
+            effective_date?: components["schemas"]["AdvancedEquityDate"];
+            ex_date?: components["schemas"]["AdvancedEquityDate"];
+            final_date?: components["schemas"]["AdvancedEquityDate"];
+            in_lieu_price?: components["schemas"]["AdvancedEquityPrice"];
+            instrument_id: components["schemas"]["UUID"];
+            new_symbol?: string;
+            pay_date?: components["schemas"]["AdvancedEquityDate"];
+            ratio?: components["schemas"]["AdvancedEquityRatio"];
+            reason: string;
+            record_date?: components["schemas"]["AdvancedEquityDate"];
+            rounding?: components["schemas"]["AdvancedEquityRounding"];
+            type: components["schemas"]["AdvancedEquityActionType"];
+        };
+        AdvancedEquityCorporateActionResult: {
+            action: components["schemas"]["AdvancedEquityCorporateAction"];
+            applications: components["schemas"]["AdvancedEquityApplication"][];
+            /** @description The instrument's status after a delisting step */
+            instrument_status?: string;
+            /** @description True when the action had been applied already and nothing was posted */
+            replayed: boolean;
+            /** @description The terms version a symbol change wrote */
+            terms_version?: number;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /**
+         * @description A calendar day, YYYY-MM-DD, with no time and no zone
+         * @example 2026-10-08
+         */
+        AdvancedEquityDate: string;
+        /** @description One execution at the simulated venue, with every charge it carried as disclosed and verified before posting: notional at the fill price, the disclosed spread, platform and venue fees, and the total the buyer paid or the seller receives, all in base units of the settlement asset. */
+        AdvancedEquityFill: {
+            account_id: components["schemas"]["UUID"];
+            effect_id: components["schemas"]["UUID"];
+            executed_at: components["schemas"]["Timestamp"];
+            fee_disclosure_hash: string;
+            fee_schedule_hash: string;
+            fee_schedule_version: string;
+            id: components["schemas"]["UUID"];
+            instrument_id: components["schemas"]["UUID"];
+            journal_transaction_id: components["schemas"]["UUID"];
+            mark: components["schemas"]["AdvancedEquityMark"];
+            notional: components["schemas"]["Quantity"];
+            order_id: components["schemas"]["UUID"];
+            platform_fees: components["schemas"]["Quantity"];
+            price: components["schemas"]["AdvancedEquityPrice"];
+            quantity: components["schemas"]["Quantity"];
+            settlement?: components["schemas"]["AdvancedEquitySettlement"];
+            settlement_asset_id: components["schemas"]["UUID"];
+            settlement_date: components["schemas"]["AdvancedEquityDate"];
+            settlement_decimals: number;
+            settlement_symbol: string;
+            share_decimals: number;
+            side: components["schemas"]["AdvancedEquitySide"];
+            slippage_bps: number;
+            spread: components["schemas"]["Quantity"];
+            total: components["schemas"]["Quantity"];
+            trade_date: components["schemas"]["AdvancedEquityDate"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            venue: string;
+            venue_fees: components["schemas"]["Quantity"];
+            venue_fill_id: string;
+        };
+        AdvancedEquityFillPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["AdvancedEquityFill"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        AdvancedEquityHoliday: {
+            date: components["schemas"]["AdvancedEquityDate"];
+            name: string;
+        };
+        AdvancedEquityHolidayRequest: {
+            date: components["schemas"]["AdvancedEquityDate"];
+            name: string;
+        };
+        /** @enum {string} */
+        AdvancedEquityKind: "EQUITY" | "ETF";
+        AdvancedEquityListing: {
+            exchange_mic: string;
+            instrument_id: components["schemas"]["UUID"];
+            kind: components["schemas"]["AdvancedEquityKind"];
+            lot_size: components["schemas"]["Quantity"];
+            mark?: components["schemas"]["AdvancedEquityMark"];
+            min_quantity: components["schemas"]["Quantity"];
+            /** @description The share asset's name */
+            name: string;
+            /** Format: int64 */
+            oracle_max_age_ms: number;
+            price_scale: number;
+            settlement_asset_id: components["schemas"]["UUID"];
+            settlement_decimals: number;
+            settlement_symbol: string;
+            share_asset_id: components["schemas"]["UUID"];
+            share_decimals: number;
+            share_symbol: string;
+            /** @description The instrument's status (ACTIVE */
+            status: string;
+            symbol: string;
+            terms_hash: string;
+            terms_version: number;
+            tick_price: components["schemas"]["AdvancedEquityPrice"];
+            trading_calendar: string;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            /** @description The simulated venue the listing trades at */
+            venue: string;
+        };
+        AdvancedEquityListingList: {
+            items: components["schemas"]["AdvancedEquityListing"][];
+            session: components["schemas"]["AdvancedEquitySessionState"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @description tick_size is in price units at price_scale (at scale 2 a tick of 1 is one hundredth); lot_size and min_quantity are base units of the share asset, whose decimals are share_decimals. settlement_asset_id defaults to the sandbox dollar. */
+        AdvancedEquityListingRequest: {
+            exchange_mic: string;
+            kind: components["schemas"]["AdvancedEquityKind"];
+            lot_size: components["schemas"]["Quantity"];
+            min_quantity: components["schemas"]["Quantity"];
+            name: string;
+            /** Format: int64 */
+            oracle_max_age_ms: number;
+            oracle_sources: string[];
+            price_scale: number;
+            risk_class: components["schemas"]["AdvancedEquityRiskClass"];
+            settlement_asset_id?: components["schemas"]["UUID"];
+            share_decimals: number;
+            symbol: string;
+            tick_size: components["schemas"]["Quantity"];
+        };
+        /** @description A reference price of one whole share in the settlement asset, as the price store observed it */
+        AdvancedEquityMark: {
+            observed_at: components["schemas"]["Timestamp"];
+            price: components["schemas"]["AdvancedEquityPrice"];
+            source: string;
+        };
+        /** @enum {string} */
+        AdvancedEquityMode: "PAPER" | "SANDBOX";
+        /** @description An equity order. reserved_quantity is what the order holds reserved on the WALLET it draws from: base units of the settlement asset for a buy, of the share asset for a sell. Every order is a DAY order and expires at expires_at. */
+        AdvancedEquityOrder: {
+            account_id: components["schemas"]["UUID"];
+            created_at: components["schemas"]["Timestamp"];
+            exchange_mic: string;
+            expires_at: components["schemas"]["Timestamp"];
+            extended_hours: boolean;
+            fill?: components["schemas"]["AdvancedEquityFill"];
+            id: components["schemas"]["UUID"];
+            instrument_id: components["schemas"]["UUID"];
+            intent_id: components["schemas"]["UUID"];
+            limit_price?: components["schemas"]["AdvancedEquityPrice"];
+            mode: components["schemas"]["AdvancedEquityMode"];
+            order_type: components["schemas"]["AdvancedEquityOrderType"];
+            price_scale: number;
+            protection_price?: components["schemas"]["AdvancedEquityPrice"];
+            quantity: components["schemas"]["Quantity"];
+            rejection_code?: string;
+            rejection_reasons: string[];
+            reservation_id?: components["schemas"]["UUID"];
+            reserved_quantity?: components["schemas"]["Quantity"];
+            risk_decision_id?: components["schemas"]["UUID"];
+            session: components["schemas"]["AdvancedEquitySession"];
+            settlement_asset_id: components["schemas"]["UUID"];
+            share_asset_id: components["schemas"]["UUID"];
+            share_decimals: number;
+            side: components["schemas"]["AdvancedEquitySide"];
+            status: components["schemas"]["AdvancedEquityOrderStatus"];
+            symbol: string;
+            tick_price: components["schemas"]["AdvancedEquityPrice"];
+            trade_date: components["schemas"]["AdvancedEquityDate"];
+            updated_at: components["schemas"]["Timestamp"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            venue: string;
+            venue_order_id?: string;
+        };
+        AdvancedEquityOrderCancelRequest: {
+            account_id: components["schemas"]["UUID"];
+        };
+        AdvancedEquityOrderPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["AdvancedEquityOrder"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @description quantity is base units of the listing's share asset; limit_price is required for a LIMIT order and refused for a MARKET order, which never trades outside regular hours. */
+        AdvancedEquityOrderRequest: {
+            account_id: components["schemas"]["UUID"];
+            extended_hours?: boolean;
+            instrument_id: components["schemas"]["UUID"];
+            limit_price?: components["schemas"]["AdvancedEquityPrice"];
+            mode: components["schemas"]["AdvancedEquityMode"];
+            order_type: components["schemas"]["AdvancedEquityOrderType"];
+            quantity: components["schemas"]["Quantity"];
+            side: components["schemas"]["AdvancedEquitySide"];
+        };
+        /**
+         * @description ACCEPTED is recorded and reserved and not yet answered by the venue; OPEN rests at the venue
+         * @enum {string}
+         */
+        AdvancedEquityOrderStatus: "ACCEPTED" | "REJECTED" | "OPEN" | "FILLED" | "CANCELLED" | "EXPIRED";
+        AdvancedEquityOrderSubmission: {
+            order: components["schemas"]["AdvancedEquityOrder"];
+            placement: components["schemas"]["AdvancedEquityPlacement"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @enum {string} */
+        AdvancedEquityOrderType: "MARKET" | "LIMIT";
+        /** @description What placing the order at the simulated venue did. PLACED carries the venue's answer; NOT_PLACED says why nothing was sent (the order stays ACCEPTED with its submission PENDING, for an operator's venue run). */
+        AdvancedEquityPlacement: {
+            detail: string;
+            error_code?: string;
+            status: components["schemas"]["AdvancedEquityPlacementStatus"];
+            venue_reason?: string;
+            venue_status?: components["schemas"]["AdvancedEquityVenueStatus"];
+        };
+        /** @enum {string} */
+        AdvancedEquityPlacementStatus: "PLACED" | "NOT_PLACED";
+        /**
+         * @description An exact decimal amount of the settlement asset per whole share
+         * @example 150.25
+         */
+        AdvancedEquityPrice: string;
+        /** @description New shares per old share, numerator/denominator (4/1 is a 4-for-1 split, 1/10 a 1-for-10 reverse split) */
+        AdvancedEquityRatio: {
+            /** Format: int64 */
+            denominator: number;
+            /** Format: int64 */
+            numerator: number;
+        };
+        /** @enum {string} */
+        AdvancedEquityRiskClass: "MAJOR" | "STANDARD" | "SPECULATIVE";
+        /**
+         * @description Shares always round down to a whole base unit; the amount paid for a fractional remainder, and a dividend, round down (the default, never paying more than the exact amount) or half-even.
+         * @enum {string}
+         */
+        AdvancedEquityRounding: "SHARES_DOWN_CASH_DOWN" | "SHARES_DOWN_CASH_HALF_EVEN";
+        /** @enum {string} */
+        AdvancedEquitySession: "CLOSED" | "PRE_MARKET" | "REGULAR" | "AFTER_HOURS";
+        /** @description The calendar at as_of: the session in force, the New York trade date (every session of a day shares it) and the T+1 settlement date of a trade made on it, when it is a trading day. */
+        AdvancedEquitySessionState: {
+            as_of: components["schemas"]["Timestamp"];
+            calendar: string;
+            holiday_name?: string;
+            next_trading_day: components["schemas"]["AdvancedEquityDate"];
+            session: components["schemas"]["AdvancedEquitySession"];
+            settlement_date?: components["schemas"]["AdvancedEquityDate"];
+            timezone: string;
+            trade_date: components["schemas"]["AdvancedEquityDate"];
+            trading_day: boolean;
+        };
+        /** @description One fill's T+1 settlement: what the account receives (shares for a buy, proceeds net of the disclosed charges for a sell) waits in UNSETTLED_RECEIVABLE from the trade date until it is SETTLED into the WALLET on the due date. */
+        AdvancedEquitySettlement: {
+            account_id: components["schemas"]["UUID"];
+            asset_decimals: number;
+            asset_id: components["schemas"]["UUID"];
+            asset_symbol: string;
+            due_date: components["schemas"]["AdvancedEquityDate"];
+            fill_id: components["schemas"]["UUID"];
+            id: components["schemas"]["UUID"];
+            instrument_id: components["schemas"]["UUID"];
+            journal_transaction_id?: components["schemas"]["UUID"];
+            order_id: components["schemas"]["UUID"];
+            quantity: components["schemas"]["Quantity"];
+            settled_at?: components["schemas"]["Timestamp"];
+            state: components["schemas"]["AdvancedEquitySettlementState"];
+            trade_date: components["schemas"]["AdvancedEquityDate"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @enum {string} */
+        AdvancedEquitySettlementFilter: "PENDING" | "SETTLED" | "ALL";
+        AdvancedEquitySettlementPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["AdvancedEquitySettlement"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        AdvancedEquitySettlementRun: {
+            as_of: components["schemas"]["Timestamp"];
+            /** @description Transactions the run used */
+            batches: number;
+            settled: components["schemas"]["AdvancedEquitySettlement"][];
+            trade_date: components["schemas"]["AdvancedEquityDate"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        AdvancedEquitySettlementRunRequest: {
+            /** @description The most settlements to settle in this run (default 500) */
+            limit?: number;
+        };
+        /** @enum {string} */
+        AdvancedEquitySettlementState: "PENDING" | "SETTLED";
+        /** @enum {string} */
+        AdvancedEquitySide: "BUY" | "SELL";
+        /** @enum {string} */
+        AdvancedEquityVenueAction: "PLACE" | "POLL";
+        AdvancedEquityVenueRun: {
+            as_of: components["schemas"]["Timestamp"];
+            items: components["schemas"]["AdvancedEquityVenueRunItem"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        AdvancedEquityVenueRunItem: {
+            action: components["schemas"]["AdvancedEquityVenueAction"];
+            detail?: string;
+            error_code?: string;
+            order_id: components["schemas"]["UUID"];
+            status_after?: components["schemas"]["AdvancedEquityOrderStatus"];
+            status_before: components["schemas"]["AdvancedEquityOrderStatus"];
+            venue_reason?: string;
+            venue_status?: components["schemas"]["AdvancedEquityVenueStatus"];
+        };
+        AdvancedEquityVenueRunRequest: {
+            /** @description The most orders to work in this run (default 100) */
+            limit?: number;
+        };
+        /** @enum {string} */
+        AdvancedEquityVenueStatus: "OPEN" | "FILLED" | "REJECTED" | "CANCELLED" | "EXPIRED";
         /** @description cap is the faucet policy's per-account limit for the rolling window, used is what the account was granted inside it, and remaining is cap - used (never below zero), all in base units of the sandbox dollar. */
         AdvancedFaucetAllowance: {
             account_id: components["schemas"]["UUID"];
@@ -8667,6 +11877,429 @@ export interface components {
             policy_version?: string;
             reason: string;
             to: string;
+        };
+        StrategyAccountRequest: {
+            account_id: components["schemas"]["UUID"];
+        };
+        /** @enum {string} */
+        StrategyBuildFailure: "SCAN_REJECTED" | "COMPILE_FAILED" | "BUILD_TIMEOUT";
+        /**
+         * @description An exact decimal string with as many fraction digits as its scale (a price or an amount in simulated dollars). Never a JSON number, never rounded.
+         * @example 150.25
+         */
+        StrategyDecimal: string;
+        StrategyDeprecateRequest: {
+            reason: string;
+        };
+        /** @description A simulation against a fixed snapshot set. Simulated results; nothing was proposed or executed. */
+        StrategyEvaluation: {
+            accepted_count: number;
+            created_at?: components["schemas"]["Timestamp"];
+            dataset_version: string;
+            evidence_ref: string;
+            evidence_sha256: string;
+            id: components["schemas"]["UUID"];
+            kind: components["schemas"]["StrategyEvaluationKind"];
+            proposals_count: number;
+            results_digest: string;
+            runs?: components["schemas"]["StrategyEvaluationRun"][];
+            runs_ok: number;
+            snapshots_count: number;
+            snapshots_digest: string;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            version_id: components["schemas"]["UUID"];
+            violations_count: number;
+        };
+        /** @enum {string} */
+        StrategyEvaluationKind: "SIMULATION";
+        StrategyEvaluationRun: {
+            accepted: number;
+            as_of: components["schemas"]["Timestamp"];
+            input_digest: string;
+            proposals: number;
+            run_digest: string;
+            sandbox_run_id: components["schemas"]["UUID"];
+            seq: number;
+            termination: components["schemas"]["StrategyRunTermination"];
+            violations: number;
+        };
+        /** @description Fee METADATA the creator states. Nothing in the marketplace charges a fee. */
+        StrategyFees: {
+            high_water_mark: boolean;
+            management_fee_bps: components["schemas"]["BPS"];
+            performance_fee_bps: components["schemas"]["BPS"];
+        };
+        StrategyFollowIntent: {
+            decision_hash?: string;
+            effect_failure_code?: string;
+            effect_id?: components["schemas"]["UUID"];
+            effect_status?: string;
+            external_ref?: string;
+            intent_id: components["schemas"]["UUID"];
+            kind: string;
+            notional: components["schemas"]["StrategyDecimal"];
+            outcome: components["schemas"]["StrategyFollowOutcome"];
+            proposal_seq: number;
+            risk_decision?: components["schemas"]["AdvancedRiskDecision"];
+        };
+        /** @enum {string} */
+        StrategyFollowOutcome: "DISPATCHED" | "RISK_REJECTED" | "ROUTE_REFUSED" | "DISPATCH_FAILED" | "DISPATCH_UNKNOWN";
+        StrategyFollowRequest: {
+            account_id: components["schemas"]["UUID"];
+            snapshot: components["schemas"]["StrategySnapshot"];
+        };
+        StrategyFollowRun: {
+            accepted_count: number;
+            account_id: components["schemas"]["UUID"];
+            as_of: components["schemas"]["Timestamp"];
+            created_at: components["schemas"]["Timestamp"];
+            equity: components["schemas"]["StrategyDecimal"];
+            evidence_ref: string;
+            evidence_sha256: string;
+            id: components["schemas"]["UUID"];
+            input_digest: string;
+            install_id: components["schemas"]["UUID"];
+            intents: components["schemas"]["StrategyFollowIntent"][];
+            intents_dispatched: number;
+            intents_failed: number;
+            intents_risk_rejected: number;
+            intents_submitted: number;
+            proposals_count: number;
+            /** @description True when this snapshot time was already followed: nothing ran again */
+            replayed?: boolean;
+            run_digest: string;
+            sandbox_run_id: components["schemas"]["UUID"];
+            termination: components["schemas"]["StrategyRunTermination"];
+            trigger: components["schemas"]["StrategyFollowTrigger"];
+            turnover: components["schemas"]["StrategyDecimal"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            version_id: components["schemas"]["UUID"];
+            violations_count: number;
+        };
+        StrategyFollowRunPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["StrategyFollowRun"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @enum {string} */
+        StrategyFollowTrigger: "EXPLICIT" | "SCHEDULED";
+        StrategyForkAncestor: {
+            listing_id: components["schemas"]["UUID"];
+            manifest_hash: string;
+            number: number;
+            source_digest: string;
+            version_id: components["schemas"]["UUID"];
+        };
+        StrategyForkRequest: {
+            account_id: components["schemas"]["UUID"];
+            title: string;
+            version: components["schemas"]["StrategyVersionInput"];
+        };
+        StrategyInstall: {
+            account_id: components["schemas"]["UUID"];
+            created_at: components["schemas"]["Timestamp"];
+            id: components["schemas"]["UUID"];
+            installed_by_actor_type: string;
+            latest_performance?: components["schemas"]["StrategyPerformanceSnapshot"];
+            listing_id: components["schemas"]["UUID"];
+            listing_title: string;
+            mode: components["schemas"]["AdvancedMode"];
+            status: components["schemas"]["StrategyInstallStatus"];
+            strategy_ref: string;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            version_id: components["schemas"]["UUID"];
+            version_moderation: components["schemas"]["StrategyModeration"];
+            version_number: number;
+            version_status: components["schemas"]["StrategyVersionStatus"];
+        };
+        StrategyInstallPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["StrategyInstall"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        StrategyInstallRemoveRequest: {
+            account_id: components["schemas"]["UUID"];
+            reason?: string;
+        };
+        StrategyInstallRequest: {
+            account_id: components["schemas"]["UUID"];
+            mode: components["schemas"]["AdvancedMode"];
+            version_id: components["schemas"]["UUID"];
+        };
+        /** @enum {string} */
+        StrategyInstallStatus: "ACTIVE" | "REMOVED";
+        /**
+         * @description The only intent kinds a strategy may propose: taking and reducing exposure. Moving value out of an account is not a proposable kind.
+         * @enum {string}
+         */
+        StrategyIntentKind: "ACQUIRE_EXPOSURE" | "CLOSE_POSITION" | "OPEN_POSITION" | "REDUCE_EXPOSURE";
+        StrategyListing: {
+            created_at: components["schemas"]["Timestamp"];
+            creator_account_id?: components["schemas"]["UUID"];
+            forked_from_version_id?: components["schemas"]["UUID"];
+            id: components["schemas"]["UUID"];
+            latest_version: components["schemas"]["StrategyVersionSummary"];
+            title: string;
+        };
+        StrategyListingCreateRequest: {
+            account_id: components["schemas"]["UUID"];
+            title: string;
+            version: components["schemas"]["StrategyVersionInput"];
+        };
+        StrategyListingDetail: {
+            created_at: components["schemas"]["Timestamp"];
+            creator_account_id?: components["schemas"]["UUID"];
+            forked_from_version_id?: components["schemas"]["UUID"];
+            id: components["schemas"]["UUID"];
+            title: string;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            /** @description Newest first */
+            versions: components["schemas"]["StrategyVersionDetail"][];
+        };
+        StrategyListingPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["StrategyListing"][];
+        };
+        StrategyManifest: {
+            allowed_instrument_ids: components["schemas"]["UUID"][];
+            allowed_instrument_kinds: components["schemas"]["InstrumentKind"][];
+            allowed_intent_kinds: components["schemas"]["StrategyIntentKind"][];
+            max_intents_per_run: number;
+            max_notional_per_intent: components["schemas"]["StrategyDecimal"];
+            /** Format: int64 */
+            min_interval_seconds: number;
+            schema: string;
+        };
+        /** @description The permissions a version is held to at run time. The server sorts and de-duplicates the lists; the manifest is then hashed and can never change. */
+        StrategyManifestInput: {
+            allowed_instrument_ids?: components["schemas"]["UUID"][];
+            allowed_instrument_kinds?: components["schemas"]["InstrumentKind"][];
+            allowed_intent_kinds: components["schemas"]["StrategyIntentKind"][];
+            max_intents_per_run: number;
+            max_notional_per_intent: components["schemas"]["StrategyDecimal"];
+            /** Format: int64 */
+            min_interval_seconds: number;
+            /** @description nodal.strategy.manifest/v1 when left out */
+            schema?: string;
+        };
+        /** @enum {string} */
+        StrategyModeration: "UNREVIEWED" | "CLEARED" | "FLAGGED" | "TAKEN_DOWN";
+        StrategyModerationRequest: {
+            reason: string;
+            to: components["schemas"]["StrategyModeration"];
+        };
+        /** @description Paper performance computed exactly from a follow history, in basis points. A paper result from caller-supplied snapshots, never a record of money earned or lost. */
+        StrategyPerformanceSnapshot: {
+            computed_at: components["schemas"]["Timestamp"];
+            first_as_of: components["schemas"]["Timestamp"];
+            follow_runs_count: number;
+            history_digest: string;
+            install_id?: components["schemas"]["UUID"];
+            last_as_of: components["schemas"]["Timestamp"];
+            /** Format: int64 */
+            max_drawdown_bps: number;
+            /** Format: int64 */
+            return_bps: number;
+            /** Format: int64 */
+            turnover_bps: number;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            version_id: components["schemas"]["UUID"];
+            /** Format: int64 */
+            volatility_bps: number;
+        };
+        StrategyProvenance: {
+            artifact_digest?: string;
+            dataset_version?: string;
+            evaluation_id?: components["schemas"]["UUID"];
+            /** @description The fork chain, nearest parent first */
+            forked_from: components["schemas"]["StrategyForkAncestor"][];
+            manifest_hash: string;
+            runtime_version?: string;
+            sdk_version?: string;
+            source_commit: string;
+            source_digest: string;
+            strategy_ref: string;
+            toolchain_version?: string;
+        };
+        StrategyReview: {
+            decision: components["schemas"]["StrategyReviewDecision"];
+            note: string;
+            reason_code: string;
+            reviewed_at: components["schemas"]["Timestamp"];
+            /** @description Shown to the creator's account and to operators only */
+            reviewer_actor_id?: string;
+            reviewer_actor_type: string;
+        };
+        /** @enum {string} */
+        StrategyReviewDecision: "APPROVE" | "REJECT";
+        StrategyReviewQueueItem: {
+            creator_account_id: components["schemas"]["UUID"];
+            listing_id: components["schemas"]["UUID"];
+            listing_title: string;
+            version: components["schemas"]["StrategyVersionSummary"];
+        };
+        StrategyReviewQueuePage: components["schemas"]["Page"] & {
+            items: components["schemas"]["StrategyReviewQueueItem"][];
+        };
+        StrategyReviewRequest: {
+            note?: string;
+            reason_code: string;
+        };
+        /** @enum {string} */
+        StrategyRiskClass: "CONSERVATIVE" | "MODERATE" | "AGGRESSIVE" | "SPECULATIVE";
+        /** @enum {string} */
+        StrategyRunSource: "FOLLOW" | "SIMULATION";
+        /** @enum {string} */
+        StrategyRunTermination: "OK" | "TIMEOUT" | "MEMORY_LIMIT" | "OUTPUT_LIMIT" | "TRAP" | "INVALID_OUTPUT" | "KILLED_BY_SWITCH" | "INVALID_MODULE";
+        StrategyRunViolation: {
+            code: string;
+            detail: string;
+            /** @description The output record it concerns; 0 when it concerns no single record */
+            record_seq: number;
+        };
+        StrategySandboxRun: {
+            accepted_count: number;
+            artifact_digest: string;
+            artifact_verified: boolean;
+            created_at: components["schemas"]["Timestamp"];
+            evaluation_id?: components["schemas"]["UUID"];
+            /** Format: int64 */
+            exit_code: number;
+            follow_run_id?: components["schemas"]["UUID"];
+            id: components["schemas"]["UUID"];
+            input_digest: string;
+            limits_version: string;
+            /** Format: int64 */
+            output_bytes: number;
+            output_digest: string;
+            proposals_count: number;
+            run_digest: string;
+            source: components["schemas"]["StrategyRunSource"];
+            strategy_ref: string;
+            termination: components["schemas"]["StrategyRunTermination"];
+            violations: components["schemas"]["StrategyRunViolation"][];
+            violations_count: number;
+            /** Format: int64 */
+            wall_ms: number;
+        };
+        StrategySandboxRunPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["StrategySandboxRun"][];
+        };
+        StrategySimulationRequest: {
+            account_id: components["schemas"]["UUID"];
+            dataset_version: string;
+            snapshots: components["schemas"]["StrategySnapshot"][];
+        };
+        /** @description The market and portfolio snapshot a strategy runs on, supplied by the caller. Prices are simulated dollars per whole base unit; positions are base units; balance is the portfolio's uninvested simulated dollars. It is strategy input only: the risk kernel's sections are read from the database, never from it. */
+        StrategySnapshot: {
+            as_of: components["schemas"]["Timestamp"];
+            instruments: components["schemas"]["StrategySnapshotInstrument"][];
+            portfolio: components["schemas"]["StrategySnapshotPortfolio"];
+        };
+        StrategySnapshotInstrument: {
+            base_decimals: number;
+            best_ask?: components["schemas"]["StrategyDecimal"];
+            best_bid?: components["schemas"]["StrategyDecimal"];
+            closes?: components["schemas"]["StrategyDecimal"][];
+            instrument_id: components["schemas"]["UUID"];
+            kind: components["schemas"]["InstrumentKind"];
+            mark: components["schemas"]["StrategyDecimal"];
+            quote_decimals: number;
+        };
+        StrategySnapshotPortfolio: {
+            balance: components["schemas"]["StrategyDecimal"];
+            positions: components["schemas"]["StrategySnapshotPosition"][];
+        };
+        StrategySnapshotPosition: {
+            instrument_id: components["schemas"]["UUID"];
+            quantity: components["schemas"]["Quantity"];
+        };
+        /** @description A strategy's source: plain file name to file text, one `package main` directory. At most 32 files of at most 65536 bytes each and 262144 bytes in all; every file is scanned before anything is built. */
+        StrategySource: {
+            [key: string]: string;
+        };
+        StrategyValidation: {
+            artifact_digest?: string;
+            failure_reason?: components["schemas"]["StrategyBuildFailure"];
+            outcome: components["schemas"]["StrategyValidationOutcome"];
+            runtime_version: string;
+            scan_codes: string[];
+            sdk_version: string;
+            toolchain_version: string;
+        };
+        /** @enum {string} */
+        StrategyValidationOutcome: "PASSED" | "FAILED";
+        StrategyValidationResult: {
+            validation: components["schemas"]["StrategyValidation"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            version: components["schemas"]["StrategyVersion"];
+        };
+        StrategyVersion: {
+            backtest_evidence_ref: string;
+            config: {
+                [key: string]: string;
+            };
+            created_at: components["schemas"]["Timestamp"];
+            /** @description Shown to the creator's account and to operators only */
+            created_by_actor_id?: string;
+            created_by_actor_type: string;
+            data_dependencies: string[];
+            description: string;
+            fees: components["schemas"]["StrategyFees"];
+            id: components["schemas"]["UUID"];
+            listing_id: components["schemas"]["UUID"];
+            manifest: components["schemas"]["StrategyManifest"];
+            manifest_hash: string;
+            moderation: components["schemas"]["StrategyModeration"];
+            number: number;
+            rejection_code?: string;
+            risk_class: components["schemas"]["StrategyRiskClass"];
+            source_commit: string;
+            source_digest: string;
+            status: components["schemas"]["StrategyVersionStatus"];
+            strategy_ref: string;
+            supported_instrument_ids: components["schemas"]["UUID"][];
+            updated_at: components["schemas"]["Timestamp"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        StrategyVersionCreateRequest: {
+            account_id: components["schemas"]["UUID"];
+            version: components["schemas"]["StrategyVersionInput"];
+        };
+        StrategyVersionDetail: components["schemas"]["StrategyVersion"] & {
+            evaluations: components["schemas"]["StrategyEvaluation"][];
+            performance: components["schemas"]["StrategyPerformanceSnapshot"][];
+            provenance: components["schemas"]["StrategyProvenance"];
+            reviews: components["schemas"]["StrategyReview"][];
+            validation?: components["schemas"]["StrategyValidation"];
+        };
+        /** @description The content of a version. A new listing and a new version need a manifest and source; a fork without them takes the parent's. */
+        StrategyVersionInput: {
+            backtest_evidence_ref?: string;
+            config?: {
+                [key: string]: string;
+            };
+            data_dependencies?: string[];
+            description: string;
+            fees?: components["schemas"]["StrategyFees"];
+            manifest?: components["schemas"]["StrategyManifestInput"];
+            risk_class: components["schemas"]["StrategyRiskClass"];
+            source?: components["schemas"]["StrategySource"];
+            source_commit: string;
+            supported_instrument_ids?: components["schemas"]["UUID"][];
+        };
+        /** @enum {string} */
+        StrategyVersionStatus: "DRAFT" | "SUBMITTED" | "VALIDATED" | "IN_REVIEW" | "APPROVED" | "REJECTED" | "DEPRECATED";
+        StrategyVersionSummary: {
+            created_at: components["schemas"]["Timestamp"];
+            description: string;
+            id: components["schemas"]["UUID"];
+            listing_id: components["schemas"]["UUID"];
+            moderation: components["schemas"]["StrategyModeration"];
+            number: number;
+            rejection_code?: string;
+            risk_class: components["schemas"]["StrategyRiskClass"];
+            status: components["schemas"]["StrategyVersionStatus"];
+            /** @description <listing id>@<version>, how intents name the version */
+            strategy_ref: string;
+            updated_at: components["schemas"]["Timestamp"];
         };
         StreamEvent: {
             data?: {

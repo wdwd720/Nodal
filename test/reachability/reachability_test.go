@@ -68,6 +68,7 @@ var financialPackages = []string{
 	"internal/transfers",
 	"internal/sandboxfund",
 	"internal/predmarket",
+	"internal/sandboxrt",
 	"internal/derivatives",
 }
 

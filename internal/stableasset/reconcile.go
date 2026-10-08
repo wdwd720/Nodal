@@ -11,6 +11,7 @@ import (
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/id"
+	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/reconciliation"
 )
@@ -22,7 +23,12 @@ type SupplyReconciliation struct {
 	StableAssetID     StableAssetID  `json:"stable_asset_id"`
 	LedgerOutstanding money.Quantity `json:"ledger_outstanding"`
 	CustomerWalletSum money.Quantity `json:"customer_wallet_sum"`
-	ChainSupply       money.Quantity `json:"chain_supply"`
+	// HeldElsewhere is every other holding of the asset on the ledger
+	// (ledger.HoldingCodes): units locked in a bridge escrow, posted as
+	// margin or derivatives collateral, in a house inventory or collected as
+	// fees. They are outstanding supply as much as a wallet balance is.
+	HeldElsewhere money.Quantity `json:"held_elsewhere"`
+	ChainSupply   money.Quantity `json:"chain_supply"`
 	// LandedUnpostedMints and LandedUnpostedBurns are requests whose
 	// transaction is already in the chain state (CONFIRMED or FINALIZED, or a
 	// queued redemption) but not yet posted: the honest difference between
@@ -66,14 +72,25 @@ func (s *Service) reconcileLocked(ctx context.Context, tx pgx.Tx, a *PlatformSta
 	}
 	out := SupplyReconciliation{StableAssetID: a.ID, LedgerOutstanding: rl.IssuedSupply, SupplyValue: rl.SupplyValue,
 		EligibleReserve: rl.EligibleReserve, CoverageBPS: rl.CoverageBPS, Covered: rl.Covered()}
-	var walletSum string
-	if err := tx.QueryRow(ctx, `SELECT coalesce(sum(b.balance), 0)::text FROM ledger_accounts la
-		JOIN ledger_balances b ON b.ledger_account_id = la.id
-		WHERE la.owner_type = 'CUSTOMER' AND la.code = 'WALLET' AND la.asset_id = $1`, a.AssetID).Scan(&walletSum); err != nil {
-		return SupplyReconciliation{}, dbErr("sum customer wallets", err)
+	// Every holding of the asset, by any owner, is outstanding supply: the
+	// customer wallets, and everything held elsewhere (ledger.HoldingCodes).
+	holding := make([]string, 0, len(ledger.HoldingCodes()))
+	for _, c := range ledger.HoldingCodes() {
+		holding = append(holding, string(c))
+	}
+	var walletSum, elsewhere string
+	if err := tx.QueryRow(ctx, `SELECT
+		coalesce(sum(b.balance) FILTER (WHERE la.owner_type = 'CUSTOMER' AND la.code = 'WALLET'), 0)::text,
+		coalesce(sum(b.balance) FILTER (WHERE NOT (la.owner_type = 'CUSTOMER' AND la.code = 'WALLET')), 0)::text
+		FROM ledger_accounts la JOIN ledger_balances b ON b.ledger_account_id = la.id
+		WHERE la.asset_id = $1 AND la.code = ANY($2)`, a.AssetID, holding).Scan(&walletSum, &elsewhere); err != nil {
+		return SupplyReconciliation{}, dbErr("sum holdings", err)
 	}
 	if out.CustomerWalletSum, err = money.ScanQuantity(walletSum); err != nil {
 		return SupplyReconciliation{}, dbErr("sum customer wallets", err)
+	}
+	if out.HeldElsewhere, err = money.ScanQuantity(elsewhere); err != nil {
+		return SupplyReconciliation{}, dbErr("sum other holdings", err)
 	}
 	mints, err := openMints(ctx, tx, a.ID)
 	if err != nil {
@@ -124,7 +141,7 @@ func (s *Service) reconcileLocked(ctx context.Context, tx pgx.Tx, a *PlatformSta
 	}
 	out.ExpectedChainSupply = out.LedgerOutstanding.Add(out.LandedUnpostedMints).Sub(out.LandedUnpostedBurns)
 	out.SupplyMatches = out.ExpectedChainSupply.Cmp(out.ChainSupply) == 0
-	out.WalletsMatch = out.CustomerWalletSum.Cmp(out.LedgerOutstanding) == 0
+	out.WalletsMatch = out.CustomerWalletSum.Add(out.HeldElsewhere).Cmp(out.LedgerOutstanding) == 0
 
 	if out.Matched() {
 		if mode == reconciliation.ModeEventDriven {
@@ -179,11 +196,12 @@ func reconDocuments(r SupplyReconciliation) (expected, observed, difference map[
 	}
 	observed = map[string]string{
 		"chain_supply": r.ChainSupply.String(), "customer_wallet_sum": r.CustomerWalletSum.String(),
+		"held_elsewhere":   r.HeldElsewhere.String(),
 		"eligible_reserve": r.EligibleReserve.String(), "coverage_bps": money.QuantityFromInt64(int64(r.CoverageBPS)).String(),
 	}
 	difference = map[string]string{
 		"chain_minus_expected":       r.ChainSupply.Sub(r.ExpectedChainSupply).String(),
-		"wallets_minus_outstanding":  r.CustomerWalletSum.Sub(r.LedgerOutstanding).String(),
+		"holdings_minus_outstanding": r.CustomerWalletSum.Add(r.HeldElsewhere).Sub(r.LedgerOutstanding).String(),
 		"supply_value_minus_reserve": r.SupplyValue.Sub(r.EligibleReserve).String(),
 	}
 	return expected, observed, difference

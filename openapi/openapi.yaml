@@ -1815,8 +1815,628 @@ paths:
         "422": { $ref: "#/components/responses/Problem" }
 
   # >>> advanced:equities paths (insert this subsystem's paths directly below; keep the marker)
+  #
+  # Equities and ETFs in PAPER and SANDBOX mode (internal/equities): listings
+  # over canonical EQUITY and ETF instruments, the XNYS calendar in
+  # America/New_York (pre-market 04:00-09:30, regular 09:30-16:00,
+  # after-hours 16:00-20:00, weekends and recorded holidays closed), a
+  # deterministic paper venue, trade-date accounting with T+1 settlement and
+  # corporate actions. No adapter in this build reaches a real broker: the
+  # venue is SIMULATED and provider mode live is refused unconditionally. The
+  # service decides every rule -- the EQUITIES gate and kill switches, the
+  # session, lots and the limit grid, pending corporate actions, Risk Kernel
+  # V2, the capital reservation -- and these routes carry its answer.
+  /advanced/equities/listings:
+    get:
+      tags: [advanced]
+      summary: Equity and ETF listings with their terms, the latest fresh mark and the calendar's session now
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Listings (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityListingList" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: List a simulated equity or ETF (operator; requires step-up)
+      description: >-
+        Creates the listing's share asset (one SIMULATED asset per listing, its
+        decimals the fractional-share precision) and the EQUITY or ETF
+        instrument that trades it on the XNYS calendar, settling in
+        settlement_asset_id -- by default the sandbox dollar, which must have
+        a fee schedule in this deployment.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityListingRequest" } } }
+      responses:
+        "201":
+          description: The listing
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityListing" } } }
+        "200":
+          description: Idempotent replay of the original answer
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityListing" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/equities/listings/{instrumentId}:
+    get:
+      tags: [advanced]
+      summary: One listing
+      parameters:
+        - { $ref: "#/components/parameters/InstrumentId" }
+      responses:
+        "200":
+          description: The listing
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityListing" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/equities/calendar:
+    get:
+      tags: [advanced]
+      summary: The XNYS calendar now -- session, trade date, T+1 settlement date -- and its recorded holidays
+      responses:
+        "200":
+          description: The calendar
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityCalendar" } } }
+  /advanced/equities/calendar/holidays:
+    post:
+      tags: [advanced]
+      summary: Record a full-day XNYS closure (operator; requires step-up)
+      description: >-
+        Recording the same closure twice is a replay; a different name for a
+        recorded date is a CONFLICT. A weekend is closed already.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityHolidayRequest" } } }
+      responses:
+        "200":
+          description: The calendar with the closure recorded
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityCalendar" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/equities/orders:
+    get:
+      tags: [advanced]
+      summary: An account's equity orders, newest first, each with its fill and settlement
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of orders
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityOrderPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Submit an equity order from one of your own accounts, and place it at the simulated venue
+      description: >-
+        The order is recorded as an economic intent and routed
+        (SubmitOrderIntent), then accepted (AcceptOrder: capability gate,
+        session, lots and limit grid, pending corporate actions, mark and fee
+        quote, Risk Kernel V2, capital reservation), each in its own
+        transaction. An ACCEPTED order is then placed at the paper venue at
+        once (PlaceAtVenue, outside any transaction) and the venue's answer
+        applied in a transaction of its own (ApplyOrderReport): it rests
+        OPEN, fills (posted on the trade date, settling T+1) or is refused.
+        placement says what happened; when placement could not complete, the
+        order stays ACCEPTED with its submission PENDING and an operator's
+        venue run places it. A market order is accepted only in the regular
+        session; a limit order also in pre-market and after-hours when
+        extended_hours is set. Every refusal is recorded: the answer is its
+        stable code (fields carry order_id, rejection_code and reason_codes)
+        and the REJECTED order stays readable.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityOrderRequest" } } }
+      responses:
+        "201":
+          description: The order and what its placement did
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityOrderSubmission" } } }
+        "200":
+          description: Idempotent replay of the original answer
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityOrderSubmission" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/equities/orders/{orderId}:
+    get:
+      tags: [advanced]
+      summary: One equity order, to its owner or an operator who may read any account; anyone else is told it does not exist
+      parameters:
+        - { $ref: "#/components/parameters/OrderId" }
+      responses:
+        "200":
+          description: The order with its fill and settlement
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityOrder" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/equities/orders/{orderId}/cancel:
+    post:
+      tags: [advanced]
+      summary: Ask the simulated venue to cancel one of your own ACCEPTED or OPEN orders
+      description: >-
+        The venue answers CANCELLED, or with the fill that beat the cancel,
+        and that answer is applied exactly once. Another account's order is
+        NOT_FOUND.
+      parameters:
+        - { $ref: "#/components/parameters/OrderId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityOrderCancelRequest" } } }
+      responses:
+        "200":
+          description: The order after the venue's answer
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityOrder" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/equities/fills:
+    get:
+      tags: [advanced]
+      summary: An account's equity fills, newest first, each with its disclosed charges and its settlement
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of fills
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityFillPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/equities/settlements:
+    get:
+      tags: [advanced]
+      summary: An account's T+1 settlements, by due date, newest first
+      description: >-
+        A PENDING settlement is value bought or sold on its trade date that
+        waits in UNSETTLED_RECEIVABLE: neither spendable nor withdrawable
+        until an operator's settlement run settles it on its due date.
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - in: query
+          name: state
+          schema: { $ref: "#/components/schemas/AdvancedEquitySettlementFilter" }
+          description: PENDING, SETTLED or ALL (the default)
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of settlements
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquitySettlementPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/equities/settlement-runs:
+    post:
+      tags: [advanced]
+      summary: Run due T+1 settlements now (operator; requires step-up)
+      description: >-
+        The settlement worker's step, run on request rather than in the
+        background: it settles every settlement due on or before today's New
+        York trade date, one account per transaction, posting
+        EQUITY_SETTLEMENT once per fill, until nothing due is left or the
+        limit is reached.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquitySettlementRunRequest" } } }
+      responses:
+        "200":
+          description: What the run settled
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquitySettlementRun" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/equities/venue-runs:
+    post:
+      tags: [advanced]
+      summary: Run the venue worker once (operator; requires step-up)
+      description: >-
+        The placement and polling worker's step, run on request rather than
+        in the background. For every order the venue still owes an answer,
+        oldest first: an ACCEPTED order whose submission is PENDING is placed;
+        one whose submission outcome is UNKNOWN is never sent again and is
+        polled instead; an OPEN order is polled (a resting limit order fills
+        when the mark crosses, and every order expires at the end of its
+        day). Each answer is applied in its own transaction, exactly once.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityVenueRunRequest" } } }
+      responses:
+        "200":
+          description: What the run did to each order
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityVenueRun" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/equities/corporate-actions:
+    get:
+      tags: [advanced]
+      summary: Corporate actions, newest effective date first
+      parameters:
+        - { in: query, name: instrument_id, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of corporate actions
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityCorporateActionPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Announce a corporate action (operator; requires step-up)
+      description: >-
+        Each type carries exactly its own fields: a split or reverse split a
+        ratio (and an in-lieu price when the ratio can leave fractional
+        shares), a dividend its per-share amount and ex, record and pay dates
+        (the ex-date the settlement cycle implies), a symbol change its new
+        symbol, a delisting its final date. Announcing the same action twice
+        is a replay; a different action for the same instrument, type and
+        effective date is a CONFLICT while the first is live.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityCorporateActionRequest" } } }
+      responses:
+        "201":
+          description: The announced action
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityCorporateAction" } } }
+        "200":
+          description: Idempotent replay of the original answer
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityCorporateAction" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/equities/corporate-actions/{actionId}:
+    get:
+      tags: [advanced]
+      summary: One corporate action
+      parameters:
+        - { in: path, name: actionId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The action
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityCorporateAction" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/equities/corporate-actions/{actionId}/cancel:
+    post:
+      tags: [advanced]
+      summary: Withdraw an announced corporate action that has not been applied (operator; requires step-up)
+      parameters:
+        - { in: path, name: actionId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityCorporateActionCancelRequest" } } }
+      responses:
+        "200":
+          description: The action, CANCELLED
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityCorporateAction" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/equities/corporate-actions/{actionId}/apply:
+    post:
+      tags: [advanced]
+      summary: Apply an announced corporate action on or after the day it takes effect (operator; requires step-up)
+      description: >-
+        One transaction under the instrument's exclusive lock: a split or
+        reverse split adjusts every settled holding (paying any fractional
+        remainder at the in-lieu price under the action's rounding policy), a
+        dividend pays the holders of record on its pay date, a symbol change
+        writes a new terms version, a delisting moves the instrument to
+        DELISTING and, on a second call on its final date, DELISTED. Applying
+        an applied action is a replay that posts nothing.
+      parameters:
+        - { in: path, name: actionId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: What the application did, account by account
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityCorporateActionResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/equities/corporate-action-applications:
+    get:
+      tags: [advanced]
+      summary: What corporate actions did to an account, newest first
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of applications
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityApplicationPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
 
   # >>> advanced:orders paths (insert this subsystem's paths directly below; keep the marker)
+  #
+  # The internal order book (internal/orders): one persistent, journalled book
+  # per instrument; every customer order is the execution of one economic
+  # intent; every fill is a SIM_TRADE between the two parties with the book's
+  # disclosed maker and taker fees and no spread. Venue label
+  # SIMULATED_INTERNAL_BOOK, value domain SIMULATED throughout. The service
+  # decides every rule -- the INTERNAL_MATCHING gate and kill switches, Risk
+  # Kernel V2, the capital reservation, self-trade prevention and the
+  # house-versus-customer crossing policy -- and these routes carry its answer.
+  # House orders and the crossing rule are changed only through the treasury
+  # service (internal/treasury), which enforces the house book's limits and
+  # disclosures; these routes read the rule in force and never change it.
+  /advanced/books:
+    get:
+      tags: [advanced]
+      summary: Internal books, oldest first, with their terms, disclosed fee schedules and the crossing rule in force
+      parameters:
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of books (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBookPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Open the internal book of an instrument (operator; requires step-up)
+      description: >-
+        A SPOT_PAIR states its terms here (it has no canonical terms row); any
+        other instrument trades on its current canonical terms and refuses
+        spot_terms. The quote asset must be a USD-pegged simulated asset, and
+        each fee schedule is quoted in it and may carry only a percentage fee,
+        a strategy fee, a subscription discount and a basis-point cap
+        (ORDER_SCHEDULE_NOT_ALLOWED_ON_INTERNAL_BOOK otherwise). Opening the
+        same book again with the same terms returns it; different terms are a
+        CONFLICT.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBookOpenRequest" } } }
+      responses:
+        "201":
+          description: The book is open
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBook" } } }
+        "200":
+          description: Idempotent replay of the original answer
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBook" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/books/orders:
+    get:
+      tags: [advanced]
+      summary: An account's orders on the internal books, newest first
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - in: query
+          name: scope
+          schema: { $ref: "#/components/schemas/AdvancedBookOrderScope" }
+          description: WORKING (the default) lists orders still PENDING, OPEN or PARTIALLY_FILLED; ALL lists every order
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of orders
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBookOrderPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/books/orders/{orderId}:
+    get:
+      tags: [advanced]
+      summary: One order, to its owner or an operator who may read any account; anyone else is told it does not exist
+      parameters:
+        - { $ref: "#/components/parameters/OrderId" }
+      responses:
+        "200":
+          description: The order
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBookOrder" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/books/orders/{orderId}/cancel:
+    post:
+      tags: [advanced]
+      summary: Cancel one of your own orders
+      description: >-
+        A resting order is cancelled on the book, serialized with every other
+        command, so a cancel racing a fill has exactly one outcome; an order
+        that has not reached the book is cancelled with its intent. Cancelling
+        a cancelled order returns it unchanged; a filled or rejected order
+        answers ORDER_NOT_OPEN. Another account's order is NOT_FOUND.
+      parameters:
+        - { $ref: "#/components/parameters/OrderId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBookOrderCancelRequest" } } }
+      responses:
+        "200":
+          description: The order after the command
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBookCommandResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/books/orders/{orderId}/replace:
+    post:
+      tags: [advanced]
+      summary: Change the price and total quantity of one of your own resting orders
+      description: >-
+        quantity is the new TOTAL quantity, fills included. Everything that
+        could refuse the replace -- Risk Kernel V2 for a replace that adds
+        risk, the book's own rules and the crossing policy (both by a dry run),
+        and the resized reservation -- is decided before anything moves; the
+        replace may then trade. A refusal is recorded and answered with its
+        stable reason.
+      parameters:
+        - { $ref: "#/components/parameters/OrderId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBookOrderReplaceRequest" } } }
+      responses:
+        "200":
+          description: The order after the command, with any fills it made
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBookCommandResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/books/trades:
+    get:
+      tags: [advanced]
+      summary: An account's fills on the internal books, newest first, each seen from the account's own side
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of fills
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBookFillPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/books/{instrumentId}:
+    get:
+      tags: [advanced]
+      summary: One internal book
+      parameters:
+        - { $ref: "#/components/parameters/InstrumentId" }
+      responses:
+        "200":
+          description: The book (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBook" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/books/{instrumentId}/depth:
+    get:
+      tags: [advanced]
+      summary: The resting book as persisted, aggregated by price level, best level first
+      parameters:
+        - { $ref: "#/components/parameters/InstrumentId" }
+        - in: query
+          name: levels
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+          description: Price levels per side
+      responses:
+        "200":
+          description: Bids and asks with the journal cursor they were read at
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBookDepth" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/books/{instrumentId}/orders:
+    post:
+      tags: [advanced]
+      summary: Submit a limit or market order to an internal book from one of your own accounts
+      description: >-
+        The order runs through the staged pipeline -- Accept (intent and
+        settlement compiler), Approve (capability gate and Risk Kernel V2),
+        Reserve (capital), Execute (the book) and Complete -- each stage its
+        own transaction. price is the limit price, or a market order's
+        protection price, which this book requires. A refusal at any stage is
+        recorded before it is answered: the answer is the stable reason
+        (fields carry reason and order_id) and the REJECTED order stays
+        readable. A client order id the account already used is refused
+        (DUPLICATE_CLIENT_ORDER_ID).
+      parameters:
+        - { $ref: "#/components/parameters/InstrumentId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBookOrderRequest" } } }
+      responses:
+        "201":
+          description: The order as the pipeline left it, with every fill it made
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBookCommandResult" } } }
+        "200":
+          description: Idempotent replay of the original answer
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBookCommandResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/books/{instrumentId}/status:
+    post:
+      tags: [advanced]
+      summary: Halt, resume or close a book (operator; requires step-up)
+      description: >-
+        A HALTED book accepts cancels only; a CLOSED book accepts nothing and
+        can be closed only once no order works on it. Every change is
+        recorded with its reason and actor.
+      parameters:
+        - { $ref: "#/components/parameters/InstrumentId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBookStatusRequest" } } }
+      responses:
+        "200":
+          description: The book in its new status
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBook" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/books/{instrumentId}/journal-verification:
+    get:
+      tags: [advanced]
+      summary: Prove from the database alone that the book's journal replays to its recorded state (operator; read-only)
+      description: >-
+        Replays every journalled command from the empty book, comparing every
+        event byte for byte and every state hash, replays the latest snapshot
+        and the tail to the same state, and compares every order that reached
+        the book with the replayed engine's record of it. It reads one
+        consistent snapshot and changes nothing. A divergence is an INTERNAL
+        error: the journal is the book's truth and must never disagree.
+      parameters:
+        - { $ref: "#/components/parameters/InstrumentId" }
+      responses:
+        "200":
+          description: What the replay proved
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBookJournalVerification" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/books/{instrumentId}/trades/{tradeSeq}/proof:
+    get:
+      tags: [advanced]
+      summary: The audit proof of one trade, to one of its parties or an operator who may read any account
+      description: >-
+        The trade's SIM_TRADE journal transaction, the APPLIED effect that
+        names it, the archived evidence document and its digest, the fee
+        schedules that priced it, and the book's journal cursor and latest
+        snapshot. Anyone who is not a party is told the trade does not exist.
+      parameters:
+        - { $ref: "#/components/parameters/InstrumentId" }
+        - in: path
+          name: tradeSeq
+          required: true
+          schema: { type: integer, format: int64, minimum: 1 }
+      responses:
+        "200":
+          description: The trade's audit proof
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBookTradeProof" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
 
   # >>> advanced:transfers paths (insert this subsystem's paths directly below; keep the marker)
   #
@@ -2306,6 +2926,439 @@ paths:
         "404": { $ref: "#/components/responses/Problem" }
 
   # >>> advanced:marketplace paths (insert this subsystem's paths directly below; keep the marker)
+  #
+  # The strategy marketplace (internal/marketplace) and the sandboxed runs behind
+  # it (internal/sandboxrt). The services decide every rule -- the lifecycle,
+  # dual control (an operator who is not the creator reviews), PAPER-only
+  # installs, the manifest, Risk V2 on every intent a strategy proposes -- and
+  # these routes only carry their answers. A version that is not public
+  # (APPROVED or DEPRECATED and not TAKEN_DOWN) is visible to its creator's
+  # account and to operators only; anyone else is told it does not exist.
+  # Performance, evaluation and follow figures are PAPER and simulated results,
+  # never a record of what any account earned.
+  /advanced/strategies/catalog:
+    get:
+      tags: [advanced]
+      summary: Approved strategy listings (an APPROVED, CLEARED version each), newest first
+      parameters:
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of listings with the newest installable version of each
+          content: { application/json: { schema: { $ref: "#/components/schemas/StrategyListingPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+  /advanced/strategies/listings:
+    get:
+      tags: [advanced]
+      summary: The listings an account created, in every status, newest first
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of listings with the newest version of each
+          content: { application/json: { schema: { $ref: "#/components/schemas/StrategyListingPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Create a listing with its first version, in DRAFT
+      description: >-
+        The version is immutable from here on apart from its lifecycle: its
+        manifest, source and configuration can never change. Source is text,
+        at most 32 files of at most 65536 bytes each and 262144 bytes in all.
+        Nothing is built until an operator validates the submitted version.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/StrategyListingCreateRequest" } } }
+      responses:
+        "201":
+          description: The listing and its DRAFT version (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/StrategyListingDetail" } } }
+        "200":
+          description: Idempotent replay of the original answer
+          content: { application/json: { schema: { $ref: "#/components/schemas/StrategyListingDetail" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/strategies/listings/{listingId}:
+    get:
+      tags: [advanced]
+      summary: One listing with its versions, validations, reviews, provenance, evaluations and paper performance
+      description: >-
+        The creator's account and operators see every version; anyone else
+        sees only the public versions, and a listing with none is NOT_FOUND.
+        Evaluations and performance snapshots are simulated and PAPER results:
+        computed from snapshots supplied by whoever ran them, never from real
+        capital.
+      parameters:
+        - { in: path, name: listingId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The listing (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/StrategyListingDetail" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/strategies/listings/{listingId}/versions:
+    post:
+      tags: [advanced]
+      summary: Publish the next version of one of your listings, in DRAFT
+      parameters:
+        - { in: path, name: listingId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/StrategyVersionCreateRequest" } } }
+      responses:
+        "201":
+          description: The new DRAFT version
+          content: { application/json: { schema: { $ref: "#/components/schemas/StrategyVersion" } } }
+        "200":
+          description: Idempotent replay of the original answer
+          content: { application/json: { schema: { $ref: "#/components/schemas/StrategyVersion" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/strategies/versions/{versionId}/forks:
+    post:
+      tags: [advanced]
+      summary: Fork an APPROVED or DEPRECATED version into a new listing of your own
+      description: >-
+        The fork starts at DRAFT and goes through the whole lifecycle again; its
+        provenance names the parent. Leaving out source or manifest takes the
+        parent's as a starting point.
+      parameters:
+        - { in: path, name: versionId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/StrategyForkRequest" } } }
+      responses:
+        "201":
+          description: The new listing with its DRAFT version
+          content: { application/json: { schema: { $ref: "#/components/schemas/StrategyListingDetail" } } }
+        "200":
+          description: Idempotent replay of the original answer
+          content: { application/json: { schema: { $ref: "#/components/schemas/StrategyListingDetail" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/strategies/versions/{versionId}/submit:
+    post:
+      tags: [advanced]
+      summary: Submit one of your DRAFT versions for validation and review
+      parameters:
+        - { in: path, name: versionId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/StrategyAccountRequest" } } }
+      responses:
+        "200":
+          description: The version, SUBMITTED
+          content: { application/json: { schema: { $ref: "#/components/schemas/StrategyVersion" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/strategies/versions/{versionId}/simulations:
+    post:
+      tags: [advanced]
+      summary: Run one of your built versions against a fixed set of snapshots and record the evaluation
+      description: >-
+        A simulation proposes nothing: every run's proposals are counted and
+        kept in the run log, never submitted. At most 20 snapshots per request;
+        the evaluation is reproducible from the dataset version and digests.
+      parameters:
+        - { in: path, name: versionId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/StrategySimulationRequest" } } }
+      responses:
+        "201":
+          description: The recorded evaluation (simulated results)
+          content: { application/json: { schema: { $ref: "#/components/schemas/StrategyEvaluation" } } }
+        "200":
+          description: Idempotent replay of the original answer
+          content: { application/json: { schema: { $ref: "#/components/schemas/StrategyEvaluation" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/strategies/versions/{versionId}/validate:
+    post:
+      tags: [advanced]
+      summary: Scan and build a SUBMITTED version (operator; requires step-up)
+      description: >-
+        A clean scan and a successful build record the artifact and move the
+        version to VALIDATED; a refused scan, a compile error or a build
+        timeout moves it to REJECTED with the reason. The build holds the
+        version's lock and is bounded by the request's time limit: one that
+        does not finish in time records nothing and leaves the version
+        SUBMITTED. A deployment with no Go toolchain answers UNSUPPORTED.
+      parameters:
+        - { in: path, name: versionId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: The version and its validation
+          content: { application/json: { schema: { $ref: "#/components/schemas/StrategyValidationResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /advanced/strategies/versions/{versionId}/review:
+    post:
+      tags: [advanced]
+      summary: Take a VALIDATED version into review (operator other than the creator; requires step-up)
+      parameters:
+        - { in: path, name: versionId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: The version, IN_REVIEW
+          content: { application/json: { schema: { $ref: "#/components/schemas/StrategyVersion" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/strategies/versions/{versionId}/approve:
+    post:
+      tags: [advanced]
+      summary: Approve a version IN_REVIEW and clear it for installs (operator other than the creator; requires step-up)
+      parameters:
+        - { in: path, name: versionId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/StrategyReviewRequest" } } }
+      responses:
+        "200":
+          description: The version, APPROVED and CLEARED
+          content: { application/json: { schema: { $ref: "#/components/schemas/StrategyVersion" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/strategies/versions/{versionId}/reject:
+    post:
+      tags: [advanced]
+      summary: Reject a SUBMITTED, VALIDATED or IN_REVIEW version (operator other than the creator; requires step-up)
+      parameters:
+        - { in: path, name: versionId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/StrategyReviewRequest" } } }
+      responses:
+        "200":
+          description: The version, REJECTED with the reason code
+          content: { application/json: { schema: { $ref: "#/components/schemas/StrategyVersion" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/strategies/versions/{versionId}/moderation:
+    post:
+      tags: [advanced]
+      summary: Flag, take down or re-clear a version (operator; requires step-up)
+      parameters:
+        - { in: path, name: versionId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/StrategyModerationRequest" } } }
+      responses:
+        "200":
+          description: The version with its new moderation state
+          content: { application/json: { schema: { $ref: "#/components/schemas/StrategyVersion" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/strategies/versions/{versionId}/deprecate:
+    post:
+      tags: [advanced]
+      summary: Retire an APPROVED version; no new installs, and existing installs can no longer be followed (operator; requires step-up)
+      parameters:
+        - { in: path, name: versionId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/StrategyDeprecateRequest" } } }
+      responses:
+        "200":
+          description: The version, DEPRECATED
+          content: { application/json: { schema: { $ref: "#/components/schemas/StrategyVersion" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/strategies/review-queue:
+    get:
+      tags: [advanced]
+      summary: Versions awaiting validation or review, oldest first (operator)
+      parameters:
+        - in: query
+          name: status
+          description: One status to list; by default SUBMITTED, VALIDATED and IN_REVIEW.
+          schema: { $ref: "#/components/schemas/StrategyVersionStatus" }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of versions with their listings
+          content: { application/json: { schema: { $ref: "#/components/schemas/StrategyReviewQueuePage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+  /advanced/strategies/installs:
+    get:
+      tags: [advanced]
+      summary: An account's installs, newest first, each with its latest paper performance snapshot
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of installs (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/StrategyInstallPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Install an APPROVED, CLEARED version for one of your accounts, in PAPER mode only
+      description: >-
+        PAPER is the only mode an install can have; the service refuses any
+        other explicitly (FORBIDDEN) rather than rewriting it, and the database
+        refuses it too. Installing a version that is already installed returns
+        the existing install.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/StrategyInstallRequest" } } }
+      responses:
+        "201":
+          description: The install (PAPER)
+          content: { application/json: { schema: { $ref: "#/components/schemas/StrategyInstall" } } }
+        "200":
+          description: The version was already installed, or an idempotent replay
+          content: { application/json: { schema: { $ref: "#/components/schemas/StrategyInstall" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/strategies/installs/{installId}/remove:
+    post:
+      tags: [advanced]
+      summary: Remove one of your ACTIVE installs
+      parameters:
+        - { in: path, name: installId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/StrategyInstallRemoveRequest" } } }
+      responses:
+        "200":
+          description: The install, REMOVED
+          content: { application/json: { schema: { $ref: "#/components/schemas/StrategyInstall" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/strategies/installs/{installId}/follows:
+    post:
+      tags: [advanced]
+      summary: Paper-follow one of your installs on one market snapshot
+      description: >-
+        The installed version runs in the sandbox on the snapshot you supply.
+        Every proposal its manifest permits becomes an economic intent (PAPER,
+        STRATEGY_MARKETPLACE) that faces routing and Risk Kernel V2 with
+        sections read from the database, never from the snapshot; only an
+        ALLOW reaches paper execution, exactly once. The snapshot must be no
+        older than five minutes and not in the future, and the manifest's
+        execution frequency bounds how often an install runs. The same snapshot
+        time with the same snapshot returns the recorded run; with a different
+        snapshot it is INVALID_IDEMPOTENCY_REUSE. Equity and turnover come from
+        the snapshot you supplied and are paper figures.
+      parameters:
+        - { in: path, name: installId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/StrategyFollowRequest" } } }
+      responses:
+        "201":
+          description: The follow run with what became of every intent (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/StrategyFollowRun" } } }
+        "200":
+          description: The run recorded earlier for this snapshot, or an idempotent replay
+          content: { application/json: { schema: { $ref: "#/components/schemas/StrategyFollowRun" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+  /advanced/strategies/installs/{installId}/performance:
+    post:
+      tags: [advanced]
+      summary: Compute and record the paper performance of one of your installs from its follow history
+      parameters:
+        - { in: path, name: installId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/StrategyAccountRequest" } } }
+      responses:
+        "201":
+          description: The recorded snapshot (paper results)
+          content: { application/json: { schema: { $ref: "#/components/schemas/StrategyPerformanceSnapshot" } } }
+        "200":
+          description: Idempotent replay of the original answer
+          content: { application/json: { schema: { $ref: "#/components/schemas/StrategyPerformanceSnapshot" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/strategies/follows:
+    get:
+      tags: [advanced]
+      summary: An account's paper-follow runs, newest first, with the intents each produced and their Risk V2 decisions
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { in: query, name: install_id, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of follow runs (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/StrategyFollowRunPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/strategies/runs:
+    get:
+      tags: [advanced]
+      summary: An account's sandbox runs (its follows, and simulations of its own listings), newest first, with termination and violations
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of sandbox runs
+          content: { application/json: { schema: { $ref: "#/components/schemas/StrategySandboxRunPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
 
   # >>> advanced:delegation paths (insert this subsystem's paths directly below; keep the marker)
 
@@ -4918,8 +5971,933 @@ components:
         record_id: { $ref: "#/components/schemas/UUID", description: The CLEARING reconciliation record opened or refreshed for a mismatch, or still unresolved }
 
     # >>> advanced:equities schemas (insert this subsystem's schemas directly below; keep the marker)
+    #
+    # Equities. A price is an exact decimal string per whole share in the
+    # listing's settlement asset (never a JSON number, never rounded); a share
+    # quantity is base units of the listing's share asset (fractional shares
+    # at its decimals); an amount of value -- a notional, a fee, a settlement,
+    # a reservation for a buy -- is base units of the settlement asset. Every
+    # enum carries x-enum-varnames prefixed Equity so its Go constants cannot
+    # collide.
+    AdvancedEquityPrice:
+      type: string
+      maxLength: 64
+      pattern: '^[0-9]+(\.[0-9]+)?$'
+      description: An exact decimal amount of the settlement asset per whole share
+      examples: ["150.25"]
+    AdvancedEquityDate:
+      type: string
+      pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+      description: A calendar day, YYYY-MM-DD, with no time and no zone
+      examples: ["2026-10-08"]
+    AdvancedEquityKind:
+      type: string
+      enum: [EQUITY, ETF]
+      x-enum-varnames: [EquityKindEquity, EquityKindETF]
+    AdvancedEquityMode:
+      type: string
+      enum: [PAPER, SANDBOX]
+      x-enum-varnames: [EquityModePaper, EquityModeSandbox]
+    AdvancedEquitySide:
+      type: string
+      enum: [BUY, SELL]
+      x-enum-varnames: [EquitySideBuy, EquitySideSell]
+    AdvancedEquityOrderType:
+      type: string
+      enum: [MARKET, LIMIT]
+      x-enum-varnames: [EquityOrderTypeMarket, EquityOrderTypeLimit]
+    AdvancedEquityOrderStatus:
+      type: string
+      enum: [ACCEPTED, REJECTED, OPEN, FILLED, CANCELLED, EXPIRED]
+      x-enum-varnames: [EquityOrderAccepted, EquityOrderRejected, EquityOrderOpen, EquityOrderFilled, EquityOrderCancelled,
+                        EquityOrderExpired]
+      description: ACCEPTED is recorded and reserved and not yet answered by the venue; OPEN rests at the venue
+    AdvancedEquitySession:
+      type: string
+      enum: [CLOSED, PRE_MARKET, REGULAR, AFTER_HOURS]
+      x-enum-varnames: [EquitySessionClosed, EquitySessionPreMarket, EquitySessionRegular, EquitySessionAfterHours]
+    AdvancedEquityRiskClass:
+      type: string
+      enum: [MAJOR, STANDARD, SPECULATIVE]
+      x-enum-varnames: [EquityRiskMajor, EquityRiskStandard, EquityRiskSpeculative]
+    AdvancedEquityActionType:
+      type: string
+      enum: [SPLIT, REVERSE_SPLIT, CASH_DIVIDEND, SYMBOL_CHANGE, DELISTING]
+      x-enum-varnames: [EquityActionSplit, EquityActionReverseSplit, EquityActionDividend, EquityActionSymbolChange,
+                        EquityActionDelisting]
+    AdvancedEquityActionStatus:
+      type: string
+      enum: [ANNOUNCED, APPLYING, APPLIED, CANCELLED]
+      x-enum-varnames: [EquityActionAnnounced, EquityActionApplying, EquityActionApplied, EquityActionCancelled]
+      description: APPLYING is used only by a delisting, between DELISTING and DELISTED
+    AdvancedEquityRounding:
+      type: string
+      enum: [SHARES_DOWN_CASH_DOWN, SHARES_DOWN_CASH_HALF_EVEN]
+      x-enum-varnames: [EquityRoundingSharesDownAmountDown, EquityRoundingSharesDownAmountHalfEven]
+      description: >-
+        Shares always round down to a whole base unit; the amount paid for a
+        fractional remainder, and a dividend, round down (the default, never
+        paying more than the exact amount) or half-even.
+    AdvancedEquitySettlementState:
+      type: string
+      enum: [PENDING, SETTLED]
+      x-enum-varnames: [EquitySettlementPending, EquitySettlementSettled]
+    AdvancedEquitySettlementFilter:
+      type: string
+      enum: [PENDING, SETTLED, ALL]
+      x-enum-varnames: [EquitySettlementFilterPending, EquitySettlementFilterSettled, EquitySettlementFilterAll]
+    AdvancedEquityVenueStatus:
+      type: string
+      enum: [OPEN, FILLED, REJECTED, CANCELLED, EXPIRED]
+      x-enum-varnames: [EquityVenueOpen, EquityVenueFilled, EquityVenueRejected, EquityVenueCancelled, EquityVenueExpired]
+    AdvancedEquityPlacementStatus:
+      type: string
+      enum: [PLACED, NOT_PLACED]
+      x-enum-varnames: [EquityPlacementPlaced, EquityPlacementNotPlaced]
+    AdvancedEquityVenueAction:
+      type: string
+      enum: [PLACE, POLL]
+      x-enum-varnames: [EquityVenueActionPlace, EquityVenueActionPoll]
+    AdvancedEquityMark:
+      type: object
+      description: A reference price of one whole share in the settlement asset, as the price store observed it
+      required: [price, source, observed_at]
+      properties:
+        price: { $ref: "#/components/schemas/AdvancedEquityPrice" }
+        source: { type: string }
+        observed_at: { $ref: "#/components/schemas/Timestamp" }
+    AdvancedEquitySessionState:
+      type: object
+      description: >-
+        The calendar at as_of: the session in force, the New York trade date
+        (every session of a day shares it) and the T+1 settlement date of a
+        trade made on it, when it is a trading day.
+      required: [calendar, timezone, as_of, session, trade_date, trading_day, next_trading_day]
+      properties:
+        calendar: { type: string }
+        timezone: { type: string }
+        as_of: { $ref: "#/components/schemas/Timestamp" }
+        session: { $ref: "#/components/schemas/AdvancedEquitySession" }
+        trade_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        trading_day: { type: boolean }
+        holiday_name: { type: string }
+        next_trading_day: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        settlement_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+    AdvancedEquityHoliday:
+      type: object
+      required: [date, name]
+      properties:
+        date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        name: { type: string }
+    AdvancedEquityCalendar:
+      type: object
+      required: [state, settlement_cycle_days, holidays]
+      properties:
+        state: { $ref: "#/components/schemas/AdvancedEquitySessionState" }
+        settlement_cycle_days: { type: integer }
+        holidays: { type: array, items: { $ref: "#/components/schemas/AdvancedEquityHoliday" } }
+    AdvancedEquityListing:
+      type: object
+      required: [instrument_id, kind, symbol, exchange_mic, name, status, terms_version, terms_hash, venue, share_asset_id,
+                 share_symbol, share_decimals, settlement_asset_id, settlement_symbol, settlement_decimals, price_scale,
+                 tick_price, lot_size, min_quantity, oracle_max_age_ms, trading_calendar, value_domain]
+      properties:
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        kind: { $ref: "#/components/schemas/AdvancedEquityKind" }
+        symbol: { type: string }
+        exchange_mic: { type: string }
+        name: { type: string, description: The share asset's name }
+        status: { type: string, description: The instrument's status (ACTIVE, HALTED, CLOSE_ONLY, DELISTING, DELISTED, ...) }
+        terms_version: { type: integer }
+        terms_hash: { type: string }
+        venue: { type: string, description: The simulated venue the listing trades at }
+        share_asset_id: { $ref: "#/components/schemas/UUID" }
+        share_symbol: { type: string }
+        share_decimals: { type: integer, minimum: 0, maximum: 18 }
+        settlement_asset_id: { $ref: "#/components/schemas/UUID" }
+        settlement_symbol: { type: string }
+        settlement_decimals: { type: integer, minimum: 0, maximum: 18 }
+        price_scale: { type: integer }
+        tick_price: { $ref: "#/components/schemas/AdvancedEquityPrice" }
+        lot_size: { $ref: "#/components/schemas/Quantity" }
+        min_quantity: { $ref: "#/components/schemas/Quantity" }
+        oracle_max_age_ms: { type: integer, format: int64 }
+        trading_calendar: { type: string }
+        mark: { $ref: "#/components/schemas/AdvancedEquityMark" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedEquityListingList:
+      type: object
+      required: [items, session, value_domain]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/AdvancedEquityListing" } }
+        session: { $ref: "#/components/schemas/AdvancedEquitySessionState" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedEquityListingRequest:
+      type: object
+      description: >-
+        tick_size is in price units at price_scale (at scale 2 a tick of 1 is
+        one hundredth); lot_size and min_quantity are base units of the share
+        asset, whose decimals are share_decimals. settlement_asset_id defaults
+        to the sandbox dollar.
+      required: [kind, symbol, name, exchange_mic, share_decimals, price_scale, tick_size, lot_size, min_quantity,
+                 oracle_max_age_ms, oracle_sources, risk_class]
+      properties:
+        kind: { $ref: "#/components/schemas/AdvancedEquityKind" }
+        symbol: { type: string, minLength: 1, maxLength: 64 }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        exchange_mic: { type: string, pattern: '^[A-Z0-9]{4}$' }
+        settlement_asset_id: { $ref: "#/components/schemas/UUID" }
+        share_decimals: { type: integer, minimum: 0, maximum: 18 }
+        price_scale: { type: integer, minimum: 0, maximum: 18 }
+        tick_size: { $ref: "#/components/schemas/Quantity" }
+        lot_size: { $ref: "#/components/schemas/Quantity" }
+        min_quantity: { $ref: "#/components/schemas/Quantity" }
+        oracle_max_age_ms: { type: integer, format: int64, minimum: 1 }
+        oracle_sources: { type: array, items: { type: string } }
+        risk_class: { $ref: "#/components/schemas/AdvancedEquityRiskClass" }
+    AdvancedEquityHolidayRequest:
+      type: object
+      required: [date, name]
+      properties:
+        date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        name: { type: string, minLength: 1, maxLength: 200 }
+    AdvancedEquityOrderRequest:
+      type: object
+      description: >-
+        quantity is base units of the listing's share asset; limit_price is
+        required for a LIMIT order and refused for a MARKET order, which never
+        trades outside regular hours.
+      required: [account_id, instrument_id, side, order_type, quantity, mode]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        side: { $ref: "#/components/schemas/AdvancedEquitySide" }
+        order_type: { $ref: "#/components/schemas/AdvancedEquityOrderType" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        limit_price: { $ref: "#/components/schemas/AdvancedEquityPrice" }
+        extended_hours: { type: boolean }
+        mode: { $ref: "#/components/schemas/AdvancedEquityMode" }
+    AdvancedEquitySettlement:
+      type: object
+      description: >-
+        One fill's T+1 settlement: what the account receives (shares for a
+        buy, proceeds net of the disclosed charges for a sell) waits in
+        UNSETTLED_RECEIVABLE from the trade date until it is SETTLED into the
+        WALLET on the due date.
+      required: [id, fill_id, order_id, account_id, instrument_id, asset_id, asset_symbol, asset_decimals, quantity, trade_date,
+                 due_date, state, value_domain]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        fill_id: { $ref: "#/components/schemas/UUID" }
+        order_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        asset_symbol: { type: string }
+        asset_decimals: { type: integer, minimum: 0, maximum: 18 }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        trade_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        due_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        state: { $ref: "#/components/schemas/AdvancedEquitySettlementState" }
+        settled_at: { $ref: "#/components/schemas/Timestamp" }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedEquityFill:
+      type: object
+      description: >-
+        One execution at the simulated venue, with every charge it carried as
+        disclosed and verified before posting: notional at the fill price,
+        the disclosed spread, platform and venue fees, and the total the
+        buyer paid or the seller receives, all in base units of the
+        settlement asset.
+      required: [id, order_id, account_id, instrument_id, side, quantity, share_decimals, price, mark, slippage_bps, venue,
+                 venue_fill_id, executed_at, trade_date, settlement_date, notional, spread, platform_fees, venue_fees, total,
+                 settlement_asset_id, settlement_symbol, settlement_decimals, fee_schedule_version, fee_schedule_hash,
+                 fee_disclosure_hash, journal_transaction_id, effect_id, value_domain]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        order_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        side: { $ref: "#/components/schemas/AdvancedEquitySide" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        share_decimals: { type: integer, minimum: 0, maximum: 18 }
+        price: { $ref: "#/components/schemas/AdvancedEquityPrice" }
+        mark: { $ref: "#/components/schemas/AdvancedEquityMark" }
+        slippage_bps: { type: integer }
+        venue: { type: string }
+        venue_fill_id: { type: string }
+        executed_at: { $ref: "#/components/schemas/Timestamp" }
+        trade_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        settlement_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        notional: { $ref: "#/components/schemas/Quantity" }
+        spread: { $ref: "#/components/schemas/Quantity" }
+        platform_fees: { $ref: "#/components/schemas/Quantity" }
+        venue_fees: { $ref: "#/components/schemas/Quantity" }
+        total: { $ref: "#/components/schemas/Quantity" }
+        settlement_asset_id: { $ref: "#/components/schemas/UUID" }
+        settlement_symbol: { type: string }
+        settlement_decimals: { type: integer, minimum: 0, maximum: 18 }
+        fee_schedule_version: { type: string }
+        fee_schedule_hash: { type: string }
+        fee_disclosure_hash: { type: string }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        effect_id: { $ref: "#/components/schemas/UUID" }
+        settlement: { $ref: "#/components/schemas/AdvancedEquitySettlement" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedEquityOrder:
+      type: object
+      description: >-
+        An equity order. reserved_quantity is what the order holds reserved
+        on the WALLET it draws from: base units of the settlement asset for a
+        buy, of the share asset for a sell. Every order is a DAY order and
+        expires at expires_at.
+      required: [id, account_id, instrument_id, intent_id, symbol, exchange_mic, share_asset_id, settlement_asset_id, side,
+                 order_type, mode, quantity, share_decimals, price_scale, tick_price, extended_hours, session, trade_date,
+                 expires_at, status, rejection_reasons, venue, created_at, updated_at, value_domain]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        intent_id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        exchange_mic: { type: string }
+        share_asset_id: { $ref: "#/components/schemas/UUID" }
+        settlement_asset_id: { $ref: "#/components/schemas/UUID" }
+        side: { $ref: "#/components/schemas/AdvancedEquitySide" }
+        order_type: { $ref: "#/components/schemas/AdvancedEquityOrderType" }
+        mode: { $ref: "#/components/schemas/AdvancedEquityMode" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        share_decimals: { type: integer, minimum: 0, maximum: 18 }
+        price_scale: { type: integer }
+        tick_price: { $ref: "#/components/schemas/AdvancedEquityPrice" }
+        limit_price: { $ref: "#/components/schemas/AdvancedEquityPrice" }
+        protection_price: { $ref: "#/components/schemas/AdvancedEquityPrice" }
+        extended_hours: { type: boolean }
+        session: { $ref: "#/components/schemas/AdvancedEquitySession" }
+        trade_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        expires_at: { $ref: "#/components/schemas/Timestamp" }
+        status: { $ref: "#/components/schemas/AdvancedEquityOrderStatus" }
+        rejection_code: { type: string }
+        rejection_reasons: { type: array, items: { type: string } }
+        reservation_id: { $ref: "#/components/schemas/UUID" }
+        reserved_quantity: { $ref: "#/components/schemas/Quantity" }
+        risk_decision_id: { $ref: "#/components/schemas/UUID" }
+        venue: { type: string }
+        venue_order_id: { type: string }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+        fill: { $ref: "#/components/schemas/AdvancedEquityFill" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedEquityOrderPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items, value_domain]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/AdvancedEquityOrder" } }
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedEquityFillPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items, value_domain]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/AdvancedEquityFill" } }
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedEquitySettlementPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items, value_domain]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/AdvancedEquitySettlement" } }
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedEquityPlacement:
+      type: object
+      description: >-
+        What placing the order at the simulated venue did. PLACED carries the
+        venue's answer; NOT_PLACED says why nothing was sent (the order stays
+        ACCEPTED with its submission PENDING, for an operator's venue run).
+      required: [status, detail]
+      properties:
+        status: { $ref: "#/components/schemas/AdvancedEquityPlacementStatus" }
+        venue_status: { $ref: "#/components/schemas/AdvancedEquityVenueStatus" }
+        venue_reason: { type: string }
+        error_code: { type: string }
+        detail: { type: string }
+    AdvancedEquityOrderSubmission:
+      type: object
+      required: [order, placement, value_domain]
+      properties:
+        order: { $ref: "#/components/schemas/AdvancedEquityOrder" }
+        placement: { $ref: "#/components/schemas/AdvancedEquityPlacement" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedEquityOrderCancelRequest:
+      type: object
+      required: [account_id]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+    AdvancedEquitySettlementRunRequest:
+      type: object
+      properties:
+        limit: { type: integer, minimum: 1, maximum: 500, description: The most settlements to settle in this run (default 500) }
+    AdvancedEquitySettlementRun:
+      type: object
+      required: [as_of, trade_date, batches, settled, value_domain]
+      properties:
+        as_of: { $ref: "#/components/schemas/Timestamp" }
+        trade_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        batches: { type: integer, description: Transactions the run used, one account each }
+        settled: { type: array, items: { $ref: "#/components/schemas/AdvancedEquitySettlement" } }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedEquityVenueRunRequest:
+      type: object
+      properties:
+        limit: { type: integer, minimum: 1, maximum: 500, description: The most orders to work in this run (default 100) }
+    AdvancedEquityVenueRunItem:
+      type: object
+      required: [order_id, action, status_before]
+      properties:
+        order_id: { $ref: "#/components/schemas/UUID" }
+        action: { $ref: "#/components/schemas/AdvancedEquityVenueAction" }
+        status_before: { $ref: "#/components/schemas/AdvancedEquityOrderStatus" }
+        status_after: { $ref: "#/components/schemas/AdvancedEquityOrderStatus" }
+        venue_status: { $ref: "#/components/schemas/AdvancedEquityVenueStatus" }
+        venue_reason: { type: string }
+        error_code: { type: string }
+        detail: { type: string }
+    AdvancedEquityVenueRun:
+      type: object
+      required: [as_of, items, value_domain]
+      properties:
+        as_of: { $ref: "#/components/schemas/Timestamp" }
+        items: { type: array, items: { $ref: "#/components/schemas/AdvancedEquityVenueRunItem" } }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedEquityRatio:
+      type: object
+      description: New shares per old share, numerator/denominator (4/1 is a 4-for-1 split, 1/10 a 1-for-10 reverse split)
+      required: [numerator, denominator]
+      properties:
+        numerator: { type: integer, format: int64, minimum: 1 }
+        denominator: { type: integer, format: int64, minimum: 1 }
+    AdvancedEquityCorporateActionRequest:
+      type: object
+      description: >-
+        effective_date is the first trading day of a split, reverse split or
+        symbol change, or the day a delisting begins; a dividend's is its
+        ex-date and may be left out. dividend_per_share and in_lieu_price are
+        exact amounts of the settlement asset per whole share (in_lieu_price
+        per whole new share).
+      required: [instrument_id, type, reason]
+      properties:
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        type: { $ref: "#/components/schemas/AdvancedEquityActionType" }
+        effective_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        ratio: { $ref: "#/components/schemas/AdvancedEquityRatio" }
+        dividend_per_share: { $ref: "#/components/schemas/AdvancedEquityPrice" }
+        in_lieu_price: { $ref: "#/components/schemas/AdvancedEquityPrice" }
+        ex_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        record_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        pay_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        final_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        new_symbol: { type: string, maxLength: 64 }
+        rounding: { $ref: "#/components/schemas/AdvancedEquityRounding" }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    AdvancedEquityCorporateAction:
+      type: object
+      required: [id, instrument_id, type, status, effective_date, share_asset_id, settlement_asset_id, rounding, reason,
+                 content_hash, announced_by_actor_type, announced_by_actor_id, created_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        type: { $ref: "#/components/schemas/AdvancedEquityActionType" }
+        status: { $ref: "#/components/schemas/AdvancedEquityActionStatus" }
+        effective_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        share_asset_id: { $ref: "#/components/schemas/UUID" }
+        settlement_asset_id: { $ref: "#/components/schemas/UUID" }
+        ratio: { $ref: "#/components/schemas/AdvancedEquityRatio" }
+        dividend_per_share: { $ref: "#/components/schemas/AdvancedEquityPrice" }
+        in_lieu_price: { $ref: "#/components/schemas/AdvancedEquityPrice" }
+        ex_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        record_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        pay_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        final_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        new_symbol: { type: string }
+        rounding: { $ref: "#/components/schemas/AdvancedEquityRounding" }
+        reason: { type: string }
+        content_hash: { type: string }
+        announced_by_actor_type: { type: string }
+        announced_by_actor_id: { type: string }
+        applied_at: { $ref: "#/components/schemas/Timestamp" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+    AdvancedEquityCorporateActionPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/AdvancedEquityCorporateAction" } }
+    AdvancedEquityCorporateActionCancelRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    AdvancedEquityApplication:
+      type: object
+      description: >-
+        One account's share of one corporate action, applied once. shares_delta
+        is base units of the share asset (negative for a reverse split);
+        settlement_amount is base units of the settlement asset paid for a
+        fractional remainder or as a dividend, exactly
+        exact_amount_numerator / exact_amount_denominator before rounding.
+      required: [id, action_id, account_id, entitled_quantity, shares_delta, settlement_amount, exact_amount_numerator,
+                 exact_amount_denominator, rounding, share_symbol, share_decimals, settlement_symbol, settlement_decimals,
+                 created_at, value_domain]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        action_id: { $ref: "#/components/schemas/UUID" }
+        action_type: { $ref: "#/components/schemas/AdvancedEquityActionType" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        entitled_quantity: { $ref: "#/components/schemas/Quantity" }
+        shares_delta: { $ref: "#/components/schemas/Quantity" }
+        settlement_amount: { $ref: "#/components/schemas/Quantity" }
+        exact_amount_numerator: { $ref: "#/components/schemas/Quantity" }
+        exact_amount_denominator: { $ref: "#/components/schemas/Quantity" }
+        rounding: { $ref: "#/components/schemas/AdvancedEquityRounding" }
+        share_symbol: { type: string }
+        share_decimals: { type: integer, minimum: 0, maximum: 18 }
+        settlement_symbol: { type: string }
+        settlement_decimals: { type: integer, minimum: 0, maximum: 18 }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        effect_id: { $ref: "#/components/schemas/UUID" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedEquityApplicationPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items, value_domain]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/AdvancedEquityApplication" } }
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedEquityCorporateActionResult:
+      type: object
+      required: [action, applications, replayed, value_domain]
+      properties:
+        action: { $ref: "#/components/schemas/AdvancedEquityCorporateAction" }
+        applications: { type: array, items: { $ref: "#/components/schemas/AdvancedEquityApplication" } }
+        replayed: { type: boolean, description: True when the action had been applied already and nothing was posted }
+        terms_version: { type: integer, description: The terms version a symbol change wrote }
+        instrument_status: { type: string, description: The instrument's status after a delisting step }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
 
     # >>> advanced:orders schemas (insert this subsystem's schemas directly below; keep the marker)
+    #
+    # The internal order book. A price is an exact decimal string in the
+    # book's quote asset per whole base unit (never a JSON number, never
+    # rounded); a quantity is base units of the base asset; an amount of value
+    # (a notional, a fee) is base units of the quote asset. Every enum carries
+    # x-enum-varnames prefixed Book so its Go constants cannot collide.
+    AdvancedBookPrice:
+      type: string
+      maxLength: 64
+      pattern: '^[0-9]+(\.[0-9]+)?$'
+      description: An exact decimal price in the book's quote asset per whole base unit
+      examples: ["2500.00"]
+    AdvancedBookMode:
+      type: string
+      enum: [PAPER, SANDBOX]
+      x-enum-varnames: [BookModePaper, BookModeSandbox]
+    AdvancedBookStatus:
+      type: string
+      enum: [OPEN, HALTED, CLOSED]
+      x-enum-varnames: [BookStatusOpen, BookStatusHalted, BookStatusClosed]
+    AdvancedBookVenueLabel:
+      type: string
+      enum: [SIMULATED_INTERNAL_BOOK]
+      x-enum-varnames: [BookVenueSimulatedInternalBook]
+    AdvancedBookTermsSource:
+      type: string
+      enum: [CANONICAL, BOOK_SPOT]
+      x-enum-varnames: [BookTermsCanonical, BookTermsSpot]
+      description: CANONICAL is the instrument's versioned terms; BOOK_SPOT is spot-pair terms stated when the book was opened
+    AdvancedBookSide:
+      type: string
+      enum: [BUY, SELL]
+      x-enum-varnames: [BookSideBuy, BookSideSell]
+    AdvancedBookOrderType:
+      type: string
+      enum: [LIMIT, MARKET]
+      x-enum-varnames: [BookOrderTypeLimit, BookOrderTypeMarket]
+    AdvancedBookTimeInForce:
+      type: string
+      enum: [GTC, IOC, FOK]
+      x-enum-varnames: [BookTimeInForceGTC, BookTimeInForceIOC, BookTimeInForceFOK]
+    AdvancedBookSTP:
+      type: string
+      enum: [CANCEL_TAKER, CANCEL_MAKER, CANCEL_BOTH]
+      x-enum-varnames: [BookSTPCancelTaker, BookSTPCancelMaker, BookSTPCancelBoth]
+      description: Self-trade prevention when the order takes liquidity; two orders of one account never trade
+    AdvancedBookLiquidityIntent:
+      type: string
+      enum: [TAKE_LIQUIDITY, PROVIDE_LIQUIDITY]
+      x-enum-varnames: [BookTakeLiquidity, BookProvideLiquidity]
+    AdvancedBookOrderStatus:
+      type: string
+      enum: [PENDING, OPEN, PARTIALLY_FILLED, FILLED, CANCELLED, REJECTED]
+      x-enum-varnames: [BookOrderPending, BookOrderOpen, BookOrderPartiallyFilled, BookOrderFilled, BookOrderCancelled, BookOrderRejected]
+    AdvancedBookOrderScope:
+      type: string
+      enum: [WORKING, ALL]
+      x-enum-varnames: [BookOrderScopeWorking, BookOrderScopeAll]
+    AdvancedBookLiquidity:
+      type: string
+      enum: [MAKER, TAKER]
+      x-enum-varnames: [BookLiquidityMaker, BookLiquidityTaker]
+      description: The role the account's order played in the fill
+    AdvancedBookOwnerType:
+      type: string
+      enum: [CUSTOMER, HOUSE]
+      x-enum-varnames: [BookOwnerCustomer, BookOwnerHouse]
+    AdvancedBookFeeScheduleRequest:
+      type: object
+      description: >-
+        The explicit fee one side of every fill pays, in the book's quote
+        asset: a percentage of the fill's notional, an extra percentage for a
+        strategy-originated order, a subscription discount on the percentage
+        fee, and a cap in basis points of notional (0 disables it). The
+        internal book charges nothing else -- no spread, no fixed or minimum
+        fee, no venue pass-through -- and rounds in the customer's favour.
+      required: [version, quote_asset_id, quote_decimals, percentage_fee_bps]
+      properties:
+        version: { type: string, minLength: 1, maxLength: 64 }
+        quote_asset_id: { $ref: "#/components/schemas/UUID" }
+        quote_decimals: { type: integer, minimum: 0, maximum: 18 }
+        percentage_fee_bps: { $ref: "#/components/schemas/BPS" }
+        strategy_fee_bps: { $ref: "#/components/schemas/BPS" }
+        subscription_discount_bps: { $ref: "#/components/schemas/BPS" }
+        max_total_fee_bps: { $ref: "#/components/schemas/BPS" }
+    AdvancedBookFeeSchedule:
+      type: object
+      description: The fee schedule a book prices one side of every fill with, as recorded on the book, and its hash
+      required: [version, quote_asset_id, quote_decimals, percentage_fee_bps, strategy_fee_bps, subscription_discount_bps,
+                 max_total_fee_bps, hash]
+      properties:
+        version: { type: string }
+        quote_asset_id: { $ref: "#/components/schemas/UUID" }
+        quote_decimals: { type: integer, minimum: 0, maximum: 18 }
+        percentage_fee_bps: { $ref: "#/components/schemas/BPS" }
+        strategy_fee_bps: { $ref: "#/components/schemas/BPS" }
+        subscription_discount_bps: { $ref: "#/components/schemas/BPS" }
+        max_total_fee_bps: { $ref: "#/components/schemas/BPS" }
+        hash: { type: string, description: The schedule's hash, as recorded on the book and on every fill it priced }
+    AdvancedBookCrossingRule:
+      type: object
+      description: >-
+        The house-versus-customer crossing rule in force. Version 0 is the
+        default, in force until a rule is recorded: a house (principal) book
+        never trades with a customer.
+      required: [book_id, version, allow_house_customer_crossing, is_default]
+      properties:
+        book_id: { $ref: "#/components/schemas/UUID" }
+        version: { type: integer }
+        allow_house_customer_crossing: { type: boolean }
+        is_default: { type: boolean, description: True when no rule was ever recorded and the default applies }
+        reason: { type: string }
+        actor_type: { type: string }
+        actor_id: { type: string }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+    AdvancedBook:
+      type: object
+      description: >-
+        One internal book: its instrument and assets, the exact grid it trades
+        on, the fee schedules that price every fill, the crossing rule in
+        force and its journal cursor.
+      required: [id, instrument_id, venue_label, mode, status, instrument_kind, base_asset_id, base_symbol, base_decimals,
+                 quote_asset_id, quote_symbol, quote_decimals, price_scale, tick_price, lot_size, min_quantity, max_price,
+                 trading_calendar, terms_source, maker_fee, taker_fee, crossing_rule, snapshot_interval, last_command_seq,
+                 last_event_seq, last_trade_seq, state_hash, value_domain]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        venue_label: { $ref: "#/components/schemas/AdvancedBookVenueLabel" }
+        mode: { $ref: "#/components/schemas/AdvancedBookMode" }
+        status: { $ref: "#/components/schemas/AdvancedBookStatus" }
+        instrument_kind: { $ref: "#/components/schemas/InstrumentKind" }
+        base_asset_id: { $ref: "#/components/schemas/UUID" }
+        base_symbol: { type: string }
+        base_decimals: { type: integer, minimum: 0, maximum: 18 }
+        quote_asset_id: { $ref: "#/components/schemas/UUID" }
+        quote_symbol: { type: string }
+        quote_decimals: { type: integer, minimum: 0, maximum: 18 }
+        price_scale: { type: integer }
+        tick_price: { $ref: "#/components/schemas/AdvancedBookPrice" }
+        lot_size: { $ref: "#/components/schemas/Quantity" }
+        min_quantity: { $ref: "#/components/schemas/Quantity" }
+        max_price: { $ref: "#/components/schemas/AdvancedBookPrice" }
+        trading_calendar: { type: string }
+        terms_source: { $ref: "#/components/schemas/AdvancedBookTermsSource" }
+        terms_version: { type: integer, description: The canonical terms version the book was opened on (absent for BOOK_SPOT) }
+        maker_fee: { $ref: "#/components/schemas/AdvancedBookFeeSchedule" }
+        taker_fee: { $ref: "#/components/schemas/AdvancedBookFeeSchedule" }
+        crossing_rule: { $ref: "#/components/schemas/AdvancedBookCrossingRule" }
+        snapshot_interval: { type: integer, format: int64 }
+        last_command_seq: { type: integer, format: int64 }
+        last_event_seq: { type: integer, format: int64 }
+        last_trade_seq: { type: integer, format: int64 }
+        state_hash: { type: string, description: hex sha256 of the book's state after its last command }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedBookPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items, value_domain]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/AdvancedBook" } }
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedBookOpenRequest:
+      type: object
+      description: spot_terms is required for a SPOT_PAIR and refused for every other instrument.
+      required: [instrument_id, mode, maker_fee, taker_fee]
+      properties:
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        mode: { $ref: "#/components/schemas/AdvancedBookMode" }
+        spot_terms: { $ref: "#/components/schemas/InstrumentTerms" }
+        maker_fee: { $ref: "#/components/schemas/AdvancedBookFeeScheduleRequest" }
+        taker_fee: { $ref: "#/components/schemas/AdvancedBookFeeScheduleRequest" }
+        snapshot_interval: { type: integer, minimum: 1, maximum: 100000, description: Commands between snapshots (default 64) }
+    AdvancedBookStatusRequest:
+      type: object
+      required: [status, reason]
+      properties:
+        status: { $ref: "#/components/schemas/AdvancedBookStatus" }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    AdvancedBookDepthLevel:
+      type: object
+      required: [price, price_ticks, quantity, orders]
+      properties:
+        price: { $ref: "#/components/schemas/AdvancedBookPrice" }
+        price_ticks: { type: integer, format: int64 }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        orders: { type: integer }
+    AdvancedBookDepth:
+      type: object
+      required: [book_id, instrument_id, status, base_decimals, quote_decimals, bids, asks, last_command_seq, state_hash, value_domain]
+      properties:
+        book_id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        status: { $ref: "#/components/schemas/AdvancedBookStatus" }
+        base_decimals: { type: integer, minimum: 0, maximum: 18 }
+        quote_decimals: { type: integer, minimum: 0, maximum: 18 }
+        bids: { type: array, items: { $ref: "#/components/schemas/AdvancedBookDepthLevel" } }
+        asks: { type: array, items: { $ref: "#/components/schemas/AdvancedBookDepthLevel" } }
+        last_command_seq: { type: integer, format: int64 }
+        state_hash: { type: string }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedBookOrderRequest:
+      type: object
+      description: >-
+        price is the limit price, or a market order's protection price, which
+        this book requires; quantity is base units of the base asset.
+      required: [account_id, side, order_type, time_in_force, price, quantity]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        side: { $ref: "#/components/schemas/AdvancedBookSide" }
+        order_type: { $ref: "#/components/schemas/AdvancedBookOrderType" }
+        time_in_force: { $ref: "#/components/schemas/AdvancedBookTimeInForce" }
+        price: { $ref: "#/components/schemas/AdvancedBookPrice" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        post_only: { type: boolean }
+        reduce_only: { type: boolean }
+        stp: { $ref: "#/components/schemas/AdvancedBookSTP" }
+        client_order_id: { type: string, minLength: 1, maxLength: 128 }
+        mode: { $ref: "#/components/schemas/AdvancedBookMode" }
+    AdvancedBookOrder:
+      type: object
+      required: [id, book_id, instrument_id, venue_label, account_id, side, order_type, time_in_force, stp, liquidity_intent,
+                 post_only, reduce_only, strategy_originated, mode, price, price_ticks, quantity, filled_quantity,
+                 remaining_quantity, cancelled_quantity, base_decimals, quote_decimals, status, created_at, updated_at, value_domain]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        book_id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        venue_label: { $ref: "#/components/schemas/AdvancedBookVenueLabel" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        intent_id: { $ref: "#/components/schemas/UUID" }
+        client_order_id: { type: string }
+        side: { $ref: "#/components/schemas/AdvancedBookSide" }
+        order_type: { $ref: "#/components/schemas/AdvancedBookOrderType" }
+        time_in_force: { $ref: "#/components/schemas/AdvancedBookTimeInForce" }
+        stp: { $ref: "#/components/schemas/AdvancedBookSTP" }
+        liquidity_intent: { $ref: "#/components/schemas/AdvancedBookLiquidityIntent" }
+        post_only: { type: boolean }
+        reduce_only: { type: boolean }
+        strategy_originated: { type: boolean }
+        mode: { $ref: "#/components/schemas/AdvancedBookMode" }
+        price: { $ref: "#/components/schemas/AdvancedBookPrice" }
+        price_ticks: { type: integer, format: int64 }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        filled_quantity: { $ref: "#/components/schemas/Quantity" }
+        remaining_quantity: { $ref: "#/components/schemas/Quantity" }
+        cancelled_quantity: { $ref: "#/components/schemas/Quantity" }
+        base_symbol: { type: string }
+        base_decimals: { type: integer, minimum: 0, maximum: 18 }
+        quote_symbol: { type: string }
+        quote_decimals: { type: integer, minimum: 0, maximum: 18 }
+        status: { $ref: "#/components/schemas/AdvancedBookOrderStatus" }
+        reject_reason: { type: string }
+        cancel_reason: { type: string }
+        reservation_id: { $ref: "#/components/schemas/UUID" }
+        accepted_command_seq: { type: integer, format: int64 }
+        last_command_seq: { type: integer, format: int64 }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedBookOrderPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items, value_domain]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/AdvancedBookOrder" } }
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedBookFill:
+      type: object
+      description: >-
+        One trade seen from one account's side: the account's own order, side,
+        role and fee. The counterparty is named only by its owner type; its
+        account is never shown.
+      required: [trade_seq, book_id, instrument_id, order_id, side, liquidity, price, price_ticks, quantity, quote_notional, fee,
+                 counterparty_owner_type, crossing_rule_version, command_seq, journal_transaction_id, effect_id, evidence_ref,
+                 evidence_sha256, executed_at, base_decimals, quote_decimals, value_domain]
+      properties:
+        trade_seq: { type: integer, format: int64 }
+        book_id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        order_id: { $ref: "#/components/schemas/UUID" }
+        side: { $ref: "#/components/schemas/AdvancedBookSide" }
+        liquidity: { $ref: "#/components/schemas/AdvancedBookLiquidity" }
+        price: { $ref: "#/components/schemas/AdvancedBookPrice" }
+        price_ticks: { type: integer, format: int64 }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        quote_notional: { $ref: "#/components/schemas/Quantity" }
+        fee: { $ref: "#/components/schemas/Quantity" }
+        counterparty_owner_type: { $ref: "#/components/schemas/AdvancedBookOwnerType" }
+        crossing_rule_version: { type: integer }
+        command_seq: { type: integer, format: int64 }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        effect_id: { $ref: "#/components/schemas/UUID" }
+        evidence_ref: { type: string }
+        evidence_sha256: { type: string }
+        executed_at: { $ref: "#/components/schemas/Timestamp" }
+        base_symbol: { type: string }
+        base_decimals: { type: integer, minimum: 0, maximum: 18 }
+        quote_symbol: { type: string }
+        quote_decimals: { type: integer, minimum: 0, maximum: 18 }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedBookFillPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items, value_domain]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/AdvancedBookFill" } }
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedBookCommandResult:
+      type: object
+      description: >-
+        The order after a command, with the fills that command made for it.
+        command_seq and state_hash are absent when the command never reached
+        the book.
+      required: [order, fills, value_domain]
+      properties:
+        order: { $ref: "#/components/schemas/AdvancedBookOrder" }
+        intent_status: { type: string, description: The order's economic intent status after a submission }
+        command_seq: { type: integer, format: int64 }
+        state_hash: { type: string }
+        fills: { type: array, items: { $ref: "#/components/schemas/AdvancedBookFill" } }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedBookOrderCancelRequest:
+      type: object
+      required: [account_id]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+    AdvancedBookOrderReplaceRequest:
+      type: object
+      description: quantity is the new TOTAL quantity in base units, fills included.
+      required: [account_id, price, quantity]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        price: { $ref: "#/components/schemas/AdvancedBookPrice" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+    AdvancedBookTradeProof:
+      type: object
+      description: >-
+        The audit proof of one trade: the SIM_TRADE journal transaction (which
+        the database balances per party), the APPLIED effect that names it,
+        the write-once evidence document and its digest, the hashes of the
+        fee schedules that priced it, and the book's journal cursor and latest
+        snapshot, which the operator's journal verification replays.
+      required: [book_id, instrument_id, venue_label, trade_seq, command_seq, event_seq, price, price_ticks, quantity, quote_notional,
+                 aggressor_side, maker_order_id, taker_order_id, maker_owner_type, taker_owner_type, maker_fee, taker_fee,
+                 maker_schedule_hash, taker_schedule_hash, crossing_rule_version, journal_transaction_id, effect_id, evidence_ref,
+                 evidence_sha256, executed_at, base_decimals, quote_decimals, book_last_command_seq, book_state_hash, snapshot_seq,
+                 value_domain]
+      properties:
+        book_id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        venue_label: { $ref: "#/components/schemas/AdvancedBookVenueLabel" }
+        trade_seq: { type: integer, format: int64 }
+        command_seq: { type: integer, format: int64 }
+        event_seq: { type: integer, format: int64 }
+        price: { $ref: "#/components/schemas/AdvancedBookPrice" }
+        price_ticks: { type: integer, format: int64 }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        quote_notional: { $ref: "#/components/schemas/Quantity" }
+        aggressor_side: { $ref: "#/components/schemas/AdvancedBookSide" }
+        maker_order_id: { $ref: "#/components/schemas/UUID" }
+        taker_order_id: { $ref: "#/components/schemas/UUID" }
+        maker_owner_type: { $ref: "#/components/schemas/AdvancedBookOwnerType" }
+        taker_owner_type: { $ref: "#/components/schemas/AdvancedBookOwnerType" }
+        maker_fee: { $ref: "#/components/schemas/Quantity" }
+        taker_fee: { $ref: "#/components/schemas/Quantity" }
+        maker_schedule_hash: { type: string }
+        taker_schedule_hash: { type: string }
+        crossing_rule_version: { type: integer }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        effect_id: { $ref: "#/components/schemas/UUID" }
+        evidence_ref: { type: string }
+        evidence_sha256: { type: string, description: hex sha256 of the archived canonical evidence document }
+        executed_at: { $ref: "#/components/schemas/Timestamp" }
+        base_symbol: { type: string }
+        base_decimals: { type: integer, minimum: 0, maximum: 18 }
+        quote_symbol: { type: string }
+        quote_decimals: { type: integer, minimum: 0, maximum: 18 }
+        book_last_command_seq: { type: integer, format: int64 }
+        book_state_hash: { type: string }
+        snapshot_seq: { type: integer, format: int64, description: Command sequence of the book's latest snapshot (0 when none) }
+        snapshot_hash: { type: string }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedBookJournalVerification:
+      type: object
+      description: What replaying the book's journal from the database proved. Every hash is hex sha256.
+      required: [book_id, instrument_id, commands, events, trades, genesis_hash, state_hash, full_replay_hash,
+                 snapshot_replay_hash, snapshot_seq, orders_checked, verified_at]
+      properties:
+        book_id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        commands: { type: integer, format: int64 }
+        events: { type: integer, format: int64 }
+        trades: { type: integer, format: int64 }
+        genesis_hash: { type: string }
+        state_hash: { type: string }
+        full_replay_hash: { type: string }
+        snapshot_replay_hash: { type: string }
+        snapshot_seq: { type: integer, format: int64 }
+        orders_checked: { type: integer }
+        verified_at: { $ref: "#/components/schemas/Timestamp" }
 
     # >>> advanced:transfers schemas (insert this subsystem's schemas directly below; keep the marker)
     #
@@ -5480,6 +7458,586 @@ components:
         matched_at: { $ref: "#/components/schemas/Timestamp" }
 
     # >>> advanced:marketplace schemas (insert this subsystem's schemas directly below; keep the marker)
+    #
+    # The enums carry x-enum-varnames so their Go constants can never collide
+    # with another schema's (APPROVE, REJECT, ACTIVE and OK are common values).
+    # Digests and hashes are lower-case hex sha256.
+    StrategyDecimal:
+      type: string
+      pattern: '^-?[0-9]+(\.[0-9]+)?$'
+      description: >-
+        An exact decimal string with as many fraction digits as its scale (a
+        price or an amount in simulated dollars). Never a JSON number, never
+        rounded.
+      examples: ["150.25"]
+    StrategyVersionStatus:
+      type: string
+      enum: [DRAFT, SUBMITTED, VALIDATED, IN_REVIEW, APPROVED, REJECTED, DEPRECATED]
+      x-enum-varnames: [StrategyStatusDraft, StrategyStatusSubmitted, StrategyStatusValidated, StrategyStatusInReview,
+                        StrategyStatusApproved, StrategyStatusRejected, StrategyStatusDeprecated]
+    StrategyModeration:
+      type: string
+      enum: [UNREVIEWED, CLEARED, FLAGGED, TAKEN_DOWN]
+      x-enum-varnames: [StrategyModerationUnreviewed, StrategyModerationCleared, StrategyModerationFlagged, StrategyModerationTakenDown]
+    StrategyRiskClass:
+      type: string
+      enum: [CONSERVATIVE, MODERATE, AGGRESSIVE, SPECULATIVE]
+      x-enum-varnames: [StrategyRiskConservative, StrategyRiskModerate, StrategyRiskAggressive, StrategyRiskSpeculative]
+    StrategyIntentKind:
+      type: string
+      description: >-
+        The only intent kinds a strategy may propose: taking and reducing
+        exposure. Moving value out of an account is not a proposable kind.
+      enum: [ACQUIRE_EXPOSURE, CLOSE_POSITION, OPEN_POSITION, REDUCE_EXPOSURE]
+      x-enum-varnames: [StrategyKindAcquireExposure, StrategyKindClosePosition, StrategyKindOpenPosition, StrategyKindReduceExposure]
+    StrategyValidationOutcome:
+      type: string
+      enum: [PASSED, FAILED]
+      x-enum-varnames: [StrategyValidationPassed, StrategyValidationFailed]
+    StrategyBuildFailure:
+      type: string
+      enum: [SCAN_REJECTED, COMPILE_FAILED, BUILD_TIMEOUT]
+      x-enum-varnames: [StrategyBuildScanRejected, StrategyBuildCompileFailed, StrategyBuildTimeout]
+    StrategyReviewDecision:
+      type: string
+      enum: [APPROVE, REJECT]
+      x-enum-varnames: [StrategyReviewApprove, StrategyReviewReject]
+    StrategyInstallStatus:
+      type: string
+      enum: [ACTIVE, REMOVED]
+      x-enum-varnames: [StrategyInstallActive, StrategyInstallRemoved]
+    StrategyFollowTrigger:
+      type: string
+      enum: [EXPLICIT, SCHEDULED]
+      x-enum-varnames: [StrategyFollowExplicit, StrategyFollowScheduled]
+    StrategyFollowOutcome:
+      type: string
+      enum: [DISPATCHED, RISK_REJECTED, ROUTE_REFUSED, DISPATCH_FAILED, DISPATCH_UNKNOWN]
+      x-enum-varnames: [StrategyOutcomeDispatched, StrategyOutcomeRiskRejected, StrategyOutcomeRouteRefused,
+                        StrategyOutcomeDispatchFailed, StrategyOutcomeDispatchUnknown]
+    StrategyRunTermination:
+      type: string
+      enum: [OK, TIMEOUT, MEMORY_LIMIT, OUTPUT_LIMIT, TRAP, INVALID_OUTPUT, KILLED_BY_SWITCH, INVALID_MODULE]
+      x-enum-varnames: [StrategyRunOk, StrategyRunTimeout, StrategyRunMemoryLimit, StrategyRunOutputLimit, StrategyRunTrap,
+                        StrategyRunInvalidOutput, StrategyRunKilledBySwitch, StrategyRunInvalidModule]
+    StrategyRunSource:
+      type: string
+      enum: [FOLLOW, SIMULATION]
+      x-enum-varnames: [StrategyRunSourceFollow, StrategyRunSourceSimulation]
+    StrategyEvaluationKind:
+      type: string
+      enum: [SIMULATION]
+      x-enum-varnames: [StrategyEvaluationSimulation]
+
+    # --- requests ---------------------------------------------------------
+    StrategySource:
+      type: object
+      description: >-
+        A strategy's source: plain file name to file text, one `package main`
+        directory. At most 32 files of at most 65536 bytes each and 262144
+        bytes in all; every file is scanned before anything is built.
+      minProperties: 1
+      maxProperties: 32
+      additionalProperties: { type: string, maxLength: 65536 }
+    StrategyFees:
+      type: object
+      description: Fee METADATA the creator states. Nothing in the marketplace charges a fee.
+      required: [performance_fee_bps, management_fee_bps, high_water_mark]
+      properties:
+        performance_fee_bps: { $ref: "#/components/schemas/BPS" }
+        management_fee_bps: { $ref: "#/components/schemas/BPS" }
+        high_water_mark: { type: boolean }
+    StrategyManifestInput:
+      type: object
+      description: >-
+        The permissions a version is held to at run time. The server sorts and
+        de-duplicates the lists; the manifest is then hashed and can never
+        change.
+      required: [allowed_intent_kinds, max_notional_per_intent, max_intents_per_run, min_interval_seconds]
+      properties:
+        schema: { type: string, description: "nodal.strategy.manifest/v1 when left out" }
+        allowed_intent_kinds: { type: array, maxItems: 4, items: { $ref: "#/components/schemas/StrategyIntentKind" } }
+        allowed_instrument_ids: { type: array, maxItems: 256, items: { $ref: "#/components/schemas/UUID" } }
+        allowed_instrument_kinds: { type: array, maxItems: 16, items: { $ref: "#/components/schemas/InstrumentKind" } }
+        max_notional_per_intent: { $ref: "#/components/schemas/StrategyDecimal" }
+        max_intents_per_run: { type: integer, minimum: 1, maximum: 100 }
+        min_interval_seconds: { type: integer, format: int64, minimum: 60, maximum: 31536000 }
+    StrategyVersionInput:
+      type: object
+      description: >-
+        The content of a version. A new listing and a new version need a
+        manifest and source; a fork without them takes the parent's.
+      required: [description, risk_class, source_commit]
+      properties:
+        description: { type: string, minLength: 1, maxLength: 4000 }
+        risk_class: { $ref: "#/components/schemas/StrategyRiskClass" }
+        supported_instrument_ids: { type: array, maxItems: 256, items: { $ref: "#/components/schemas/UUID" } }
+        manifest: { $ref: "#/components/schemas/StrategyManifestInput" }
+        source: { $ref: "#/components/schemas/StrategySource" }
+        source_commit: { type: string, minLength: 1, maxLength: 100 }
+        backtest_evidence_ref: { type: string, maxLength: 500 }
+        data_dependencies: { type: array, maxItems: 64, items: { type: string } }
+        fees: { $ref: "#/components/schemas/StrategyFees" }
+        config:
+          type: object
+          maxProperties: 128
+          additionalProperties: { type: string, maxLength: 1024 }
+    StrategyListingCreateRequest:
+      type: object
+      required: [account_id, title, version]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        title: { type: string, minLength: 1, maxLength: 200 }
+        version: { $ref: "#/components/schemas/StrategyVersionInput" }
+    StrategyVersionCreateRequest:
+      type: object
+      required: [account_id, version]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        version: { $ref: "#/components/schemas/StrategyVersionInput" }
+    StrategyForkRequest:
+      type: object
+      required: [account_id, title, version]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        title: { type: string, minLength: 1, maxLength: 200 }
+        version: { $ref: "#/components/schemas/StrategyVersionInput" }
+    StrategyAccountRequest:
+      type: object
+      required: [account_id]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+    StrategySnapshotInstrument:
+      type: object
+      required: [instrument_id, kind, base_decimals, quote_decimals, mark]
+      properties:
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        kind: { $ref: "#/components/schemas/InstrumentKind" }
+        base_decimals: { type: integer, minimum: 0, maximum: 18 }
+        quote_decimals: { type: integer, minimum: 0, maximum: 18 }
+        mark: { $ref: "#/components/schemas/StrategyDecimal" }
+        best_bid: { $ref: "#/components/schemas/StrategyDecimal" }
+        best_ask: { $ref: "#/components/schemas/StrategyDecimal" }
+        closes: { type: array, maxItems: 4096, items: { $ref: "#/components/schemas/StrategyDecimal" } }
+    StrategySnapshotPosition:
+      type: object
+      required: [instrument_id, quantity]
+      properties:
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+    StrategySnapshotPortfolio:
+      type: object
+      required: [balance, positions]
+      properties:
+        balance:
+          $ref: "#/components/schemas/StrategyDecimal"
+        positions: { type: array, maxItems: 1024, items: { $ref: "#/components/schemas/StrategySnapshotPosition" } }
+    StrategySnapshot:
+      type: object
+      description: >-
+        The market and portfolio snapshot a strategy runs on, supplied by the
+        caller. Prices are simulated dollars per whole base unit; positions are
+        base units; balance is the portfolio's uninvested simulated dollars.
+        It is strategy input only: the risk kernel's sections are read from the
+        database, never from it.
+      required: [as_of, instruments, portfolio]
+      properties:
+        as_of: { $ref: "#/components/schemas/Timestamp" }
+        instruments: { type: array, maxItems: 256, items: { $ref: "#/components/schemas/StrategySnapshotInstrument" } }
+        portfolio: { $ref: "#/components/schemas/StrategySnapshotPortfolio" }
+    StrategySimulationRequest:
+      type: object
+      required: [account_id, dataset_version, snapshots]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        dataset_version: { type: string, minLength: 1, maxLength: 100 }
+        snapshots: { type: array, minItems: 1, maxItems: 20, items: { $ref: "#/components/schemas/StrategySnapshot" } }
+    StrategyReviewRequest:
+      type: object
+      required: [reason_code]
+      properties:
+        reason_code: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,63}$' }
+        note: { type: string, maxLength: 2000 }
+    StrategyModerationRequest:
+      type: object
+      required: [to, reason]
+      properties:
+        to: { $ref: "#/components/schemas/StrategyModeration" }
+        reason: { type: string, minLength: 1, maxLength: 1000 }
+    StrategyDeprecateRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 1000 }
+    StrategyInstallRequest:
+      type: object
+      required: [account_id, version_id, mode]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        version_id: { $ref: "#/components/schemas/UUID" }
+        mode: { $ref: "#/components/schemas/AdvancedMode" }
+    StrategyInstallRemoveRequest:
+      type: object
+      required: [account_id]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        reason: { type: string, maxLength: 1000 }
+    StrategyFollowRequest:
+      type: object
+      required: [account_id, snapshot]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        snapshot: { $ref: "#/components/schemas/StrategySnapshot" }
+
+    # --- responses --------------------------------------------------------
+    StrategyVersionSummary:
+      type: object
+      required: [id, listing_id, number, status, moderation, risk_class, description, strategy_ref, created_at, updated_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        listing_id: { $ref: "#/components/schemas/UUID" }
+        number: { type: integer }
+        status: { $ref: "#/components/schemas/StrategyVersionStatus" }
+        moderation: { $ref: "#/components/schemas/StrategyModeration" }
+        risk_class: { $ref: "#/components/schemas/StrategyRiskClass" }
+        description: { type: string }
+        strategy_ref: { type: string, description: "<listing id>@<version>, how intents name the version" }
+        rejection_code: { type: string }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+    StrategyListing:
+      type: object
+      required: [id, title, created_at, latest_version]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        title: { type: string }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        forked_from_version_id: { $ref: "#/components/schemas/UUID" }
+        creator_account_id:
+          $ref: "#/components/schemas/UUID"
+        latest_version: { $ref: "#/components/schemas/StrategyVersionSummary" }
+    StrategyListingPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/StrategyListing" } }
+    StrategyManifest:
+      type: object
+      required: [schema, allowed_intent_kinds, allowed_instrument_ids, allowed_instrument_kinds, max_notional_per_intent,
+                 max_intents_per_run, min_interval_seconds]
+      properties:
+        schema: { type: string }
+        allowed_intent_kinds: { type: array, items: { $ref: "#/components/schemas/StrategyIntentKind" } }
+        allowed_instrument_ids: { type: array, items: { $ref: "#/components/schemas/UUID" } }
+        allowed_instrument_kinds: { type: array, items: { $ref: "#/components/schemas/InstrumentKind" } }
+        max_notional_per_intent: { $ref: "#/components/schemas/StrategyDecimal" }
+        max_intents_per_run: { type: integer }
+        min_interval_seconds: { type: integer, format: int64 }
+    StrategyVersion:
+      type: object
+      required: [value_domain, id, listing_id, number, status, moderation, description, risk_class, supported_instrument_ids,
+                 manifest, manifest_hash, source_digest, source_commit, backtest_evidence_ref, data_dependencies, fees, config,
+                 strategy_ref, created_by_actor_type, created_at, updated_at]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        id: { $ref: "#/components/schemas/UUID" }
+        listing_id: { $ref: "#/components/schemas/UUID" }
+        number: { type: integer }
+        status: { $ref: "#/components/schemas/StrategyVersionStatus" }
+        moderation: { $ref: "#/components/schemas/StrategyModeration" }
+        description: { type: string }
+        risk_class: { $ref: "#/components/schemas/StrategyRiskClass" }
+        supported_instrument_ids: { type: array, items: { $ref: "#/components/schemas/UUID" } }
+        manifest: { $ref: "#/components/schemas/StrategyManifest" }
+        manifest_hash: { type: string }
+        source_digest: { type: string }
+        source_commit: { type: string }
+        backtest_evidence_ref: { type: string }
+        data_dependencies: { type: array, items: { type: string } }
+        fees: { $ref: "#/components/schemas/StrategyFees" }
+        config: { type: object, additionalProperties: { type: string } }
+        strategy_ref: { type: string }
+        created_by_actor_type: { type: string }
+        created_by_actor_id: { type: string, description: Shown to the creator's account and to operators only }
+        rejection_code: { type: string }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+    StrategyValidation:
+      type: object
+      required: [outcome, scan_codes, toolchain_version, sdk_version, runtime_version]
+      properties:
+        outcome: { $ref: "#/components/schemas/StrategyValidationOutcome" }
+        artifact_digest: { type: string }
+        failure_reason: { $ref: "#/components/schemas/StrategyBuildFailure" }
+        scan_codes: { type: array, items: { type: string } }
+        toolchain_version: { type: string }
+        sdk_version: { type: string }
+        runtime_version: { type: string }
+    StrategyReview:
+      type: object
+      required: [decision, reason_code, note, reviewer_actor_type, reviewed_at]
+      properties:
+        decision: { $ref: "#/components/schemas/StrategyReviewDecision" }
+        reason_code: { type: string }
+        note: { type: string }
+        reviewer_actor_type: { type: string }
+        reviewer_actor_id: { type: string, description: Shown to the creator's account and to operators only }
+        reviewed_at: { $ref: "#/components/schemas/Timestamp" }
+    StrategyForkAncestor:
+      type: object
+      required: [version_id, listing_id, number, source_digest, manifest_hash]
+      properties:
+        version_id: { $ref: "#/components/schemas/UUID" }
+        listing_id: { $ref: "#/components/schemas/UUID" }
+        number: { type: integer }
+        source_digest: { type: string }
+        manifest_hash: { type: string }
+    StrategyProvenance:
+      type: object
+      required: [strategy_ref, source_commit, source_digest, manifest_hash, forked_from]
+      properties:
+        strategy_ref: { type: string }
+        source_commit: { type: string }
+        source_digest: { type: string }
+        manifest_hash: { type: string }
+        artifact_digest: { type: string }
+        toolchain_version: { type: string }
+        sdk_version: { type: string }
+        runtime_version: { type: string }
+        dataset_version: { type: string }
+        evaluation_id: { $ref: "#/components/schemas/UUID" }
+        forked_from:
+          type: array
+          description: The fork chain, nearest parent first
+          items: { $ref: "#/components/schemas/StrategyForkAncestor" }
+    StrategyEvaluationRun:
+      type: object
+      required: [seq, sandbox_run_id, as_of, input_digest, run_digest, termination, proposals, accepted, violations]
+      properties:
+        seq: { type: integer }
+        sandbox_run_id: { $ref: "#/components/schemas/UUID" }
+        as_of: { $ref: "#/components/schemas/Timestamp" }
+        input_digest: { type: string }
+        run_digest: { type: string }
+        termination: { $ref: "#/components/schemas/StrategyRunTermination" }
+        proposals: { type: integer }
+        accepted: { type: integer }
+        violations: { type: integer }
+    StrategyEvaluation:
+      type: object
+      description: A simulation against a fixed snapshot set. Simulated results; nothing was proposed or executed.
+      required: [value_domain, id, version_id, kind, dataset_version, snapshots_count, snapshots_digest, results_digest, runs_ok,
+                 proposals_count, accepted_count, violations_count, evidence_ref, evidence_sha256]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        id: { $ref: "#/components/schemas/UUID" }
+        version_id: { $ref: "#/components/schemas/UUID" }
+        kind: { $ref: "#/components/schemas/StrategyEvaluationKind" }
+        dataset_version: { type: string }
+        snapshots_count: { type: integer }
+        snapshots_digest: { type: string }
+        results_digest: { type: string }
+        runs_ok: { type: integer }
+        proposals_count: { type: integer }
+        accepted_count: { type: integer }
+        violations_count: { type: integer }
+        evidence_ref: { type: string }
+        evidence_sha256: { type: string }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        runs: { type: array, items: { $ref: "#/components/schemas/StrategyEvaluationRun" } }
+    StrategyPerformanceSnapshot:
+      type: object
+      description: >-
+        Paper performance computed exactly from a follow history, in basis
+        points. A paper result from caller-supplied snapshots, never a record
+        of money earned or lost.
+      required: [value_domain, version_id, follow_runs_count, first_as_of, last_as_of, history_digest, return_bps,
+                 max_drawdown_bps, volatility_bps, turnover_bps, computed_at]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        install_id: { $ref: "#/components/schemas/UUID" }
+        version_id: { $ref: "#/components/schemas/UUID" }
+        follow_runs_count: { type: integer }
+        first_as_of: { $ref: "#/components/schemas/Timestamp" }
+        last_as_of: { $ref: "#/components/schemas/Timestamp" }
+        history_digest: { type: string }
+        return_bps: { type: integer, format: int64 }
+        max_drawdown_bps: { type: integer, format: int64 }
+        volatility_bps: { type: integer, format: int64 }
+        turnover_bps: { type: integer, format: int64 }
+        computed_at: { $ref: "#/components/schemas/Timestamp" }
+    StrategyVersionDetail:
+      allOf:
+        - { $ref: "#/components/schemas/StrategyVersion" }
+        - type: object
+          required: [reviews, provenance, evaluations, performance]
+          properties:
+            validation: { $ref: "#/components/schemas/StrategyValidation" }
+            reviews: { type: array, items: { $ref: "#/components/schemas/StrategyReview" } }
+            provenance: { $ref: "#/components/schemas/StrategyProvenance" }
+            evaluations: { type: array, items: { $ref: "#/components/schemas/StrategyEvaluation" } }
+            performance: { type: array, items: { $ref: "#/components/schemas/StrategyPerformanceSnapshot" } }
+    StrategyListingDetail:
+      type: object
+      required: [value_domain, id, title, created_at, versions]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        id: { $ref: "#/components/schemas/UUID" }
+        title: { type: string }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        forked_from_version_id: { $ref: "#/components/schemas/UUID" }
+        creator_account_id:
+          $ref: "#/components/schemas/UUID"
+        versions:
+          type: array
+          description: Newest first
+          items: { $ref: "#/components/schemas/StrategyVersionDetail" }
+    StrategyValidationResult:
+      type: object
+      required: [value_domain, version, validation]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        version: { $ref: "#/components/schemas/StrategyVersion" }
+        validation: { $ref: "#/components/schemas/StrategyValidation" }
+    StrategyReviewQueueItem:
+      type: object
+      required: [listing_id, listing_title, creator_account_id, version]
+      properties:
+        listing_id: { $ref: "#/components/schemas/UUID" }
+        listing_title: { type: string }
+        creator_account_id: { $ref: "#/components/schemas/UUID" }
+        version: { $ref: "#/components/schemas/StrategyVersionSummary" }
+    StrategyReviewQueuePage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/StrategyReviewQueueItem" } }
+    StrategyInstall:
+      type: object
+      required: [value_domain, id, account_id, version_id, listing_id, listing_title, strategy_ref, version_number, version_status,
+                 version_moderation, mode, status, installed_by_actor_type, created_at]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        version_id: { $ref: "#/components/schemas/UUID" }
+        listing_id: { $ref: "#/components/schemas/UUID" }
+        listing_title: { type: string }
+        strategy_ref: { type: string }
+        version_number: { type: integer }
+        version_status: { $ref: "#/components/schemas/StrategyVersionStatus" }
+        version_moderation: { $ref: "#/components/schemas/StrategyModeration" }
+        mode: { $ref: "#/components/schemas/AdvancedMode" }
+        status: { $ref: "#/components/schemas/StrategyInstallStatus" }
+        installed_by_actor_type: { type: string }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        latest_performance: { $ref: "#/components/schemas/StrategyPerformanceSnapshot" }
+    StrategyInstallPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [value_domain, items]
+          properties:
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+            items: { type: array, items: { $ref: "#/components/schemas/StrategyInstall" } }
+    StrategyFollowIntent:
+      type: object
+      required: [proposal_seq, intent_id, kind, outcome, notional]
+      properties:
+        proposal_seq: { type: integer }
+        intent_id: { $ref: "#/components/schemas/UUID" }
+        kind: { type: string }
+        outcome: { $ref: "#/components/schemas/StrategyFollowOutcome" }
+        notional: { $ref: "#/components/schemas/StrategyDecimal" }
+        decision_hash: { type: string }
+        risk_decision: { $ref: "#/components/schemas/AdvancedRiskDecision" }
+        effect_id: { $ref: "#/components/schemas/UUID" }
+        effect_status: { type: string }
+        effect_failure_code: { type: string }
+        external_ref: { type: string }
+    StrategyFollowRun:
+      type: object
+      required: [value_domain, id, install_id, version_id, account_id, sandbox_run_id, trigger, as_of, input_digest, run_digest,
+                 termination, proposals_count, accepted_count, violations_count, intents_submitted, intents_dispatched,
+                 intents_risk_rejected, intents_failed, equity, turnover, evidence_ref, evidence_sha256, created_at, intents]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        id: { $ref: "#/components/schemas/UUID" }
+        install_id: { $ref: "#/components/schemas/UUID" }
+        version_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        sandbox_run_id: { $ref: "#/components/schemas/UUID" }
+        trigger: { $ref: "#/components/schemas/StrategyFollowTrigger" }
+        as_of: { $ref: "#/components/schemas/Timestamp" }
+        input_digest: { type: string }
+        run_digest: { type: string }
+        termination: { $ref: "#/components/schemas/StrategyRunTermination" }
+        proposals_count: { type: integer }
+        accepted_count: { type: integer }
+        violations_count: { type: integer }
+        intents_submitted: { type: integer }
+        intents_dispatched: { type: integer }
+        intents_risk_rejected: { type: integer }
+        intents_failed: { type: integer }
+        equity: { $ref: "#/components/schemas/StrategyDecimal" }
+        turnover: { $ref: "#/components/schemas/StrategyDecimal" }
+        evidence_ref: { type: string }
+        evidence_sha256: { type: string }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        replayed: { type: boolean, description: "True when this snapshot time was already followed: nothing ran again" }
+        intents: { type: array, items: { $ref: "#/components/schemas/StrategyFollowIntent" } }
+    StrategyFollowRunPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [value_domain, items]
+          properties:
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+            items: { type: array, items: { $ref: "#/components/schemas/StrategyFollowRun" } }
+    StrategyRunViolation:
+      type: object
+      required: [record_seq, code, detail]
+      properties:
+        record_seq: { type: integer, description: The output record it concerns; 0 when it concerns no single record }
+        code: { type: string }
+        detail: { type: string }
+    StrategySandboxRun:
+      type: object
+      required: [id, source, strategy_ref, termination, exit_code, artifact_verified, wall_ms, output_bytes, artifact_digest,
+                 input_digest, output_digest, run_digest, limits_version, proposals_count, accepted_count, violations_count,
+                 created_at, violations]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        source: { $ref: "#/components/schemas/StrategyRunSource" }
+        follow_run_id: { $ref: "#/components/schemas/UUID" }
+        evaluation_id: { $ref: "#/components/schemas/UUID" }
+        strategy_ref: { type: string }
+        termination: { $ref: "#/components/schemas/StrategyRunTermination" }
+        exit_code: { type: integer, format: int64 }
+        artifact_verified: { type: boolean }
+        wall_ms: { type: integer, format: int64 }
+        output_bytes: { type: integer, format: int64 }
+        artifact_digest: { type: string }
+        input_digest: { type: string }
+        output_digest: { type: string }
+        run_digest: { type: string }
+        limits_version: { type: string }
+        proposals_count: { type: integer }
+        accepted_count: { type: integer }
+        violations_count: { type: integer }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        violations: { type: array, items: { $ref: "#/components/schemas/StrategyRunViolation" } }
+    StrategySandboxRunPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/StrategySandboxRun" } }
 
     # >>> advanced:delegation schemas (insert this subsystem's schemas directly below; keep the marker)
 
