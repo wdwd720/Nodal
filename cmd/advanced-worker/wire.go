@@ -173,20 +173,7 @@ func build(ctx context.Context, in buildInput) (_ *worker, err error) {
 	add(advancedjobs.NewDerivativesExpiry(database, derivativesSvc, instrumentRepo, clk, settings(advancedjobs.NameDerivativesExpiry)))
 	add(advancedjobs.NewDerivativesClearing(database, derivativesSvc, settings(advancedjobs.NameDerivativesClearing)))
 
-	// --- prediction markets (no oracle: closing and escrow need none) ----------
-	predmarketSvc, err := predmarket.NewService(predmarket.Config{
-		Clock: clk, Intents: intents(), Effects: effects(), Authorizer: authorizer(), Registry: econ.NewRegistry(),
-		KillSwitches: killChecker, Ledger: ledgerSvc, Capital: capitalSvc, Risk: risk.NewStore(),
-		RiskPolicy: risk.DefaultAdvancedPolicy(), Router: router, Instruments: instrumentRepo, Assets: assetRepo,
-		Reconciliation: reconRepo, Audit: auditWriter,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("prediction markets: %w", err)
-	}
-	add(advancedjobs.NewPredictionClose(database, predmarketSvc, settings(advancedjobs.NamePredictionClose)))
-	add(advancedjobs.NewPredictionEscrow(database, predmarketSvc, settings(advancedjobs.NamePredictionEscrow)))
-
-	// --- the internal order book ---------------------------------------------------
+	// --- the internal order book (prediction markets cancel through it) -----------
 	ordersSvc, err := orders.NewService(orders.Config{
 		Clock: clk, Ledger: ledgerSvc, Capital: capitalSvc, Intents: intents(), Effects: effects(), Authorizer: authorizer(),
 		Registry: econ.NewRegistry(), Risk: risk.NewStore(), RiskPolicy: risk.DefaultAdvancedPolicy(), Router: router,
@@ -196,6 +183,32 @@ func build(ctx context.Context, in buildInput) (_ *worker, err error) {
 	if err != nil {
 		return nil, fmt.Errorf("orders service: %w", err)
 	}
+
+	// --- prediction markets ---------------------------------------------------------
+	// As cmd/api: the order book cancels the working orders on a market's
+	// outcome books when it closes (which is what the close job does), and
+	// the sandbox oracle -- whose key derives from a seed in the source --
+	// exists only where fake providers are allowed. Closing and escrow
+	// reconciliation never consult it.
+	predmarketConfig := predmarket.Config{
+		Clock: clk, Intents: intents(), Effects: effects(), Authorizer: authorizer(), Registry: econ.NewRegistry(),
+		KillSwitches: killChecker, Ledger: ledgerSvc, Capital: capitalSvc, Risk: risk.NewStore(),
+		RiskPolicy: risk.DefaultAdvancedPolicy(), Router: router, Instruments: instrumentRepo, Assets: assetRepo,
+		Reconciliation: reconRepo, Audit: auditWriter, Books: ordersSvc,
+	}
+	if cfg.Env.AllowsFakeProviders() {
+		if predmarketConfig.SandboxOracle, err = predmarket.NewSandboxOracle("nodal-sandbox-oracle",
+			[]byte("nodal.predmarket.sandbox-oracle!")); err != nil {
+			return nil, fmt.Errorf("prediction market sandbox oracle: %w", err)
+		}
+	}
+	predmarketSvc, err := predmarket.NewService(predmarketConfig)
+	if err != nil {
+		return nil, fmt.Errorf("prediction markets: %w", err)
+	}
+	add(advancedjobs.NewPredictionClose(database, predmarketSvc, settings(advancedjobs.NamePredictionClose)))
+	add(advancedjobs.NewPredictionEscrow(database, predmarketSvc, settings(advancedjobs.NamePredictionEscrow)))
+
 	add(advancedjobs.NewOrdersCompleteTerminal(database, ordersSvc, settings(advancedjobs.NameOrdersCompleteTerminal)))
 	add(advancedjobs.NewOrdersBookProof(database, ordersSvc, reconRepo, settings(advancedjobs.NameOrdersBookProof)))
 

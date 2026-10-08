@@ -186,7 +186,8 @@ func newWorld(t *testing.T) *world {
 	w.predictions, err = predmarket.NewService(predmarket.Config{
 		Clock: clk, Intents: w.intents, Effects: w.effects, Authorizer: w.authz, Registry: w.registry,
 		KillSwitches: kills, Ledger: w.ledger, Capital: w.capital, Risk: w.risk, RiskPolicy: risk.DefaultAdvancedPolicy(),
-		Router: router, Instruments: w.instr, Assets: w.assets, Reconciliation: w.recon, Audit: aw, Oracle: w.oracle,
+		Router: router, Instruments: w.instr, Assets: w.assets, Reconciliation: w.recon, Audit: aw,
+		SandboxOracle: w.oracle, Books: w.orders,
 	})
 	require.NoError(t, err)
 
