@@ -43,6 +43,7 @@ import (
 	"github.com/nodal/controlplane/internal/margin"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/notification"
+	"github.com/nodal/controlplane/internal/orders"
 	"github.com/nodal/controlplane/internal/reconciliation"
 	"github.com/nodal/controlplane/internal/risk"
 	"github.com/nodal/controlplane/internal/sandboxfund"
@@ -89,6 +90,11 @@ type World struct {
 	Margin      *margin.Service
 	Derivatives *derivatives.Service
 	Instruments *instruments.Repository
+	Assets      *assets.Repository
+	// Orders is the internal order book; OrderPipeline runs an order through
+	// every stage, each in its own transaction, as the API does.
+	Orders        *orders.Service
+	OrderPipeline *orders.Pipeline
 	// Identity is the production identity reader (compliance profiles).
 	Identity compliance.AccountVerification
 
@@ -203,6 +209,19 @@ func wire(d *db.DB, o Options) (*World, error) {
 	if err != nil {
 		return nil, fmt.Errorf("sandboxworld: derivatives: %w", err)
 	}
+	w.Assets = assets.NewRepository()
+	w.Orders, err = orders.NewService(orders.Config{
+		Clock: clk, Ledger: led, Capital: w.Capital, Intents: w.Intents, Effects: w.Effects, Authorizer: w.Authorizer,
+		Registry: w.Registry, Risk: w.Risk, RiskPolicy: risk.DefaultAdvancedPolicy(), Router: router,
+		Instruments: w.Instruments, Assets: w.Assets, Prices: w.Prices, KillSwitches: kills,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("sandboxworld: orders: %w", err)
+	}
+	w.OrderPipeline, err = orders.NewPipeline(w.Orders, d)
+	if err != nil {
+		return nil, fmt.Errorf("sandboxworld: order pipeline: %w", err)
+	}
 	return w, nil
 }
 
@@ -279,7 +298,7 @@ func (w *World) SimAsset(ctx context.Context, symbol, name string, decimals uint
 	if usdPegged {
 		a.IsStablecoin, a.PegCurrency = true, valuation.USDPeg
 	}
-	return assets.NewRepository().Create(ctx, w.DB, a)
+	return w.Assets.Create(ctx, w.DB, a)
 }
 
 // Fund grants a customer simulated value from the faucet, as the customer.

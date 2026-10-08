@@ -47,7 +47,7 @@ func scenarioTransfer(ctx context.Context, w *sandboxworld.World, rec *recorder)
 	if err != nil {
 		return err
 	}
-	rec.step("two synthetic customers, each with a VERIFIED sandbox compliance profile",
+	rec.step("two synthetic customers, each signed in with a verified email address (NODAL_IDENTITY, D-055)",
 		"alice_account", alice.Account.String(), "bob_account", bob.Account.String())
 
 	units := func(n int64) money.Quantity { return sandboxworld.Units(n, w.USD.Decimals) }
