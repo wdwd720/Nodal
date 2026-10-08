@@ -11,7 +11,9 @@ The last section lists the claims that must not be made at all.
 The citations are checked rather than promised: this document is in the `inScope` list of
 `test/docs/references_test.go`, so `go test ./test/docs/` fails if any test function named here stops
 existing. When this document was written, every evidence command below was run once at `80f616b`, and every
-test a claim cites was reported `PASS` (see "How this document was verified").
+test a claim cites was reported `PASS` (see "How this document was verified"). Claims revised since were re-run
+when they changed: C3 and SEC2 at `e575c4b`, DA4 (the agent worker holding no key material) at `ba20d9c`,
+the new test in M1's caveat at `da9f0c0`, OP2 (the restore drill) at `9db3f7c`.
 
 ## The one paragraph to read first
 
@@ -727,7 +729,7 @@ or test changed between them.
 - **Implementation:** `internal/advancedmetrics/collector.go`, `internal/advancedmetrics/instruments.go`, `docs/runbooks/advanced-sandbox-reconciliation.md`
 - **Tests:** `internal/advancedmetrics/collector_integration_test.go`: `TestIntegration_GaugesEqualTheRowDerivedTruth`, `TestIntegration_CountersCountEachNewRowOncePerProcess`; `internal/advancedmetrics/instruments_test.go`: `TestInstruments_AreNamespacedAndDescribed`; `test/docs/runbooks_test.go`: `TestDocs_EveryRunbookRouteIsServed`, `TestDocs_NothingMarkedPendingAlreadyExists`
 - **Mode:** Local/test.
-- **Caveat:** Metrics, alarms and 20 runbooks are written; no alarm has fired in a deployment and no runbook has been used in an incident. Some execution-path instruments are unrecorded (capabilities matrix, row 24).
+- **Caveat:** Metrics, alarms and 20 runbooks are written; no alarm has fired in a deployment and no runbook has been used in an incident. One declared instrument, provider mismatches, is recorded by nothing, since no advanced reconciliation compares against an external provider (capabilities matrix, row 24).
 - **Evidence:** `go run ./scripts/inttest -pkg '^\./internal/advancedmetrics$' -run '^(TestIntegration_GaugesEqualTheRowDerivedTruth|TestIntegration_CountersCountEachNewRowOncePerProcess|TestInstruments_AreNamespacedAndDescribed)$' && go test -count=1 -run '^(TestDocs_EveryRunbookRouteIsServed|TestDocs_NothingMarkedPendingAlreadyExists)$' ./test/docs/`
 
 #### OP5 · Guards for reachable money paths, live citations and hidden characters

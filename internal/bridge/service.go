@@ -161,8 +161,9 @@ var txOptions = db.TxOptions{Isolation: pgx.ReadCommitted, MaxRetries: 3}
 // systemActor is the actor of every step after admission.
 var systemActor = econ.SystemActor("bridge")
 
-// breakerActor pauses a route whose books disagree with the chains.
-var breakerActor = econ.SystemActor("bridge-circuit-breaker")
+// breakerActor pauses a route whose books disagree with the chains
+// (breaker.go).
+var breakerActor = econ.SystemActor(BreakerActorID)
 
 // Network is the devnet network this service's host carries: the one whose
 // routes it bridges, observes and reconciles.
