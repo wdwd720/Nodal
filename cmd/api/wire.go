@@ -36,11 +36,13 @@ import (
 	"github.com/nodal/controlplane/internal/config"
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
+	"github.com/nodal/controlplane/internal/delegation"
 	"github.com/nodal/controlplane/internal/derivatives"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/equities"
 	"github.com/nodal/controlplane/internal/event"
 	"github.com/nodal/controlplane/internal/execution"
+	"github.com/nodal/controlplane/internal/feeledger"
 	"github.com/nodal/controlplane/internal/fees"
 	"github.com/nodal/controlplane/internal/funding"
 	"github.com/nodal/controlplane/internal/gates"
@@ -68,11 +70,13 @@ import (
 	"github.com/nodal/controlplane/internal/ratelimit"
 	"github.com/nodal/controlplane/internal/reconciliation"
 	"github.com/nodal/controlplane/internal/risk"
+	"github.com/nodal/controlplane/internal/sandboxchain"
 	"github.com/nodal/controlplane/internal/sandboxfund"
 	"github.com/nodal/controlplane/internal/sandboxrt"
 	"github.com/nodal/controlplane/internal/stableasset"
 	"github.com/nodal/controlplane/internal/stream"
 	"github.com/nodal/controlplane/internal/transfers"
+	"github.com/nodal/controlplane/internal/treasury"
 	"github.com/nodal/controlplane/internal/valuation"
 	"github.com/nodal/controlplane/internal/withdrawal"
 )
@@ -321,7 +325,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// The persistent simulated chain host the sandbox capabilities run on,
 	// opened once for all of them; nil when no sandbox chain is configured
 	// (see openSandboxChain).
-	sandboxChain, _, err := openSandboxChain(ctx, cfg, in.resolver, database, clk)
+	sandboxChain, sandboxSeed, err := openSandboxChain(ctx, cfg, in.resolver, database, clk)
 	if err != nil {
 		return nil, err
 	}
@@ -567,6 +571,33 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	}
 
 	// >>> advanced:treasury services
+	//
+	// The house book (internal/treasury) and the fee ledger (internal/feeledger).
+	// The treasury decides every control itself (its signing policy, the
+	// PRINCIPAL_TRADING and INTERNAL_MATCHING gates and kill switches, its
+	// versioned limits, Risk Kernel V2, the order book's own house rules); this
+	// block hands it its collaborators. It places house orders on the internal
+	// book through the one order service above, and since 00759 nothing else
+	// can place a house order at all.
+	treasurySvc, err := treasury.NewService(treasury.Config{
+		Clock: clk, Ledger: ledgerSvc, Effects: econ.NewEffectStore(clk, outbox, auditWriter),
+		Authorizer: econ.NewAuthorizer(gateChecker, killChecker), Registry: econ.NewRegistry(), Orders: ordersSvc,
+		Prices: priceStore, Assets: assetRepo, Instruments: instrumentRepo, KillSwitches: killChecker, Audit: auditWriter,
+		RiskPolicy: risk.DefaultAdvancedPolicy(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("treasury service: %w", err)
+	}
+	// The fee ledger books disclosed fees and performance fees (sandbox
+	// accounting, never charged live) with its package defaults: a two-minute
+	// quote TTL and the SYSTEM fee-ledger service applying its effects.
+	feeLedgerSvc, err := feeledger.NewService(feeledger.Config{
+		Clock: clk, Ledger: ledgerSvc, Capital: capitalSvc, Effects: econ.NewEffectStore(clk, outbox, auditWriter),
+		Authorizer: econ.NewAuthorizer(gateChecker, killChecker), Assets: assetRepo, Audit: auditWriter,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("fee ledger: %w", err)
+	}
 
 	// >>> advanced:stable services
 	//
@@ -722,11 +753,13 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// collaborators: fresh econ stores, the authorizer over the gate checker
 	// and kill switches, the risk store and default Risk V2 policy, the
 	// deployment's legal router (conservative by default, as for transfers)
-	// and a wazero runner. Three collaborators have no production
-	// implementation in this build, so internal/httpapi carries the thinnest
-	// honest ones: risk sections read from the database, an executor that
-	// refuses every dispatch (no paper venue executes economic intents yet),
-	// and -- only where no Go toolchain is found -- a builder that refuses.
+	// and a wazero runner. The sandbox charges every run to an account under
+	// sandboxrt.DefaultBudget, and the builder builds under its default bounds
+	// (two minutes, a 32 MiB module, 1 GiB of compiler and linker memory).
+	// internal/httpapi carries the adapters: risk sections read from the
+	// database, the order book's paper venue as the executor of risk-approved
+	// paper intents, and -- only where no Go toolchain is found -- a builder
+	// that refuses.
 	strategyRouter, err := legalRouterFor(cfg.Env, in.cfg.API.LegalPolicy)
 	if err != nil {
 		return nil, err
@@ -783,17 +816,96 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("marketplace risk sections: %w", err)
 	}
+	// A strategy's allowed paper intent fills on the order book's paper venue:
+	// at the reference mark -- no older than the five minutes the follow's own
+	// reference prices may be -- priced through the one published schedule
+	// (httpapi.MarketplacePaperSchedule) whose spread (10 bps), platform fee
+	// (10 bps) and strategy fee (5 bps) are itemized on every fill's stored
+	// disclosure and posted to their own accounts. The account's wallet pays
+	// it; the venue refuses what the wallet cannot cover, and the follow
+	// records the dispatch as failed.
+	strategyIntents := econ.NewIntentStore(clk, outbox, auditWriter)
+	strategyExecutor, err := httpapi.NewMarketplacePaperExecutor(httpapi.MarketplacePaperExecutorConfig{
+		Venue: orders.PaperConfig{
+			Clock: clk, Ledger: ledgerSvc, Capital: capitalSvc, Intents: strategyIntents,
+			Effects: econ.NewEffectStore(clk, outbox, auditWriter), Authorizer: strategyAuth, Risk: risk.NewStore(),
+			RiskPolicy: risk.DefaultAdvancedPolicy(), Router: strategyRouter, Instruments: instrumentRepo, Assets: assetRepo,
+			Prices: priceStore, KillSwitches: killChecker, MaxMarkAge: 5 * time.Minute,
+			Verification: httpapi.AdvancedVerificationLevels{Rule: compliance.NewAccountVerification(clk)},
+		},
+		Schedule: httpapi.MarketplacePaperSchedule(),
+		Intents:  strategyIntents,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marketplace paper executor: %w", err)
+	}
 	strategyMarketplace, err := marketplace.NewService(marketplace.Config{
-		Clock: clk, Intents: econ.NewIntentStore(clk, outbox, auditWriter), Effects: econ.NewEffectStore(clk, outbox, auditWriter),
+		Clock: clk, Intents: strategyIntents, Effects: econ.NewEffectStore(clk, outbox, auditWriter),
 		Auth: strategyAuth, Risk: risk.NewStore(), RiskPolicy: risk.DefaultAdvancedPolicy(), Router: strategyRouter,
-		Sandbox: strategySandbox, Builder: strategyBuilder, Sections: strategySections, Executor: httpapi.UnwiredPaperExecutor{},
-		Audit: auditWriter,
+		Sandbox: strategySandbox, Builder: strategyBuilder, Sections: strategySections, Executor: strategyExecutor,
+		Audit: auditWriter, MaxPriceAge: 5 * time.Minute,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("strategy marketplace: %w", err)
 	}
 
 	// >>> advanced:delegation services
+	//
+	// Delegated agent authority (internal/delegation): scoped, expiring
+	// capabilities an account's owner grants to the account's own agents,
+	// delegated swaps signed only after the transaction inspector proves them
+	// the approved plan, and withdrawals to allow-listed destinations under the
+	// customer's policy. It runs on the sandbox chain opened above, so without
+	// one every delegation route answers UNSUPPORTED. Its keys derive from the
+	// same seed (internal/sandboxchain): the delegated wallet signer from
+	// PurposeDelegatedSigner and one co-signer per sandbox venue from the
+	// venue's name; the seed and the keys never leave the signers. No agent
+	// reaches any of it over HTTP: the agent runtime admits an agent's requests
+	// in-process. The identity rule is D-055's, never a request's.
+	var delegationDeps httpapi.DelegationDeps
+	if sandboxChain != nil {
+		var delegationRouter *legalrouter.Router
+		if delegationRouter, err = legalRouterFor(cfg.Env, in.cfg.API.LegalPolicy); err != nil {
+			return nil, err
+		}
+		if delegationRouter == nil {
+			if delegationRouter, err = legalrouter.New(legalrouter.ConservativePolicy()); err != nil {
+				return nil, fmt.Errorf("delegation legal router: %w", err)
+			}
+		}
+		var delegationSigner *delegation.DelegatedSigner
+		if delegationSigner, err = delegation.NewDelegatedSigner(sandboxSeed.Derive(sandboxchain.PurposeDelegatedSigner),
+			delegation.SignerConfig{Environment: cfg.Env, Clock: clk, Policy: delegation.DefaultSigningPolicy(),
+				Fees: delegation.HostFees(sandboxChain.Host)}); err != nil {
+			return nil, fmt.Errorf("delegated signer: %w", err)
+		}
+		delegationVenues := httpapi.DelegationSandboxVenues()
+		venueSigners := make([]*delegation.VenueSigner, 0, len(delegationVenues))
+		for _, v := range delegationVenues {
+			venueSigner := delegation.NewVenueSigner(sandboxSeed.VenueSeed(v.Name))
+			venueSigners = append(venueSigners, venueSigner)
+			delegationDeps.CoSigners = append(delegationDeps.CoSigners,
+				httpapi.DelegationCoSigner{Name: v.Name, Chain: v.Chain, Address: venueSigner.PublicKey()})
+		}
+		if delegationDeps.Service, err = delegation.New(delegation.Deps{
+			DB: database, Clock: clk, Environment: cfg.Env, Host: sandboxChain.Host,
+			Intents: econ.NewIntentStore(clk, outbox, auditWriter), Effects: econ.NewEffectStore(clk, outbox, auditWriter),
+			Authorizer: econ.NewAuthorizer(gateChecker, killChecker), Kills: killChecker, Ledger: ledgerSvc, Capital: capitalSvc,
+			Risk: risk.NewStore(), RiskPolicy: risk.DefaultAdvancedPolicy(), Router: delegationRouter, Prices: priceStore,
+			Identity: compliance.NewAccountVerification(clk), Profiles: compliance.NewRepository(auditWriter),
+			Reconciliation: reconciliation.NewRepository(clk, outbox, auditWriter), Audit: auditWriter,
+			Accounts: accountRepo, Assets: assetRepo, Signer: delegationSigner, Venues: venueSigners,
+		}); err != nil {
+			return nil, fmt.Errorf("delegation service: %w", err)
+		}
+		// One sandbox venue is registered at startup, idempotently; an operator
+		// registers the others this deployment co-signs for. A failure leaves
+		// delegated swaps refused (no venue to settle at), never the API down.
+		if _, verr := httpapi.EnsureDelegationVenue(ctx, database, delegationDeps, delegationVenues[0]); verr != nil {
+			log.Warn("delegation: the sandbox venue is not registered; delegated swaps are refused until an operator registers one",
+				"venue", delegationVenues[0].Name, "error", verr.Error())
+		}
+	}
 
 	// >>> advanced:operator services
 	//
@@ -862,6 +974,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		},
 
 		// >>> advanced:treasury deps
+		Treasury: httpapi.TreasuryDeps{Service: treasurySvc, Fees: feeLedgerSvc},
 
 		// >>> advanced:stable deps
 		// Empty -- every route UNSUPPORTED -- unless a sandbox chain is
@@ -879,6 +992,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		Marketplace: httpapi.MarketplaceDeps{Service: strategyMarketplace, Sandbox: strategySandbox},
 
 		// >>> advanced:delegation deps
+		Delegation: delegationDeps,
 
 		// >>> advanced:operator deps
 		Operator: operatorDeps,

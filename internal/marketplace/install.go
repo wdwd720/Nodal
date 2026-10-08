@@ -12,6 +12,7 @@ import (
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/id"
+	"github.com/nodal/controlplane/internal/security"
 )
 
 // InstallRequest installs a version for an account.
@@ -26,8 +27,9 @@ type InstallRequest struct {
 }
 
 // InstallVersion installs an APPROVED, CLEARED version for an account in
-// PAPER mode. Installing an already-installed version returns the existing
-// install.
+// PAPER mode, for the account's owner only. The install's paper book starts
+// with the configured paper capital. Installing an already-installed version
+// returns the existing install.
 func (s *Service) InstallVersion(ctx context.Context, tx pgx.Tx, req InstallRequest) (Install, bool, error) {
 	if err := requireActor(req.Actor, CreatorActorTypes(), "install a strategy"); err != nil {
 		return Install{}, false, err
@@ -39,6 +41,9 @@ func (s *Service) InstallVersion(ctx context.Context, tx pgx.Tx, req InstallRequ
 	}
 	if req.AccountID.IsZero() {
 		return Install{}, false, errs.New(errs.CodeValidationFailed, "marketplace: an account is required")
+	}
+	if err := requireOwner(ctx, tx, req.Actor, req.AccountID, "install a strategy"); err != nil {
+		return Install{}, false, err
 	}
 	if err := s.authorize(ctx, tx, gates.ModePaper); err != nil {
 		return Install{}, false, err
@@ -60,26 +65,30 @@ func (s *Service) InstallVersion(ctx context.Context, tx pgx.Tx, req InstallRequ
 		return Install{}, false, dbErr("find install", err)
 	}
 	in, err := scanInstall(tx.QueryRow(ctx, `INSERT INTO marketplace_installs (id, account_id, version_id, mode, status,
-		installed_by_actor_type, installed_by_actor_id) VALUES ($1,$2,$3,$4,'ACTIVE',$5,$6) RETURNING `+installColumns,
-		id.New[installKind](), req.AccountID, req.VersionID, req.Mode, req.Actor.Type, req.Actor.ID))
+		installed_by_actor_type, installed_by_actor_id, paper_capital) VALUES ($1,$2,$3,$4,'ACTIVE',$5,$6,$7::numeric) RETURNING `+installColumns,
+		id.New[installKind](), req.AccountID, req.VersionID, req.Mode, req.Actor.Type, req.Actor.ID, s.cfg.PaperCapital.String()))
 	if err != nil {
 		return Install{}, false, dbErr("create install", err)
 	}
 	if err := s.auditEvent(ctx, tx, audit.AccountStream(req.AccountID.String()), req.Actor, "marketplace.install.created",
 		"marketplace_install", in.ID.String(), "installed in PAPER mode",
-		map[string]string{"version_id": v.ID.String(), "strategy_ref": v.StrategyRef(), "mode": string(in.Mode)}); err != nil {
+		map[string]string{"version_id": v.ID.String(), "strategy_ref": v.StrategyRef(), "mode": string(in.Mode), "paper_capital": in.PaperCapital}); err != nil {
 		return Install{}, false, err
 	}
 	return in, false, nil
 }
 
-// RemoveInstall removes an ACTIVE install.
+// RemoveInstall removes an ACTIVE install: the account's owner may, and so
+// may an operator or the system.
 func (s *Service) RemoveInstall(ctx context.Context, tx pgx.Tx, iid InstallID, by econ.Actor, reason string) (Install, error) {
 	if err := requireActor(by, TransitionActorTypes(), "remove an install"); err != nil {
 		return Install{}, err
 	}
 	in, err := s.loadInstall(ctx, tx, iid, true)
 	if err != nil {
+		return Install{}, err
+	}
+	if err := s.requireActsFor(ctx, tx, by, in.AccountID, "remove an install"); err != nil {
 		return Install{}, err
 	}
 	if in.Status != InstallActive {
@@ -98,4 +107,14 @@ func (s *Service) RemoveInstall(ctx context.Context, tx pgx.Tx, iid InstallID, b
 		return Install{}, err
 	}
 	return out, nil
+}
+
+// requireActsFor admits the account's owner, an operator and the system:
+// actions an operator may take on any account (and the system on its
+// schedule), and a customer on their own.
+func (s *Service) requireActsFor(ctx context.Context, q pgx.Tx, by econ.Actor, account accounts.AccountID, what string) error {
+	if by.Type == security.ActorOperator || by.Type == security.ActorSystem {
+		return nil
+	}
+	return requireOwner(ctx, q, by, account, what)
 }

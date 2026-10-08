@@ -44,6 +44,8 @@ import { OrderBooksSection } from "./orders/OrderBooksSection.tsx";
 import { TransfersSection } from "./transfers/Transfers.tsx";
 
 // >>> advanced:treasury import
+import { TreasurySection } from "./treasury/TreasurySection.tsx";
+import { FeesSection } from "./fees/FeesSection.tsx";
 
 // >>> advanced:stable import
 import { StableAssetsSection } from "./stable/StableSection.tsx";
@@ -58,6 +60,7 @@ import { PredictionMarketsSection } from "./predmarket/PredictionMarkets.tsx";
 import { StrategiesSection } from "./marketplace/StrategiesSection.tsx";
 
 // >>> advanced:delegation import
+import { DelegationSection } from "./delegation/DelegationSection.tsx";
 
 // >>> advanced:operator import
 import { OperatorConsole } from "./operator/OperatorConsole.tsx";
@@ -161,6 +164,20 @@ export const ADVANCED_SECTIONS: readonly AdvancedSection[] = [
   },
 
   // >>> advanced:treasury section
+  {
+    path: "treasury",
+    title: "Treasury",
+    description:
+      "The operator's house books: simulated house capital only, each under its own signing policy and risk limits — positions and PnL at fresh marks, limits in use, balances, reconciliation, house orders, quotes and paper-venue fills, and the disclosed house-versus-customer crossing rules.",
+    element: <TreasurySection />,
+  },
+  {
+    path: "fees",
+    title: "Fees",
+    description:
+      "Every published fee schedule with its version history and an exact quote calculator, this account's quote disclosures, fee bookings with their spread lines, performance-fee periods with their high-water marks, and the house trades against it.",
+    element: <FeesSection />,
+  },
 
   // >>> advanced:stable section
   {
@@ -199,6 +216,13 @@ export const ADVANCED_SECTIONS: readonly AdvancedSection[] = [
   },
 
   // >>> advanced:delegation section
+  {
+    path: "agent-authority",
+    title: "Agent authority",
+    description:
+      "What the account delegated to its own agents -- capability scope, limits and their use, expiry and revocation -- the signing requests they made with the inspected plan, and the withdrawals they proposed with destination, policy and your decision.",
+    element: <DelegationSection />,
+  },
 
   // >>> advanced:operator section
   {

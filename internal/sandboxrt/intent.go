@@ -42,17 +42,19 @@ type IntentContext struct {
 	CorrelationID string
 }
 
-// IntentTerms are the terms of a sandbox-originated intent.
+// IntentTerms are the terms of a sandbox-originated intent. Notional is the
+// quantity at ReferencePrice, the price the host read itself; LimitPrice is the
+// strategy's instruction to the venue and never values anything.
 type IntentTerms struct {
-	Origin         string      `json:"origin"`
-	Side           Side        `json:"side"`
-	LimitPrice     string      `json:"limit_price"`
-	Notional       string      `json:"notional"`
-	PriceSource    PriceSource `json:"price_source"`
-	SandboxRunID   string      `json:"sandbox_run_id"`
-	RunDigest      string      `json:"run_digest"`
-	ArtifactDigest string      `json:"artifact_digest"`
-	ProposalSeq    int         `json:"proposal_seq"`
+	Origin         string `json:"origin"`
+	Side           Side   `json:"side"`
+	LimitPrice     string `json:"limit_price"`
+	Notional       string `json:"notional"`
+	ReferencePrice string `json:"reference_price"`
+	SandboxRunID   string `json:"sandbox_run_id"`
+	RunDigest      string `json:"run_digest"`
+	ArtifactDigest string `json:"artifact_digest"`
+	ProposalSeq    int    `json:"proposal_seq"`
 }
 
 func (c IntentContext) validate() error {
@@ -89,8 +91,13 @@ func (a AcceptedProposal) Intent(c IntentContext) (econ.Intent, error) {
 	if err := c.validate(); err != nil {
 		return econ.Intent{}, err
 	}
+	if ref, err := nodalsdk.ParseDecimal(a.ReferencePrice); err != nil || ref.Sign() <= 0 {
+		// Only FilterAt makes an AcceptedProposal, always at a reference
+		// price; one without is not something a run accepted.
+		return econ.Intent{}, errs.New(errs.CodeValidationFailed, "sandboxrt: an accepted proposal names the reference price of its notional")
+	}
 	terms, err := audit.CanonicalJSON(IntentTerms{
-		Origin: OriginSandbox, Side: a.Side, LimitPrice: a.LimitPrice, Notional: a.Notional, PriceSource: a.PriceSource,
+		Origin: OriginSandbox, Side: a.Side, LimitPrice: a.LimitPrice, Notional: a.Notional, ReferencePrice: a.ReferencePrice,
 		SandboxRunID: c.RunID.String(), RunDigest: hex.EncodeToString(c.RunDigest),
 		ArtifactDigest: hex.EncodeToString(c.ArtifactDigest), ProposalSeq: a.Seq,
 	})

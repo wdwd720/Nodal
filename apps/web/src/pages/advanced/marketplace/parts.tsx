@@ -6,7 +6,7 @@
 import { useState, type ReactNode } from "react";
 import { newIdempotencyKey } from "@controlplane/generated-client";
 
-import { Pill } from "../../../components/Layout.tsx";
+import { Disclosure, Pill } from "../../../components/Layout.tsx";
 import { Bps, DecimalValue } from "../../../components/Money.tsx";
 import {
   MODERATION_MEANING,
@@ -69,6 +69,19 @@ export function SimulatedAmount(props: { readonly value: string | undefined }): 
     <>
       <DecimalValue value={props.value} /> <span className="cell-note">simulated dollars</span>
     </>
+  );
+}
+
+/**
+ * What the compiler said, as the backend kept it (bounded, with the build
+ * directory replaced): the backend sends it to the creator and to operators
+ * only, since it can quote the source.
+ */
+export function BuildLog(props: { readonly log: string }): ReactNode {
+  return (
+    <Disclosure title="What the compiler said">
+      {props.log === "" ? <p className="note">The compiler said nothing.</p> : <pre className="mono-small">{props.log}</pre>}
+    </Disclosure>
   );
 }
 

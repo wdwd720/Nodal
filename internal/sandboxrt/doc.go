@@ -1,7 +1,7 @@
 // Package sandboxrt is the sandboxed strategy runtime (advanced goal §15;
 // ADR-0020 decision 4; docs/architecture/ADVANCED_FINANCIAL_MODEL.md, package
-// map: SANDBOX_RUNTIME, migration 00751, capability USER_CODE_SANDBOX, mode
-// SANDBOX).
+// map: SANDBOX_RUNTIME, migrations 00751 and 00757, capability
+// USER_CODE_SANDBOX, mode SANDBOX).
 //
 // It is a separate trust boundary. User strategy code is untrusted, and the
 // only thing that ever leaves it is a typed intent PROPOSAL:
@@ -24,7 +24,13 @@
 //     generated go.mod whose only dependency is the embedded SDK, under an
 //     environment that contains nothing from the parent process: a secret in
 //     the parent's environment is absent from the build. Builds are
-//     reproducible; the artifact digest is the sha256 of the wasm bytes.
+//     reproducible; the artifact digest is the sha256 of the wasm bytes. A
+//     build is bounded in wall time, in the size of the module it writes and
+//     in the resident memory of its process group (BuilderConfig, with safe
+//     defaults and hard ceilings); a build past a bound is stopped and is a
+//     typed refusal (BUILD_TIMEOUT, BUILD_OUTPUT_LIMIT, BUILD_MEMORY_LIMIT),
+//     never an artifact. The compiler's output is kept bounded, with the build
+//     directory replaced, so an author can read why a build failed.
 //   - Runner instantiates an artifact with wazero and WASI preview1 and
 //     nothing else: no filesystem, no environment, no arguments beyond the
 //     program name, no sockets, stdin = the input document, bounded stdout
@@ -36,8 +42,18 @@
 //   - ParseOutput accepts exactly two record types, intent and log, and
 //     nothing else; an unknown record makes the whole run INVALID_OUTPUT.
 //   - Filter drops every proposal beyond the strategy's manifest and records a
-//     violation for it.
-//   - Service persists artifacts (immutable), runs and violations
+//     violation for it. A proposal's notional is computed at a REFERENCE PRICE
+//     the caller read from its own records (FilterAt), never at the limit
+//     price the strategy chose; a proposal for an instrument without one is
+//     refused and recorded (REFERENCE_PRICE_UNAVAILABLE). Intent carries that
+//     reference price in the terms, and refuses without one.
+//   - Budget bounds the sandbox per call and per account per window: runs,
+//     CPU and wall time. A call is admitted whole or refused before anything
+//     runs, and every run is charged to its account under an advisory lock, so
+//     concurrent callers cannot overspend; a refusal is RATE_LIMITED with a
+//     stable SANDBOX_BUDGET_* reason. The database refuses a run nobody was
+//     charged for (SX002) and a charge beyond the budget it carries (SX003).
+//   - Service persists artifacts (immutable), runs, violations and usage
 //     (append-only), and refuses to run at all while CAPABILITY_DISABLE for
 //     USER_CODE_SANDBOX (or the global kill) is active.
 //
@@ -56,6 +72,8 @@
 //   - Build source that has not passed Scan. The only unscanned build path is
 //     in a _test.go file and exists so the runtime's isolation can be proved
 //     independently of the scanner.
+//   - Value a proposal at a price the strategy chose, or run code for an
+//     account beyond its budget.
 //   - Hold mutable package-level state, read the wall clock implicitly, or
 //     use floating point.
 package sandboxrt

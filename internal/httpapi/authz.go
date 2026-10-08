@@ -351,6 +351,72 @@ var operationPolicies = map[string]operationPolicy{
 	"GetAdvancedTransfersReconciliation": {AnyOf: perms(security.PermSandboxOperate, security.PermReconciliationRead)},
 
 	// >>> advanced:treasury operations
+	//
+	// The house book (internal/treasury) is the operator's: every route under
+	// /advanced/treasury/books needs sandbox:operate, and every action that
+	// moves value or changes a policy or a crossing rule -- registering a book,
+	// its signing and risk policies, funding, house orders and quotes, hedges,
+	// conversions, rebalances and paper fills, the crossing rule -- a recent
+	// step-up as well. A cancel is never new risk, and syncing the register or
+	// marking it to market moves no value, so they need none. The treasury's own
+	// signing policy then decides whether the operator may act for the book. The
+	// crossing disclosures are what customers are told, so customers read them;
+	// the house trades against an account are tenant-scoped per request.
+	//
+	// The fee ledger (internal/feeledger): published schedules and the quote
+	// calculator are any signed-in customer's (transparency); an account's
+	// quotes, bookings and performance periods are tenant-scoped per request,
+	// and a record read by its own id is scoped by its own account (NOT_FOUND
+	// otherwise). Recording quotes, the spread audit and the performance-period
+	// lifecycle are sandbox:operate; publishing a schedule, reversing a booking
+	// and crystallizing or reversing a period -- which charge or return a
+	// customer's simulated value or change what every later quote charges --
+	// need a recent step-up as well.
+	"GetAdvancedTreasuryBooks":                                {AnyOf: perms(security.PermSandboxOperate)},
+	"PostAdvancedTreasuryBooks":                               {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"GetAdvancedTreasuryBooksHouseBookId":                     {AnyOf: perms(security.PermSandboxOperate)},
+	"PostAdvancedTreasuryBooksHouseBookIdActorPolicy":         {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedTreasuryBooksHouseBookIdLimits":              {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedTreasuryBooksHouseBookIdFundings":            {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedTreasuryBooksHouseBookIdOrders":              {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedTreasuryBooksHouseBookIdOrdersOrderIdCancel": {AnyOf: perms(security.PermSandboxOperate), Mutating: true},
+	"PostAdvancedTreasuryBooksHouseBookIdQuotes":              {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedTreasuryBooksHouseBookIdHedges":              {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedTreasuryBooksHouseBookIdConversions":         {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedTreasuryBooksHouseBookIdRebalances":          {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"GetAdvancedTreasuryBooksHouseBookIdPaperFills":           {AnyOf: perms(security.PermSandboxOperate)},
+	"PostAdvancedTreasuryBooksHouseBookIdPaperFills":          {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedTreasuryBooksHouseBookIdSync":                {AnyOf: perms(security.PermSandboxOperate), Mutating: true},
+	"PostAdvancedTreasuryBooksHouseBookIdMarkToMarket":        {AnyOf: perms(security.PermSandboxOperate), Mutating: true},
+	"GetAdvancedTreasuryBooksHouseBookIdReport":               {AnyOf: perms(security.PermSandboxOperate)},
+	"GetAdvancedTreasuryBooksHouseBookIdBalances":             {AnyOf: perms(security.PermSandboxOperate)},
+	"GetAdvancedTreasuryBooksHouseBookIdReconciliation":       {AnyOf: perms(security.PermSandboxOperate)},
+	"GetAdvancedTreasuryBooksHouseBookIdEvents":               {AnyOf: perms(security.PermSandboxOperate)},
+	"GetAdvancedTreasuryBooksHouseBookIdActions":              {AnyOf: perms(security.PermSandboxOperate)},
+	"GetAdvancedTreasuryBooksHouseBookIdRiskDecisions":        {AnyOf: perms(security.PermSandboxOperate)},
+	"PostAdvancedTreasuryCrossingRules":                       {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"GetAdvancedTreasuryCrossingDisclosures":                  {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny, security.PermSandboxOperate)},
+	"GetAdvancedTreasuryHouseTrades":                          {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedFeesSchedules":                                {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"PostAdvancedFeesSchedules":                               {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"GetAdvancedFeesSchedulesHistory":                         {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedFeesQuotePreview":                             {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedFeesQuotes":                                   {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"PostAdvancedFeesQuotes":                                  {AnyOf: perms(security.PermSandboxOperate), Mutating: true},
+	"GetAdvancedFeesQuotesFeeDisclosureId":                    {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedFeesBookings":                                 {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedFeesBookingsFeeBookingId":                     {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"PostAdvancedFeesBookingsFeeBookingIdReverse":             {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"GetAdvancedFeesSpreadAudit":                              {AnyOf: perms(security.PermSandboxOperate)},
+	"GetAdvancedFeesSpreadTotals":                             {AnyOf: perms(security.PermSandboxOperate)},
+	"GetAdvancedFeesPeriods":                                  {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"PostAdvancedFeesPeriods":                                 {AnyOf: perms(security.PermSandboxOperate), Mutating: true},
+	"GetAdvancedFeesPeriodsFeePeriodId":                       {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"PostAdvancedFeesPeriodsFeePeriodIdFlows":                 {AnyOf: perms(security.PermSandboxOperate), Mutating: true},
+	"PostAdvancedFeesPeriodsFeePeriodIdAccruals":              {AnyOf: perms(security.PermSandboxOperate), Mutating: true},
+	"PostAdvancedFeesPeriodsFeePeriodIdCrystallize":           {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedFeesPeriodsFeePeriodIdCancel":                {AnyOf: perms(security.PermSandboxOperate), Mutating: true},
+	"PostAdvancedFeesPeriodsFeePeriodIdReverse":               {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
 
 	// >>> advanced:stable operations
 	//
@@ -502,6 +568,39 @@ var operationPolicies = map[string]operationPolicy{
 	"GetAdvancedStrategiesRuns":                          {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
 
 	// >>> advanced:delegation operations
+	//
+	// Delegated agent authority (internal/delegation), simulated value only.
+	// Reads of one account are tenant-scoped per request (the owner, or an
+	// operator holding account:read_any); a capability, swap or withdrawal read
+	// by its own id is scoped by its own account and answers NOT_FOUND
+	// otherwise. The owner's commands need sandbox:delegate and ownership, and
+	// every grant, revocation, destination change, policy version and decision a
+	// recent step-up; cancelling a withdrawal only reduces risk and needs none.
+	// Operators read across accounts under sandbox:operate; registering a venue
+	// and running the executions move value, hence step-up. No delegation route
+	// admits an agent: agents are admitted in-process, never over HTTP.
+	"GetAdvancedDelegationAgents":                           {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedDelegationCapabilities":                     {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedDelegationCapabilitiesCapabilityId":         {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedDelegationDestinations":                     {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedDelegationWithdrawalPolicy":                 {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedDelegationSwaps":                            {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedDelegationSwapsSwapId":                      {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedDelegationWithdrawals":                      {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedDelegationWithdrawalsWithdrawalId":          {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedDelegationVenues":                           {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"PostAdvancedDelegationCapabilities":                    {AnyOf: perms(security.PermSandboxDelegate), StepUp: true, Mutating: true},
+	"PostAdvancedDelegationCapabilitiesCapabilityIdRevoke":  {AnyOf: perms(security.PermSandboxDelegate), StepUp: true, Mutating: true},
+	"PostAdvancedDelegationDestinations":                    {AnyOf: perms(security.PermSandboxDelegate), StepUp: true, Mutating: true},
+	"PostAdvancedDelegationDestinationsDestinationIdRemove": {AnyOf: perms(security.PermSandboxDelegate), StepUp: true, Mutating: true},
+	"PostAdvancedDelegationWithdrawalPolicy":                {AnyOf: perms(security.PermSandboxDelegate), StepUp: true, Mutating: true},
+	"PostAdvancedDelegationSwapsSwapIdDecision":             {AnyOf: perms(security.PermSandboxDelegate), StepUp: true, Mutating: true},
+	"PostAdvancedDelegationWithdrawalsWithdrawalIdDecision": {AnyOf: perms(security.PermSandboxDelegate), StepUp: true, Mutating: true},
+	"PostAdvancedDelegationWithdrawalsWithdrawalIdCancel":   {AnyOf: perms(security.PermSandboxDelegate), Mutating: true},
+	"GetAdvancedDelegationOpsCapabilities":                  {AnyOf: perms(security.PermSandboxOperate)},
+	"GetAdvancedDelegationOpsPending":                       {AnyOf: perms(security.PermSandboxOperate)},
+	"PostAdvancedDelegationOpsVenues":                       {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedDelegationOpsExecutePending":               {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
 
 	// >>> advanced:operator operations
 	//

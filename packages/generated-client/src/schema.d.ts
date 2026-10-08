@@ -2266,6 +2266,938 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/advanced/delegation/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The account's agents, any of which its owner may grant a capability to */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The account's agents, newest first (bounded; the service decides whether an agent may act) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationAgentList"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** An account's delegated capabilities with their scope, limits, use and expiry, newest first */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of capabilities (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationCapabilityPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /**
+         * Grant one of the account's agents a scoped, expiring capability (owner only; step-up)
+         * @description The environment is the deployment's and the strategy is the agent's own; neither is the caller's to choose. The capability is immutable except for revocation. The Idempotency-Key is also the grant's own key: the same key with the same terms returns the existing grant.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DelegationGrantRequest"];
+                };
+            };
+            responses: {
+                /** @description The capability, ACTIVE */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationCapability"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/capabilities/{capabilityId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One capability with every use recorded under it, newest first */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    capabilityId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The capability (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationCapabilityDetail"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/capabilities/{capabilityId}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revoke a capability (owner only; step-up). Nothing not yet signed under it can be signed afterwards */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    capabilityId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DelegationReasonRequest"];
+                };
+            };
+            responses: {
+                /** @description The capability, REVOKED (revoking a revoked capability returns it unchanged) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationCapability"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/destinations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The account's allow-listed withdrawal destinations, newest first */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Every destination the account allow-listed, active and removed (bounded) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationDestinationList"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /** Allow-list a withdrawal destination (owner only; step-up). Its age starts now */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DelegationDestinationRequest"];
+                };
+            };
+            responses: {
+                /** @description The destination, ACTIVE */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationDestination"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/destinations/{destinationId}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Remove a destination from the allow-list (owner only; step-up). Nothing not yet signed goes to it afterwards */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    destinationId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DelegationReasonRequest"];
+                };
+            };
+            responses: {
+                /** @description The destination, REMOVED */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationDestination"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/ops/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Operator — capabilities across every account, newest first (read only) */
+        get: {
+            parameters: {
+                query?: {
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                    status?: components["schemas"]["DelegationCapabilityStatus"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of capabilities (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationCapabilityPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/ops/execute-pending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Operator — execute every swap and withdrawal that is ready, oldest first (step-up)
+         * @description Admitted and approved swaps and approved withdrawals are each executed under the service's own authority: inspected, signed, submitted exactly once and settled. The service refuses what may not go ahead (a revoked capability, a cooling period, a closed gate); each subject's outcome is reported.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DelegationExecuteRequest"];
+                };
+            };
+            responses: {
+                /** @description What the run did to each subject */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationExecutionRun"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/ops/pending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Operator — every swap and withdrawal not yet at an end, across accounts, oldest first (read only)
+         * @description Awaiting a decision, awaiting execution, or signed and in flight. Bounded by limit per kind.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Pending swaps and withdrawals (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationPending"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/ops/venues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Operator — register a sandbox venue this deployment co-signs for (step-up)
+         * @description The venue's settlement address is its co-signer's, never the caller's to choose: a name with no co-signer in this deployment is refused. Without a house book, one is created for the venue.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DelegationVenueRequest"];
+                };
+            };
+            responses: {
+                /** @description The venue */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationVenue"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/swaps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Signing requests (delegated swaps) of an account with their plan, inspection and decision trail, newest first */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                    status?: components["schemas"]["DelegationSwapStatus"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of swaps (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationSwapPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/swaps/{swapId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One signing request with its plan, inspection and decision trail */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    swapId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The swap (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationSwap"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/swaps/{swapId}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve or decline a swap awaiting approval, bound to the plan hash shown (owner only; step-up)
+         * @description An approval is executed at once under the service's own authority: compiled, inspected, signed by the delegated wallet and the venue, submitted exactly once and settled. The decision stands whatever the execution then does; `execution` says what it did. A decline cancels the swap and returns its funds.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    swapId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DelegationDecisionRequest"];
+                };
+            };
+            responses: {
+                /** @description The swap after the decision (and, for an approval, after its execution) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationSwapDecisionResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/venues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Registered sandbox venues, and the venues this deployment holds a co-signer for */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Venues (bounded) and the deployment's co-signers */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationVenueList"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/withdrawal-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The account's withdrawal policy in force and every earlier version */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The latest version (absent when the account has none, so nothing can be withdrawn) and its history */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationWithdrawalPolicyState"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /** Write the account's next withdrawal policy version (owner only; step-up). Versions are immutable */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DelegationWithdrawalPolicyRequest"];
+                };
+            };
+            responses: {
+                /** @description The new version, which applies to every proposal from now on */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationWithdrawalPolicy"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/withdrawals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Withdrawals the account's agents proposed, with destination, policy evaluation and decision trail, newest first */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                    status?: components["schemas"]["DelegationWithdrawalStatus"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of withdrawals (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationWithdrawalPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/withdrawals/{withdrawalId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One withdrawal with its plan, policy evaluation, inspection and decision trail */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    withdrawalId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The withdrawal (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationWithdrawal"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/withdrawals/{withdrawalId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stop a withdrawal that has not been signed (owner only). Cancelling only reduces risk, so it needs no step-up */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    withdrawalId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DelegationReasonRequest"];
+                };
+            };
+            responses: {
+                /** @description The withdrawal, CANCELLED, with its funds returned */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationWithdrawal"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/withdrawals/{withdrawalId}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve or decline a withdrawal awaiting approval, bound to the plan hash shown (owner only; step-up)
+         * @description An approval past the policy's cooling period is executed at once under the service's own authority: compiled, inspected, signed, submitted exactly once and settled. Before it, the withdrawal stays APPROVED and `execution` carries the refusal; an operator's execution run takes it later. A decline returns the funds.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    withdrawalId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DelegationDecisionRequest"];
+                };
+            };
+            responses: {
+                /** @description The withdrawal after the decision (and, for an approval, after its execution) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationWithdrawalDecisionResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/advanced/derivatives/clearing-house/funding": {
         parameters: {
             query?: never;
@@ -3977,6 +4909,871 @@ export interface paths {
                 403: components["responses"]["Problem"];
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/fees/bookings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The fees charged to an account, newest first, each with its spread line */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description One page of fee bookings */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["FeeBookingPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/fees/bookings/{feeBookingId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One fee booking with its disclosure, re-proved end to end from the record */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    feeBookingId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The booking, its disclosure and its verification */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["FeeBookingDetail"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/fees/bookings/{feeBookingId}/reverse": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reverse a booking by a COMPENSATION journal of exactly its charges, with a reason code */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    feeBookingId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["FeeReverseRequest"];
+                };
+            };
+            responses: {
+                /** @description The reversed booking */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["FeeBooking"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/fees/periods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** An account's performance-fee periods (sandbox accounting, never charged live), newest first */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                    strategy_ref?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description One page of periods with their flows, lines and statements */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["FeePeriodPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /**
+         * Open the next performance-fee period of an (account, strategy) pair
+         * @description A pair's first period starts with its high-water mark at its opening NAV; every later one chains from the latest crystallized statement. One period of a pair is open at a time.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["FeeOpenPeriodRequest"];
+                };
+            };
+            responses: {
+                /** @description The opened period */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["FeePeriod"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/fees/periods/{feePeriodId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One performance-fee period with its flows, lines, statement and attribution */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    feePeriodId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The period (a crystallized one re-proved from its terms, flows and valuations) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["FeePeriod"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/fees/periods/{feePeriodId}/accruals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Value an open period at an instant and book the change in its running accrual
+         * @description Nothing accrues below the high-water mark or the hurdle; a fall is a compensating REVERSAL line.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    feePeriodId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["FeeAccrueRequest"];
+                };
+            };
+            responses: {
+                /** @description The line the valuation booked */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["FeeLineResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/fees/periods/{feePeriodId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel an open period, reversing any running accrual */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    feePeriodId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["FeeCancelPeriodRequest"];
+                };
+            };
+            responses: {
+                /** @description The cancelled period */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["FeePeriod"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/fees/periods/{feePeriodId}/crystallize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Crystallize a period once its end has passed, charging the fee to the customer's wallet */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    feePeriodId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["FeeCrystallizeRequest"];
+                };
+            };
+            responses: {
+                /** @description The crystallized period with its statement */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["FeePeriod"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/fees/periods/{feePeriodId}/flows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record a deposit (positive) or withdrawal (negative) of an open period; no flow creates or destroys performance */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    feePeriodId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["FeeFlowRequest"];
+                };
+            };
+            responses: {
+                /** @description The recorded flow */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["FeeFlowResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/fees/periods/{feePeriodId}/reverse": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reverse a crystallization by a COMPENSATION of exactly the fee, with a reason code */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    feePeriodId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["FeeReverseRequest"];
+                };
+            };
+            responses: {
+                /** @description The reversed period */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["FeePeriod"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/fees/quote-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Price an order exactly under the schedule in force (nothing is recorded or charged)
+         * @description The fee engine itemizes the reference notional, the spread, every explicit fee, the network estimate and the effective all-in price, and the disclosure is verified against the schedule before it is returned. The reference price is a decimal string in the schedule's quote asset. A read: it records, reserves and charges nothing.
+         */
+        get: {
+            parameters: {
+                query: {
+                    at?: components["schemas"]["Timestamp"];
+                    base_decimals: number;
+                    base_quantity: components["schemas"]["Quantity"];
+                    has_subscription?: boolean;
+                    reference_price: string;
+                    schedule_key: string;
+                    side: components["schemas"]["FeeSide"];
+                    strategy_originated?: boolean;
+                    trailing_volume_usd?: components["schemas"]["USD"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The verified disclosure the schedule produces */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["FeeQuotePreview"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/fees/quotes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The quote disclosures bound to an account, newest first */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description One page of quote disclosures */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["FeeQuotePage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /** Record a verified quote disclosure under the schedule in force (bound to its payer when named) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["FeeQuoteRecordRequest"];
+                };
+            };
+            responses: {
+                /** @description The stored disclosure */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["FeeQuoteRecord"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/fees/quotes/{feeDisclosureId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One stored quote disclosure, re-proved from the record against its schedule */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    feeDisclosureId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The disclosure and its verification */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["FeeQuoteRecord"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/fees/schedules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every published fee schedule key with the version in force now (public to any signed-in customer) */
+        get: {
+            parameters: {
+                query?: {
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description One page of schedule keys */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["FeeScheduleSummaryPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /** Publish the next immutable version of a schedule key, effective now or later, never in the past */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["FeePublishRequest"];
+                };
+            };
+            responses: {
+                /** @description The published version */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["FeeScheduleVersion"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/fees/schedules/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every version of one schedule key, oldest first, and which is in force now */
+        get: {
+            parameters: {
+                query: {
+                    key: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The schedule's version history */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["FeeScheduleHistory"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/fees/spread-audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every charged spread with its disclosure, schedule version, prices and journal, oldest first */
+        get: {
+            parameters: {
+                query?: {
+                    account_id?: components["schemas"]["UUID"];
+                    include_reversed?: boolean;
+                    limit?: components["parameters"]["Limit"];
+                    quote_asset_id?: components["schemas"]["UUID"];
+                    since?: components["schemas"]["Timestamp"];
+                    until?: components["schemas"]["Timestamp"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The spread lines the filter selects */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["FeeSpreadAudit"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/fees/spread-totals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The spread booked and the spread reversed in one quote asset */
+        get: {
+            parameters: {
+                query: {
+                    quote_asset_id: components["schemas"]["UUID"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The spread totals */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["FeeSpreadTotals"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -7531,8 +9328,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Paper-follow one of your installs on one market snapshot
-         * @description The installed version runs in the sandbox on the snapshot you supply. Every proposal its manifest permits becomes an economic intent (PAPER, STRATEGY_MARKETPLACE) that faces routing and Risk Kernel V2 with sections read from the database, never from the snapshot; only an ALLOW reaches paper execution, exactly once. The snapshot must be no older than five minutes and not in the future, and the manifest's execution frequency bounds how often an install runs. The same snapshot time with the same snapshot returns the recorded run; with a different snapshot it is INVALID_IDEMPOTENCY_REUSE. Equity and turnover come from the snapshot you supplied and are paper figures.
+         * Paper-follow one of your installs, now
+         * @description The installed version runs in the sandbox on an input the service builds itself: the install's paper book (its paper capital moved by its own earlier fills) and, for every instrument the version names, the freshest reference price in the price store no older than five minutes with its recent history. No snapshot is accepted from the caller. Every proposal the manifest permits -- valued at the reference price, never at a limit price the strategy chose -- becomes an economic intent (PAPER, STRATEGY_MARKETPLACE) that faces routing and Risk Kernel V2, whose balance section is the paper book's uninvested balance; only an ALLOW reaches paper execution, exactly once, and an executed dispatch is a fill of the paper book at its reference price. The manifest's execution frequency bounds how often an install runs, and the run is charged to the account's sandbox budget. A book holding an instrument with no fresh reference price cannot be valued and is refused (STALE_MARKET_DATA). The book's uninvested balance (paper_cash), equity and turnover are paper figures, before the venue's disclosed charges.
          */
         post: {
             parameters: {
@@ -7548,7 +9345,7 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/json": components["schemas"]["StrategyFollowRequest"];
+                    "application/json": components["schemas"]["StrategyAccountRequest"];
                 };
             };
             responses: {
@@ -7593,7 +9390,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Compute and record the paper performance of one of your installs from its follow history */
+        /**
+         * Compute and record the paper performance of one of your installs from its follow history
+         * @description Computed exactly from the follow runs valued from the install's paper book (runs recorded before the book existed are not counted); the database refuses a snapshot over anything else. VALIDATION_FAILED until one such run exists.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -7784,7 +9584,7 @@ export interface paths {
         };
         /**
          * One listing with its versions, validations, reviews, provenance, evaluations and paper performance
-         * @description The creator's account and operators see every version; anyone else sees only the public versions, and a listing with none is NOT_FOUND. Evaluations and performance snapshots are simulated and PAPER results: computed from snapshots supplied by whoever ran them, never from real capital.
+         * @description The creator's account and operators see every version; anyone else sees only the public versions, and a listing with none is NOT_FOUND. Evaluations are simulated results over the snapshot set their runner supplied. Performance snapshots are PAPER results computed from each install's paper book -- its paper capital moved by its own fills, valued at reference prices the service read from the price store -- never from a caller's figures, and never a record of real capital.
          */
         get: {
             parameters: {
@@ -8274,7 +10074,7 @@ export interface paths {
         put?: never;
         /**
          * Run one of your built versions against a fixed set of snapshots and record the evaluation
-         * @description A simulation proposes nothing: every run's proposals are counted and kept in the run log, never submitted. At most 20 snapshots per request; the evaluation is reproducible from the dataset version and digests.
+         * @description A simulation proposes nothing: every run's proposals are counted and kept in the run log, never submitted. At most 20 snapshots per request; the evaluation is reproducible from the dataset version and digests. Every run is charged to the creator's account under the sandbox budget: a request beyond the runs or CPU one call may be granted, or beyond what the account's window has left, is refused before anything runs (429 RATE_LIMITED, the budget's reason in the problem's fields, and a Retry-After when the window will have room).
          */
         post: {
             parameters: {
@@ -8317,6 +10117,7 @@ export interface paths {
                 404: components["responses"]["Problem"];
                 409: components["responses"]["Problem"];
                 422: components["responses"]["Problem"];
+                429: components["responses"]["Problem"];
             };
         };
         delete?: never;
@@ -8385,7 +10186,7 @@ export interface paths {
         put?: never;
         /**
          * Scan and build a SUBMITTED version (operator; requires step-up)
-         * @description A clean scan and a successful build record the artifact and move the version to VALIDATED; a refused scan, a compile error or a build timeout moves it to REJECTED with the reason. The build holds the version's lock and is bounded by the request's time limit: one that does not finish in time records nothing and leaves the version SUBMITTED. A deployment with no Go toolchain answers UNSUPPORTED.
+         * @description The version is claimed in one transaction, built between transactions and its outcome recorded in another; no transaction is open while it builds. A clean scan and a successful build record the artifact and move the version to VALIDATED; a refused scan, a compile error or a build past one of the builder's bounds -- its time, the size of the module it produces, the memory its compiler and linker hold -- moves it to REJECTED with the reason, and the compiler's bounded output is kept with the validation for the creator to read. A version another build holds a live claim on answers CONFLICT and nothing is built twice; a build that could not run at all (a deployment with no Go toolchain answers UNSUPPORTED) records nothing and frees the version at once.
          */
         post: {
             parameters: {
@@ -9094,6 +10895,1142 @@ export interface paths {
                 403: components["responses"]["Problem"];
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/treasury/books": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The registered house books, newest first */
+        get: {
+            parameters: {
+                query?: {
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description One page of house books (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TreasuryBookPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /**
+         * Register a house book with its class, valuation asset and first signing policy
+         * @description The house book trades only its own house capital. The valuation asset defaults to the sandbox dollar and must be a SIMULATED, USD-pegged asset. A replay of the same name and key returns the book it created; another registration of the name is a CONFLICT.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["TreasuryRegisterRequest"];
+                };
+            };
+            responses: {
+                /** @description The registered house book */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TreasuryBookDetail"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/treasury/books/{houseBookId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A house book with the signing policy and risk policy in force */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    houseBookId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The house book */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TreasuryBookDetail"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/treasury/books/{houseBookId}/actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The register of house actions (who did what for the book, under which policy, with what outcome), newest first */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path: {
+                    houseBookId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The latest house actions */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TreasuryActionList"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/treasury/books/{houseBookId}/actor-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record who may act for the book, the next version of its signing policy (it holds no keys; custody NONE_SANDBOX) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    houseBookId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["TreasurySigningPolicyRequest"];
+                };
+            };
+            responses: {
+                /** @description The signing policy version recorded */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TreasurySigningPolicy"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/treasury/books/{houseBookId}/balances": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inventory, reservations, fundings and venue flows of the book, asset by asset (read only) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    houseBookId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The book's balances */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TreasuryBalanceList"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/treasury/books/{houseBookId}/conversions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Treasury conversion between the valuation asset and one other sandbox asset */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    houseBookId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["TreasuryConvertRequest"];
+                };
+            };
+            responses: {
+                /** @description The applied action and the paper fill with its disclosure */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TreasuryPaperOutcome"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/treasury/books/{houseBookId}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The book's position register, newest first */
+        get: {
+            parameters: {
+                query?: {
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path: {
+                    houseBookId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description One page of position events */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TreasuryPositionEventPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/treasury/books/{houseBookId}/fundings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Inject simulated house capital into the book (HOUSE_FUNDING)
+         * @description Funding in any asset but the valuation asset enters the register at a fresh mark, and is refused without one.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    houseBookId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["TreasuryFundRequest"];
+                };
+            };
+            responses: {
+                /** @description The funding, its journal and the action that recorded it */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TreasuryFunding"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/treasury/books/{houseBookId}/hedges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Hedge on the simulated paper venue (an immediate fill at a fresh mark, spread and fee disclosed) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    houseBookId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["TreasuryHedgeRequest"];
+                };
+            };
+            responses: {
+                /** @description The applied action and the paper fill with its disclosure */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TreasuryPaperOutcome"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/treasury/books/{houseBookId}/limits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record the next version of the book's risk limits, stated in its valuation asset
+         * @description An asset with no inventory limit cannot be accumulated and an instrument with no exposure limit cannot be bought through: the limits fail closed. Neither stops a sale.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    houseBookId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["TreasuryRiskPolicyRequest"];
+                };
+            };
+            responses: {
+                /** @description The risk policy version recorded */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TreasuryRiskPolicy"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/treasury/books/{houseBookId}/mark-to-market": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Persist the book's PnL report at fresh marks as a hashed snapshot */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    houseBookId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The snapshot and the action that recorded it */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TreasurySnapshot"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/treasury/books/{houseBookId}/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Place a house order on the internal book after every treasury control
+         * @description The signing policy, the capabilities, the risk policy's limits and Risk Kernel V2 decide under the book's lock; then the order book applies its own rules (house inventory reservations and the house-versus-customer crossing rule, refused by default). A refusal is recorded as a REJECTED action and answered with its code and reason codes.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    houseBookId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["TreasuryOrderRequest"];
+                };
+            };
+            responses: {
+                /** @description The applied action, the order and the trades it made at once */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TreasuryOrderOutcome"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/treasury/books/{houseBookId}/orders/{orderId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel a resting house order (never new risk; no kill switch stops it) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    houseBookId: components["schemas"]["UUID"];
+                    orderId: components["parameters"]["OrderId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The applied cancel and the order after it */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TreasuryOrderOutcome"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/treasury/books/{houseBookId}/paper-fills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The book's paper-venue fills, newest first, each with its verified disclosure */
+        get: {
+            parameters: {
+                query?: {
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path: {
+                    houseBookId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description One page of paper fills */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TreasuryPaperFillPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /** Execute on the paper venue under a named activity the book's strategy permits */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    houseBookId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["TreasuryPaperRequest"];
+                };
+            };
+            responses: {
+                /** @description The applied action and the paper fill with its disclosure */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TreasuryPaperOutcome"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/treasury/books/{houseBookId}/quotes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Quote two-sided (a post-only GTC bid and ask, each its own house action)
+         * @description The bid is evaluated first, the ask against it. One leg can be refused while the other rests: each leg's action says APPLIED or REJECTED with its reason codes.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    houseBookId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["TreasuryQuoteRequest"];
+                };
+            };
+            responses: {
+                /** @description Both legs */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TreasuryQuoteOutcome"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/treasury/books/{houseBookId}/rebalances": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move the book's holding of an asset to a target on the paper venue
+         * @description A holding already at its target needs no fill and records nothing (no_op).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    houseBookId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["TreasuryRebalanceRequest"];
+                };
+            };
+            responses: {
+                /** @description The rebalance outcome */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TreasuryRebalanceOutcome"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/treasury/books/{houseBookId}/reconciliation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Prove the position register against the ledger, asset by asset (an empty list means the books agree) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    houseBookId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The reconciliation */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TreasuryReconciliation"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/treasury/books/{houseBookId}/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Positions, realized and unrealized PnL at fresh marks, and every limit with its use
+         * @description The treasury syncs the position register first (it ingests any internal-book trade not yet recorded, exactly once) and states PnL at marks no older than the risk policy allows. Each limit is the treasury's own evaluation of a request that adds nothing: its cap, what is already used, and the codes new risk would meet now. A position without a fresh mark has no market value and is named in missing_marks.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    houseBookId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The PnL report and the limits in use */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TreasuryReport"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/treasury/books/{houseBookId}/risk-decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The book's Risk Kernel V2 decisions with the treasury limit evaluation that fed each, newest first */
+        get: {
+            parameters: {
+                query?: {
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path: {
+                    houseBookId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description One page of risk decisions */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TreasuryRiskDecisionPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/treasury/books/{houseBookId}/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest every internal-book trade of the house book the position register has not recorded (exactly once) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    houseBookId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description How many trades were ingested */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TreasurySyncResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/treasury/crossing-disclosures": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What customers are told about house books trading against them on one instrument's book, every rule version */
+        get: {
+            parameters: {
+                query: {
+                    instrument_id: components["schemas"]["UUID"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Every crossing disclosure of the book, oldest first */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TreasuryCrossingDisclosureList"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/treasury/crossing-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change whether house books may trade with customers on one instrument's book, with its customer disclosure
+         * @description The order book refuses house-versus-customer crossing by default. This is the only way the treasury loosens it, and it is always disclosed: the disclosure must say the activity is simulated, and it is archived with the rule version it describes.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["TreasuryCrossingRuleRequest"];
+                };
+            };
+            responses: {
+                /** @description The disclosure recorded with the new rule version */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TreasuryCrossingDisclosure"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/treasury/house-trades": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Internal-book trades in which a house book was the account's counterparty, newest first
+         * @description Each trade names the crossing rule version that allowed it and that version's disclosure.
+         */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description One page of house trades against the account */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TreasuryHouseTradePage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -13082,6 +16019,497 @@ export interface components {
             policy_version: string;
             reason_codes: string[];
         };
+        /** @enum {string} */
+        DelegationActionClass: "ACQUIRE_EXPOSURE" | "REDUCE_EXPOSURE" | "PROPOSE_WITHDRAWAL";
+        DelegationActor: {
+            actor_id: string;
+            actor_type: string;
+        };
+        DelegationAgent: {
+            created_at: components["schemas"]["Timestamp"];
+            id: components["schemas"]["UUID"];
+            name: string;
+            stage: string;
+            /** @description A PAUSED, FAILED, REVOKED or SUPERSEDED agent may not act; the service refuses a grant to one */
+            state: string;
+            strategy_id: components["schemas"]["UUID"];
+        };
+        DelegationAgentList: {
+            items: components["schemas"]["DelegationAgent"][];
+        };
+        DelegationApproval: {
+            approver: components["schemas"]["DelegationActor"];
+            authenticated_at?: components["schemas"]["Timestamp"];
+            decided_at: components["schemas"]["Timestamp"];
+            decision: components["schemas"]["DelegationDecision"];
+            plan_hash: string;
+            reason: string;
+        };
+        DelegationAssetRef: {
+            decimals: number;
+            id: components["schemas"]["UUID"];
+            symbol: string;
+        };
+        DelegationCapability: {
+            account_id: components["schemas"]["UUID"];
+            action_classes: components["schemas"]["DelegationActionClass"][];
+            agent_id: components["schemas"]["UUID"];
+            agent_name?: string;
+            as_of: components["schemas"]["Timestamp"];
+            chain_allowlist: components["schemas"]["DelegationChain"][];
+            /** @description SHA-256 of the canonical grant; every plan signed under it names it */
+            content_hash: string;
+            destination_allowlist: string[];
+            environment: string;
+            expires_at: components["schemas"]["Timestamp"];
+            granted_at: components["schemas"]["Timestamp"];
+            granted_by: components["schemas"]["DelegationActor"];
+            id: components["schemas"]["UUID"];
+            instrument_classes: components["schemas"]["DelegationInstrumentClass"][];
+            max_daily_notional_usd: components["schemas"]["USD"];
+            max_notional_usd: components["schemas"]["USD"];
+            max_single_trade_usd: components["schemas"]["USD"];
+            mode: components["schemas"]["AdvancedMode"];
+            requires_human_approval: boolean;
+            revocation_reason?: string;
+            revoked_at?: components["schemas"]["Timestamp"];
+            revoked_by?: components["schemas"]["DelegationActor"];
+            standing: components["schemas"]["DelegationCapabilityStanding"];
+            status: components["schemas"]["DelegationCapabilityStatus"];
+            strategy_id: components["schemas"]["UUID"];
+            usage: components["schemas"]["DelegationCapabilityUsage"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        DelegationCapabilityDetail: components["schemas"]["DelegationCapability"] & {
+            /** @description Newest first, bounded */
+            uses: components["schemas"]["DelegationCapabilityUse"][];
+        };
+        DelegationCapabilityPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["DelegationCapability"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /**
+         * @description REVOKED when revoked; EXPIRED when as_of is at or after expires_at; ACTIVE otherwise. Expiry is not a stored status.
+         * @enum {string}
+         */
+        DelegationCapabilityStanding: "ACTIVE" | "EXPIRED" | "REVOKED";
+        /** @enum {string} */
+        DelegationCapabilityStatus: "ACTIVE" | "REVOKED";
+        /** @description What the capability has used, measured from its usage rows: on the UTC day of as_of and in all. remaining_* is the limit less the use, never below zero. A use is recorded at admission, so a request that was later refused or failed still counts against the limits. */
+        DelegationCapabilityUsage: {
+            /** @description The UTC day used_today_usd counts */
+            day: string;
+            remaining_today_usd: components["schemas"]["USD"];
+            remaining_total_usd: components["schemas"]["USD"];
+            used_today_usd: components["schemas"]["USD"];
+            used_total_usd: components["schemas"]["USD"];
+            uses: number;
+        };
+        DelegationCapabilityUse: {
+            action_class: components["schemas"]["DelegationActionClass"];
+            id: components["schemas"]["UUID"];
+            notional_usd: components["schemas"]["USD"];
+            subject_id: components["schemas"]["UUID"];
+            subject_kind: components["schemas"]["DelegationSubjectKind"];
+            used_at: components["schemas"]["Timestamp"];
+        };
+        /** @enum {string} */
+        DelegationChain: "sbx-solana" | "sbx-ethereum";
+        DelegationCoSigner: {
+            address: string;
+            chain: components["schemas"]["DelegationChain"];
+            name: string;
+            registered: boolean;
+        };
+        /** @enum {string} */
+        DelegationDecision: "APPROVE" | "DECLINE";
+        DelegationDecisionRequest: {
+            decision: components["schemas"]["DelegationDecision"];
+            /** @description The plan hash the owner was shown; any other plan is refused */
+            plan_hash: string;
+            reason: string;
+        };
+        DelegationDestination: {
+            account_id: components["schemas"]["UUID"];
+            added_at: components["schemas"]["Timestamp"];
+            added_by: components["schemas"]["DelegationActor"];
+            address: string;
+            chain: components["schemas"]["DelegationChain"];
+            id: components["schemas"]["UUID"];
+            label: string;
+            removed_at?: components["schemas"]["Timestamp"];
+            removed_by?: components["schemas"]["DelegationActor"];
+            status: components["schemas"]["DelegationDestinationStatus"];
+        };
+        DelegationDestinationList: {
+            items: components["schemas"]["DelegationDestination"][];
+        };
+        /** @description The destination as the allow-list holds it now (its status may have changed since the plan froze it). */
+        DelegationDestinationRef: {
+            id: components["schemas"]["UUID"];
+            label: string;
+            status: components["schemas"]["DelegationDestinationStatus"];
+        };
+        DelegationDestinationRequest: {
+            account_id: components["schemas"]["UUID"];
+            address: string;
+            chain: components["schemas"]["DelegationChain"];
+            label: string;
+        };
+        /** @enum {string} */
+        DelegationDestinationStatus: "ACTIVE" | "REMOVED";
+        /**
+         * @description AUTO_APPROVE exists only in LOCAL, TEST and DEV with every auto bound met; a rejected proposal is never stored as a withdrawal.
+         * @enum {string}
+         */
+        DelegationEvaluationOutcome: "AUTO_APPROVE" | "HUMAN_REQUIRED";
+        DelegationExecuteRequest: {
+            /** @default 10 */
+            limit: number;
+        };
+        /** @description Whether the decision was followed by an execution, and how that ended when it did not run to its end. */
+        DelegationExecution: {
+            attempted: boolean;
+            error?: components["schemas"]["DelegationExecutionError"];
+        };
+        DelegationExecutionError: {
+            /** @description The stable error code the execution ended with */
+            code: string;
+            detail: string;
+            /** @description The delegation reason code, when the service gave one */
+            reason?: string;
+        };
+        DelegationExecutionItem: {
+            account_id: components["schemas"]["UUID"];
+            error?: components["schemas"]["DelegationExecutionError"];
+            id: components["schemas"]["UUID"];
+            kind: components["schemas"]["DelegationSubjectKind"];
+            status: string;
+            status_before: string;
+        };
+        DelegationExecutionRun: {
+            items: components["schemas"]["DelegationExecutionItem"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        DelegationGrantRequest: {
+            account_id: components["schemas"]["UUID"];
+            action_classes: components["schemas"]["DelegationActionClass"][];
+            agent_id: components["schemas"]["UUID"];
+            chain_allowlist: components["schemas"]["DelegationChain"][];
+            /** @description Simulated-chain addresses a swap may pay to and a withdrawal may go to; a swap's venue must be among them */
+            destination_allowlist: string[];
+            expires_at: components["schemas"]["Timestamp"];
+            instrument_classes: components["schemas"]["DelegationInstrumentClass"][];
+            max_daily_notional_usd: components["schemas"]["USD"];
+            max_notional_usd: components["schemas"]["USD"];
+            max_single_trade_usd: components["schemas"]["USD"];
+            mode: components["schemas"]["AdvancedMode"];
+            requires_human_approval: boolean;
+        };
+        /** @description The signing provider's one decision: the capability validated again, the compiled message inspected field by field against the persisted plan, then the signing policy. REJECTED carries every reason code. */
+        DelegationInspection: {
+            capability_hash: string;
+            decided_at: components["schemas"]["Timestamp"];
+            id: components["schemas"]["UUID"];
+            inspector_version: string;
+            message_sha256: string;
+            plan_hash: string;
+            policy_hash: string;
+            policy_version: string;
+            reason_codes: string[];
+            signer_public_key: string;
+            verdict: components["schemas"]["DelegationVerdict"];
+        };
+        /** @enum {string} */
+        DelegationInstrumentClass: "STABLE_VALUE" | "SPOT_TOKEN" | "SPECULATIVE_TOKEN";
+        DelegationPending: {
+            as_of: components["schemas"]["Timestamp"];
+            swaps: components["schemas"]["DelegationSwap"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            withdrawals: components["schemas"]["DelegationWithdrawal"][];
+        };
+        /** @description Whole sandbox dollars per whole unit of the asset, mantissa x 10^-scale. A par price is the registry's USD peg, not an observation. */
+        DelegationPlanPrice: {
+            mantissa: string;
+            observed_at: components["schemas"]["Timestamp"];
+            par: boolean;
+            scale: string;
+            source: string;
+        };
+        DelegationReasonRequest: {
+            reason: string;
+        };
+        /** @enum {string} */
+        DelegationSubjectKind: "SWAP" | "WITHDRAWAL";
+        DelegationSwap: {
+            account_id: components["schemas"]["UUID"];
+            action_class: components["schemas"]["DelegationActionClass"];
+            agent_id: components["schemas"]["UUID"];
+            amount_in: components["schemas"]["Quantity"];
+            amount_out: components["schemas"]["Quantity"];
+            approval?: components["schemas"]["DelegationApproval"];
+            capability_id: components["schemas"]["UUID"];
+            chain: components["schemas"]["DelegationChain"];
+            created_at: components["schemas"]["Timestamp"];
+            effect_id?: components["schemas"]["UUID"];
+            failure_code?: string;
+            id: components["schemas"]["UUID"];
+            inspection?: components["schemas"]["DelegationInspection"];
+            intent_id: components["schemas"]["UUID"];
+            journal_transaction_id?: components["schemas"]["UUID"];
+            min_amount_out: components["schemas"]["Quantity"];
+            mode: components["schemas"]["AdvancedMode"];
+            notional_usd: components["schemas"]["USD"];
+            pay_asset: components["schemas"]["DelegationAssetRef"];
+            plan: components["schemas"]["DelegationSwapPlan"];
+            plan_hash: string;
+            quote_expires_at: components["schemas"]["Timestamp"];
+            receive_asset: components["schemas"]["DelegationAssetRef"];
+            request_nonce: string;
+            requested_at: components["schemas"]["Timestamp"];
+            requires_approval: boolean;
+            reservation_id: components["schemas"]["UUID"];
+            signed_at?: components["schemas"]["Timestamp"];
+            status: components["schemas"]["DelegationSwapStatus"];
+            /** @description Oldest first */
+            transitions: components["schemas"]["DelegationTransition"][];
+            tx_id?: string;
+            updated_at: components["schemas"]["Timestamp"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            venue: components["schemas"]["DelegationVenueRef"];
+            wallet: string;
+        };
+        DelegationSwapDecisionResult: {
+            execution: components["schemas"]["DelegationExecution"];
+            swap: components["schemas"]["DelegationSwap"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        DelegationSwapPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["DelegationSwap"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @description The canonical settlement plan exactly as hashed; numbers are the plan's own decimal strings. */
+        DelegationSwapPlan: {
+            account_id: string;
+            action_class: string;
+            agent_id: string;
+            amount_in: components["schemas"]["Quantity"];
+            amount_out: components["schemas"]["Quantity"];
+            capability_hash: string;
+            capability_id: string;
+            chain: string;
+            fee_per_tx: components["schemas"]["Quantity"];
+            intent_id: string;
+            max_slippage_bps: string;
+            min_amount_out: components["schemas"]["Quantity"];
+            mode: string;
+            notional_usd: components["schemas"]["USD"];
+            pay_asset_id: string;
+            pay_decimals: string;
+            pay_mint: string;
+            pay_price: components["schemas"]["DelegationPlanPrice"];
+            quote_expires_at: components["schemas"]["Timestamp"];
+            receive_asset_id: string;
+            receive_decimals: string;
+            receive_mint: string;
+            receive_price: components["schemas"]["DelegationPlanPrice"];
+            request_nonce: string;
+            requested_at: components["schemas"]["Timestamp"];
+            spread_bps: string;
+            swap_id: string;
+            venue_address: string;
+            venue_id: string;
+            version: string;
+            wallet: string;
+        };
+        /** @enum {string} */
+        DelegationSwapStatus: "ADMITTED" | "AWAITING_APPROVAL" | "APPROVED" | "SIGNED" | "SUBMITTED" | "UNKNOWN" | "SETTLED" | "REJECTED" | "CANCELLED" | "FAILED";
+        DelegationTransition: {
+            actor: components["schemas"]["DelegationActor"];
+            from_status: string;
+            occurred_at: components["schemas"]["Timestamp"];
+            reason: string;
+            to_status: string;
+        };
+        DelegationVenue: {
+            address: string;
+            chain: components["schemas"]["DelegationChain"];
+            /** @description Whether this deployment holds the venue's co-signer; without it no swap there is signed */
+            co_signer: boolean;
+            created_at: components["schemas"]["Timestamp"];
+            created_by: components["schemas"]["DelegationActor"];
+            house_account_id: components["schemas"]["UUID"];
+            id: components["schemas"]["UUID"];
+            name: string;
+            spread_bps: components["schemas"]["BPS"];
+        };
+        DelegationVenueList: {
+            co_signers: components["schemas"]["DelegationCoSigner"][];
+            items: components["schemas"]["DelegationVenue"][];
+        };
+        DelegationVenueRef: {
+            address: string;
+            id: components["schemas"]["UUID"];
+            name: string;
+        };
+        DelegationVenueRequest: {
+            house_account_id?: components["schemas"]["UUID"];
+            name: string;
+            spread_bps: components["schemas"]["BPS"];
+        };
+        /** @enum {string} */
+        DelegationVerdict: "APPROVED" | "REJECTED";
+        DelegationWithdrawal: {
+            account_id: components["schemas"]["UUID"];
+            agent_id: components["schemas"]["UUID"];
+            amount: components["schemas"]["Quantity"];
+            approval?: components["schemas"]["DelegationApproval"];
+            approval_expires_at: components["schemas"]["Timestamp"];
+            asset: components["schemas"]["DelegationAssetRef"];
+            capability_id: components["schemas"]["UUID"];
+            chain: components["schemas"]["DelegationChain"];
+            created_at: components["schemas"]["Timestamp"];
+            destination: components["schemas"]["DelegationDestinationRef"];
+            destination_address: string;
+            effect_id?: components["schemas"]["UUID"];
+            environment: string;
+            evaluation: components["schemas"]["DelegationWithdrawalEvaluation"];
+            /** @description The end of the policy's cooling period; nothing is signed before it */
+            executable_at: components["schemas"]["Timestamp"];
+            failure_code?: string;
+            id: components["schemas"]["UUID"];
+            inspection?: components["schemas"]["DelegationInspection"];
+            intent_id: components["schemas"]["UUID"];
+            journal_transaction_id?: components["schemas"]["UUID"];
+            mode: components["schemas"]["AdvancedMode"];
+            notional_usd: components["schemas"]["USD"];
+            plan: components["schemas"]["DelegationWithdrawalPlan"];
+            plan_hash: string;
+            policy_id: components["schemas"]["UUID"];
+            proposal_nonce: string;
+            proposed_at: components["schemas"]["Timestamp"];
+            reservation_id: components["schemas"]["UUID"];
+            signed_at?: components["schemas"]["Timestamp"];
+            status: components["schemas"]["DelegationWithdrawalStatus"];
+            /** @description Oldest first */
+            transitions: components["schemas"]["DelegationTransition"][];
+            tx_id?: string;
+            updated_at: components["schemas"]["Timestamp"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            wallet: string;
+        };
+        DelegationWithdrawalDecisionResult: {
+            execution: components["schemas"]["DelegationExecution"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            withdrawal: components["schemas"]["DelegationWithdrawal"];
+        };
+        /** @description The withdrawal policy's decision about the proposal, as recorded with it. */
+        DelegationWithdrawalEvaluation: {
+            /** Format: int64 */
+            account_age_seconds: number;
+            anomalies: string[];
+            compliance_clear: boolean;
+            count_last_24h: number;
+            day_total_before_usd: components["schemas"]["USD"];
+            /** Format: int64 */
+            destination_age_seconds: number;
+            environment: string;
+            outcome: components["schemas"]["DelegationEvaluationOutcome"];
+            policy_hash: string;
+            policy_version: string;
+            reason_codes: string[];
+            risk_score: number;
+        };
+        DelegationWithdrawalPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["DelegationWithdrawal"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @description The frozen withdrawal plan exactly as hashed; numbers are the plan's own decimal strings. */
+        DelegationWithdrawalPlan: {
+            account_id: string;
+            agent_id: string;
+            amount: components["schemas"]["Quantity"];
+            approval_expires_at: components["schemas"]["Timestamp"];
+            asset_id: string;
+            capability_hash: string;
+            capability_id: string;
+            chain: string;
+            decimals: string;
+            destination_address: string;
+            destination_id: string;
+            evaluation_outcome: string;
+            executable_at: components["schemas"]["Timestamp"];
+            fee_per_tx: components["schemas"]["Quantity"];
+            intent_id: string;
+            mint: string;
+            mode: string;
+            notional_usd: components["schemas"]["USD"];
+            policy_hash: string;
+            policy_id: string;
+            policy_version: string;
+            price: components["schemas"]["DelegationPlanPrice"];
+            proposal_nonce: string;
+            proposed_at: components["schemas"]["Timestamp"];
+            risk_score: string;
+            version: string;
+            wallet: string;
+            withdrawal_id: string;
+        };
+        DelegationWithdrawalPolicy: {
+            account_id: components["schemas"]["UUID"];
+            /** @description Honoured only in LOCAL, TEST and DEV; everywhere else the owner decides */
+            auto_approve_enabled: boolean;
+            auto_approve_max_risk_score: number;
+            auto_approve_max_usd: components["schemas"]["USD"];
+            /** Format: int64 */
+            cooling_period_seconds: number;
+            created_at: components["schemas"]["Timestamp"];
+            created_by: components["schemas"]["DelegationActor"];
+            daily_limit_usd: components["schemas"]["USD"];
+            effective_at: components["schemas"]["Timestamp"];
+            id: components["schemas"]["UUID"];
+            max_risk_score: number;
+            /** Format: int64 */
+            min_account_age_seconds: number;
+            /** Format: int64 */
+            min_destination_age_seconds: number;
+            per_withdrawal_limit_usd: components["schemas"]["USD"];
+            policy_hash: string;
+            /** Format: int64 */
+            strong_auth_max_age_seconds: number;
+            strong_auth_required: boolean;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            velocity_max_count: number;
+            version: number;
+        };
+        DelegationWithdrawalPolicyRequest: {
+            account_id: components["schemas"]["UUID"];
+            auto_approve_enabled: boolean;
+            auto_approve_max_risk_score: number;
+            auto_approve_max_usd: components["schemas"]["USD"];
+            /** Format: int64 */
+            cooling_period_seconds: number;
+            daily_limit_usd: components["schemas"]["USD"];
+            max_risk_score: number;
+            /** Format: int64 */
+            min_account_age_seconds: number;
+            /** Format: int64 */
+            min_destination_age_seconds: number;
+            per_withdrawal_limit_usd: components["schemas"]["USD"];
+            /** Format: int64 */
+            strong_auth_max_age_seconds: number;
+            strong_auth_required: boolean;
+            velocity_max_count: number;
+        };
+        DelegationWithdrawalPolicyState: {
+            account_id: components["schemas"]["UUID"];
+            current?: components["schemas"]["DelegationWithdrawalPolicy"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            /** @description Newest first, bounded */
+            versions: components["schemas"]["DelegationWithdrawalPolicy"][];
+        };
+        /** @enum {string} */
+        DelegationWithdrawalStatus: "PROPOSED" | "AWAITING_APPROVAL" | "APPROVED" | "SIGNED" | "SUBMITTED" | "UNKNOWN" | "SETTLED" | "REJECTED" | "DECLINED" | "CANCELLED" | "FAILED";
         Deposit: {
             account_id: components["schemas"]["UUID"];
             available_at?: components["schemas"]["Timestamp"];
@@ -13729,6 +17157,526 @@ export interface components {
         EconomicIntentPage: components["schemas"]["Page"] & {
             items: components["schemas"]["EconomicIntent"][];
             value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        FeeAccrueRequest: {
+            at: components["schemas"]["Timestamp"];
+            /** @description the gross NAV at that instant, before any performance fee */
+            nav: components["schemas"]["USD"];
+        };
+        FeeAttribution: {
+            eligible: boolean;
+            fee_share: components["schemas"]["USD"];
+            gross_pnl: components["schemas"]["USD"];
+            remainder_allocated: components["schemas"]["USD"];
+            strategy: string;
+        };
+        FeeBooking: {
+            account_id: components["schemas"]["UUID"];
+            booked_at: components["schemas"]["Timestamp"];
+            booking_mode: components["schemas"]["FeeBookingMode"];
+            charges: components["schemas"]["FeeCharges"];
+            disclosure_id: components["schemas"]["UUID"];
+            effect_id: components["schemas"]["UUID"];
+            evidence_ref: string;
+            id: components["schemas"]["UUID"];
+            intent_id?: components["schemas"]["UUID"];
+            journal_kind: string;
+            journal_transaction_id: components["schemas"]["UUID"];
+            mode: components["schemas"]["AdvancedMode"];
+            reversal_effect_id?: components["schemas"]["UUID"];
+            reversal_journal_transaction_id?: components["schemas"]["UUID"];
+            reversal_reason_code?: string;
+            reversed_at?: components["schemas"]["Timestamp"];
+            spread_line: components["schemas"]["FeeSpreadLine"];
+            status: components["schemas"]["FeeBookingStatus"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        FeeBookingDetail: components["schemas"]["FeeBooking"] & {
+            disclosure: components["schemas"]["FeeDisclosure"];
+            verification: components["schemas"]["FeeVerification"];
+        };
+        /**
+         * @description POSTED is the fee ledger's own journal; EMBEDDED charges were posted inside the trade's journal and verified.
+         * @enum {string}
+         */
+        FeeBookingMode: "POSTED" | "EMBEDDED";
+        FeeBookingPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["FeeBooking"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @enum {string} */
+        FeeBookingStatus: "BOOKED" | "REVERSED";
+        FeeCancelPeriodRequest: {
+            reason: string;
+        };
+        /** @description Everything a disclosure charges, component by component, as the ledger books it. */
+        FeeCharges: {
+            network: components["schemas"]["Quantity"];
+            network_asset_id?: components["schemas"]["UUID"];
+            network_in_quote: boolean;
+            /** @description fixed, percentage and minimum-fee top-up */
+            platform: components["schemas"]["Quantity"];
+            quote_asset_id: components["schemas"]["UUID"];
+            spread: components["schemas"]["Quantity"];
+            strategy: components["schemas"]["Quantity"];
+            venue: components["schemas"]["Quantity"];
+        };
+        FeeContribution: {
+            gross_pnl: components["schemas"]["USD"];
+            strategy: string;
+        };
+        FeeCrystallizeRequest: {
+            /** @description the gross closing NAV */
+            closing_nav: components["schemas"]["USD"];
+            contributions?: components["schemas"]["FeeContribution"][];
+        };
+        FeeDisclosedFeeLine: {
+            cap_reduction: components["schemas"]["Quantity"];
+            charged: components["schemas"]["Quantity"];
+            component: string;
+            computed: components["schemas"]["Quantity"];
+            discount_bps: components["schemas"]["BPS"];
+            fixed_amount: components["schemas"]["Quantity"];
+            rate_bps: components["schemas"]["BPS"];
+            rounding: string;
+        };
+        FeeDisclosedFees: {
+            computed_total: components["schemas"]["Quantity"];
+            lines: components["schemas"]["FeeDisclosedFeeLine"][];
+            max_absolute_applied: boolean;
+            max_bps_applied: boolean;
+            max_total_fee: components["schemas"]["Quantity"];
+            max_total_fee_bps: components["schemas"]["BPS"];
+            max_total_fee_bps_amount: components["schemas"]["Quantity"];
+            max_total_fee_bps_rounding: string;
+            min_fee: components["schemas"]["Quantity"];
+            minimum_applied: boolean;
+            minimum_fee_top_up: components["schemas"]["Quantity"];
+            total: components["schemas"]["Quantity"];
+        };
+        FeeDisclosedInput: {
+            base_decimals: number;
+            base_qty: components["schemas"]["Quantity"];
+            has_subscription: boolean;
+            quote_decimals: number;
+            reference_price: components["schemas"]["FeePriceRecord"];
+            side: components["schemas"]["FeeSide"];
+            strategy_originated: boolean;
+            trailing_volume_usd: components["schemas"]["USD"];
+        };
+        FeeDisclosedMode: {
+            component: string;
+            favours_platform: boolean;
+            mode: string;
+        };
+        /** @description The canonical audit record of one quote: everything it charges, itemized, with the inputs and the rounding of every component. Quantities are base units of the quote asset (the network estimate in its own asset); the slippage reserve is held, never charged. */
+        FeeDisclosure: {
+            effective_price: components["schemas"]["FeePriceRecord"];
+            execution_price: components["schemas"]["FeePriceRecord"];
+            fees: components["schemas"]["FeeDisclosedFees"];
+            input: components["schemas"]["FeeDisclosedInput"];
+            kind: string;
+            network: {
+                amount: components["schemas"]["Quantity"];
+                asset: components["schemas"]["UUID"];
+                in_quote_asset: boolean;
+            };
+            notional_at_execution: components["schemas"]["Quantity"];
+            notional_at_reference: components["schemas"]["Quantity"];
+            quote_asset: components["schemas"]["UUID"];
+            reference_price: components["schemas"]["FeePriceRecord"];
+            rounding: {
+                any_favours_platform: boolean;
+                components: components["schemas"]["FeeDisclosedMode"][];
+                platform_favourable_allowed: boolean;
+            };
+            schedule_hash: string;
+            schedule_version: string;
+            slippage_reserve: {
+                amount: components["schemas"]["Quantity"];
+                bps: components["schemas"]["BPS"];
+                held_not_charged: boolean;
+                rounding: string;
+            };
+            spread: {
+                amount: components["schemas"]["Quantity"];
+                bps: components["schemas"]["BPS"];
+                rounding: string;
+            };
+            tier: {
+                /** @description -1 is the base schedule */
+                index: number;
+                min_trailing_volume_usd: components["schemas"]["USD"];
+                percentage_fee_bps: components["schemas"]["BPS"];
+                spread_bps: components["schemas"]["BPS"];
+            };
+            total_credit: components["schemas"]["Quantity"];
+            total_debit: components["schemas"]["Quantity"];
+            worst_case_total: components["schemas"]["Quantity"];
+        };
+        FeeFlow: {
+            actor_id: string;
+            actor_type: string;
+            /** @description a deposit is positive, a withdrawal negative */
+            amount: components["schemas"]["USD"];
+            at: components["schemas"]["Timestamp"];
+            id: components["schemas"]["UUID"];
+            nav_before: components["schemas"]["USD"];
+            seq: number;
+        };
+        FeeFlowRequest: {
+            amount: components["schemas"]["USD"];
+            at: components["schemas"]["Timestamp"];
+            nav_before: components["schemas"]["USD"];
+        };
+        FeeFlowResult: {
+            flow: components["schemas"]["FeeFlow"];
+            period_id: components["schemas"]["UUID"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @enum {string} */
+        FeeLineKind: "ACCRUAL" | "REVERSAL" | "NO_CHANGE" | "CRYSTALLIZATION";
+        FeeLineResult: {
+            line: components["schemas"]["FeePerformanceLine"];
+            period_id: components["schemas"]["UUID"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        FeeOpenPeriodRequest: {
+            account_id: components["schemas"]["UUID"];
+            /** @description defaults to the sandbox dollar */
+            fee_asset_id?: components["schemas"]["UUID"];
+            /** Format: int64 */
+            fee_rate_bps: number;
+            /** Format: int64 */
+            hurdle_annual_bps: number;
+            /** @description PAPER (default) or SANDBOX */
+            mode?: components["schemas"]["AdvancedMode"];
+            /** @description the first period of a pair only */
+            opening_nav?: components["schemas"]["USD"];
+            period_end: components["schemas"]["Timestamp"];
+            /** @description the first period of a pair only */
+            period_start?: components["schemas"]["Timestamp"];
+            strategy_ref: string;
+            terms_version: string;
+        };
+        FeePerformanceLine: {
+            accrual_after: components["schemas"]["USD"];
+            accrual_before: components["schemas"]["USD"];
+            amount: components["schemas"]["USD"];
+            at: components["schemas"]["Timestamp"];
+            effect_id: components["schemas"]["UUID"];
+            /** @description what is above the high-water mark and the hurdle; nothing accrues on less */
+            fee_base: components["schemas"]["USD"];
+            hurdle_threshold: components["schemas"]["USD"];
+            hwm_adjusted: components["schemas"]["USD"];
+            id: components["schemas"]["UUID"];
+            journal_transaction_id?: components["schemas"]["UUID"];
+            kind: components["schemas"]["FeeLineKind"];
+            nav: components["schemas"]["USD"];
+            seq: number;
+        };
+        FeePeriod: {
+            account_id: components["schemas"]["UUID"];
+            /** @description the running accrual of an open period */
+            accrued: components["schemas"]["USD"];
+            crystallization_effect_id?: components["schemas"]["UUID"];
+            crystallization_journal_transaction_id?: components["schemas"]["UUID"];
+            crystallized_at?: components["schemas"]["Timestamp"];
+            fee_asset_id: components["schemas"]["UUID"];
+            flows: components["schemas"]["FeeFlow"][];
+            /**
+             * Format: int64
+             * @description Modified Dietz return gross of the fee, rounded toward zero
+             */
+            gross_return_bps?: number;
+            id: components["schemas"]["UUID"];
+            last_valuation_at?: components["schemas"]["Timestamp"];
+            lines: components["schemas"]["FeePerformanceLine"][];
+            mode: components["schemas"]["AdvancedMode"];
+            /** Format: int64 */
+            net_return_bps?: number;
+            previous_period_id?: components["schemas"]["UUID"];
+            reversal_journal_transaction_id?: components["schemas"]["UUID"];
+            reversal_reason_code?: string;
+            reversed_at?: components["schemas"]["Timestamp"];
+            seq: number;
+            statement?: components["schemas"]["FeeStatement"];
+            statement_hash?: string;
+            status: components["schemas"]["FeePeriodStatus"];
+            strategy_ref: string;
+            terms: components["schemas"]["FeePeriodTerms"];
+            terms_hash: string;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            /** @description present on a read by id of a period with a statement */
+            verification?: components["schemas"]["FeeVerification"];
+        };
+        FeePeriodPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["FeePeriod"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @enum {string} */
+        FeePeriodStatus: "OPEN" | "CRYSTALLIZED" | "CANCELLED" | "REVERSED";
+        FeePeriodTerms: {
+            account_ref: string;
+            crystallization: string;
+            /** Format: int64 */
+            fee_rate_bps: number;
+            /** Format: int64 */
+            hurdle_annual_bps: number;
+            opening_nav: components["schemas"]["USD"];
+            period_end: components["schemas"]["Timestamp"];
+            period_start: components["schemas"]["Timestamp"];
+            prior_accrued_fee: components["schemas"]["USD"];
+            /** @description the high-water mark the period opened with */
+            prior_hwm: components["schemas"]["USD"];
+            terms_version: string;
+        };
+        FeePriceRecord: {
+            at: components["schemas"]["Timestamp"];
+            mantissa: components["schemas"]["Quantity"];
+            quote_asset: string;
+            scale: number;
+            source: string;
+        };
+        FeePublishRequest: {
+            /** @description now when absent; never in the past */
+            effective_from?: components["schemas"]["Timestamp"];
+            key: string;
+            reason: string;
+            schedule: components["schemas"]["FeeSchedule"];
+        };
+        FeeQuoteInput: {
+            /** @description the instant whose schedule prices the order; now when absent */
+            at?: components["schemas"]["Timestamp"];
+            base_decimals: number;
+            base_quantity: components["schemas"]["Quantity"];
+            has_subscription?: boolean;
+            /** @description price of one whole base unit in the schedule's quote asset, exactly */
+            reference_price: string;
+            schedule_key: string;
+            side: components["schemas"]["FeeSide"];
+            strategy_originated?: boolean;
+            trailing_volume_usd?: components["schemas"]["USD"];
+        };
+        FeeQuotePage: components["schemas"]["Page"] & {
+            items: components["schemas"]["FeeQuoteRecord"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        FeeQuotePreview: {
+            charges: components["schemas"]["FeeCharges"];
+            disclosure: components["schemas"]["FeeDisclosure"];
+            disclosure_hash: string;
+            /** @description always false: a preview is never stored or charged */
+            recorded: boolean;
+            schedule: components["schemas"]["FeeScheduleRef"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        FeeQuoteRecord: {
+            account_id?: components["schemas"]["UUID"];
+            base_asset_id?: components["schemas"]["UUID"];
+            charges: components["schemas"]["FeeCharges"];
+            disclosure: components["schemas"]["FeeDisclosure"];
+            disclosure_hash: string;
+            id: components["schemas"]["UUID"];
+            quoted_at: components["schemas"]["Timestamp"];
+            schedule_hash: string;
+            schedule_id: components["schemas"]["UUID"];
+            schedule_key: string;
+            schedule_version: number;
+            side: components["schemas"]["FeeSide"];
+            subsystem: string;
+            valid_until: components["schemas"]["Timestamp"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            /** @description present on a read by id */
+            verification?: components["schemas"]["FeeVerification"];
+        };
+        FeeQuoteRecordRequest: components["schemas"]["FeeQuoteInput"] & {
+            /** @description binds the quote to its payer: only that account can then be charged it */
+            account_id?: components["schemas"]["UUID"];
+            base_asset_id?: components["schemas"]["UUID"];
+            /** @description PAPER or SANDBOX */
+            mode: components["schemas"]["AdvancedMode"];
+            /** @description where the reference price came from */
+            source?: string;
+            /** @description the subsystem the quote belongs to (ORDERS, TRANSFERS, ...) */
+            subsystem: string;
+        };
+        FeeReverseRequest: {
+            reason: string;
+            reason_code: string;
+        };
+        /** @description Every rounding mode the schedule uses (down, up, half_even, half_up, floor, ceil, exact). */
+        FeeRounding: {
+            allow_platform_favourable: boolean;
+            buy_notional: string;
+            fee_cap: string;
+            percentage_fee: string;
+            sell_notional: string;
+            slippage_reserve: string;
+            spread: string;
+            strategy_fee: string;
+            venue_pass_through: string;
+        };
+        /** @description One fee schedule, every component explicit. Amounts are base units of the quote asset (the network fee in its own asset); rates are basis points. */
+        FeeSchedule: {
+            fixed_fee: components["schemas"]["Quantity"];
+            /** @description the version label every quote records */
+            label: string;
+            max_total_fee: components["schemas"]["Quantity"];
+            max_total_fee_bps: components["schemas"]["BPS"];
+            min_fee: components["schemas"]["Quantity"];
+            network_fee_amount: components["schemas"]["Quantity"];
+            network_fee_asset_id?: components["schemas"]["UUID"];
+            percentage_fee_bps: components["schemas"]["BPS"];
+            quote_asset_id: components["schemas"]["UUID"];
+            quote_decimals: number;
+            rounding: components["schemas"]["FeeRounding"];
+            slippage_reserve_bps: components["schemas"]["BPS"];
+            spread_bps: components["schemas"]["BPS"];
+            strategy_fee_bps: components["schemas"]["BPS"];
+            subscription_discount_bps: components["schemas"]["BPS"];
+            tiers: components["schemas"]["FeeTier"][];
+            venue_pass_through_bps: components["schemas"]["BPS"];
+        };
+        FeeScheduleHistory: {
+            /** @description the version in force now; absent when none is yet */
+            effective_version?: number;
+            key: string;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            versions: components["schemas"]["FeeScheduleVersion"][];
+        };
+        FeeScheduleRef: {
+            effective_from: components["schemas"]["Timestamp"];
+            id: components["schemas"]["UUID"];
+            key: string;
+            label: string;
+            schedule_hash: string;
+            version: number;
+        };
+        FeeScheduleSummary: {
+            /** @description the version in force now; absent when every version takes effect later */
+            effective?: components["schemas"]["FeeScheduleVersion"];
+            key: string;
+            latest_version: number;
+            version_count: number;
+        };
+        FeeScheduleSummaryPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["FeeScheduleSummary"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        FeeScheduleVersion: {
+            actor_id: string;
+            actor_type: string;
+            effective_from: components["schemas"]["Timestamp"];
+            id: components["schemas"]["UUID"];
+            /** @description this version prices orders now */
+            in_force: boolean;
+            key: string;
+            published_at: components["schemas"]["Timestamp"];
+            quote_asset: components["schemas"]["TreasuryAssetRef"];
+            reason: string;
+            schedule: components["schemas"]["FeeSchedule"];
+            schedule_hash: string;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            version: number;
+        };
+        /** @enum {string} */
+        FeeSide: "BUY" | "SELL";
+        FeeSpreadAudit: {
+            items: components["schemas"]["FeeSpreadCharge"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        FeeSpreadCharge: {
+            account_id: components["schemas"]["UUID"];
+            base_quantity: components["schemas"]["Quantity"];
+            booked_at: components["schemas"]["Timestamp"];
+            booking_id: components["schemas"]["UUID"];
+            booking_mode: components["schemas"]["FeeBookingMode"];
+            disclosure_hash: string;
+            disclosure_id: components["schemas"]["UUID"];
+            execution_price: components["schemas"]["TreasuryPrice"];
+            journal_transaction_id: components["schemas"]["UUID"];
+            quote_asset_id: components["schemas"]["UUID"];
+            reference_price: components["schemas"]["TreasuryPrice"];
+            reversal_journal_transaction_id?: components["schemas"]["UUID"];
+            schedule_hash: string;
+            schedule_key: string;
+            schedule_version: number;
+            side: components["schemas"]["FeeSide"];
+            spread_amount: components["schemas"]["Quantity"];
+            spread_bps: components["schemas"]["BPS"];
+            status: components["schemas"]["FeeBookingStatus"];
+        };
+        FeeSpreadLine: {
+            base_quantity: components["schemas"]["Quantity"];
+            disclosure_hash: string;
+            execution_price: components["schemas"]["TreasuryPrice"];
+            quote_asset_id: components["schemas"]["UUID"];
+            reference_price: components["schemas"]["TreasuryPrice"];
+            schedule_hash: string;
+            schedule_key: string;
+            schedule_version: number;
+            side: components["schemas"]["FeeSide"];
+            spread_amount: components["schemas"]["Quantity"];
+            spread_bps: components["schemas"]["BPS"];
+        };
+        /** @description Booked less reversed is what SPREAD_REVENUE holds from the fee ledger's bookings. */
+        FeeSpreadTotals: {
+            booked: components["schemas"]["Quantity"];
+            quote_asset_id: components["schemas"]["UUID"];
+            reversed: components["schemas"]["Quantity"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @description The deterministic statement a crystallization stores with its hash. */
+        FeeStatement: {
+            attribution: components["schemas"]["FeeAttribution"][];
+            closing_nav_gross: components["schemas"]["USD"];
+            closing_nav_net: components["schemas"]["USD"];
+            fee_amount: components["schemas"]["USD"];
+            fee_base: components["schemas"]["USD"];
+            /** Format: int64 */
+            fee_rate_bps: number;
+            flows: components["schemas"]["FeeStatementFlow"][];
+            gross_pnl: components["schemas"]["USD"];
+            /** Format: int64 */
+            hurdle_annual_bps: number;
+            hurdle_threshold: components["schemas"]["USD"];
+            hwm_adjusted: components["schemas"]["USD"];
+            /** @description the high-water mark the next period opens with */
+            hwm_after: components["schemas"]["USD"];
+            hwm_before: components["schemas"]["USD"];
+            kind: string;
+            mode: string;
+            net_flows: components["schemas"]["USD"];
+            opening_nav: components["schemas"]["USD"];
+            period_end: components["schemas"]["Timestamp"];
+            period_start: components["schemas"]["Timestamp"];
+            prior_accrued_fee: components["schemas"]["USD"];
+            rounding: {
+                [key: string]: string;
+            };
+        };
+        FeeStatementFlow: {
+            amount: components["schemas"]["USD"];
+            at: components["schemas"]["Timestamp"];
+            hwm_after: components["schemas"]["USD"];
+            hwm_before: components["schemas"]["USD"];
+            nav_after: components["schemas"]["USD"];
+            nav_before: components["schemas"]["USD"];
+        };
+        FeeTier: {
+            min_trailing_volume_usd: components["schemas"]["USD"];
+            overrides_percentage_fee: boolean;
+            overrides_spread: boolean;
+            percentage_fee_bps: components["schemas"]["BPS"];
+            spread_bps: components["schemas"]["BPS"];
+        };
+        FeeVerification: {
+            /** @description the stable error code when the record does not verify */
+            code?: string;
+            detail?: string;
+            reason?: string;
+            verified: boolean;
         };
         Fill: {
             external_fill_id: string;
@@ -15727,7 +19675,7 @@ export interface components {
             account_id: components["schemas"]["UUID"];
         };
         /** @enum {string} */
-        StrategyBuildFailure: "SCAN_REJECTED" | "COMPILE_FAILED" | "BUILD_TIMEOUT";
+        StrategyBuildFailure: "SCAN_REJECTED" | "COMPILE_FAILED" | "BUILD_TIMEOUT" | "BUILD_OUTPUT_LIMIT" | "BUILD_MEMORY_LIMIT";
         /**
          * @description An exact decimal string with as many fraction digits as its scale (a price or an amount in simulated dollars). Never a JSON number, never rounded.
          * @example 150.25
@@ -15782,22 +19730,29 @@ export interface components {
             external_ref?: string;
             intent_id: components["schemas"]["UUID"];
             kind: string;
+            /** @description The proposal's quantity at reference_price -- what the manifest's cap and Risk Kernel V2 judged. */
             notional: components["schemas"]["StrategyDecimal"];
             outcome: components["schemas"]["StrategyFollowOutcome"];
             proposal_seq: number;
+            /** @description The price the service read itself that the notional was computed at, never the strategy's limit price. */
+            reference_price?: components["schemas"]["StrategyDecimal"];
             risk_decision?: components["schemas"]["AdvancedRiskDecision"];
+        };
+        /** @description A reference price a follow run valued its paper book and its proposals at, by the price store's observation. */
+        StrategyFollowMark: {
+            instrument_id: components["schemas"]["UUID"];
+            mark: components["schemas"]["StrategyDecimal"];
+            observed_at: components["schemas"]["Timestamp"];
+            price_id: components["schemas"]["UUID"];
         };
         /** @enum {string} */
         StrategyFollowOutcome: "DISPATCHED" | "RISK_REJECTED" | "ROUTE_REFUSED" | "DISPATCH_FAILED" | "DISPATCH_UNKNOWN";
-        StrategyFollowRequest: {
-            account_id: components["schemas"]["UUID"];
-            snapshot: components["schemas"]["StrategySnapshot"];
-        };
         StrategyFollowRun: {
             accepted_count: number;
             account_id: components["schemas"]["UUID"];
             as_of: components["schemas"]["Timestamp"];
             created_at: components["schemas"]["Timestamp"];
+            /** @description The paper book -- its uninvested balance plus every position at its reference price -- when the run started. */
             equity: components["schemas"]["StrategyDecimal"];
             evidence_ref: string;
             evidence_sha256: string;
@@ -15809,13 +19764,17 @@ export interface components {
             intents_failed: number;
             intents_risk_rejected: number;
             intents_submitted: number;
+            marks: components["schemas"]["StrategyFollowMark"][];
+            /** @description The paper book's uninvested balance when the run started. Absent for a run recorded before paper books, whose equity came from a caller's snapshot and counts for no performance. */
+            paper_cash?: components["schemas"]["StrategyDecimal"];
             proposals_count: number;
-            /** @description True when this snapshot time was already followed: nothing ran again */
+            /** @description True when the install was already followed at this instant: nothing ran again */
             replayed?: boolean;
             run_digest: string;
             sandbox_run_id: components["schemas"]["UUID"];
             termination: components["schemas"]["StrategyRunTermination"];
             trigger: components["schemas"]["StrategyFollowTrigger"];
+            /** @description The exact notional the run dispatched. */
             turnover: components["schemas"]["StrategyDecimal"];
             value_domain: components["schemas"]["ValueDomainSimulated"];
             version_id: components["schemas"]["UUID"];
@@ -15848,6 +19807,8 @@ export interface components {
             listing_id: components["schemas"]["UUID"];
             listing_title: string;
             mode: components["schemas"]["AdvancedMode"];
+            /** @description What the install's paper book started with, in simulated dollars; it never changes. */
+            paper_capital: components["schemas"]["StrategyDecimal"];
             status: components["schemas"]["StrategyInstallStatus"];
             strategy_ref: string;
             value_domain: components["schemas"]["ValueDomainSimulated"];
@@ -15930,7 +19891,7 @@ export interface components {
             reason: string;
             to: components["schemas"]["StrategyModeration"];
         };
-        /** @description Paper performance computed exactly from a follow history, in basis points. A paper result from caller-supplied snapshots, never a record of money earned or lost. */
+        /** @description Paper performance computed exactly from an install's paper book, in basis points: each follow run's equity is the install's paper capital moved by its own fills, valued at reference prices the service read, before the venue's disclosed charges. A paper result, never a record of money earned or lost. */
         StrategyPerformanceSnapshot: {
             computed_at: components["schemas"]["Timestamp"];
             first_as_of: components["schemas"]["Timestamp"];
@@ -16062,6 +20023,8 @@ export interface components {
         };
         StrategyValidation: {
             artifact_digest?: string;
+            /** @description What the compiler said, at most 64 KiB, with the build directory replaced by $BUILD: why a COMPILE_FAILED version did not build. Shown to the creator's account and to operators only. */
+            build_log?: string;
             failure_reason?: components["schemas"]["StrategyBuildFailure"];
             outcome: components["schemas"]["StrategyValidationOutcome"];
             runtime_version: string;
@@ -16221,6 +20184,558 @@ export interface components {
         TradeIntentPage: components["schemas"]["Page"] & {
             items: components["schemas"]["TradeIntent"][];
         };
+        TreasuryAction: {
+            activity?: components["schemas"]["TreasuryStrategy"];
+            actor_id: string;
+            actor_type: string;
+            correlation_id?: string;
+            effect_id?: components["schemas"]["UUID"];
+            evidence_ref?: string;
+            evidence_sha256?: string;
+            funding_id?: components["schemas"]["UUID"];
+            house_account_id: components["schemas"]["UUID"];
+            id: components["schemas"]["UUID"];
+            idempotency_key: string;
+            kind: components["schemas"]["TreasuryActionKind"];
+            occurred_at: components["schemas"]["Timestamp"];
+            order_id?: components["schemas"]["UUID"];
+            outcome: components["schemas"]["TreasuryOutcome"];
+            paper_fill_id?: components["schemas"]["UUID"];
+            policy_id?: components["schemas"]["UUID"];
+            reason_codes: string[];
+            rejection_code?: string;
+            risk_decision_id?: components["schemas"]["UUID"];
+            risk_policy_version?: number;
+            signing_policy_id?: components["schemas"]["UUID"];
+            signing_policy_version: number;
+            snapshot_id?: components["schemas"]["UUID"];
+        };
+        /** @enum {string} */
+        TreasuryActionKind: "REGISTER" | "SET_POLICY" | "SET_SIGNING_POLICY" | "FUND" | "PLACE_ORDER" | "CANCEL_ORDER" | "PAPER_FILL" | "MARK_TO_MARKET";
+        TreasuryActionList: {
+            items: components["schemas"]["TreasuryAction"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        TreasuryAssetLimit: {
+            asset_id: components["schemas"]["UUID"];
+            /** @description base units of the asset, counting every working buy */
+            max_quantity: components["schemas"]["Quantity"];
+        };
+        TreasuryAssetPnL: {
+            asset: components["schemas"]["TreasuryAssetRef"];
+            /** @description remaining cost, valuation-asset base units */
+            cost: components["schemas"]["Quantity"];
+            /** @description absent when no fresh mark exists */
+            mark?: components["schemas"]["TreasuryPrice"];
+            market_value?: components["schemas"]["Quantity"];
+            /** @description base units of the asset */
+            quantity: components["schemas"]["Quantity"];
+            realized_today: components["schemas"]["Quantity"];
+            realized_total: components["schemas"]["Quantity"];
+            unrealized?: components["schemas"]["Quantity"];
+        };
+        TreasuryAssetRef: {
+            asset_id: components["schemas"]["UUID"];
+            decimals: number;
+            symbol: string;
+        };
+        TreasuryBalance: {
+            asset: components["schemas"]["TreasuryAssetRef"];
+            available: components["schemas"]["Quantity"];
+            funded: components["schemas"]["Quantity"];
+            internal_book: components["schemas"]["TreasuryVenueFlow"];
+            inventory: components["schemas"]["Quantity"];
+            paper_venue: components["schemas"]["TreasuryVenueFlow"];
+            reserved: components["schemas"]["Quantity"];
+            working_buys: components["schemas"]["Quantity"];
+            working_sells: components["schemas"]["Quantity"];
+        };
+        TreasuryBalanceList: {
+            house_account_id: components["schemas"]["UUID"];
+            items: components["schemas"]["TreasuryBalance"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        TreasuryBook: {
+            class: components["schemas"]["TreasuryClass"];
+            house_account_id: components["schemas"]["UUID"];
+            name: string;
+            permitted_activities: components["schemas"]["TreasuryStrategy"][];
+            registered_at: components["schemas"]["Timestamp"];
+            registered_by_actor_id: string;
+            registered_by_actor_type: string;
+            status: components["schemas"]["TreasuryBookStatus"];
+            strategy: components["schemas"]["TreasuryStrategy"];
+            valuation_asset: components["schemas"]["TreasuryAssetRef"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            /** Format: int64 */
+            version: number;
+        };
+        TreasuryBookDetail: components["schemas"]["TreasuryBook"] & {
+            /** @description absent until a risk policy is recorded; without one every house order and fill is refused */
+            risk_policy?: components["schemas"]["TreasuryRiskPolicy"];
+            signing_policy: components["schemas"]["TreasurySigningPolicy"];
+        };
+        TreasuryBookPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["TreasuryBook"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @enum {string} */
+        TreasuryBookStatus: "ACTIVE" | "KILLED" | "CLOSED";
+        /**
+         * @description PRINCIPAL provides liquidity, makes markets and hedges; TREASURY rebalances inventory and converts.
+         * @enum {string}
+         */
+        TreasuryClass: "PRINCIPAL" | "TREASURY";
+        TreasuryConvertRequest: {
+            from_asset_id: components["schemas"]["UUID"];
+            /** @description PAPER (default) or SANDBOX */
+            mode?: components["schemas"]["AdvancedMode"];
+            /** @description base units of the asset that is not the valuation asset */
+            quantity: components["schemas"]["Quantity"];
+            to_asset_id: components["schemas"]["UUID"];
+        };
+        TreasuryCrossingDisclosure: {
+            actor_id: string;
+            actor_type: string;
+            allow: boolean;
+            book_id: components["schemas"]["UUID"];
+            disclosed_at: components["schemas"]["Timestamp"];
+            disclosure: string;
+            evidence_ref: string;
+            evidence_sha256: string;
+            id: components["schemas"]["UUID"];
+            instrument_id: components["schemas"]["UUID"];
+            reason: string;
+            rule_version: number;
+        };
+        TreasuryCrossingDisclosureList: {
+            instrument_id: components["schemas"]["UUID"];
+            items: components["schemas"]["TreasuryCrossingDisclosure"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        TreasuryCrossingRuleRequest: {
+            allow: boolean;
+            /** @description what customers are told; it must say the activity is simulated */
+            disclosure: string;
+            instrument_id: components["schemas"]["UUID"];
+            reason: string;
+        };
+        /** @enum {string} */
+        TreasuryDirection: "INCREASE" | "DECREASE";
+        TreasuryDiscrepancy: {
+            actual: components["schemas"]["Quantity"];
+            asset_id: components["schemas"]["UUID"];
+            expected: components["schemas"]["Quantity"];
+            what: string;
+        };
+        /** @enum {string} */
+        TreasuryEventKind: "FUNDING" | "BOOK_FILL" | "PAPER_FILL";
+        TreasuryFunding: {
+            action: components["schemas"]["TreasuryAction"];
+            asset: components["schemas"]["TreasuryAssetRef"];
+            /** @description valuation-asset base units the funding entered the register at */
+            cost_basis: components["schemas"]["Quantity"];
+            effect_id: components["schemas"]["UUID"];
+            evidence_ref: string;
+            funded_at: components["schemas"]["Timestamp"];
+            house_account_id: components["schemas"]["UUID"];
+            id: components["schemas"]["UUID"];
+            journal_transaction_id: components["schemas"]["UUID"];
+            mark?: components["schemas"]["TreasuryPrice"];
+            quantity: components["schemas"]["Quantity"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        TreasuryFundRequest: {
+            asset_id: components["schemas"]["UUID"];
+            /** @description PAPER (default) or SANDBOX */
+            mode?: components["schemas"]["AdvancedMode"];
+            quantity: components["schemas"]["Quantity"];
+            reason: string;
+        };
+        TreasuryHedgeRequest: {
+            asset_id: components["schemas"]["UUID"];
+            /** @description PAPER (default) or SANDBOX */
+            mode?: components["schemas"]["AdvancedMode"];
+            quantity: components["schemas"]["Quantity"];
+            side: components["schemas"]["TreasurySide"];
+        };
+        TreasuryHouseOrder: {
+            book_id: components["schemas"]["UUID"];
+            cancel_reason?: string;
+            cancelled_quantity: components["schemas"]["Quantity"];
+            client_order_id?: string;
+            created_at: components["schemas"]["Timestamp"];
+            filled_quantity: components["schemas"]["Quantity"];
+            house_account_id: components["schemas"]["UUID"];
+            id: components["schemas"]["UUID"];
+            instrument_id: components["schemas"]["UUID"];
+            mode: components["schemas"]["AdvancedMode"];
+            order_type: components["schemas"]["TreasuryOrderType"];
+            post_only: boolean;
+            /** @description the limit price as the book states it */
+            price: string;
+            quantity: components["schemas"]["Quantity"];
+            reduce_only: boolean;
+            reject_reason?: string;
+            remaining_quantity: components["schemas"]["Quantity"];
+            side: components["schemas"]["TreasurySide"];
+            status: components["schemas"]["TreasuryOrderStatus"];
+            time_in_force: components["schemas"]["TreasuryTimeInForce"];
+            updated_at: components["schemas"]["Timestamp"];
+        };
+        TreasuryHouseTrade: {
+            /** @description the fee the account paid on this trade, in the quote asset */
+            account_fee: components["schemas"]["Quantity"];
+            account_side: components["schemas"]["TreasurySide"];
+            base_asset: components["schemas"]["TreasuryAssetRef"];
+            base_quantity: components["schemas"]["Quantity"];
+            book_id: components["schemas"]["UUID"];
+            crossing_rule_version: number;
+            /** @description the customer disclosure recorded with that crossing rule version */
+            disclosure?: string;
+            house_account_id: components["schemas"]["UUID"];
+            house_side: components["schemas"]["TreasurySide"];
+            instrument_id: components["schemas"]["UUID"];
+            journal_transaction_id: components["schemas"]["UUID"];
+            price: components["schemas"]["TreasuryPrice"];
+            quote_asset: components["schemas"]["TreasuryAssetRef"];
+            quote_notional: components["schemas"]["Quantity"];
+            trade_id: components["schemas"]["UUID"];
+            /** Format: int64 */
+            trade_seq: number;
+            traded_at: components["schemas"]["Timestamp"];
+        };
+        TreasuryHouseTradePage: components["schemas"]["Page"] & {
+            items: components["schemas"]["TreasuryHouseTrade"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        TreasuryInstrumentLimit: {
+            instrument_id: components["schemas"]["UUID"];
+            /** @description valuation-asset base units: the base held at a mark plus the working buy notional */
+            max_exposure: components["schemas"]["Quantity"];
+        };
+        TreasuryLimitEvaluation: {
+            circuit_breakers: string[];
+            codes: string[];
+            daily_loss_limit: components["schemas"]["Quantity"];
+            exposure_after?: components["schemas"]["Quantity"];
+            exposure_cap?: components["schemas"]["Quantity"];
+            inventory_after: components["schemas"]["Quantity"];
+            inventory_cap?: components["schemas"]["Quantity"];
+            /** @description realized PnL of the UTC day plus every open loss (negative is a loss) */
+            loss_measure: components["schemas"]["Quantity"];
+            missing_marks: string[];
+            risk_increasing: boolean;
+        };
+        /** @enum {string} */
+        TreasuryLimitKind: "DAILY_LOSS" | "INVENTORY" | "INSTRUMENT_EXPOSURE";
+        TreasuryLimitUse: {
+            asset_id?: components["schemas"]["UUID"];
+            cap?: components["schemas"]["Quantity"];
+            /** @description what new risk would meet now; empty means the limit leaves room */
+            codes: string[];
+            instrument_id?: components["schemas"]["UUID"];
+            kind: components["schemas"]["TreasuryLimitKind"];
+            /** @description DAILY_LOSS: the signed loss measure; INVENTORY: held plus working buys; INSTRUMENT_EXPOSURE: absent without a fresh mark */
+            used?: components["schemas"]["Quantity"];
+        };
+        TreasuryOrderOutcome: {
+            action: components["schemas"]["TreasuryAction"];
+            decision?: components["schemas"]["TreasuryRiskDecision"];
+            order?: components["schemas"]["TreasuryHouseOrder"];
+            trades: components["schemas"]["TreasuryTrade"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        TreasuryOrderRequest: {
+            activity: components["schemas"]["TreasuryStrategy"];
+            client_order_id?: string;
+            instrument_id: components["schemas"]["UUID"];
+            order_type: components["schemas"]["TreasuryOrderType"];
+            post_only?: boolean;
+            /** @description the limit price (or a market order's protection price) in the book's valuation asset, exactly */
+            price: string;
+            quantity: components["schemas"]["Quantity"];
+            reduce_only?: boolean;
+            side: components["schemas"]["TreasurySide"];
+            time_in_force: components["schemas"]["TreasuryTimeInForce"];
+        };
+        /** @enum {string} */
+        TreasuryOrderStatus: "PENDING" | "OPEN" | "PARTIALLY_FILLED" | "FILLED" | "CANCELLED" | "REJECTED";
+        /** @enum {string} */
+        TreasuryOrderType: "LIMIT" | "MARKET";
+        /** @enum {string} */
+        TreasuryOutcome: "APPLIED" | "REJECTED";
+        /** @enum {string} */
+        TreasuryOwnerType: "CUSTOMER" | "HOUSE";
+        TreasuryPaperFill: {
+            activity: components["schemas"]["TreasuryStrategy"];
+            base_asset: components["schemas"]["TreasuryAssetRef"];
+            base_quantity: components["schemas"]["Quantity"];
+            disclosure: components["schemas"]["FeeDisclosure"];
+            disclosure_hash: string;
+            effect_id: components["schemas"]["UUID"];
+            evidence_ref: string;
+            fee_amount: components["schemas"]["Quantity"];
+            filled_at: components["schemas"]["Timestamp"];
+            house_account_id: components["schemas"]["UUID"];
+            id: components["schemas"]["UUID"];
+            journal_transaction_id: components["schemas"]["UUID"];
+            notional_at_reference: components["schemas"]["Quantity"];
+            quote_asset: components["schemas"]["TreasuryAssetRef"];
+            reference_price: components["schemas"]["TreasuryPrice"];
+            schedule_hash: string;
+            side: components["schemas"]["TreasurySide"];
+            spread_amount: components["schemas"]["Quantity"];
+            spread_bps: components["schemas"]["BPS"];
+            total_quote: components["schemas"]["Quantity"];
+            /** @description Always SIMULATED_PAPER_VENUE. */
+            venue_label: string;
+        };
+        TreasuryPaperFillPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["TreasuryPaperFill"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        TreasuryPaperOutcome: {
+            action: components["schemas"]["TreasuryAction"];
+            decision?: components["schemas"]["TreasuryRiskDecision"];
+            fill?: components["schemas"]["TreasuryPaperFill"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        TreasuryPaperRequest: {
+            activity: components["schemas"]["TreasuryStrategy"];
+            asset_id: components["schemas"]["UUID"];
+            /** @description PAPER (default) or SANDBOX */
+            mode?: components["schemas"]["AdvancedMode"];
+            quantity: components["schemas"]["Quantity"];
+            side: components["schemas"]["TreasurySide"];
+        };
+        TreasuryPositionEvent: {
+            asset: components["schemas"]["TreasuryAssetRef"];
+            book_trade_id?: components["schemas"]["UUID"];
+            cost_after: components["schemas"]["Quantity"];
+            cost_before: components["schemas"]["Quantity"];
+            cost_removed: components["schemas"]["Quantity"];
+            direction: components["schemas"]["TreasuryDirection"];
+            fees: components["schemas"]["Quantity"];
+            funding_id?: components["schemas"]["UUID"];
+            id: components["schemas"]["UUID"];
+            instrument_id?: components["schemas"]["UUID"];
+            journal_transaction_id: components["schemas"]["UUID"];
+            kind: components["schemas"]["TreasuryEventKind"];
+            occurred_at: components["schemas"]["Timestamp"];
+            paper_fill_id?: components["schemas"]["UUID"];
+            qty_after: components["schemas"]["Quantity"];
+            qty_before: components["schemas"]["Quantity"];
+            quantity: components["schemas"]["Quantity"];
+            realized_pnl: components["schemas"]["Quantity"];
+            /** Format: int64 */
+            seq: number;
+            /** @description the cost added by an increase, the proceeds of a decrease (valuation-asset base units) */
+            value: components["schemas"]["Quantity"];
+        };
+        TreasuryPositionEventPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["TreasuryPositionEvent"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @description The price of one whole unit, exactly mantissa × 10^-scale, in the quote asset named by the record that carries it. */
+        TreasuryPrice: {
+            mantissa: components["schemas"]["Quantity"];
+            observed_at?: components["schemas"]["Timestamp"];
+            scale: number;
+            source?: string;
+        };
+        TreasuryQuoteOutcome: {
+            ask: components["schemas"]["TreasuryOrderOutcome"];
+            bid: components["schemas"]["TreasuryOrderOutcome"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        TreasuryQuoteRequest: {
+            /** @description MARKET_MAKING or LIQUIDITY_PROVISION */
+            activity: components["schemas"]["TreasuryStrategy"];
+            ask_price: string;
+            ask_quantity: components["schemas"]["Quantity"];
+            bid_price: string;
+            bid_quantity: components["schemas"]["Quantity"];
+            instrument_id: components["schemas"]["UUID"];
+        };
+        TreasuryRebalanceOutcome: {
+            action?: components["schemas"]["TreasuryAction"];
+            decision?: components["schemas"]["TreasuryRiskDecision"];
+            fill?: components["schemas"]["TreasuryPaperFill"];
+            /** @description the holding was already at its target: nothing was filled or recorded */
+            no_op: boolean;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        TreasuryRebalanceRequest: {
+            asset_id: components["schemas"]["UUID"];
+            /** @description PAPER (default) or SANDBOX */
+            mode?: components["schemas"]["AdvancedMode"];
+            /** @description the holding the book should end with, in base units */
+            target: components["schemas"]["Quantity"];
+        };
+        TreasuryReconciliation: {
+            agrees: boolean;
+            discrepancies: components["schemas"]["TreasuryDiscrepancy"][];
+            house_account_id: components["schemas"]["UUID"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        TreasuryRegisterRequest: {
+            name: string;
+            operators_allowed: boolean;
+            reason: string;
+            service_actor_id: string;
+            strategy: components["schemas"]["TreasuryStrategy"];
+            /** @description defaults to the sandbox dollar */
+            valuation_asset_id?: components["schemas"]["UUID"];
+        };
+        TreasuryReport: {
+            assets: components["schemas"]["TreasuryAssetPnL"][];
+            at: components["schemas"]["Timestamp"];
+            house_account_id: components["schemas"]["UUID"];
+            limits?: components["schemas"]["TreasuryLimitUse"][];
+            loss_measure: components["schemas"]["Quantity"];
+            missing_marks: components["schemas"]["UUID"][];
+            open_losses: components["schemas"]["Quantity"];
+            realized_today: components["schemas"]["Quantity"];
+            realized_total: components["schemas"]["Quantity"];
+            /** @description absent when the book has no risk policy (then limits is empty) */
+            risk_policy_version?: number;
+            rounding: {
+                [key: string]: string;
+            };
+            /** Format: int64 */
+            through_event_seq: number;
+            trading_day: string;
+            unrealized_total: components["schemas"]["Quantity"];
+            valuation_asset: components["schemas"]["TreasuryAssetRef"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        TreasuryRiskDecision: {
+            decision_hash: string;
+            id: components["schemas"]["UUID"];
+            input_hash: string;
+            /** @description present when the decision was just made */
+            limits?: components["schemas"]["TreasuryLimitEvaluation"];
+            reason_codes: string[];
+            treasury_codes: string[];
+            verdict: components["schemas"]["TreasuryVerdict"];
+        };
+        TreasuryRiskDecisionPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["TreasuryRiskDecisionRecord"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        TreasuryRiskDecisionRecord: {
+            asset_id: components["schemas"]["UUID"];
+            decision_hash: string;
+            evaluated_at: components["schemas"]["Timestamp"];
+            evaluator_version: string;
+            house_account_id: components["schemas"]["UUID"];
+            id: components["schemas"]["UUID"];
+            input_hash: string;
+            instrument_id?: components["schemas"]["UUID"];
+            intent_kind: string;
+            limits: components["schemas"]["TreasuryLimitEvaluation"];
+            reason_codes: string[];
+            risk_increasing: boolean;
+            risk_policy_version: string;
+            stage: string;
+            treasury_codes: string[];
+            treasury_policy_hash: string;
+            treasury_policy_version: number;
+            verdict: components["schemas"]["TreasuryVerdict"];
+        };
+        TreasuryRiskPolicy: {
+            actor_id: string;
+            actor_type: string;
+            daily_loss_limit: components["schemas"]["Quantity"];
+            effective_at: components["schemas"]["Timestamp"];
+            house_account_id: components["schemas"]["UUID"];
+            label: string;
+            max_instrument_exposure: components["schemas"]["TreasuryInstrumentLimit"][];
+            max_inventory: components["schemas"]["TreasuryAssetLimit"][];
+            /** Format: int64 */
+            max_mark_age_ms: number;
+            paper_fee_bps: components["schemas"]["BPS"];
+            paper_spread_bps: components["schemas"]["BPS"];
+            policy_hash: string;
+            reason: string;
+            valuation_asset_id: components["schemas"]["UUID"];
+            version: number;
+        };
+        TreasuryRiskPolicyRequest: {
+            daily_loss_limit: components["schemas"]["Quantity"];
+            label: string;
+            max_instrument_exposure: components["schemas"]["TreasuryInstrumentLimit"][];
+            max_inventory: components["schemas"]["TreasuryAssetLimit"][];
+            /** Format: int64 */
+            max_mark_age_ms: number;
+            paper_fee_bps: components["schemas"]["BPS"];
+            paper_spread_bps: components["schemas"]["BPS"];
+            reason: string;
+        };
+        /** @enum {string} */
+        TreasurySide: "BUY" | "SELL";
+        TreasurySigningPolicy: {
+            actor_id: string;
+            actor_type: string;
+            effective_at: components["schemas"]["Timestamp"];
+            house_account_id: components["schemas"]["UUID"];
+            /** @description Always NONE_SANDBOX: a sandbox house book holds no keys. */
+            key_custody: string;
+            /** @description Whether operators may place orders and fills too (they may always cancel and administer). */
+            operators_allowed: boolean;
+            policy_hash: string;
+            reason: string;
+            /** @description The one SERVICE actor that may act for the book. */
+            service_actor_id: string;
+            version: number;
+        };
+        TreasurySigningPolicyRequest: {
+            operators_allowed: boolean;
+            reason: string;
+            service_actor_id: string;
+        };
+        TreasurySnapshot: {
+            action: components["schemas"]["TreasuryAction"];
+            document_hash: string;
+            id: components["schemas"]["UUID"];
+            report: components["schemas"]["TreasuryReport"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @enum {string} */
+        TreasuryStrategy: "LIQUIDITY_PROVISION" | "MARKET_MAKING" | "HEDGING" | "INVENTORY_REBALANCING" | "TREASURY_CONVERSION";
+        TreasurySyncResult: {
+            house_account_id: components["schemas"]["UUID"];
+            ingested: number;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @enum {string} */
+        TreasuryTimeInForce: "GTC" | "IOC" | "FOK";
+        TreasuryTrade: {
+            aggressor_side: components["schemas"]["TreasurySide"];
+            base_quantity: components["schemas"]["Quantity"];
+            book_id: components["schemas"]["UUID"];
+            /** @description 0 when no house book traded with a customer */
+            crossing_rule_version: number;
+            id: components["schemas"]["UUID"];
+            journal_transaction_id: components["schemas"]["UUID"];
+            maker_fee: components["schemas"]["Quantity"];
+            maker_order_id: components["schemas"]["UUID"];
+            maker_owner_type: components["schemas"]["TreasuryOwnerType"];
+            price: components["schemas"]["TreasuryPrice"];
+            quote_notional: components["schemas"]["Quantity"];
+            taker_fee: components["schemas"]["Quantity"];
+            taker_order_id: components["schemas"]["UUID"];
+            taker_owner_type: components["schemas"]["TreasuryOwnerType"];
+            /** Format: int64 */
+            trade_seq: number;
+        };
+        TreasuryVenueFlow: {
+            bought: components["schemas"]["Quantity"];
+            sold: components["schemas"]["Quantity"];
+        };
+        /** @enum {string} */
+        TreasuryVerdict: "ALLOW" | "REJECT";
         /**
          * @description USD as a decimal string with exactly two fraction digits
          * @example 1234.56

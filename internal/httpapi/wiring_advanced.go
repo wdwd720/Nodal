@@ -64,6 +64,9 @@ type AdvancedDeps struct {
 	Transfers TransfersDeps
 
 	// >>> advanced:treasury deps
+	// Treasury holds the house book and the fee ledger (see TreasuryDeps);
+	// each that is nil leaves only its own routes UNSUPPORTED.
+	Treasury TreasuryDeps
 
 	// >>> advanced:stable deps
 	// Stable serves /advanced/stable-assets (see StableDeps). Its zero value
@@ -92,6 +95,10 @@ type AdvancedDeps struct {
 	Marketplace MarketplaceDeps
 
 	// >>> advanced:delegation deps
+	// Delegation holds delegated agent authority and the venue co-signers it
+	// was built with; a nil service leaves the /advanced/delegation routes
+	// UNSUPPORTED.
+	Delegation DelegationDeps
 
 	// >>> advanced:operator deps
 	// Operator serves the operator console (/advanced/ops): the overview, the
@@ -136,6 +143,7 @@ func wireAdvanced(p *Ports, d WireDeps) {
 	wireTransfers(p, d)
 
 	// >>> advanced:treasury wire
+	wireTreasury(p, d)
 
 	// >>> advanced:stable wire
 	wireStable(p, d)
@@ -152,6 +160,7 @@ func wireAdvanced(p *Ports, d WireDeps) {
 	wireMarketplace(p, d)
 
 	// >>> advanced:delegation wire
+	wireDelegation(p, d)
 
 	// >>> advanced:operator wire
 	wireOperator(p, d)

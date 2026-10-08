@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/audit"
+	"github.com/nodal/controlplane/internal/capital"
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/compliance"
 	"github.com/nodal/controlplane/internal/db"
@@ -29,9 +31,11 @@ import (
 	"github.com/nodal/controlplane/internal/gen/api"
 	"github.com/nodal/controlplane/internal/instruments"
 	"github.com/nodal/controlplane/internal/killswitch"
+	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/legalrouter"
 	"github.com/nodal/controlplane/internal/marketplace"
 	"github.com/nodal/controlplane/internal/money"
+	"github.com/nodal/controlplane/internal/orders"
 	"github.com/nodal/controlplane/internal/risk"
 	"github.com/nodal/controlplane/internal/sandboxrt"
 	"github.com/nodal/controlplane/internal/security"
@@ -91,6 +95,7 @@ type marketplaceItest struct {
 	d          *db.DB
 	h          *harness
 	prices     *valuation.PriceStore
+	ledger     *ledger.Service
 	toolchain  bool
 	instrument string
 	base, quot assets.AssetID
@@ -114,7 +119,7 @@ func newMarketplaceItest(t *testing.T) *marketplaceItest {
 	t.Cleanup(func() { _ = runner.Close(context.Background()) })
 	sandbox := sandboxrt.NewService(clk, auth, runner, aw)
 
-	w := &marketplaceItest{t: t, d: d, prices: valuation.NewPriceStore(clk)}
+	w := &marketplaceItest{t: t, d: d, prices: valuation.NewPriceStore(clk), ledger: ledger.NewService(clk, "httpapi-itest")}
 	// A real build when the toolchain is here, as cmd/api decides; the
 	// refusing builder otherwise.
 	var builder marketplace.ArtifactBuilder = UnavailableStrategyBuilder{Reason: "no go command on PATH in this test environment"}
@@ -135,10 +140,25 @@ func newMarketplaceItest(t *testing.T) *marketplaceItest {
 		Identity: compliance.NewAccountVerification(clk), Prices: w.prices, KillSwitches: kills, MaxPriceAge: 5 * time.Minute,
 	})
 	require.NoError(t, err)
+	// The executor is the order book's paper venue, as cmd/api wires it.
+	intents := econ.NewIntentStore(clk, outbox, aw)
+	executor, err := NewMarketplacePaperExecutor(MarketplacePaperExecutorConfig{
+		Venue: orders.PaperConfig{
+			Clock: clk, Ledger: w.ledger, Capital: capital.NewService(clk, capital.OutboxEmitter{Outbox: outbox, Clock: clk}),
+			Intents: intents, Effects: econ.NewEffectStore(clk, outbox, aw), Authorizer: auth, Risk: risk.NewStore(),
+			RiskPolicy: risk.DefaultAdvancedPolicy(), Router: router, Instruments: instruments.NewRepository(), Assets: assets.NewRepository(),
+			Prices: w.prices, KillSwitches: kills, MaxMarkAge: 5 * time.Minute,
+			Verification: AdvancedVerificationLevels{Rule: compliance.NewAccountVerification(clk)},
+		},
+		// The one published schedule every deployment prices strategy fills by.
+		Schedule: MarketplacePaperSchedule(),
+		Intents:  intents,
+	})
+	require.NoError(t, err)
 	svc, err := marketplace.NewService(marketplace.Config{
-		Clock: clk, Intents: econ.NewIntentStore(clk, outbox, aw), Effects: econ.NewEffectStore(clk, outbox, aw), Auth: auth,
+		Clock: clk, Intents: intents, Effects: econ.NewEffectStore(clk, outbox, aw), Auth: auth,
 		Risk: risk.NewStore(), RiskPolicy: risk.DefaultAdvancedPolicy(), Router: router, Sandbox: sandbox, Builder: builder,
-		Sections: sections, Executor: UnwiredPaperExecutor{}, Audit: aw,
+		Sections: sections, Executor: executor, Audit: aw,
 	})
 	require.NoError(t, err)
 	ports, err := Wire(WireDeps{DB: d, Clock: clk, Env: "TEST", Instruments: instruments.NewRepository(),
@@ -185,17 +205,22 @@ func (w *marketplaceItest) customer(verified bool) (security.Principal, accounts
 	}, acct
 }
 
-// operator is an operator principal with a fresh step-up; with an account it
-// also owns that customer account (an ADMIN holds the customer surface too).
-func (w *marketplaceItest) operator(role security.Role, acct *accounts.AccountID) security.Principal {
-	p := security.Principal{
+// operator is an operator principal with a fresh step-up.
+func (w *marketplaceItest) operator(role security.Role) security.Principal {
+	return security.Principal{
 		SubjectID: uuid.NewString(), ActorType: security.ActorOperator, Roles: []security.Role{role},
 		SessionID: testSessionID, AuthTime: time.Now().UTC(), AMR: []string{"pwd", "mfa"},
 	}
-	if acct != nil {
-		p.AccountIDs = []string{acct.String()}
-	}
-	return p
+}
+
+// operatorOwning is an operator who is also the owner of a customer account
+// (an ADMIN holds the customer surface too): the user behind both.
+func (w *marketplaceItest) operatorOwning(role security.Role) (security.Principal, accounts.AccountID) {
+	w.t.Helper()
+	userID, acct := seedAccount(w.t, w.d)
+	p := w.operator(role)
+	p.SubjectID, p.AccountIDs = userID.String(), []string{acct.String()}
+	return p, acct
 }
 
 func (w *marketplaceItest) as(p security.Principal) *harness {
@@ -221,17 +246,18 @@ func (w *marketplaceItest) versionBody(acct accounts.AccountID, title string) ma
 	}
 }
 
-// snapshot is a market in which the instrument trends up, so momentum buys
-// one whole unit at the mark.
-func (w *marketplaceItest) snapshot(asOf time.Time) map[string]any {
-	return map[string]any{
-		"as_of": asOf.UTC().Format(time.RFC3339Nano),
-		"instruments": []map[string]any{{
-			"instrument_id": w.instrument, "kind": "SPOT_PAIR", "base_decimals": 6, "quote_decimals": 6,
-			"mark": "150.25", "best_bid": "150.20", "best_ask": "150.30",
-			"closes": []string{"140.00", "142.50", "145.00", "147.50", "150.00", "152.50"},
-		}},
-		"portfolio": map[string]any{"balance": "10000.00", "positions": []any{}},
+// trend records the pair's price history in the price store, a minute apart
+// and ending a second ago: it rises, so momentum buys one whole unit, and the
+// last observation is the fresh reference price (150.25).
+func (w *marketplaceItest) trend() {
+	w.t.Helper()
+	now := time.Now().UTC().Add(-time.Second)
+	prices := []int64{14000, 14250, 14500, 14750, 15000, 15025}
+	for i, cents := range prices {
+		_, err := w.prices.RecordPrice(w.t.Context(), w.d, valuation.PriceObservation{AssetID: w.base, QuoteAssetID: w.quot,
+			Mantissa: money.QuantityFromInt64(cents), Scale: 2, Source: "itest-mark",
+			ObservedAt: now.Add(-time.Duration(len(prices)-1-i) * time.Minute)})
+		require.NoError(w.t, err)
 	}
 }
 
@@ -282,8 +308,7 @@ func TestIntegration_MarketplaceLifecycleThroughHTTP(t *testing.T) {
 	assert.Equal(t, errs.CodeForbidden, res.problem().Code)
 
 	// An operator who is also a creator is refused by the service itself.
-	_, adminAcct := w.customer(false)
-	adminCreator := w.operator(security.RoleAdmin, &adminAcct)
+	adminCreator, adminAcct := w.operatorOwning(security.RoleAdmin)
 	res = w.as(adminCreator).do(http.MethodPost, "/v1/advanced/strategies/listings", w.versionBody(adminAcct, "Operator's own"),
 		"Idempotency-Key", "itest-admin-create-"+uuid.NewString())
 	require.Equal(t, http.StatusCreated, res.Code, "body=%s", res.Body.String())
@@ -305,7 +330,7 @@ func TestIntegration_MarketplaceLifecycleThroughHTTP(t *testing.T) {
 	}
 
 	// --- an operator validates, reviews and approves ------------------------
-	reviewer := w.operator(security.RoleOperations, nil)
+	reviewer := w.operator(security.RoleOperations)
 	res = w.as(reviewer).do(http.MethodPost, versionPath+"/validate", nil, "Idempotency-Key", "itest-validate-"+uuid.NewString())
 	if !w.toolchain {
 		require.Equal(t, http.StatusUnprocessableEntity, res.Code, "body=%s", res.Body.String())
@@ -394,51 +419,68 @@ func TestIntegration_MarketplaceLifecycleThroughHTTP(t *testing.T) {
 	assert.Equal(t, api.StrategyInstallActive, install.Status)
 	installPath := "/v1/advanced/strategies/installs/" + install.Id.String()
 
-	// A fresh reference price for the pair, as the risk kernel's oracle
-	// section requires for a risk-increasing intent.
-	_, err := w.prices.RecordPrice(t.Context(), w.d, valuation.PriceObservation{AssetID: w.base, QuoteAssetID: w.quot,
-		Mantissa: money.QuantityFromInt64(15025), Scale: 2, Source: "itest-mark", ObservedAt: time.Now().UTC().Add(-time.Second)})
-	require.NoError(t, err)
+	// The market, in the price store: the service reads it itself. The
+	// follower's wallet holds the quote asset the paper venue fills in.
+	w.trend()
+	booksFund(t, w.d, w.ledger, followerAcct, w.quot, 10_000_000_000)
 
-	asOf := time.Now().UTC().Add(-2 * time.Second)
 	followKey := "itest-follow-" + uuid.NewString()
-	followBody := map[string]any{"account_id": followerAcct.String(), "snapshot": w.snapshot(asOf)}
+	followBody := map[string]any{"account_id": followerAcct.String()}
 	res = w.as(follower).do(http.MethodPost, installPath+"/follows", followBody, "Idempotency-Key", followKey)
 	require.Equal(t, http.StatusCreated, res.Code, "body=%s", res.Body.String())
 	var run api.StrategyFollowRun
 	res.json(&run)
 	assert.Equal(t, api.SIMULATED, run.ValueDomain)
 	assert.Equal(t, api.StrategyRunOk, run.Termination)
-	assert.Equal(t, "10000.00", run.Equity, "equity is the exact value of the snapshot the run saw")
+	require.NotNil(t, run.PaperCash)
+	assert.Equal(t, "10000.00", *run.PaperCash, "a new paper book holds its paper capital")
+	assert.Equal(t, "10000.00", run.Equity, "and is worth exactly that")
+	require.Len(t, run.Marks, 1, "the pair's fresh reference price, as the price store holds it")
+	assert.Equal(t, "150.25", run.Marks[0].Mark)
 	assert.Zero(t, run.ViolationsCount)
 	require.Len(t, run.Intents, 1, "momentum proposes one buy, which the manifest permits")
 	intent := run.Intents[0]
 	assert.Equal(t, "ACQUIRE_EXPOSURE", intent.Kind)
-	assert.Regexp(t, `^150\.25(0*)$`, intent.Notional, "one whole unit at the mark, exactly, at the scale the service computed")
+	assert.Regexp(t, `^150\.25(0*)$`, intent.Notional, "one whole unit at the reference price, exactly, at the scale the service computed")
+	require.NotNil(t, intent.ReferencePrice)
+	assert.Equal(t, "150.25", *intent.ReferencePrice)
 	require.NotNil(t, intent.RiskDecision, "every intent a strategy proposes faces Risk Kernel V2")
 	assert.Equal(t, api.ALLOW, intent.RiskDecision.Verdict,
 		"sections read from the database: an active account, a verified owner, an open pair and a fresh price; reasons=%v",
 		intent.RiskDecision.ReasonCodes)
-	// No paper venue executes economic intents in this build: the allowed
-	// intent is handed to execution, which refuses, and the record says so.
-	assert.Equal(t, api.StrategyOutcomeDispatchFailed, intent.Outcome)
+	// The allowed intent fills on the order book's paper venue: at the mark,
+	// with the schedule's spread and fees disclosed on the fill, and the
+	// intent completes.
+	assert.Equal(t, api.StrategyOutcomeDispatched, intent.Outcome)
 	require.NotNil(t, intent.EffectStatus)
-	assert.Equal(t, "FAILED", *intent.EffectStatus)
-	require.NotNil(t, intent.EffectFailureCode)
-	assert.Equal(t, "UNSUPPORTED", *intent.EffectFailureCode)
+	assert.Equal(t, "APPLIED", *intent.EffectStatus)
+	require.NotNil(t, intent.ExternalRef)
+	require.True(t, strings.HasPrefix(*intent.ExternalRef, "paper-fill:"), *intent.ExternalRef)
+	var notional, spread, platform, total string
+	require.NoError(t, w.d.QueryRow(t.Context(), `SELECT notional_at_reference::text, spread_amount::text, platform_fee_amount::text,
+		total_quote::text FROM paper_fills WHERE intent_id = $1 AND id::text = $2`, intent.IntentId,
+		strings.TrimPrefix(*intent.ExternalRef, "paper-fill:")).Scan(&notional, &spread, &platform, &total))
+	assert.Equal(t, "150250000", notional, "one whole unit at the 150.25 mark, in quote base units")
+	assert.Equal(t, "150250", spread, "the disclosed 10 bps spread")
+	assert.Equal(t, "225375", platform, "the 10 bps platform fee and the 5 bps strategy fee, disclosed")
+	assert.Equal(t, "150625625", total)
+	var intentStatus string
+	require.NoError(t, w.d.QueryRow(t.Context(), `SELECT status FROM economic_intents WHERE id = $1`, intent.IntentId).Scan(&intentStatus))
+	assert.Equal(t, "COMPLETED", intentStatus)
+	wallet, err := w.ledger.Balance(t.Context(), w.d, ledger.CustomerAccount(followerAcct, ledger.CodeWallet, w.base))
+	require.NoError(t, err)
+	assert.Equal(t, "1000000", wallet.String(), "the account received the unit")
+	assert.Equal(t, 1, countRows(t, w.d, `SELECT count(*) FROM marketplace_paper_fills WHERE intent_id = $1 AND notional = 150.25`, intent.IntentId),
+		"and the install's paper book recorded the fill at the reference price")
 
-	// The same key replays the answer; the same snapshot under a new key is the
-	// recorded run, and nothing runs again.
+	// The same key replays the answer; a new key a moment later is refused by
+	// the manifest's execution frequency, and nothing runs again.
 	replay = w.as(follower).do(http.MethodPost, installPath+"/follows", followBody, "Idempotency-Key", followKey)
 	require.Equal(t, http.StatusOK, replay.Code, "a replay returns the recorded answer; body=%s", replay.Body.String())
 	assert.JSONEq(t, res.Body.String(), replay.Body.String())
 	again := w.as(follower).do(http.MethodPost, installPath+"/follows", followBody, "Idempotency-Key", "itest-follow-"+uuid.NewString())
-	require.Equal(t, http.StatusOK, again.Code, "body=%s", again.Body.String())
-	var recorded api.StrategyFollowRun
-	again.json(&recorded)
-	require.NotNil(t, recorded.Replayed)
-	assert.True(t, *recorded.Replayed)
-	assert.Equal(t, run.Id, recorded.Id)
+	require.Equal(t, http.StatusTooManyRequests, again.Code, "body=%s", again.Body.String())
+	assert.Equal(t, errs.CodeRateLimited, again.problem().Code)
 
 	// --- the follower's reads observe it -------------------------------------
 	res = w.as(follower).do(http.MethodGet, "/v1/advanced/strategies/follows?account_id="+followerAcct.String()+"&install_id="+install.Id.String(), nil)
@@ -494,8 +536,7 @@ func TestIntegration_MarketplaceLifecycleThroughHTTP(t *testing.T) {
 	assert.Equal(t, errs.CodeForbidden, res.problem().Code)
 	res = w.as(creator).do(http.MethodGet, "/v1/advanced/strategies/follows?account_id="+followerAcct.String(), nil)
 	require.Equal(t, http.StatusForbidden, res.Code, "body=%s", res.Body.String())
-	res = w.as(creator).do(http.MethodPost, installPath+"/follows",
-		map[string]any{"account_id": creatorAcct.String(), "snapshot": w.snapshot(time.Now().UTC().Add(-time.Second))},
+	res = w.as(creator).do(http.MethodPost, installPath+"/follows", map[string]any{"account_id": creatorAcct.String()},
 		"Idempotency-Key", "itest-stranger-follow-"+uuid.NewString())
 	require.Equal(t, http.StatusNotFound, res.Code, "body=%s", res.Body.String())
 	assert.Equal(t, errs.CodeNotFound, res.problem().Code)
@@ -506,4 +547,11 @@ func TestIntegration_MarketplaceLifecycleThroughHTTP(t *testing.T) {
 	var none api.StrategyInstallPage
 	res.json(&none)
 	assert.Empty(t, none.Items)
+}
+
+func countRows(t *testing.T, d *db.DB, sql string, args ...any) int {
+	t.Helper()
+	var n int
+	require.NoError(t, d.QueryRow(t.Context(), sql, args...).Scan(&n))
+	return n
 }

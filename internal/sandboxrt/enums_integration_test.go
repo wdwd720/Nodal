@@ -38,7 +38,8 @@ func sortedStrings[T ~string](in []T) []string {
 }
 
 // TestIntegration_EveryCheckListHasItsGoTwin pairs each CHECK (col IN (...))
-// of migration 00751 with the Go function that lists the same values.
+// of migrations 00751 and 00757 with the Go function that lists the same
+// values.
 func TestIntegration_EveryCheckListHasItsGoTwin(t *testing.T) {
 	requireDB(t)
 	pairs := map[string][]string{
@@ -47,6 +48,7 @@ func TestIntegration_EveryCheckListHasItsGoTwin(t *testing.T) {
 		"sandbox_runs_actor_type_check":                         sortedStrings(RecordingActorTypes()),
 		"strategy_artifacts_created_by_actor_type_check":        sortedStrings(RecordingActorTypes()),
 		"strategy_artifact_sources_created_by_actor_type_check": sortedStrings(RecordingActorTypes()),
+		"sandbox_usage_purpose_check":                           sortedStrings(AllRunPurposes()),
 	}
 	for constraint, goList := range pairs {
 		assert.Equal(t, goList, checkValues(t, constraint), constraint)

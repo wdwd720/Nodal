@@ -168,11 +168,12 @@ func (s *Service) moderate(ctx context.Context, tx pgx.Tx, v Version, to Moderat
 	return out, nil
 }
 
-const installColumns = `id, account_id, version_id, mode, status, installed_by_actor_type, installed_by_actor_id, created_at`
+const installColumns = `id, account_id, version_id, mode, status, installed_by_actor_type, installed_by_actor_id, paper_capital::text, created_at`
 
 func scanInstall(row pgx.Row) (Install, error) {
 	var in Install
-	if err := row.Scan(&in.ID, &in.AccountID, &in.VersionID, &in.Mode, &in.Status, &in.InstalledBy.Type, &in.InstalledBy.ID, &in.CreatedAt); err != nil {
+	if err := row.Scan(&in.ID, &in.AccountID, &in.VersionID, &in.Mode, &in.Status, &in.InstalledBy.Type, &in.InstalledBy.ID, &in.PaperCapital,
+		&in.CreatedAt); err != nil {
 		return Install{}, err
 	}
 	in.CreatedAt = in.CreatedAt.UTC()

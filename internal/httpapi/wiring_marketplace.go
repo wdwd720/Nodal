@@ -9,16 +9,20 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/nodal/controlplane/internal/accounts"
+	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
+	"github.com/nodal/controlplane/internal/fees"
 	"github.com/nodal/controlplane/internal/id"
 	"github.com/nodal/controlplane/internal/instruments"
 	"github.com/nodal/controlplane/internal/killswitch"
 	"github.com/nodal/controlplane/internal/marketplace"
+	"github.com/nodal/controlplane/internal/orders"
 	"github.com/nodal/controlplane/internal/risk"
 	"github.com/nodal/controlplane/internal/sandboxrt"
+	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/valuation"
 	"github.com/nodal/controlplane/internal/valuedomain"
 )
@@ -40,11 +44,14 @@ func wireMarketplace(p *Ports, d WireDeps) {
 }
 
 // marketplaceAdapter serves MarketplacePort over the marketplace and sandbox
-// services. Every write is one service operation in one transaction. The reads
-// that the services expose are the services' own; the lists they do not expose
-// (the catalogue, an account's listings, installs, follows and runs) are
-// read-only projections in the manner of readmodel.go: every statement below is
-// a SELECT, and nothing here decides anything.
+// services. Every write is one service operation in one transaction. Every
+// list is the marketplace package's own read (the catalogue, an account's
+// listings, installs and follows, the review queue, and a version's reviews,
+// evaluations and paper performance), in one read-only transaction. What is
+// left here are read-only projections in the manner of readmodel.go -- the
+// Risk Kernel V2 decision and the effect behind each follow intent, and an
+// account's sandbox runs: every statement below is a SELECT, and nothing here
+// decides anything.
 type marketplaceAdapter struct {
 	svc     *marketplace.Service
 	sandbox *sandboxrt.Service
@@ -77,36 +84,7 @@ func (a marketplaceAdapter) write(ctx context.Context, fn func(ctx context.Conte
 	return err
 }
 
-// --- columns and scans ------------------------------------------------------
-
-const (
-	marketplaceListingCols = `l.id, l.creator_account_id, l.creator_actor_type, l.creator_actor_id, l.title, l.forked_from_version_id, l.created_at`
-	marketplaceSummaryCols = `v.id, v.listing_id, v.version, v.status, v.moderation_state, v.risk_class, v.description,
-		coalesce(v.rejection_code, ''), v.created_at, v.updated_at`
-)
-
-// marketplaceRowScanner is what pgx.Row and pgx.Rows have in common.
-type marketplaceRowScanner interface {
-	Scan(dest ...any) error
-}
-
-func marketplaceListingDest(l *marketplace.Listing) []any {
-	return []any{&l.ID, &l.CreatorAccountID, &l.Creator.Type, &l.Creator.ID, &l.Title, &l.ForkedFromVersionID, &l.CreatedAt}
-}
-
-func marketplaceSummaryDest(v *MarketplaceVersionSummary) []any {
-	return []any{&v.ID, &v.ListingID, &v.Number, &v.Status, &v.Moderation, &v.RiskClass, &v.Description, &v.RejectionCode,
-		&v.CreatedAt, &v.UpdatedAt}
-}
-
-func marketplaceUTC(l *marketplace.Listing, v *MarketplaceVersionSummary) {
-	if l != nil {
-		l.CreatedAt = l.CreatedAt.UTC()
-	}
-	if v != nil {
-		v.CreatedAt, v.UpdatedAt = v.CreatedAt.UTC(), v.UpdatedAt.UTC()
-	}
-}
+// --- reads ------------------------------------------------------------------
 
 // marketplaceCursor decodes a keyset cursor and refuses one whose id is not a
 // UUID, so a tampered cursor is a VALIDATION_FAILED rather than a database
@@ -122,14 +100,6 @@ func marketplaceCursor(cursor string) (keysetCursor, bool, error) {
 	return c, true, nil
 }
 
-func marketplaceIDs[K any](ids []id.ID[K]) []string {
-	out := make([]string, 0, len(ids))
-	for _, i := range ids {
-		out = append(out, i.String())
-	}
-	return out
-}
-
 func marketplaceQueryErr(op string, err error) error {
 	if ee, ok := errs.As(err); ok {
 		return ee
@@ -137,61 +107,51 @@ func marketplaceQueryErr(op string, err error) error {
 	return errs.Wrap(err, errs.CodeInternal, "marketplace read: "+op)
 }
 
-// --- reads ------------------------------------------------------------------
-
-func (a marketplaceAdapter) Catalog(ctx context.Context, cursor string, limit int) ([]MarketplaceListingSummary, string, error) {
-	return a.listingPage(ctx, cursor, limit,
-		` AND v.status = 'APPROVED' AND v.moderation_state = 'CLEARED'`, "", nil)
-}
-
-func (a marketplaceAdapter) AccountListings(ctx context.Context, account accounts.AccountID, cursor string, limit int) ([]MarketplaceListingSummary, string, error) {
-	return a.listingPage(ctx, cursor, limit, "", ` AND l.creator_account_id = $1`, []any{account})
-}
-
-// listingPage pages listings newest first, each with the newest version that
-// satisfies versionWhere.
-func (a marketplaceAdapter) listingPage(ctx context.Context, cursor string, limit int, versionWhere, where string, args []any) ([]MarketplaceListingSummary, string, error) {
+// marketplaceList reads one page of one of the marketplace package's lists in
+// a read-only transaction, and the cursor of the page after it: key names the
+// keyset position of a row.
+func marketplaceList[T any](ctx context.Context, a marketplaceAdapter, cursor string, limit int,
+	read func(ctx context.Context, q db.Querier, after *marketplace.PageKey, limit int) ([]T, bool, error),
+	key func(T) (time.Time, string)) ([]T, string, error) {
 	limit = clampLimit(limit)
 	c, hasCursor, err := marketplaceCursor(cursor)
 	if err != nil {
 		return nil, "", err
 	}
-	sql := `SELECT ` + marketplaceListingCols + `, ` + marketplaceSummaryCols + ` FROM marketplace_listings l
-		JOIN LATERAL (SELECT * FROM marketplace_listing_versions v WHERE v.listing_id = l.id` + versionWhere + `
-			ORDER BY v.version DESC LIMIT 1) v ON true
-		WHERE true` + where
+	var after *marketplace.PageKey
 	if hasCursor {
-		sql += fmt.Sprintf(` AND (l.created_at, l.id) < ($%d, $%d::uuid)`, len(args)+1, len(args)+2)
-		args = append(args, c.At, c.ID)
+		after = &marketplace.PageKey{At: c.At, ID: c.ID}
 	}
-	sql += fmt.Sprintf(` ORDER BY l.created_at DESC, l.id DESC LIMIT %d`, limit+1)
-	var out []MarketplaceListingSummary
+	var out []T
+	var more bool
 	err = a.read(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, sql, args...)
-		if err != nil {
-			return marketplaceQueryErr("list listings", err)
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var s MarketplaceListingSummary
-			if err := rows.Scan(append(marketplaceListingDest(&s.Listing), marketplaceSummaryDest(&s.Latest)...)...); err != nil {
-				return marketplaceQueryErr("scan listing", err)
-			}
-			marketplaceUTC(&s.Listing, &s.Latest)
-			out = append(out, s)
-		}
-		return rows.Err()
+		var err error
+		out, more, err = read(ctx, tx, after, limit)
+		return err
 	})
 	if err != nil {
 		return nil, "", err
 	}
-	next := ""
-	if len(out) > limit {
-		out = out[:limit]
-		last := out[len(out)-1].Listing
-		next = encodeCursor(keysetCursor{At: last.CreatedAt, ID: last.ID.String()})
+	if !more || len(out) == 0 {
+		return out, "", nil
 	}
-	return out, next, nil
+	at, last := key(out[len(out)-1])
+	return out, encodeCursor(keysetCursor{At: at, ID: last}), nil
+}
+
+func marketplaceListingKey(s MarketplaceListingSummary) (time.Time, string) {
+	return s.Listing.CreatedAt, s.Listing.ID.String()
+}
+
+func (a marketplaceAdapter) Catalog(ctx context.Context, cursor string, limit int) ([]MarketplaceListingSummary, string, error) {
+	return marketplaceList(ctx, a, cursor, limit, marketplace.Catalogue, marketplaceListingKey)
+}
+
+func (a marketplaceAdapter) AccountListings(ctx context.Context, account accounts.AccountID, cursor string, limit int) ([]MarketplaceListingSummary, string, error) {
+	return marketplaceList(ctx, a, cursor, limit,
+		func(ctx context.Context, q db.Querier, after *marketplace.PageKey, limit int) ([]MarketplaceListingSummary, bool, error) {
+			return marketplace.AccountListings(ctx, q, account, after, limit)
+		}, marketplaceListingKey)
 }
 
 func (a marketplaceAdapter) Listing(ctx context.Context, lid marketplace.ListingID) (MarketplaceListingView, error) {
@@ -205,32 +165,30 @@ func (a marketplaceAdapter) Listing(ctx context.Context, lid marketplace.Listing
 }
 
 // listingView assembles a listing with its newest versions and everything
-// recorded about each: the services' own reads for the version, its validation
-// and its provenance, and projections for its reviews, evaluations and the
-// paper performance of its installs.
+// recorded about each, from the services' own reads: the version, its
+// validation and provenance, its reviews and evaluations, and the paper
+// performance of its installs.
 func (a marketplaceAdapter) listingView(ctx context.Context, q db.Querier, lid marketplace.ListingID) (MarketplaceListingView, error) {
 	l, err := a.svc.Listing(ctx, q, lid)
 	if err != nil {
 		return MarketplaceListingView{}, err
 	}
 	view := MarketplaceListingView{Listing: l}
-	rows, err := q.Query(ctx, `SELECT id FROM marketplace_listing_versions WHERE listing_id = $1 ORDER BY version DESC LIMIT $2`,
-		lid, marketplaceMaxVersions)
+	ids, err := marketplace.ListingVersionIDs(ctx, q, lid, marketplaceMaxVersions)
+	if err != nil || len(ids) == 0 {
+		return view, err
+	}
+	reviews, err := marketplace.Reviews(ctx, q, ids)
 	if err != nil {
-		return MarketplaceListingView{}, marketplaceQueryErr("list versions", err)
+		return MarketplaceListingView{}, err
 	}
-	var ids []marketplace.VersionID
-	for rows.Next() {
-		var vid marketplace.VersionID
-		if err := rows.Scan(&vid); err != nil {
-			rows.Close()
-			return MarketplaceListingView{}, marketplaceQueryErr("scan version id", err)
-		}
-		ids = append(ids, vid)
+	evaluations, err := marketplace.Evaluations(ctx, q, ids, marketplaceMaxEvaluations)
+	if err != nil {
+		return MarketplaceListingView{}, err
 	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return MarketplaceListingView{}, marketplaceQueryErr("list versions", err)
+	performance, err := marketplace.PaperPerformance(ctx, q, ids, marketplaceMaxPerformance)
+	if err != nil {
+		return MarketplaceListingView{}, err
 	}
 	index := make(map[marketplace.VersionID]int, len(ids))
 	for _, vid := range ids {
@@ -238,8 +196,11 @@ func (a marketplaceAdapter) listingView(ctx context.Context, q db.Querier, lid m
 		if err != nil {
 			return MarketplaceListingView{}, err
 		}
-		vv := MarketplaceVersionView{Version: v, Reviews: []MarketplaceReview{}, Evaluations: []MarketplaceEvaluation{},
+		vv := MarketplaceVersionView{Version: v, Reviews: reviews[vid], Evaluations: []MarketplaceEvaluation{},
 			Performance: []marketplace.PerformanceSnapshot{}}
+		if vv.Reviews == nil {
+			vv.Reviews = []MarketplaceReview{}
+		}
 		if val, ok, err := a.svc.ValidationOf(ctx, q, vid); err != nil {
 			return MarketplaceListingView{}, err
 		} else if ok {
@@ -251,92 +212,17 @@ func (a marketplaceAdapter) listingView(ctx context.Context, q db.Querier, lid m
 		index[vid] = len(view.Versions)
 		view.Versions = append(view.Versions, vv)
 	}
-	if len(ids) == 0 {
-		return view, nil
+	for _, e := range evaluations {
+		if i, ok := index[e.Evaluation.VersionID]; ok {
+			view.Versions[i].Evaluations = append(view.Versions[i].Evaluations, e)
+		}
 	}
-	keys := marketplaceIDs(ids)
-	if err := a.attachReviews(ctx, q, keys, index, &view); err != nil {
-		return MarketplaceListingView{}, err
-	}
-	if err := a.attachEvaluations(ctx, q, keys, index, &view); err != nil {
-		return MarketplaceListingView{}, err
-	}
-	perf, err := a.performanceOf(ctx, q, `version_id = ANY($1::uuid[])`, keys, marketplaceMaxPerformance)
-	if err != nil {
-		return MarketplaceListingView{}, err
-	}
-	for _, p := range perf {
+	for _, p := range performance {
 		if i, ok := index[p.VersionID]; ok {
 			view.Versions[i].Performance = append(view.Versions[i].Performance, p)
 		}
 	}
 	return view, nil
-}
-
-func (a marketplaceAdapter) attachReviews(ctx context.Context, q db.Querier, keys []string, index map[marketplace.VersionID]int, view *MarketplaceListingView) error {
-	rows, err := q.Query(ctx, `SELECT version_id, decision, reason_code, note, reviewer_actor_type, reviewer_actor_id, reviewed_at
-		FROM marketplace_reviews WHERE version_id = ANY($1::uuid[]) ORDER BY reviewed_at, id`, keys)
-	if err != nil {
-		return marketplaceQueryErr("list reviews", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var vid marketplace.VersionID
-		var r MarketplaceReview
-		if err := rows.Scan(&vid, &r.Decision, &r.ReasonCode, &r.Note, &r.Reviewer.Type, &r.Reviewer.ID, &r.ReviewedAt); err != nil {
-			return marketplaceQueryErr("scan review", err)
-		}
-		r.ReviewedAt = r.ReviewedAt.UTC()
-		if i, ok := index[vid]; ok {
-			view.Versions[i].Reviews = append(view.Versions[i].Reviews, r)
-		}
-	}
-	return rows.Err()
-}
-
-func (a marketplaceAdapter) attachEvaluations(ctx context.Context, q db.Querier, keys []string, index map[marketplace.VersionID]int, view *MarketplaceListingView) error {
-	rows, err := q.Query(ctx, `SELECT id, version_id, kind, dataset_version, snapshots_count, snapshots_digest, results_digest, runs_ok,
-		proposals_count, accepted_count, violations_count, evidence_ref, evidence_sha256, created_at
-		FROM marketplace_evaluations WHERE version_id = ANY($1::uuid[]) ORDER BY created_at DESC, id DESC LIMIT $2`, keys, marketplaceMaxEvaluations)
-	if err != nil {
-		return marketplaceQueryErr("list evaluations", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var e MarketplaceEvaluation
-		ev := &e.Evaluation
-		if err := rows.Scan(&ev.ID, &ev.VersionID, &ev.Kind, &ev.DatasetVersion, &e.SnapshotsCount, &ev.SnapshotsDigest, &ev.ResultsDigest,
-			&ev.RunsOK, &ev.ProposalsCount, &ev.AcceptedCount, &ev.ViolationsCount, &ev.EvidenceRef, &ev.EvidenceSHA256, &e.CreatedAt); err != nil {
-			return marketplaceQueryErr("scan evaluation", err)
-		}
-		e.CreatedAt = e.CreatedAt.UTC()
-		if i, ok := index[ev.VersionID]; ok {
-			view.Versions[i].Evaluations = append(view.Versions[i].Evaluations, e)
-		}
-	}
-	return rows.Err()
-}
-
-// performanceOf reads recorded paper performance snapshots, newest first.
-func (a marketplaceAdapter) performanceOf(ctx context.Context, q db.Querier, where string, keys []string, limit int) ([]marketplace.PerformanceSnapshot, error) {
-	rows, err := q.Query(ctx, `SELECT install_id, version_id, follow_runs_count, first_as_of, last_as_of, history_digest, return_bps,
-		max_drawdown_bps, volatility_bps, turnover_bps, computed_at
-		FROM marketplace_performance_snapshots WHERE `+where+` ORDER BY computed_at DESC, id DESC LIMIT $2`, keys, limit)
-	if err != nil {
-		return nil, marketplaceQueryErr("list performance", err)
-	}
-	defer rows.Close()
-	var out []marketplace.PerformanceSnapshot
-	for rows.Next() {
-		var p marketplace.PerformanceSnapshot
-		if err := rows.Scan(&p.InstallID, &p.VersionID, &p.Points, &p.FirstAsOf, &p.LastAsOf, &p.HistoryDigest, &p.ReturnBPS,
-			&p.MaxDrawdownBPS, &p.VolatilityBPS, &p.TurnoverBPS, &p.ComputedAt); err != nil {
-			return nil, marketplaceQueryErr("scan performance", err)
-		}
-		p.FirstAsOf, p.LastAsOf, p.ComputedAt = p.FirstAsOf.UTC(), p.LastAsOf.UTC(), p.ComputedAt.UTC()
-		out = append(out, p)
-	}
-	return out, rows.Err()
 }
 
 func (a marketplaceAdapter) ListingRecord(ctx context.Context, lid marketplace.ListingID) (marketplace.Listing, error) {
@@ -356,231 +242,46 @@ func (a marketplaceAdapter) VersionRecord(ctx context.Context, vid marketplace.V
 }
 
 func (a marketplaceAdapter) ReviewQueue(ctx context.Context, statuses []marketplace.Status, cursor string, limit int) ([]MarketplaceQueueItem, string, error) {
-	limit = clampLimit(limit)
-	c, hasCursor, err := marketplaceCursor(cursor)
-	if err != nil {
-		return nil, "", err
-	}
-	wanted := make([]string, 0, len(statuses))
-	for _, s := range statuses {
-		wanted = append(wanted, string(s))
-	}
-	args := []any{wanted}
-	sql := `SELECT ` + marketplaceListingCols + `, ` + marketplaceSummaryCols + ` FROM marketplace_listing_versions v
-		JOIN marketplace_listings l ON l.id = v.listing_id WHERE v.status = ANY($1::text[])`
-	if hasCursor {
-		sql += ` AND (v.created_at, v.id) > ($2, $3::uuid)`
-		args = append(args, c.At, c.ID)
-	}
-	sql += fmt.Sprintf(` ORDER BY v.created_at, v.id LIMIT %d`, limit+1)
-	var out []MarketplaceQueueItem
-	err = a.read(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, sql, args...)
-		if err != nil {
-			return marketplaceQueryErr("list review queue", err)
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var it MarketplaceQueueItem
-			if err := rows.Scan(append(marketplaceListingDest(&it.Listing), marketplaceSummaryDest(&it.Version)...)...); err != nil {
-				return marketplaceQueryErr("scan review queue", err)
-			}
-			marketplaceUTC(&it.Listing, &it.Version)
-			out = append(out, it)
-		}
-		return rows.Err()
-	})
-	if err != nil {
-		return nil, "", err
-	}
-	next := ""
-	if len(out) > limit {
-		out = out[:limit]
-		last := out[len(out)-1].Version
-		next = encodeCursor(keysetCursor{At: last.CreatedAt, ID: last.ID.String()})
-	}
-	return out, next, nil
-}
-
-const marketplaceInstallCols = `i.id, i.account_id, i.version_id, i.mode, i.status, i.installed_by_actor_type, i.installed_by_actor_id, i.created_at`
-
-func marketplaceInstallDest(in *marketplace.Install) []any {
-	return []any{&in.ID, &in.AccountID, &in.VersionID, &in.Mode, &in.Status, &in.InstalledBy.Type, &in.InstalledBy.ID, &in.CreatedAt}
+	return marketplaceList(ctx, a, cursor, limit,
+		func(ctx context.Context, q db.Querier, after *marketplace.PageKey, limit int) ([]MarketplaceQueueItem, bool, error) {
+			return marketplace.Queue(ctx, q, statuses, after, limit)
+		}, func(it MarketplaceQueueItem) (time.Time, string) { return it.Version.CreatedAt, it.Version.ID.String() })
 }
 
 func (a marketplaceAdapter) Installs(ctx context.Context, account accounts.AccountID, cursor string, limit int) ([]MarketplaceInstallView, string, error) {
-	limit = clampLimit(limit)
-	c, hasCursor, err := marketplaceCursor(cursor)
-	if err != nil {
-		return nil, "", err
-	}
-	args := []any{account}
-	where := `i.account_id = $1`
-	if hasCursor {
-		where += ` AND (i.created_at, i.id) < ($2, $3::uuid)`
-		args = append(args, c.At, c.ID)
-	}
-	var out []MarketplaceInstallView
-	err = a.read(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		var err error
-		out, err = a.installViews(ctx, tx, where, args, fmt.Sprintf(` ORDER BY i.created_at DESC, i.id DESC LIMIT %d`, limit+1))
-		return err
-	})
-	if err != nil {
-		return nil, "", err
-	}
-	next := ""
-	if len(out) > limit {
-		out = out[:limit]
-		last := out[len(out)-1].Install
-		next = encodeCursor(keysetCursor{At: last.CreatedAt, ID: last.ID.String()})
-	}
-	return out, next, nil
-}
-
-// installViews reads installs with their listing, version and latest paper
-// performance snapshot.
-func (a marketplaceAdapter) installViews(ctx context.Context, q db.Querier, where string, args []any, tail string) ([]MarketplaceInstallView, error) {
-	rows, err := q.Query(ctx, `SELECT `+marketplaceInstallCols+`, `+marketplaceListingCols+`, `+marketplaceSummaryCols+`
-		FROM marketplace_installs i JOIN marketplace_listing_versions v ON v.id = i.version_id
-		JOIN marketplace_listings l ON l.id = v.listing_id WHERE `+where+tail, args...)
-	if err != nil {
-		return nil, marketplaceQueryErr("list installs", err)
-	}
-	var out []MarketplaceInstallView
-	for rows.Next() {
-		var iv MarketplaceInstallView
-		dest := append(append(marketplaceInstallDest(&iv.Install), marketplaceListingDest(&iv.Listing)...), marketplaceSummaryDest(&iv.Version)...)
-		if err := rows.Scan(dest...); err != nil {
-			rows.Close()
-			return nil, marketplaceQueryErr("scan install", err)
-		}
-		iv.Install.CreatedAt = iv.Install.CreatedAt.UTC()
-		marketplaceUTC(&iv.Listing, &iv.Version)
-		out = append(out, iv)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return nil, marketplaceQueryErr("list installs", err)
-	}
-	if len(out) == 0 {
-		return out, nil
-	}
-	ids := make([]marketplace.InstallID, 0, len(out))
-	for _, iv := range out {
-		ids = append(ids, iv.Install.ID)
-	}
-	latest, err := q.Query(ctx, `SELECT DISTINCT ON (install_id) install_id, version_id, follow_runs_count, first_as_of, last_as_of,
-		history_digest, return_bps, max_drawdown_bps, volatility_bps, turnover_bps, computed_at
-		FROM marketplace_performance_snapshots WHERE install_id = ANY($1::uuid[]) ORDER BY install_id, computed_at DESC, id DESC`,
-		marketplaceIDs(ids))
-	if err != nil {
-		return nil, marketplaceQueryErr("latest performance", err)
-	}
-	defer latest.Close()
-	byInstall := map[marketplace.InstallID]marketplace.PerformanceSnapshot{}
-	for latest.Next() {
-		var p marketplace.PerformanceSnapshot
-		if err := latest.Scan(&p.InstallID, &p.VersionID, &p.Points, &p.FirstAsOf, &p.LastAsOf, &p.HistoryDigest, &p.ReturnBPS,
-			&p.MaxDrawdownBPS, &p.VolatilityBPS, &p.TurnoverBPS, &p.ComputedAt); err != nil {
-			return nil, marketplaceQueryErr("scan performance", err)
-		}
-		p.FirstAsOf, p.LastAsOf, p.ComputedAt = p.FirstAsOf.UTC(), p.LastAsOf.UTC(), p.ComputedAt.UTC()
-		byInstall[p.InstallID] = p
-	}
-	if err := latest.Err(); err != nil {
-		return nil, marketplaceQueryErr("latest performance", err)
-	}
-	for i := range out {
-		if p, ok := byInstall[out[i].Install.ID]; ok {
-			out[i].LatestPerformance = &p
-		}
-	}
-	return out, nil
+	return marketplaceList(ctx, a, cursor, limit,
+		func(ctx context.Context, q db.Querier, after *marketplace.PageKey, limit int) ([]MarketplaceInstallView, bool, error) {
+			return marketplace.AccountInstalls(ctx, q, account, after, limit)
+		}, func(iv MarketplaceInstallView) (time.Time, string) {
+			return iv.Install.CreatedAt, iv.Install.ID.String()
+		})
 }
 
 func (a marketplaceAdapter) installView(ctx context.Context, q db.Querier, iid marketplace.InstallID) (MarketplaceInstallView, error) {
-	views, err := a.installViews(ctx, q, `i.id = $1`, []any{iid}, "")
-	if err != nil {
-		return MarketplaceInstallView{}, err
-	}
-	if len(views) != 1 {
-		return MarketplaceInstallView{}, errs.New(errs.CodeNotFound, "marketplace: install not found").WithField("install_id", iid.String())
-	}
-	return views[0], nil
+	return marketplace.InstallSummaryOf(ctx, q, iid)
 }
 
 func (a marketplaceAdapter) InstallRecord(ctx context.Context, iid marketplace.InstallID) (marketplace.Install, error) {
 	return a.svc.Install(ctx, a.db, iid)
 }
 
-const marketplaceFollowCols = `f.id, f.install_id, f.version_id, f.account_id, f.sandbox_run_id, f.trigger, f.as_of, f.input_digest, f.run_digest,
-	r.termination_reason, f.proposals_count, f.accepted_count, f.violations_count, f.intents_submitted, f.intents_dispatched,
-	f.intents_risk_rejected, f.intents_failed, f.equity::text, f.turnover::text, f.evidence_ref, f.evidence_sha256, f.created_at`
-
 func (a marketplaceAdapter) Follows(ctx context.Context, account accounts.AccountID, install *marketplace.InstallID, cursor string, limit int) ([]MarketplaceFollowView, string, error) {
-	limit = clampLimit(limit)
-	c, hasCursor, err := marketplaceCursor(cursor)
-	if err != nil {
-		return nil, "", err
-	}
-	args := []any{account}
-	sql := `SELECT ` + marketplaceFollowCols + ` FROM marketplace_follow_runs f JOIN sandbox_runs r ON r.id = f.sandbox_run_id
-		WHERE f.account_id = $1`
-	if install != nil {
-		args = append(args, *install)
-		sql += fmt.Sprintf(` AND f.install_id = $%d`, len(args))
-	}
-	if hasCursor {
-		sql += fmt.Sprintf(` AND (f.created_at, f.id) < ($%d, $%d::uuid)`, len(args)+1, len(args)+2)
-		args = append(args, c.At, c.ID)
-	}
-	sql += fmt.Sprintf(` ORDER BY f.created_at DESC, f.id DESC LIMIT %d`, limit+1)
-	var out []MarketplaceFollowView
-	err = a.read(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, sql, args...)
-		if err != nil {
-			return marketplaceQueryErr("list follow runs", err)
-		}
-		var runs []marketplace.FollowRun
-		for rows.Next() {
-			var f marketplace.FollowRun
-			if err := rows.Scan(&f.ID, &f.InstallID, &f.VersionID, &f.AccountID, &f.SandboxRunID, &f.Trigger, &f.AsOf, &f.InputDigest,
-				&f.RunDigest, &f.Termination, &f.ProposalsCount, &f.AcceptedCount, &f.ViolationsCount, &f.IntentsSubmitted,
-				&f.IntentsDispatched, &f.IntentsRiskRejected, &f.IntentsFailed, &f.Equity, &f.Turnover, &f.EvidenceRef,
-				&f.EvidenceSHA256, &f.CreatedAt); err != nil {
-				rows.Close()
-				return marketplaceQueryErr("scan follow run", err)
-			}
-			f.AsOf, f.CreatedAt = f.AsOf.UTC(), f.CreatedAt.UTC()
-			runs = append(runs, f)
-		}
-		rows.Close()
-		if err := rows.Err(); err != nil {
-			return marketplaceQueryErr("list follow runs", err)
-		}
-		for _, f := range runs {
-			if f.Intents, err = a.svc.FollowIntents(ctx, tx, f.ID); err != nil {
-				return err
-			}
-			view, err := a.followView(ctx, tx, f)
+	return marketplaceList(ctx, a, cursor, limit,
+		func(ctx context.Context, q db.Querier, after *marketplace.PageKey, limit int) ([]MarketplaceFollowView, bool, error) {
+			runs, more, err := marketplace.AccountFollowRuns(ctx, q, account, install, after, limit)
 			if err != nil {
-				return err
+				return nil, false, err
 			}
-			out = append(out, view)
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, "", err
-	}
-	next := ""
-	if len(out) > limit {
-		out = out[:limit]
-		last := out[len(out)-1].Run
-		next = encodeCursor(keysetCursor{At: last.CreatedAt, ID: last.ID.String()})
-	}
-	return out, next, nil
+			out := make([]MarketplaceFollowView, 0, len(runs))
+			for _, run := range runs {
+				view, err := a.followView(ctx, q, run)
+				if err != nil {
+					return nil, false, err
+				}
+				out = append(out, view)
+			}
+			return out, more, nil
+		}, func(v MarketplaceFollowView) (time.Time, string) { return v.Run.CreatedAt, v.Run.ID.String() })
 }
 
 // followView attaches to a follow run the Risk Kernel V2 decision of every
@@ -776,8 +477,8 @@ func (a marketplaceAdapter) Submit(ctx context.Context, vid marketplace.VersionI
 func (a marketplaceAdapter) Simulate(ctx context.Context, r MarketplaceSimulate) (MarketplaceEvaluation, error) {
 	var out MarketplaceEvaluation
 	err := a.write(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		ev, err := a.svc.Simulate(ctx, tx, marketplace.SimulationRequest{VersionID: r.VersionID, DatasetVersion: r.DatasetVersion,
-			Snapshots: r.Snapshots, Actor: r.Actor})
+		ev, err := a.svc.Simulate(ctx, tx, marketplace.SimulationRequest{VersionID: r.VersionID, AccountID: r.Account,
+			DatasetVersion: r.DatasetVersion, Snapshots: r.Snapshots, Actor: r.Actor})
 		if err != nil {
 			return err
 		}
@@ -791,14 +492,15 @@ func (a marketplaceAdapter) Simulate(ctx context.Context, r MarketplaceSimulate)
 	return out, err
 }
 
+// Validate claims, builds and records a version between transactions (the
+// service opens them on the database itself: no transaction is held while the
+// strategy builds).
 func (a marketplaceAdapter) Validate(ctx context.Context, vid marketplace.VersionID, actor econ.Actor) (marketplace.Version, marketplace.Validation, error) {
-	var v marketplace.Version
-	var val marketplace.Validation
-	err := a.write(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		var err error
-		v, val, err = a.svc.Validate(ctx, tx, vid, actor)
-		return err
-	})
+	v, val, err := a.svc.RunValidation(ctx, a.db, vid, actor)
+	if err != nil && ctx.Err() != nil {
+		return marketplace.Version{}, marketplace.Validation{}, errs.Wrap(err, errs.CodeProviderUnavailable,
+			"the request ended before the validation completed; its outcome is not confirmed, retry with the same Idempotency-Key")
+	}
 	return v, val, err
 }
 
@@ -874,8 +576,8 @@ func (a marketplaceAdapter) RemoveInstall(ctx context.Context, iid marketplace.I
 func (a marketplaceAdapter) Follow(ctx context.Context, r MarketplaceFollowRequest) (MarketplaceFollowView, error) {
 	var out MarketplaceFollowView
 	err := a.write(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		run, err := a.svc.PaperFollow(ctx, tx, marketplace.FollowRequest{InstallID: r.InstallID, Input: r.Input,
-			Trigger: marketplace.TriggerExplicit, Actor: r.Actor, CorrelationID: r.CorrelationID})
+		run, err := a.svc.PaperFollow(ctx, tx, marketplace.FollowRequest{InstallID: r.InstallID, Trigger: marketplace.TriggerExplicit,
+			Actor: r.Actor, CorrelationID: r.CorrelationID})
 		if err != nil {
 			return err
 		}
@@ -898,10 +600,10 @@ func (a marketplaceAdapter) RecordPerformance(ctx context.Context, iid marketpla
 // --- what cmd/api injects into the marketplace -------------------------------
 //
 // internal/marketplace takes four collaborators it does not implement. The
-// ArtifactBuilder is *sandboxrt.Builder wherever a Go toolchain exists. The
-// other three have no production implementation in this build, so the
-// thinnest real ones live here: risk sections read from the database, an
-// executor that refuses honestly, and a builder that says it cannot build.
+// ArtifactBuilder is *sandboxrt.Builder wherever a Go toolchain exists (and a
+// builder that says it cannot build where none does). The IntentExecutor is
+// the order book's paper venue (internal/orders), adapted below. The risk
+// sections are read from the database, below.
 
 // UnavailableStrategyBuilder is the ArtifactBuilder of a deployment with no Go
 // toolchain. It builds nothing and says so with UNSUPPORTED, which the
@@ -922,18 +624,147 @@ func (b UnavailableStrategyBuilder) Build(context.Context, sandboxrt.Source) (sa
 		"strategies cannot be built in this deployment: "+reason+"; the version is unchanged")
 }
 
-// UnwiredPaperExecutor is the marketplace's IntentExecutor in a build that has
-// no paper execution venue for economic intents (internal/orders, which the
-// marketplace names as the implementer, is not part of this build). It
-// executes nothing: every risk-approved intent it is handed is refused with
-// UNSUPPORTED, which the marketplace records as a DISPATCH_FAILED outcome on a
-// FAILED effect. It never reports a fill, so no follow can claim one.
+// UnwiredPaperExecutor is the marketplace's IntentExecutor in a process that
+// wires no paper venue. cmd/api wires MarketplacePaperExecutor, over the order
+// book's paper venue; a process that builds no venue executes nothing: every
+// risk-approved intent it is handed is refused with UNSUPPORTED, which the
+// marketplace records as a DISPATCH_FAILED outcome on a FAILED effect. It
+// never reports a fill, so no follow can claim one.
 type UnwiredPaperExecutor struct{}
 
 // ExecutePaper refuses.
 func (UnwiredPaperExecutor) ExecutePaper(context.Context, pgx.Tx, marketplace.PaperExecution) (marketplace.ExecutionReceipt, error) {
 	return marketplace.ExecutionReceipt{}, errs.New(errs.CodeUnsupported,
-		"no paper execution venue for strategy intents is wired in this deployment; nothing was executed")
+		"no paper execution venue for strategy intents is wired in this process; nothing was executed")
+}
+
+// MarketplacePaperSchedule is the one published charge schedule of strategy
+// paper fills, for every process that wires MarketplacePaperExecutor: a 10
+// bps spread, a 10 bps platform fee and a 5 bps strategy fee, each itemized
+// on every fill's stored disclosure and posted to its own account.
+func MarketplacePaperSchedule() fees.Schedule {
+	return fees.Schedule{Version: "marketplace-paper-v1", SpreadBPS: 10, PercentageFeeBPS: 10, StrategyFeeBPS: 5,
+		Rounding: fees.DefaultRounding()}
+}
+
+// MarketplacePaperExecutorConfig wires the marketplace's IntentExecutor over
+// the order book's paper venue.
+type MarketplacePaperExecutorConfig struct {
+	// Venue is the paper venue's configuration (orders.PaperConfig); its
+	// Schedules are not read: every instrument a strategy trades is priced
+	// under Schedule.
+	Venue orders.PaperConfig
+	// Schedule is the published charge schedule of strategy fills -- its
+	// spread and fees disclosed on every fill. It is quoted, fill by fill, in
+	// the instrument's own quote asset; the asset and decimals it names are
+	// replaced by the instrument's.
+	Schedule fees.Schedule
+	// Intents moves each executed intent through EXECUTING to COMPLETED: the
+	// venue never moves an intent, its caller does.
+	Intents *econ.IntentStore
+	// Actor is the execution actor on those transitions (default SERVICE
+	// "marketplace-paper-execution").
+	Actor econ.Actor
+}
+
+// MarketplacePaperExecutor executes the marketplace's risk-approved PAPER
+// intents on the order book's paper venue: an immediate fill of the intent's
+// quantity at the reference mark, priced through the published schedule,
+// whose spread and fees are itemized on the fill's stored disclosure and
+// posted to their own accounts -- the account's real paper execution. The
+// marketplace hands it only intents Risk V2 allowed, inside a savepoint, and
+// exactly once.
+type MarketplacePaperExecutor struct {
+	cfg MarketplacePaperExecutorConfig
+}
+
+var _ marketplace.IntentExecutor = (*MarketplacePaperExecutor)(nil)
+
+// NewMarketplacePaperExecutor validates the venue's dependencies and the
+// schedule.
+func NewMarketplacePaperExecutor(cfg MarketplacePaperExecutorConfig) (*MarketplacePaperExecutor, error) {
+	if cfg.Intents == nil || cfg.Venue.Instruments == nil || cfg.Venue.Assets == nil {
+		return nil, errs.New(errs.CodeInternal, "marketplace paper executor: the intent store, instruments and assets are required")
+	}
+	if strings.TrimSpace(cfg.Schedule.Version) == "" {
+		return nil, errs.New(errs.CodeInternal, "marketplace paper executor: the published schedule needs a version")
+	}
+	probe := cfg.Schedule
+	probe.QuoteAsset, probe.QuoteDecimals = econ.SandboxDollarID(), econ.SandboxDollarDecimals
+	if err := probe.Validate(); err != nil {
+		return nil, err
+	}
+	cfg.Venue.Schedules = nil
+	if _, err := orders.NewPaperVenue(cfg.Venue); err != nil {
+		return nil, err
+	}
+	if cfg.Actor == (econ.Actor{}) {
+		cfg.Actor = econ.Actor{Type: security.ActorService, ID: "marketplace-paper-execution"}
+	}
+	return &MarketplacePaperExecutor{cfg: cfg}, nil
+}
+
+// ExecutePaper fills the intent on the paper venue and completes it. A refusal
+// of the venue (no fresh mark, the account cannot cover the fill, a kind the
+// venue does not fill) is returned as it is: the marketplace records the
+// dispatch as failed, and nothing the attempt wrote survives its savepoint.
+func (e *MarketplacePaperExecutor) ExecutePaper(ctx context.Context, tx pgx.Tx, ex marketplace.PaperExecution) (marketplace.ExecutionReceipt, error) {
+	iid, err := instruments.ParseInstrumentID(ex.Intent.InstrumentID)
+	if err != nil || iid.IsZero() {
+		return marketplace.ExecutionReceipt{}, errs.New(errs.CodeValidationFailed, "marketplace paper executor: the intent names no instrument")
+	}
+	quoteID, err := e.quoteAsset(ctx, tx, iid)
+	if err != nil {
+		return marketplace.ExecutionReceipt{}, err
+	}
+	quote, err := e.cfg.Venue.Assets.Get(ctx, tx, quoteID)
+	if err != nil {
+		return marketplace.ExecutionReceipt{}, err
+	}
+	schedule := e.cfg.Schedule
+	schedule.QuoteAsset, schedule.QuoteDecimals = quote.ID, quote.Decimals
+	venueCfg := e.cfg.Venue
+	venueCfg.Schedules = map[instruments.InstrumentID]fees.Schedule{iid: schedule}
+	venue, err := orders.NewPaperVenue(venueCfg)
+	if err != nil {
+		return marketplace.ExecutionReceipt{}, err
+	}
+	if _, err := e.cfg.Intents.Transition(ctx, tx, ex.Intent.ID, econ.StatusExecuting, e.cfg.Actor, "paper venue fill", ""); err != nil {
+		return marketplace.ExecutionReceipt{}, err
+	}
+	fill, err := venue.ExecuteIntent(ctx, tx, ex.Intent)
+	if err != nil {
+		return marketplace.ExecutionReceipt{}, err
+	}
+	ref := "paper-fill:" + fill.ID.String()
+	if _, err := e.cfg.Intents.Transition(ctx, tx, ex.Intent.ID, econ.StatusCompleted, e.cfg.Actor, "filled on the paper venue ("+ref+")", ""); err != nil {
+		return marketplace.ExecutionReceipt{}, err
+	}
+	return marketplace.ExecutionReceipt{ExternalRef: ref}, nil
+}
+
+// quoteAsset is the asset an instrument is quoted in, as the paper venue reads
+// it: the canonical terms' quote (or settlement) asset, else a spot pair's
+// quote asset.
+func (e *MarketplacePaperExecutor) quoteAsset(ctx context.Context, q db.Querier, iid instruments.InstrumentID) (assets.AssetID, error) {
+	terms, err := e.cfg.Venue.Instruments.CurrentTerms(ctx, q, iid)
+	switch {
+	case err == nil:
+		if terms.Terms.QuoteAssetID != nil {
+			return *terms.Terms.QuoteAssetID, nil
+		}
+		return terms.Terms.SettlementAssetID, nil
+	case !errs.HasCode(err, errs.CodeNotFound):
+		return assets.AssetID{}, err
+	}
+	ins, err := e.cfg.Venue.Instruments.Get(ctx, q, iid)
+	if err != nil {
+		return assets.AssetID{}, err
+	}
+	if ins.QuoteAssetID == nil {
+		return assets.AssetID{}, errs.New(errs.CodeUnsupported, "marketplace paper executor: the instrument has no quote asset the paper venue can fill in")
+	}
+	return *ins.QuoteAssetID, nil
 }
 
 // MarketplaceIdentityReader answers whether an account's owner holds a

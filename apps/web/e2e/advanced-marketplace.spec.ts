@@ -14,6 +14,8 @@
  *   - the creator cannot approve their own strategy, an install in any mode
  *     but PAPER is refused by the service, and a customer is refused the
  *     review queue -- each refusal reaching the client with its code;
+ *   - a paper follow sends the account and nothing else: the backend builds
+ *     the run's input from the install's paper book and its own prices;
  *   - no money-shaped figure appears that the API did not send, and no
  *     control is dead.
  */
@@ -326,6 +328,28 @@ test("a customer is refused the review queue, and the page shows the refusal wit
   await settle(page);
   await expect(page.locator(".explain-meta")).toContainText(`code ${problem.code}`);
   await expect(page.getByRole("button", { name: "Decide", exact: true })).toHaveCount(0);
+});
+
+test("a paper follow carries the account and nothing else: the backend builds the run's input itself", async ({ page }) => {
+  const id = await accountId(page);
+  // An install this account does not have: the route answers NOT_FOUND for
+  // the install, not VALIDATION_FAILED for a missing snapshot -- the request
+  // shape is the account alone.
+  const follow = await command(page, `/v1/advanced/strategies/installs/${unknownId()}/follows`, { account_id: id });
+  expect(follow.status).toBe(404);
+  expect(isProblem(follow.body)).toBe(true);
+  expect((follow.body as Problem).code).toBe("NOT_FOUND");
+
+  // The installs page offers a follow without asking for any figure.
+  await page.goto("/advanced/strategies/installs");
+  await settle(page);
+  await expect(page.getByLabel("Market and portfolio snapshot (JSON)", { exact: true })).toHaveCount(0);
+  const follows = page.getByRole("button", { name: "Paper-follow", exact: true });
+  if ((await follows.count()) > 0) {
+    await follows.first().click();
+    await expect(page.getByRole("button", { name: "Follow now", exact: true })).toBeVisible();
+    await expect(page.locator("main textarea")).toHaveCount(0);
+  }
 });
 
 test("an unknown listing is answered NOT_FOUND", async ({ page }) => {

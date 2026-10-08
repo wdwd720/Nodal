@@ -36,6 +36,7 @@ import (
 	"github.com/nodal/controlplane/internal/sandboxrt"
 	nodalsdk "github.com/nodal/controlplane/internal/sandboxrt/sdk"
 	"github.com/nodal/controlplane/internal/security"
+	"github.com/nodal/controlplane/internal/valuation"
 	"github.com/nodal/controlplane/internal/valuedomain"
 )
 
@@ -246,6 +247,7 @@ type fixture struct {
 	sections *staticSections
 	router   *legalrouter.Router
 	aw       audit.Writer
+	prices   *valuation.PriceStore
 
 	creatorAccount accounts.AccountID
 	creator        econ.Actor
@@ -272,7 +274,7 @@ func newFixture(t *testing.T) *fixture {
 	router, err := legalrouter.New(legalrouter.ConservativePolicy())
 	require.NoError(t, err)
 	f := &fixture{t: t, ctx: context.Background(), clk: clk, intents: econ.NewIntentStore(clk, out, aw), effects: econ.NewEffectStore(clk, out, aw),
-		auth: auth, sections: &staticSections{clk: clk}, router: router, aw: aw}
+		auth: auth, sections: &staticSections{clk: clk}, router: router, aw: aw, prices: valuation.NewPriceStore(clk)}
 	f.exec = &recordingExecutor{intents: f.intents}
 	f.sandbox = sandboxrt.NewService(clk, auth, testRunner, aw)
 	f.svc = f.newService(f.sandbox)
@@ -281,16 +283,48 @@ func newFixture(t *testing.T) *fixture {
 	f.operator = econ.Actor{Type: security.ActorOperator, ID: uuid.NewString()}
 	f.operator2 = econ.Actor{Type: security.ActorOperator, ID: uuid.NewString()}
 	f.insA, f.insB = f.instruments()
+	f.trend()
 	return f
+}
+
+func (f *fixture) config(sb *sandboxrt.Service) Config {
+	return Config{Clock: f.clk, Intents: f.intents, Effects: f.effects, Auth: f.auth, Risk: risk.NewStore(),
+		RiskPolicy: risk.DefaultAdvancedPolicy(), Router: f.router, Sandbox: sb, Builder: testBuilder, Sections: f.sections,
+		Executor: f.exec, Audit: f.aw, ServiceID: "marketplace-itest"}
 }
 
 func (f *fixture) newService(sb *sandboxrt.Service) *Service {
 	f.t.Helper()
-	svc, err := NewService(Config{Clock: f.clk, Intents: f.intents, Effects: f.effects, Auth: f.auth, Risk: risk.NewStore(),
-		RiskPolicy: risk.DefaultAdvancedPolicy(), Router: f.router, Sandbox: sb, Builder: testBuilder, Sections: f.sections,
-		Executor: f.exec, Audit: f.aw, ServiceID: "marketplace-itest"})
+	svc, err := NewService(f.config(sb))
 	require.NoError(f.t, err)
 	return svc
+}
+
+// mark records one observation of an instrument's pair in the price store.
+func (f *fixture) mark(instrument string, at time.Time, price string) {
+	f.t.Helper()
+	p, err := money.PriceFromDecimalString(price, f.quoteAsset.String(), "itest-mark", at)
+	require.NoError(f.t, err)
+	_, err = f.prices.RecordPrice(f.ctx, testDB, valuation.PriceObservation{AssetID: f.baseOf[instrument], QuoteAssetID: f.quoteAsset,
+		Mantissa: p.Mantissa, Scale: p.Scale, Source: "itest-mark", ObservedAt: at.UTC()})
+	require.NoError(f.t, err)
+}
+
+// history records prices one minute apart, the last one now.
+func (f *fixture) history(instrument string, prices ...string) {
+	f.t.Helper()
+	now := f.clk.Now()
+	for i, p := range prices {
+		f.mark(instrument, now.Add(-time.Duration(len(prices)-1-i)*time.Minute), p)
+	}
+}
+
+// trend gives the first instrument a rising history (momentum buys it) and
+// the second a falling one, the reference price the last close of each:
+// the same market f.input describes.
+func (f *fixture) trend() {
+	f.history(f.insA, "140.00", "142.50", "145.00", "147.50", "150.00", "150.25")
+	f.history(f.insB, "45.00", "44.00", "43.00", "42.00", "41.00", "40.10")
 }
 
 func (f *fixture) inTx(fn func(ctx context.Context, tx pgx.Tx) error) error {
@@ -341,8 +375,9 @@ func (f *fixture) instruments() (string, string) {
 	return ids[0], ids[1]
 }
 
-// input is a snapshot in which the first instrument trends up (momentum
-// buys it) and the second trends down.
+// input is a market and portfolio snapshot in which the first instrument
+// trends up and the second trends down: what a simulation runs on, and what a
+// caller once handed a follow (which the service now refuses).
 func (f *fixture) input(asOf time.Time) sandboxrt.Input {
 	return sandboxrt.Input{
 		AsOf: asOf,
@@ -377,7 +412,7 @@ func loadStrategy(t *testing.T, name string) sandboxrt.Source {
 
 func (f *fixture) versionRequest(strategy string) VersionRequest {
 	return VersionRequest{
-		Description: "test strategy " + strategy, RiskClass: RiskModerate, SupportedInstrumentIDs: []string{f.insA},
+		Description: "test strategy " + strategy, RiskClass: RiskModerate, SupportedInstrumentIDs: []string{f.insA, f.insB},
 		Manifest: f.manifest(), Source: loadStrategy(f.t, strategy), SourceCommit: "test-" + strategy,
 		BacktestEvidenceRef: "evidence://backtests/" + strategy, DataDependencies: []string{"closes", "marks"},
 		Fees: FeeModel{PerformanceFeeBPS: 2000, ManagementFeeBPS: 100, HighWaterMark: true}, Config: map[string]string{"order_units": "1000000"},
@@ -409,15 +444,20 @@ func (f *fixture) step(fn func(ctx context.Context, tx pgx.Tx) (Version, error))
 	return v
 }
 
+// validate builds a SUBMITTED version, between transactions.
+func (f *fixture) validate(vid VersionID) (Version, Validation) {
+	f.t.Helper()
+	v, val, err := f.svc.RunValidation(f.ctx, testDB, vid, econ.SystemActor("marketplace.validator"))
+	require.NoError(f.t, err)
+	return v, val
+}
+
 // approved takes a strategy from source to an APPROVED, CLEARED version.
 func (f *fixture) approved(strategy string) (Listing, Version) {
 	f.t.Helper()
 	l, v := f.draft(strategy)
 	f.step(func(ctx context.Context, tx pgx.Tx) (Version, error) { return f.svc.Submit(ctx, tx, v.ID, f.creator) })
-	f.step(func(ctx context.Context, tx pgx.Tx) (Version, error) {
-		out, _, err := f.svc.Validate(ctx, tx, v.ID, econ.SystemActor("marketplace.validator"))
-		return out, err
-	})
+	f.validate(v.ID)
 	f.step(func(ctx context.Context, tx pgx.Tx) (Version, error) {
 		return f.svc.StartReview(ctx, tx, v.ID, f.operator)
 	})
@@ -440,11 +480,12 @@ func (f *fixture) install(v Version) Install {
 	return in
 }
 
-func (f *fixture) follow(svc *Service, in Install, input sandboxrt.Input) (FollowRun, error) {
+// follow paper-follows an install now, as the follower who owns it.
+func (f *fixture) follow(svc *Service, in Install) (FollowRun, error) {
 	var run FollowRun
 	err := f.inTx(func(ctx context.Context, tx pgx.Tx) error {
 		var err error
-		run, err = svc.PaperFollow(ctx, tx, FollowRequest{InstallID: in.ID, Input: input, Trigger: TriggerExplicit, Actor: f.followerActor})
+		run, err = svc.PaperFollow(ctx, tx, FollowRequest{InstallID: in.ID, Trigger: TriggerExplicit, Actor: f.followerActor})
 		return err
 	})
 	return run, err

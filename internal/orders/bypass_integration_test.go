@@ -161,7 +161,7 @@ func TestIntegration_TheDatabaseRefusesOverfillAndIllegalOrderStates(t *testing.
 	// service as a copy of a house order, is refused.
 	h := f.houseBook("market-tif")
 	f.fundHouse(h, tm.m.base.ID, units(5))
-	house, err := f.pipe.SubmitHouse(f.ctx, f.houseOrder(tm.m, h, SideSell, "150.00", units(1)))
+	house, err := f.submitHouse(f.houseOrder(tm.m, h, SideSell, "150.00", units(1)))
 	require.NoError(t, err)
 	err = f.rawTx(`INSERT INTO book_orders (id, book_id, instrument_id, owner_type, owner_id, house_account_id,
 		idempotency_key, request_hash, side, order_type, time_in_force, stp_mode, liquidity_intent, post_only,
@@ -203,7 +203,7 @@ func TestIntegration_TheDatabaseRefusesSelfTradesUnruledCrossingAndDuplicateClie
 	f.fundHouse(h, tm.m.base.ID, units(5))
 	hr := f.houseOrder(tm.m, h, SideSell, "150.00", units(1))
 	hr.ClientOrderID = "raw-dup"
-	first, err := f.pipe.SubmitHouse(f.ctx, hr)
+	first, err := f.submitHouse(hr)
 	require.NoError(t, err)
 	err = f.rawTx(`INSERT INTO book_orders (id, book_id, instrument_id, owner_type, owner_id, house_account_id,
 		idempotency_key, request_hash, client_order_id, side, order_type, time_in_force, stp_mode, liquidity_intent, post_only,
@@ -262,7 +262,7 @@ func TestIntegration_TheDatabaseBindsBooksRulesAndHouseReservations(t *testing.T
 
 	h := f.houseBook("bypass")
 	f.fundHouse(h, tm.m.base.ID, units(5))
-	out, err := f.pipe.SubmitHouse(f.ctx, f.houseOrder(tm.m, h, SideSell, "150.00", units(2)))
+	out, err := f.submitHouse(f.houseOrder(tm.m, h, SideSell, "150.00", units(2)))
 	require.NoError(t, err)
 	rid := out.Order.ReservationID
 	err = f.rawTx(`UPDATE book_house_reservations SET consumed_quantity = 1 WHERE id = $1`, rid)
