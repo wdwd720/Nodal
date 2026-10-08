@@ -130,6 +130,10 @@ func withKillSwitches(k econ.KillSwitchReader) worldOption {
 	}
 }
 
+func withAuthority(r AuthorityReader) worldOption { return func(c *Config) { c.Authority = r } }
+
+func withStrategies(r StrategyReader) worldOption { return func(c *Config) { c.Strategies = r } }
+
 // wednesday10 is 10:00 New York time on Wednesday 2026-10-07.
 var wednesday10 = time.Date(2026, 10, 7, 14, 0, 0, 0, time.UTC)
 
@@ -159,7 +163,7 @@ func newWorld(t *testing.T, opts ...worldOption) *world {
 	require.NoError(t, err)
 	sch := fees.Schedule{
 		Version: "equities-itest-v1", QuoteAsset: cash.ID, QuoteDecimals: 6, SpreadBPS: 20, PercentageFeeBPS: 10,
-		VenuePassThroughBPS: 3, SlippageReserveBPS: 50, Rounding: fees.DefaultRounding(),
+		VenuePassThroughBPS: 3, SlippageReserveBPS: 50, StrategyFeeBPS: 5, Rounding: fees.DefaultRounding(),
 	}
 	intents := econ.NewIntentStore(clk, out, aw)
 	effects := econ.NewEffectStore(clk, out, aw)
@@ -366,15 +370,26 @@ func (w *world) trade(acct accounts.AccountID, l Listing, s orderSpec) Order {
 	return w.place(w.accept(in.ID))
 }
 
+// settleDue runs the settlement worker until nothing is due: one account per
+// transaction, as SettleDue settles.
 func (w *world) settleDue() []Settlement {
 	w.t.Helper()
 	var out []Settlement
-	require.NoError(w.t, w.inTx(func(ctx context.Context, tx pgx.Tx) error {
-		var err error
-		out, err = w.svc.SettleDue(ctx, tx, 500)
-		return err
-	}))
-	return out
+	for {
+		var batch []Settlement
+		require.NoError(w.t, w.inTx(func(ctx context.Context, tx pgx.Tx) error {
+			var err error
+			batch, err = w.svc.SettleDue(ctx, tx, 500)
+			return err
+		}))
+		if len(batch) == 0 {
+			return out
+		}
+		for _, s := range batch[1:] {
+			require.Equal(w.t, batch[0].AccountID, s.AccountID, "a batch settles one account")
+		}
+		out = append(out, batch...)
+	}
 }
 
 func (w *world) intent(iid econ.IntentID) econ.Intent {

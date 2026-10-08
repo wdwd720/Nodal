@@ -31,10 +31,12 @@ type PaperConfig struct {
 //   - A market order fills in full at the mark moved by the disclosed
 //     slippage against the customer, rounded onto the tick grid against the
 //     customer, unless that price is beyond the order's protection price
-//     (REJECTED, PRICE_PROTECTION) or there is no mark (REJECTED, NO_MARK).
+//     (REJECTED, PRICE_PROTECTION), rounds to nothing (REJECTED, NO_BID) or
+//     there is no mark (REJECTED, NO_MARK).
 //   - A limit order fills in full only when the mark crosses its limit (a
 //     buy: mark <= limit; a sell: mark >= limit), at the slipped price capped
-//     by the limit; otherwise it rests (OPEN).
+//     by the limit; otherwise it rests (OPEN). It is never refused for want
+//     of a bid.
 //   - Session rules: an order outside the session it may trade in is
 //     REJECTED (SESSION_CLOSED) when placed; an order at or after its expiry
 //     is EXPIRED.
@@ -199,12 +201,14 @@ func (p *PaperVenue) evaluate(o BrokerOrder, mark *Mark, at time.Time, placing b
 	if err != nil {
 		return OrderReport{}, errs.Wrap(err, errs.CodeValidationFailed, "equities: price the execution")
 	}
-	if !slipped.IsPositive() {
-		return reject(VenueReasonNoBid)
-	}
 	var price money.Quantity
 	switch o.Type {
 	case OrderMarket:
+		// A market sell whose slipped price rounds to nothing has no bid. A
+		// limit order never meets this: it rests, or fills at its limit.
+		if !slipped.IsPositive() {
+			return reject(VenueReasonNoBid)
+		}
 		protection := *o.ProtectionPrice
 		if (o.Side == SideBuy && slipped.Cmp(protection) > 0) || (o.Side == SideSell && slipped.Cmp(protection) < 0) {
 			return reject(VenueReasonPriceProtection)

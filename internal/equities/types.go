@@ -165,6 +165,10 @@ const (
 	// RejectCorporateActionPending: a split, reverse split, symbol change or
 	// delisting is effective and not yet applied.
 	RejectCorporateActionPending RejectionCode = "EQUITIES_CORPORATE_ACTION_PENDING"
+	// RejectIntentPredatesSplit: a split or reverse split was applied after
+	// the intent was recorded, so its quantity and limit are in units the
+	// instrument no longer trades in.
+	RejectIntentPredatesSplit RejectionCode = "EQUITIES_INTENT_PREDATES_SPLIT"
 	// RejectVenue: the venue refused the order.
 	RejectVenue RejectionCode = "VENUE_REJECTED"
 )
@@ -175,7 +179,7 @@ func AllRejectionCodes() []RejectionCode {
 	return []RejectionCode{
 		RejectCapabilityNotApproved, RejectKillSwitch, RejectRisk, RejectInsufficientBuyingPower,
 		RejectBelowMinimum, RejectNotLotMultiple, RejectLimitPriceInvalid, RejectNoMark,
-		RejectNotionalTooSmall, RejectCorporateActionPending, RejectVenue,
+		RejectNotionalTooSmall, RejectCorporateActionPending, RejectIntentPredatesSplit, RejectVenue,
 	}
 }
 
@@ -194,7 +198,7 @@ func (c RejectionCode) errorCode() errs.Code {
 		return errs.CodeStaleMarketData
 	case RejectCorporateActionPending:
 		return errs.CodeAssetRestricted
-	case RejectVenue:
+	case RejectIntentPredatesSplit, RejectVenue:
 		return errs.CodeConflict
 	}
 	return errs.CodeValidationFailed

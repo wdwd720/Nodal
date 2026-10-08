@@ -2,6 +2,8 @@ package equities
 
 import (
 	"context"
+	"errors"
+	"sort"
 	"strings"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/fees"
 	"github.com/nodal/controlplane/internal/id"
+	"github.com/nodal/controlplane/internal/instruments"
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/money"
 )
@@ -357,11 +360,19 @@ type settlementRequest struct {
 	DueDate      string         `json:"due_date"`
 }
 
-// SettleDue posts EQUITY_SETTLEMENT for every unsettled settlement due on or
-// before today's New York trade date, up to limit, and completes the order's
-// intent. Each settlement settles exactly once: an econ effect under a
-// deterministic key, rows taken FOR UPDATE SKIP LOCKED, and a database guard
-// that refuses any change to a settled row.
+// SettleDue posts EQUITY_SETTLEMENT for the unsettled settlements of one
+// account that are due on or before today's New York trade date -- the
+// account of the oldest due settlement no other worker holds -- up to limit,
+// and completes each order's intent. A worker calls it, one transaction at a
+// time, until it returns nothing.
+//
+// One account per transaction, with every instrument lock taken before
+// anything is posted, keeps the lock order of every other writer (instrument,
+// then the account's audit stream, then its ledger rows): concurrent workers
+// and corporate actions cannot deadlock against a batch. Each settlement
+// settles exactly once: an econ effect under a deterministic key, rows taken
+// FOR UPDATE SKIP LOCKED, and a database guard that refuses any change to a
+// settled row.
 func (s *Service) SettleDue(ctx context.Context, tx pgx.Tx, limit int) ([]Settlement, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 100
@@ -372,12 +383,21 @@ func (s *Service) SettleDue(ctx context.Context, tx pgx.Tx, limit int) ([]Settle
 	}
 	now := s.clk.Now().UTC()
 	today := cal.TradeDate(now)
-	rows, err := tx.Query(ctx, `SELECT `+settlementColumns+` FROM equity_settlements
-		WHERE settled_at IS NULL AND due_date <= $1 ORDER BY due_date, id LIMIT $2 FOR UPDATE SKIP LOCKED`, today.Time(), limit)
+	first, err := scanSettlement(tx.QueryRow(ctx, `SELECT `+settlementColumns+` FROM equity_settlements
+		WHERE settled_at IS NULL AND due_date <= $1 ORDER BY due_date, id LIMIT 1 FOR UPDATE SKIP LOCKED`, today.Time()))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, storeErr("select due settlements", err)
 	}
-	var due []Settlement
+	due := []Settlement{first}
+	rows, err := tx.Query(ctx, `SELECT `+settlementColumns+` FROM equity_settlements
+		WHERE settled_at IS NULL AND due_date <= $1 AND account_id = $2 AND id <> $3
+		ORDER BY due_date, id LIMIT $4 FOR UPDATE SKIP LOCKED`, today.Time(), first.AccountID, first.ID, limit-1)
+	if err != nil {
+		return nil, storeErr("select due settlements", err)
+	}
 	for rows.Next() {
 		st, err := scanSettlement(rows)
 		if err != nil {
@@ -390,6 +410,20 @@ func (s *Service) SettleDue(ctx context.Context, tx pgx.Tx, limit int) ([]Settle
 	if err := rows.Err(); err != nil {
 		return nil, storeErr("select due settlements", err)
 	}
+	var toLock []instruments.InstrumentID
+	seen := map[instruments.InstrumentID]bool{}
+	for _, st := range due {
+		if !seen[st.InstrumentID] {
+			seen[st.InstrumentID] = true
+			toLock = append(toLock, st.InstrumentID)
+		}
+	}
+	sort.Slice(toLock, func(i, j int) bool { return toLock[i].String() < toLock[j].String() })
+	for _, iid := range toLock {
+		if err := lockInstrument(ctx, tx, iid, false); err != nil {
+			return nil, err
+		}
+	}
 	out := make([]Settlement, 0, len(due))
 	for _, st := range due {
 		settled, err := s.settleOne(ctx, tx, st, now)
@@ -401,10 +435,8 @@ func (s *Service) SettleDue(ctx context.Context, tx pgx.Tx, limit int) ([]Settle
 	return out, nil
 }
 
+// settleOne settles one due settlement; SettleDue holds its instrument lock.
 func (s *Service) settleOne(ctx context.Context, tx pgx.Tx, st Settlement, now time.Time) (Settlement, error) {
-	if err := lockInstrument(ctx, tx, st.InstrumentID, false); err != nil {
-		return Settlement{}, err
-	}
 	o, err := getOrder(ctx, tx, st.OrderID, false)
 	if err != nil {
 		return Settlement{}, err

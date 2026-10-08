@@ -189,7 +189,9 @@ func symbolValid(s string) bool {
 
 // AnnounceCorporateAction records an ANNOUNCED corporate action. Announcing
 // the same action twice is a replay; a different action for the same
-// (instrument, type, effective date) is a CONFLICT.
+// (instrument, type, effective date) is a CONFLICT while the first is live. A
+// cancelled action frees its date: announcing after a cancellation records a
+// new action.
 func (s *Service) AnnounceCorporateAction(ctx context.Context, tx pgx.Tx, spec CorporateActionSpec) (CorporateAction, error) {
 	if err := validActor(spec.Actor); err != nil {
 		return CorporateAction{}, err
@@ -276,9 +278,10 @@ type CorporateActionResult struct {
 //     once no order on the instrument is live and nothing is unsettled or
 //     reserved in its shares: CORPORATE_ACTION per holder, with cash-in-lieu
 //     for any fractional remainder under the action's rounding policy;
-//   - CASH_DIVIDEND on its pay date, to the holders of record (the trade-date
-//     position at 00:00 New York time on the ex-date): Dr WALLET / Cr
-//     DIVIDENDS per holder;
+//   - CASH_DIVIDEND on its pay date, once every split effective before its
+//     ex-date is applied, to the holders of record (the trade-date position
+//     at 00:00 New York time on the ex-date, in the ex-date's units): Dr
+//     WALLET / Cr DIVIDENDS per holder;
 //   - SYMBOL_CHANGE: a new terms version, no posting;
 //   - DELISTING: the instrument becomes DELISTING on the effective date (buys
 //     stop, holders may sell) and DELISTED on the final date (a second call).
@@ -324,7 +327,7 @@ func (s *Service) ApplyCorporateAction(ctx context.Context, tx pgx.Tx, aid Corpo
 	case ActionSymbolChange:
 		return s.applySymbolChange(ctx, tx, a, l, today, actor, now)
 	case ActionDelisting:
-		return s.applyDelisting(ctx, tx, a, today, actor, now)
+		return s.applyDelisting(ctx, tx, a, l, today, actor, now)
 	}
 	return CorporateActionResult{}, errs.New(errs.CodeValidationFailed, "equities: unknown corporate action type")
 }
@@ -412,19 +415,40 @@ func (s *Service) applyDividend(ctx context.Context, tx pgx.Tx, a CorporateActio
 	if err := s.requireNoLiveOrders(ctx, tx, a, &cutoff); err != nil {
 		return CorporateActionResult{}, err
 	}
+	// A split effective before the ex-date changes the units the holders of
+	// record hold; until it is applied the ledger's history does not show it.
+	var pendingSplits int
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM equity_corporate_actions WHERE instrument_id = $1
+		AND action_type IN ('SPLIT','REVERSE_SPLIT') AND status = 'ANNOUNCED' AND effective_date < $2`,
+		a.InstrumentID, a.ExDate.Time()).Scan(&pendingSplits); err != nil {
+		return CorporateActionResult{}, storeErr("count pending splits", err)
+	}
+	if pendingSplits > 0 {
+		return CorporateActionResult{}, errs.Newf(errs.CodeConflict,
+			"equities: %d splits effective before the ex-date are not applied; apply them before paying the dividend", pendingSplits).
+			WithField("action_id", a.ID.String())
+	}
 	// Holders of record: the trade-date position (WALLET plus shares bought
 	// but unsettled) before 00:00 New York time on the ex-date, from the
-	// ledger's own history.
+	// ledger's own history, in the units of the ex-date: a split effective
+	// before the ex-date counts even when it was applied after the cutoff
+	// (nothing traded in between, so it adjusts exactly that position), and
+	// one effective on or after the ex-date never does.
 	holders, err := s.holdings(ctx, tx, `SELECT la.owner_id::text,
 		       sum(CASE WHEN e.side = 'DEBIT' THEN e.quantity ELSE -e.quantity END)::text
 		  FROM journal_entries e
 		  JOIN ledger_accounts la ON la.id = e.ledger_account_id
 		  JOIN journal_transactions t ON t.id = e.transaction_id
 		 WHERE la.owner_type = 'CUSTOMER' AND la.asset_id = $1 AND la.code IN ('WALLET','UNSETTLED_RECEIVABLE')
-		   AND t.effective_at < $2
+		   AND (t.effective_at < $2
+		        OR (t.kind = 'CORPORATE_ACTION' AND EXISTS (
+		              SELECT 1 FROM corporate_action_applications app
+		                JOIN equity_corporate_actions ca ON ca.id = app.action_id
+		               WHERE app.journal_transaction_id = t.id AND ca.instrument_id = $3
+		                 AND ca.action_type IN ('SPLIT','REVERSE_SPLIT') AND ca.effective_date < $4)))
 		 GROUP BY la.owner_id
 		HAVING sum(CASE WHEN e.side = 'DEBIT' THEN e.quantity ELSE -e.quantity END) > 0
-		 ORDER BY la.owner_id`, l.ShareAsset.ID, cutoff)
+		 ORDER BY la.owner_id`, l.ShareAsset.ID, cutoff, a.InstrumentID, a.ExDate.Time())
 	if err != nil {
 		return CorporateActionResult{}, err
 	}
@@ -469,7 +493,7 @@ func (s *Service) applySymbolChange(ctx context.Context, tx pgx.Tx, a CorporateA
 	return res, s.recordAction(ctx, tx, res.Action, 0)
 }
 
-func (s *Service) applyDelisting(ctx context.Context, tx pgx.Tx, a CorporateAction, today Date, actor econ.Actor, now time.Time) (CorporateActionResult, error) {
+func (s *Service) applyDelisting(ctx context.Context, tx pgx.Tx, a CorporateAction, l Listing, today Date, actor econ.Actor, now time.Time) (CorporateActionResult, error) {
 	to, next, when := assets.StatusDelisting, ActionApplying, a.EffectiveDate
 	if a.Status == ActionApplying {
 		to, next, when = assets.StatusDelisted, ActionApplied, a.FinalDate
@@ -482,11 +506,16 @@ func (s *Service) applyDelisting(ctx context.Context, tx pgx.Tx, a CorporateActi
 	if today.Before(when) {
 		return CorporateActionResult{}, notYet(a, when)
 	}
-	inst, err := s.instruments.TransitionStatus(ctx, tx, a.InstrumentID, instruments.StatusChange{
-		To: to, ActorType: string(actor.Type), ActorID: actor.ID, Reason: "delisting (corporate action " + a.ID.String() + ")",
-	})
-	if err != nil {
-		return CorporateActionResult{}, err
+	// An operator may have moved the instrument already; the action then
+	// records the step without moving it again (the same status is not a
+	// transition the instrument has).
+	inst, err := l.Instrument, error(nil)
+	if inst.Status != to {
+		if inst, err = s.instruments.TransitionStatus(ctx, tx, a.InstrumentID, instruments.StatusChange{
+			To: to, ActorType: string(actor.Type), ActorID: actor.ID, Reason: "delisting (corporate action " + a.ID.String() + ")",
+		}); err != nil {
+			return CorporateActionResult{}, err
+		}
 	}
 	res := CorporateActionResult{Instrument: &inst}
 	if res.Action, err = transitionAction(ctx, tx, a, next, actor, "instrument "+string(to), now); err != nil {

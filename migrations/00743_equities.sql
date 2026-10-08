@@ -8,25 +8,28 @@
 -- no WALLET goes negative (LG001). This migration adds the equities registers and makes their own
 -- invariants true in the database, independent of any Go code:
 --
---   1. An equity order's status moves only along its legal edges (EQ001) and only with a transition row
---      naming both endpoints (AU001, 00726). Everything but its status, its rejection and its broker order
---      id is frozen (EQ002); the rejection is written once, with the move to REJECTED; the broker order id
---      is written once.
+--   1. An equity order is recorded ACCEPTED or REJECTED, and its status moves only along its legal edges
+--      (EQ001) and only with a transition row naming both endpoints (AU001, 00726). Everything but its
+--      status, its rejection and its broker order id is frozen (EQ002); the rejection is written once, with
+--      the move to REJECTED; the broker order id is written once.
 --   2. A fill is immutable, one per order, and it agrees with its order: same account, instrument, side and
 --      quantity (no overfill), a price on the order's tick grid that never goes through the order's limit
---      or protection price, executed inside the order's life, and only for an ACCEPTED or OPEN order (EQ003).
---      Its booked charges add up to its total (CHECK).
---   3. A settlement is one per fill. It settles once, together with its journal transaction, and never
---      changes afterwards (EQ004); its identity is frozen (EQ002).
---   4. A corporate action's status moves only along its legal edges (EQ005) with a bound transition row;
---      its terms are frozen (EQ002). One action per (instrument, type, effective date). Each type carries
---      exactly the fields it needs.
+--      or protection price, executed inside the order's life, and only for an ACCEPTED or OPEN order, which
+--      it locks (EQ003). At COMMIT an order is FILLED exactly when it has its fill (EQ003). Its booked
+--      charges add up to its total (CHECK).
+--   3. A settlement is one per fill. It is recorded unsettled, settles once, together with its journal
+--      transaction, and never changes afterwards (EQ004); its identity is frozen (EQ002).
+--   4. A corporate action is recorded ANNOUNCED and its status moves only along its legal edges (EQ005)
+--      with a bound transition row; its terms are frozen (EQ002). One live action per (instrument, type,
+--      effective date): a cancelled one frees its date. Each type carries exactly the fields it needs and
+--      no other type's.
 --   5. A corporate action is applied to an account at most once (UNIQUE), and an application is immutable
 --      and carries its journal transaction exactly when it moved value.
 --   6. Calendar holidays are append-only weekdays, one per (calendar, date).
 --
--- Custom SQLSTATEs: EQ001 illegal equity order transition, EQ002 equity record identity changed, EQ003 fill
--- contradicts its order, EQ004 settlement changed after settling, EQ005 illegal corporate action transition.
+-- Custom SQLSTATEs: EQ001 illegal equity order transition (or birth), EQ002 equity record identity changed,
+-- EQ003 fill contradicts its order, EQ004 settlement recorded settled or changed after settling, EQ005 illegal
+-- corporate action transition (or birth).
 
 -- ---------------------------------------------------------------------------
 -- 1. Orders
@@ -60,7 +63,8 @@ CREATE TABLE equity_orders (
     rejection_code      text CHECK (rejection_code IN (
                             'CAPABILITY_NOT_APPROVED','KILL_SWITCH_ACTIVE','RISK_REJECTED','INSUFFICIENT_BUYING_POWER',
                             'EQUITIES_QUANTITY_BELOW_MINIMUM','EQUITIES_QUANTITY_NOT_LOT_MULTIPLE','EQUITIES_LIMIT_PRICE_INVALID',
-                            'EQUITIES_NO_MARK','EQUITIES_NOTIONAL_TOO_SMALL','EQUITIES_CORPORATE_ACTION_PENDING','VENUE_REJECTED')),
+                            'EQUITIES_NO_MARK','EQUITIES_NOTIONAL_TOO_SMALL','EQUITIES_CORPORATE_ACTION_PENDING',
+                            'EQUITIES_INTENT_PREDATES_SPLIT','VENUE_REJECTED')),
     rejection_reasons   text[] NOT NULL DEFAULT '{}',
     reservation_id      uuid,
     reserved_quantity   numeric(38,0) CHECK (reserved_quantity > 0),
@@ -141,6 +145,22 @@ $$;
 ALTER FUNCTION cp_equity_order_guard() SET search_path = pg_catalog, public, pg_temp;
 CREATE TRIGGER equity_orders_guard BEFORE UPDATE ON equity_orders
     FOR EACH ROW EXECUTE FUNCTION cp_equity_order_guard();
+
+-- +goose StatementBegin
+CREATE FUNCTION cp_equity_order_born() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.status NOT IN ('ACCEPTED','REJECTED') THEN
+        RAISE EXCEPTION 'EQUITY_ORDER_TRANSITION_ILLEGAL: equity order % is recorded ACCEPTED or REJECTED, not %', NEW.id, NEW.status
+            USING ERRCODE = 'EQ001';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+-- +goose StatementEnd
+ALTER FUNCTION cp_equity_order_born() SET search_path = pg_catalog, public, pg_temp;
+CREATE TRIGGER equity_orders_born BEFORE INSERT ON equity_orders
+    FOR EACH ROW EXECUTE FUNCTION cp_equity_order_born();
 CREATE TRIGGER equity_orders_no_delete BEFORE DELETE ON equity_orders
     FOR EACH ROW EXECUTE FUNCTION forbid_mutation();
 
@@ -221,7 +241,8 @@ LANGUAGE plpgsql AS $$
 DECLARE
     o equity_orders%ROWTYPE;
 BEGIN
-    SELECT * INTO o FROM equity_orders WHERE id = NEW.order_id;
+    -- Locked, so no status change of the order can commit alongside the fill unseen.
+    SELECT * INTO o FROM equity_orders WHERE id = NEW.order_id FOR UPDATE;
     IF NOT FOUND THEN
         RAISE EXCEPTION 'EQUITY_FILL_CONTRADICTS_ORDER: fill % names no order', NEW.id USING ERRCODE = 'EQ003';
     END IF;
@@ -257,6 +278,39 @@ $$;
 ALTER FUNCTION cp_equity_fill_matches_order() SET search_path = pg_catalog, public, pg_temp;
 CREATE TRIGGER equity_fills_match_order BEFORE INSERT ON equity_fills
     FOR EACH ROW EXECUTE FUNCTION cp_equity_fill_matches_order();
+
+-- An order is FILLED exactly when it has its fill, checked at COMMIT: a fill whose order is not FILLED
+-- by then, or an order made FILLED without one, is refused.
+-- +goose StatementBegin
+CREATE FUNCTION cp_equity_fill_order_filled() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM equity_orders WHERE id = NEW.order_id AND status = 'FILLED') THEN
+        RAISE EXCEPTION 'EQUITY_FILL_CONTRADICTS_ORDER: fill % is recorded but order % is not FILLED', NEW.id, NEW.order_id
+            USING ERRCODE = 'EQ003';
+    END IF;
+    RETURN NULL;
+END;
+$$;
+-- +goose StatementEnd
+ALTER FUNCTION cp_equity_fill_order_filled() SET search_path = pg_catalog, public, pg_temp;
+CREATE CONSTRAINT TRIGGER equity_fills_order_filled AFTER INSERT ON equity_fills
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION cp_equity_fill_order_filled();
+
+-- +goose StatementBegin
+CREATE FUNCTION cp_equity_filled_order_has_fill() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.status = 'FILLED' AND NOT EXISTS (SELECT 1 FROM equity_fills WHERE order_id = NEW.id) THEN
+        RAISE EXCEPTION 'EQUITY_FILL_CONTRADICTS_ORDER: order % is FILLED without a fill', NEW.id USING ERRCODE = 'EQ003';
+    END IF;
+    RETURN NULL;
+END;
+$$;
+-- +goose StatementEnd
+ALTER FUNCTION cp_equity_filled_order_has_fill() SET search_path = pg_catalog, public, pg_temp;
+CREATE CONSTRAINT TRIGGER equity_orders_filled_has_fill AFTER UPDATE OF status ON equity_orders
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION cp_equity_filled_order_has_fill();
 
 -- ---------------------------------------------------------------------------
 -- 3. Settlements
@@ -307,6 +361,22 @@ $$;
 ALTER FUNCTION cp_equity_settlement_guard() SET search_path = pg_catalog, public, pg_temp;
 CREATE TRIGGER equity_settlements_guard BEFORE UPDATE ON equity_settlements
     FOR EACH ROW EXECUTE FUNCTION cp_equity_settlement_guard();
+
+-- +goose StatementBegin
+CREATE FUNCTION cp_equity_settlement_born() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.settled_at IS NOT NULL OR NEW.journal_transaction_id IS NOT NULL THEN
+        RAISE EXCEPTION 'EQUITY_SETTLEMENT_FINAL: equity settlement % is recorded unsettled and settles once, later', NEW.id
+            USING ERRCODE = 'EQ004';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+-- +goose StatementEnd
+ALTER FUNCTION cp_equity_settlement_born() SET search_path = pg_catalog, public, pg_temp;
+CREATE TRIGGER equity_settlements_born BEFORE INSERT ON equity_settlements
+    FOR EACH ROW EXECUTE FUNCTION cp_equity_settlement_born();
 CREATE TRIGGER equity_settlements_no_delete BEFORE DELETE ON equity_settlements
     FOR EACH ROW EXECUTE FUNCTION forbid_mutation();
 
@@ -344,15 +414,18 @@ CREATE TABLE equity_corporate_actions (
     applied_at                timestamptz,
     created_at                timestamptz NOT NULL DEFAULT now(),
     updated_at                timestamptz NOT NULL DEFAULT now(),
-    UNIQUE (instrument_id, action_type, effective_date),
+    -- Each type carries exactly its own fields: all of them, and no other type any of them.
     CONSTRAINT equity_corporate_actions_ratio_shape CHECK (
-        (action_type IN ('SPLIT','REVERSE_SPLIT')) = (ratio_numerator IS NOT NULL AND ratio_denominator IS NOT NULL)),
+        CASE WHEN action_type IN ('SPLIT','REVERSE_SPLIT')
+             THEN ratio_numerator IS NOT NULL AND ratio_denominator IS NOT NULL
+             ELSE ratio_numerator IS NULL AND ratio_denominator IS NULL END),
     CONSTRAINT equity_corporate_actions_split_direction CHECK (
         (action_type <> 'SPLIT' OR ratio_numerator > ratio_denominator)
         AND (action_type <> 'REVERSE_SPLIT' OR ratio_numerator < ratio_denominator)),
     CONSTRAINT equity_corporate_actions_dividend_shape CHECK (
-        (action_type = 'CASH_DIVIDEND') = (cash_per_share IS NOT NULL AND ex_date IS NOT NULL
-                                           AND record_date IS NOT NULL AND pay_date IS NOT NULL)),
+        CASE WHEN action_type = 'CASH_DIVIDEND'
+             THEN cash_per_share IS NOT NULL AND ex_date IS NOT NULL AND record_date IS NOT NULL AND pay_date IS NOT NULL
+             ELSE cash_per_share IS NULL AND ex_date IS NULL AND record_date IS NULL AND pay_date IS NULL END),
     CONSTRAINT equity_corporate_actions_dividend_dates CHECK (
         action_type <> 'CASH_DIVIDEND' OR (effective_date = ex_date AND ex_date <= record_date AND record_date <= pay_date)),
     CONSTRAINT equity_corporate_actions_cash_scales CHECK (
@@ -366,6 +439,10 @@ CREATE TABLE equity_corporate_actions (
     CONSTRAINT equity_corporate_actions_applying_is_delisting CHECK (status <> 'APPLYING' OR action_type = 'DELISTING'),
     CONSTRAINT equity_corporate_actions_applied_at CHECK ((status = 'APPLIED') = (applied_at IS NOT NULL))
 );
+-- One live action per (instrument, type, effective date); a cancelled action frees its date, so a
+-- mis-announced action can be withdrawn and announced again correctly.
+CREATE UNIQUE INDEX equity_corporate_actions_live_key ON equity_corporate_actions (instrument_id, action_type, effective_date)
+    WHERE status <> 'CANCELLED';
 CREATE INDEX equity_corporate_actions_open_idx ON equity_corporate_actions (instrument_id, effective_date)
     WHERE status IN ('ANNOUNCED','APPLYING');
 CREATE TRIGGER equity_corporate_actions_updated_at BEFORE UPDATE ON equity_corporate_actions
@@ -411,6 +488,22 @@ $$;
 ALTER FUNCTION cp_equity_action_guard() SET search_path = pg_catalog, public, pg_temp;
 CREATE TRIGGER equity_corporate_actions_guard BEFORE UPDATE ON equity_corporate_actions
     FOR EACH ROW EXECUTE FUNCTION cp_equity_action_guard();
+
+-- +goose StatementBegin
+CREATE FUNCTION cp_equity_action_born() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.status <> 'ANNOUNCED' THEN
+        RAISE EXCEPTION 'EQUITY_ACTION_TRANSITION_ILLEGAL: corporate action % is recorded ANNOUNCED, not %', NEW.id, NEW.status
+            USING ERRCODE = 'EQ005';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+-- +goose StatementEnd
+ALTER FUNCTION cp_equity_action_born() SET search_path = pg_catalog, public, pg_temp;
+CREATE TRIGGER equity_corporate_actions_born BEFORE INSERT ON equity_corporate_actions
+    FOR EACH ROW EXECUTE FUNCTION cp_equity_action_born();
 CREATE TRIGGER equity_corporate_actions_no_delete BEFORE DELETE ON equity_corporate_actions
     FOR EACH ROW EXECUTE FUNCTION forbid_mutation();
 

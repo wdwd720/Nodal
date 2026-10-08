@@ -19,6 +19,7 @@ import (
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
+	"github.com/nodal/controlplane/internal/fees"
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/instruments"
 	"github.com/nodal/controlplane/internal/killswitch"
@@ -600,6 +601,9 @@ func TestIntegration_UnknownSubmissionIsReconciledNotRetried(t *testing.T) {
 	}
 	assert.True(t, listed, "an unknown submission is on the reconciliation worklist")
 	assert.Equal(t, o.ID, w.accept(in.ID).ID, "replaying the acceptance changes nothing")
+	_, err = w.svc.PlaceAtVenue(w.ctx, testDB, o.ID)
+	require.Error(t, err, "an UNKNOWN submission is never sent again")
+	assert.Equal(t, errs.CodeReconciliationRequired, errs.CodeOf(err))
 
 	o = w.poll(o)
 	require.Equal(t, OrderFilled, o.Status)
@@ -645,7 +649,8 @@ func TestIntegration_TheCapabilityGateAndKillSwitchRefuseOrders(t *testing.T) {
 
 // TestIntegration_AnAgentOrderWithoutAuthorityIsRefused: an agent may
 // propose an equity order, but the risk kernel requires its delegated
-// authority, and without one the order is refused -- fail closed.
+// authority; with no authority register wired the section is missing and the
+// order is refused -- fail closed.
 func TestIntegration_AnAgentOrderWithoutAuthorityIsRefused(t *testing.T) {
 	w := newWorld(t)
 	acct := w.account()
@@ -671,6 +676,101 @@ func TestIntegration_AnAgentOrderWithoutAuthorityIsRefused(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.Equal(t, errs.CodeForbidden, errs.CodeOf(err))
+}
+
+// fakeAuthority is an authority register that answers one snapshot, for
+// agents' orders only.
+type fakeAuthority struct{ snap risk.AuthoritySnapshot }
+
+func (f fakeAuthority) Authority(_ context.Context, _ db.Querier, s RiskSubject) (risk.AuthoritySnapshot, error) {
+	if s.Intent.ActorType != security.ActorAgent || s.Intent.AgentID == "" || s.Intent.DelegationID == "" || !s.NotionalUSD.IsPositive() {
+		return risk.AuthoritySnapshot{}, errs.New(errs.CodeInternal, "the authority register was asked about something that is not an agent's order")
+	}
+	return f.snap, nil
+}
+
+// fakeStrategies is a strategy register that answers one snapshot, for
+// strategy-originated orders only.
+type fakeStrategies struct{ snap risk.StrategySnapshot }
+
+func (f fakeStrategies) Strategy(_ context.Context, _ db.Querier, s RiskSubject) (risk.StrategySnapshot, error) {
+	if s.Intent.StrategyRef == "" {
+		return risk.StrategySnapshot{}, errs.New(errs.CodeInternal, "the strategy register was asked about an order no strategy originated")
+	}
+	return f.snap, nil
+}
+
+// TestIntegration_AnAgentOrderIsHeldToItsDelegatedAuthority: with the
+// authority register wired, an agent acting within its delegation trades
+// (the subsystem, not the agent, moves the order), and one whose delegation
+// is revoked is refused with the kernel's reason.
+func TestIntegration_AnAgentOrderIsHeldToItsDelegatedAuthority(t *testing.T) {
+	agentOrder := func(snap risk.AuthoritySnapshot) Order {
+		w := newWorld(t, withAuthority(fakeAuthority{snap: snap}))
+		acct := w.account()
+		w.fund(acct, w.cash.ID, 10_000_000_000)
+		l := w.list(1, 1)
+		w.mark(l, 15_000)
+		agent := uuid.NewString()
+		req := w.request(acct, l, market(SideBuy, 1_000_000))
+		req.ActorType, req.ActorID, req.AgentID, req.AgentAuthority = security.ActorAgent, agent, agent, agentauthority.LevelUserApprovedRule
+		req.DelegationID = uuid.NewString()
+		in := w.submit(req)
+		require.Equal(t, econ.StatusRouted, in.Status)
+		o := w.place(w.accept(in.ID))
+		if o.Status == OrderFilled {
+			assert.Positive(t, w.count(`SELECT count(*) FROM economic_effect_transitions tr JOIN economic_effects e ON e.id = tr.effect_id
+				WHERE e.intent_id = $1`, in.ID))
+			assert.Zero(t, w.count(`SELECT count(*) FROM economic_effect_transitions tr JOIN economic_effects e ON e.id = tr.effect_id
+				WHERE e.intent_id = $1 AND tr.actor_type = 'AGENT'`, in.ID), "an agent never applies an effect")
+		}
+		return o
+	}
+
+	o := agentOrder(risk.AuthoritySnapshot{Present: true, WithinLimits: true, InScope: true})
+	assert.Equal(t, OrderFilled, o.Status, "an agent within its delegated authority trades")
+	assert.Equal(t, security.ActorAgent, o.ActorType)
+
+	o = agentOrder(risk.AuthoritySnapshot{Present: true, Revoked: true, WithinLimits: true, InScope: true})
+	require.Equal(t, OrderRejected, o.Status)
+	assert.Equal(t, RejectRisk, o.RejectionCode)
+	assert.Contains(t, o.RejectionReasons, risk.ReasonAuthorityRevoked)
+}
+
+// TestIntegration_AStrategyOrderNeedsAnApprovedStrategyAndPaysItsFee: a
+// strategy-originated order is refused while no strategy register is wired
+// (the section is missing) or the strategy is not approved; an approved
+// strategy's order trades and pays the schedule's strategy fee, disclosed and
+// booked like every other fee.
+func TestIntegration_AStrategyOrderNeedsAnApprovedStrategyAndPaysItsFee(t *testing.T) {
+	strategyOrder := func(opts ...worldOption) (*world, Order) {
+		w := newWorld(t, opts...)
+		acct := w.account()
+		w.fund(acct, w.cash.ID, 10_000_000_000)
+		l := w.list(1, 1)
+		w.mark(l, 15_000)
+		req := w.request(acct, l, market(SideBuy, 1_000_000))
+		req.StrategyRef = "strategy-" + uuid.NewString()
+		return w, w.place(w.accept(w.submit(req).ID))
+	}
+
+	_, o := strategyOrder()
+	require.Equal(t, OrderRejected, o.Status)
+	assert.Contains(t, o.RejectionReasons, risk.ReasonInputInvalid, "no strategy register: the section is missing")
+
+	_, o = strategyOrder(withStrategies(fakeStrategies{snap: risk.StrategySnapshot{Approved: false, ManifestPermits: true}}))
+	require.Equal(t, OrderRejected, o.Status)
+	assert.Contains(t, o.RejectionReasons, risk.ReasonStrategyNotApproved)
+
+	w, o := strategyOrder(withStrategies(fakeStrategies{snap: risk.StrategySnapshot{Approved: true, ManifestPermits: true}}))
+	require.Equal(t, OrderFilled, o.Status)
+	d, err := w.svc.VerifyFill(w.ctx, testDB, o.ID)
+	require.NoError(t, err)
+	charged := false
+	for _, line := range d.Fees.Lines {
+		charged = charged || (line.Component == fees.ComponentStrategyFee && line.Charged.IsPositive())
+	}
+	assert.True(t, charged, "the strategy fee is charged and disclosed")
 }
 
 // TestIntegration_LiveCannotBeRequested: no equity order can be LIVE; the

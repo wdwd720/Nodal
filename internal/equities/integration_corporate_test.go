@@ -13,6 +13,7 @@ import (
 
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/assets"
+	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/instruments"
 	"github.com/nodal/controlplane/internal/ledger"
@@ -110,6 +111,8 @@ func TestIntegration_SplitAndReverseSplitPreserveValueWithCashInLieu(t *testing.
 	assert.Equal(t, "10000000", w.cust(a, ledger.CodeCorporateActions, l.ShareAsset.ID).String())
 	// 10 × 150.00 = 20 × 75.00, exactly.
 	assert.Equal(t, valueAt(q(10_000_000), 15_000).String(), valueAt(w.cust(a, ledger.CodeWallet, l.ShareAsset.ID), 7_500).String())
+	w.at(2026, 10, 8, 10, 1)
+	w.mark(l, 7_500)
 	assert.Equal(t, OrderFilled, w.trade(b, l, market(SideBuy, 1_000_000)).Status, "trading resumes once applied")
 	w.at(2026, 10, 9, 8, 0)
 	w.settleDue()
@@ -368,6 +371,30 @@ func TestIntegration_DelistingBlocksBuysThenEverything(t *testing.T) {
 	assert.True(t, again.Replayed)
 }
 
+// TestIntegration_ADelistingFollowsAnOperatorWhoMovedFirst: when an operator
+// has already made the instrument DELISTING, the delisting action records its
+// first step without moving the instrument again, and still ends it DELISTED.
+func TestIntegration_ADelistingFollowsAnOperatorWhoMovedFirst(t *testing.T) {
+	w := newWorld(t)
+	l := w.list(1, 1)
+	d, err := w.announce(CorporateActionSpec{InstrumentID: l.Instrument.ID, Type: ActionDelisting, EffectiveDate: NewDate(2026, 10, 7),
+		FinalDate: NewDate(2026, 10, 8), Reason: "issuer delisting"})
+	require.NoError(t, err)
+	transitionInstrument(t, w, l.Instrument.ID, assets.StatusDelisting)
+	res, err := w.applyAction(d.ID)
+	require.NoError(t, err)
+	assert.Equal(t, ActionApplying, res.Action.Status)
+	assert.Equal(t, assets.StatusDelisting, res.Instrument.Status)
+	assert.Equal(t, 1, w.count(`SELECT count(*) FROM instrument_status_transitions WHERE instrument_id = $1 AND to_status = 'DELISTING'`,
+		l.Instrument.ID), "the instrument moved once, by the operator")
+
+	w.at(2026, 10, 8, 10, 0)
+	res, err = w.applyAction(d.ID)
+	require.NoError(t, err)
+	assert.Equal(t, ActionApplied, res.Action.Status)
+	assert.Equal(t, assets.StatusDelisted, res.Instrument.Status)
+}
+
 // TestIntegration_CorporateActionsRefuseWhilePositionsCanMove: a split is
 // refused while an order on the instrument is live or shares bought are not
 // settled, and applies once they are; a cancelled action cannot be applied.
@@ -417,4 +444,120 @@ func TestIntegration_CorporateActionsRefuseWhilePositionsCanMove(t *testing.T) {
 	w.at(2026, 10, 9, 10, 0)
 	w.mark(l, 7_500)
 	assert.Equal(t, OrderFilled, w.trade(acct, l, market(SideBuy, 1_000_000)).Status)
+}
+
+// TestIntegration_ACancelledActionFreesItsDate: a mis-announced dividend is
+// withdrawn and announced again for the same ex-date with corrected terms;
+// while an action is live a different one for its date conflicts, and the
+// same one is a replay.
+func TestIntegration_ACancelledActionFreesItsDate(t *testing.T) {
+	w := newWorld(t)
+	l := w.list(1, 1)
+	cancel := func(aid CorporateActionID) {
+		t.Helper()
+		require.NoError(t, w.inTx(func(ctx context.Context, tx pgx.Tx) error {
+			_, err := w.svc.CancelCorporateAction(ctx, tx, aid, w.sys, "announced with the wrong amount")
+			return err
+		}))
+	}
+	spec := CorporateActionSpec{InstrumentID: l.Instrument.ID, Type: ActionCashDividend, ExDate: NewDate(2026, 10, 14),
+		RecordDate: NewDate(2026, 10, 14), PayDate: NewDate(2026, 10, 16), CashPerShare: &PricePoint{Mantissa: q(25), Scale: 2},
+		Reason: "quarterly dividend"}
+	first, err := w.announce(spec)
+	require.NoError(t, err)
+	corrected := spec
+	corrected.CashPerShare = &PricePoint{Mantissa: q(26), Scale: 2}
+	_, err = w.announce(corrected)
+	require.Error(t, err)
+	assert.Equal(t, errs.CodeConflict, errs.CodeOf(err), "a different action for a live action's date")
+
+	cancel(first.ID)
+	second, err := w.announce(corrected)
+	require.NoError(t, err, "a cancelled action frees its date")
+	assert.NotEqual(t, first.ID, second.ID)
+	assert.Equal(t, ActionAnnounced, second.Status)
+	replay, err := w.announce(corrected)
+	require.NoError(t, err)
+	assert.Equal(t, second.ID, replay.ID, "announcing a live action again is a replay")
+
+	cancel(second.ID)
+	third, err := w.announce(spec)
+	require.NoError(t, err)
+	assert.NotEqual(t, first.ID, third.ID, "the cancelled action is not revived")
+	assert.Equal(t, ActionAnnounced, third.Status)
+	gone, err := w.svc.CorporateAction(w.ctx, testDB, first.ID)
+	require.NoError(t, err)
+	assert.Equal(t, ActionCancelled, gone.Status)
+}
+
+// TestIntegration_AnIntentRecordedBeforeASplitIsNotExecutedInOldUnits: an
+// intent routed before a 2-for-1 split states its quantity and limit in
+// pre-split shares; accepted after the split it is refused, not filled for
+// half the intended exposure at a limit twice the market. A new intent in
+// post-split shares trades.
+func TestIntegration_AnIntentRecordedBeforeASplitIsNotExecutedInOldUnits(t *testing.T) {
+	w := newWorld(t)
+	acct := w.account()
+	w.fund(acct, w.cash.ID, 10_000_000_000)
+	l := w.list(1, 1)
+	w.mark(l, 10_000)
+	stale := w.submit(w.request(acct, l, limit(SideBuy, 1_000_000, 10_000)))
+	require.Equal(t, econ.StatusRouted, stale.Status)
+	split, err := w.announce(CorporateActionSpec{InstrumentID: l.Instrument.ID, Type: ActionSplit, EffectiveDate: NewDate(2026, 10, 8),
+		Ratio: &Ratio{Numerator: 2, Denominator: 1}, Reason: "2-for-1 split"})
+	require.NoError(t, err)
+	w.at(2026, 10, 8, 9, 0)
+	_, err = w.applyAction(split.ID)
+	require.NoError(t, err)
+
+	w.at(2026, 10, 8, 10, 0)
+	w.mark(l, 5_000)
+	o := w.accept(stale.ID)
+	require.Equal(t, OrderRejected, o.Status)
+	assert.Equal(t, RejectIntentPredatesSplit, o.RejectionCode)
+	assert.Equal(t, []string{"SPLIT:" + split.ID.String()}, o.RejectionReasons)
+	assert.Equal(t, errs.CodeConflict, errs.CodeOf(o.Refusal()))
+	assert.Equal(t, econ.StatusRejected, w.intent(stale.ID).Status)
+	assert.Zero(t, w.count(`SELECT count(*) FROM equity_fills WHERE order_id = $1`, o.ID))
+
+	fresh := w.trade(acct, l, limit(SideBuy, 2_000_000, 5_000))
+	assert.Equal(t, OrderFilled, fresh.Status, "an intent in post-split shares trades")
+}
+
+// TestIntegration_ADividendCountsASplitAppliedLate: a 2-for-1 split effective
+// on Thursday is applied only on Monday, after the dividend's Friday ex-date
+// began. The dividend waits for it, and then pays the holder of record on the
+// two post-split shares the ex-date counts, not on the one share the ledger
+// showed at 00:00 on the ex-date.
+func TestIntegration_ADividendCountsASplitAppliedLate(t *testing.T) {
+	w := newWorld(t)
+	acct := w.account()
+	w.fund(acct, w.cash.ID, 10_000_000_000)
+	l := w.list(1, 1)
+	w.mark(l, 10_000)
+	require.Equal(t, OrderFilled, w.trade(acct, l, market(SideBuy, 1_000_000)).Status)
+	split, err := w.announce(CorporateActionSpec{InstrumentID: l.Instrument.ID, Type: ActionSplit, EffectiveDate: NewDate(2026, 10, 8),
+		Ratio: &Ratio{Numerator: 2, Denominator: 1}, Reason: "2-for-1 split"})
+	require.NoError(t, err)
+	div, err := w.announce(CorporateActionSpec{InstrumentID: l.Instrument.ID, Type: ActionCashDividend, ExDate: NewDate(2026, 10, 9),
+		RecordDate: NewDate(2026, 10, 9), PayDate: NewDate(2026, 10, 12), CashPerShare: &PricePoint{Mantissa: q(10), Scale: 2},
+		Reason: "dividend declared on post-split shares"})
+	require.NoError(t, err)
+	w.at(2026, 10, 8, 9, 0)
+	w.settleDue()
+
+	w.at(2026, 10, 12, 10, 0)
+	_, err = w.applyAction(div.ID)
+	require.Error(t, err)
+	assert.Equal(t, errs.CodeConflict, errs.CodeOf(err), "a split effective before the ex-date is not applied yet")
+	res, err := w.applyAction(split.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "1000000", applicationOf(t, res.Applications, acct).SharesDelta.String())
+
+	paid, err := w.applyAction(div.ID)
+	require.NoError(t, err)
+	app := applicationOf(t, paid.Applications, acct)
+	assert.Equal(t, "2000000", app.EntitledQuantity.String(), "two post-split shares")
+	assert.Equal(t, "200000", app.CashAmount.String(), "2 × 0.10")
+	assert.Equal(t, "200000", w.cust(acct, ledger.CodeDividends, w.cash.ID).String())
 }

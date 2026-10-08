@@ -38,6 +38,29 @@ type VerificationReader interface {
 	Level(ctx context.Context, q db.Querier, account accounts.AccountID) (valuedomain.VerificationLevel, error)
 }
 
+// RiskSubject is what a risk-section reader is asked about: the order's
+// economic intent, the USD notional it puts at risk and the evaluation time.
+type RiskSubject struct {
+	Intent      econ.Intent
+	NotionalUSD money.USD
+	At          time.Time
+}
+
+// AuthorityReader supplies the risk kernel's authority section for an order
+// an agent proposed: whether the agent holds delegated authority over the
+// account that is unexpired, unrevoked, within its limits and in scope for
+// this order. Equities keeps no delegation register of its own.
+type AuthorityReader interface {
+	Authority(ctx context.Context, q db.Querier, s RiskSubject) (risk.AuthoritySnapshot, error)
+}
+
+// StrategyReader supplies the risk kernel's strategy section for a
+// strategy-originated order: whether the strategy is approved and its
+// manifest permits this order.
+type StrategyReader interface {
+	Strategy(ctx context.Context, q db.Querier, s RiskSubject) (risk.StrategySnapshot, error)
+}
+
 // identityVerification reads the level internal/identity establishes, over
 // the caller's querier.
 type identityVerification struct{}
@@ -76,6 +99,12 @@ type Config struct {
 	MinOrderNotional money.USD
 	// Verification is optional; the default reads internal/identity.
 	Verification VerificationReader
+	// Authority is optional. Without it the risk kernel's authority section
+	// is missing, so every order an agent proposes is refused (fail closed).
+	Authority AuthorityReader
+	// Strategies is optional. Without it the strategy section is missing, so
+	// every strategy-originated order is refused (fail closed).
+	Strategies StrategyReader
 }
 
 // Service is the equities subsystem. It holds no mutable state; every
@@ -98,6 +127,8 @@ type Service struct {
 	collar       money.BPS
 	minNotional  money.USD
 	verification VerificationReader
+	authority    AuthorityReader
+	strategies   StrategyReader
 	instruments  *instruments.Repository
 	assets       *assets.Repository
 	accounts     *accounts.Repository
@@ -162,8 +193,9 @@ func NewService(cfg Config) (*Service, error) {
 		clk: cfg.Clock, intents: cfg.Intents, effects: cfg.Effects, auth: cfg.Authorizer, kills: cfg.KillSwitches,
 		router: cfg.Router, riskStore: risk.NewStore(), riskPolicy: cfg.RiskPolicy, capital: cfg.Capital, ledger: cfg.Ledger,
 		prices: cfg.Prices, audit: cfg.Audit, adapter: cfg.Adapter, schedules: schedules, collar: cfg.MarketCollarBPS,
-		minNotional: cfg.MinOrderNotional, verification: v, instruments: instruments.NewRepository(),
-		assets: assets.NewRepository(), accounts: accounts.NewRepository(), actor: econ.SystemActor("equities"),
+		minNotional: cfg.MinOrderNotional, verification: v, authority: cfg.Authority, strategies: cfg.Strategies,
+		instruments: instruments.NewRepository(), assets: assets.NewRepository(), accounts: accounts.NewRepository(),
+		actor: econ.SystemActor("equities"),
 	}, nil
 }
 

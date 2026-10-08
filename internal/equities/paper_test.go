@@ -168,6 +168,35 @@ func TestPaper_SessionRulesAndExpiry(t *testing.T) {
 	assert.Equal(t, VenueReasonDayOrderExpired, r.Reason)
 }
 
+// TestPaper_ASellLimitIsNeverRefusedForWantOfABid: at a mark so low that the
+// slipped price rounds to nothing, a market sell has no bid and is refused,
+// but a sell limit at one tick rests while the mark is below it (and can be
+// cancelled) and fills at its limit once the mark reaches it.
+func TestPaper_ASellLimitIsNeverRefusedForWantOfABid(t *testing.T) {
+	v := testVenue(t, 10)
+	ctx := context.Background()
+	at := ny(t, 2026, 10, 7, 11, 0, 0)
+	exp := ny(t, 2026, 10, 7, 16, 0, 0)
+
+	r, err := v.PlaceOrder(ctx, PlaceOrderRequest{Order: marketOrder(SideSell, 1, exp), Mark: mark(1, 2, at), At: at})
+	require.NoError(t, err)
+	assert.Equal(t, ReportRejected, r.Status)
+	assert.Equal(t, VenueReasonNoBid, r.Reason, "0.01 less 10 bps rounds down to nothing")
+
+	sell := limitOrder(SideSell, 1, false, exp)
+	r, err = v.OrderStatus(ctx, OrderStatusRequest{Order: sell, Mark: mark(5, 3, at), At: at})
+	require.NoError(t, err)
+	assert.Equal(t, ReportOpen, r.Status, "a mark of 0.005 is below the 0.01 limit: the order rests")
+	r, err = v.Cancel(ctx, CancelRequest{Order: sell, Mark: mark(5, 3, at), At: at})
+	require.NoError(t, err)
+	assert.Equal(t, ReportCancelled, r.Status)
+
+	r, err = v.OrderStatus(ctx, OrderStatusRequest{Order: sell, Mark: mark(1, 2, at), At: at})
+	require.NoError(t, err)
+	require.Equal(t, ReportFilled, r.Status)
+	assert.Equal(t, "1", r.Fill.Price.String(), "the slipped price rounds to nothing; the limit is the floor")
+}
+
 func TestPaper_CancelRestingOrFillsFirst(t *testing.T) {
 	v := testVenue(t, 0)
 	ctx := context.Background()
@@ -246,8 +275,9 @@ func TestProviderMode_LiveIsRefusedUnconditionally(t *testing.T) {
 
 // TestProp_PaperVenueIsDeterministicAndNeverFillsThroughALimit: the same
 // request always gets the same answer, a fill is always the whole order on
-// the tick grid, a market fill never passes its protection price and a limit
-// fill never passes its limit.
+// the tick grid, a market fill never passes its protection price, a limit
+// fill never passes its limit, and polling or cancelling a limit order never
+// refuses it.
 func TestProp_PaperVenueIsDeterministicAndNeverFillsThroughALimit(t *testing.T) {
 	v := testVenue(t, 25)
 	ctx := context.Background()
@@ -272,6 +302,18 @@ func TestProp_PaperVenueIsDeterministicAndNeverFillsThroughALimit(t *testing.T) 
 		b, errB := v.PlaceOrder(ctx, req)
 		if (errA == nil) != (errB == nil) || (errA == nil && !sameReport(a, b)) {
 			rt.Fatalf("the same request got two answers: %+v / %+v", a, b)
+		}
+		if o.Type == OrderLimit {
+			// A limit order the venue holds is never refused afterwards: it
+			// rests, fills, is cancelled or expires.
+			polled, err := v.OrderStatus(ctx, OrderStatusRequest{Order: o, Mark: m, At: at})
+			if err != nil || polled.Status == ReportRejected {
+				rt.Fatalf("polling a limit order refused it: %+v %v", polled, err)
+			}
+			cancelled, err := v.Cancel(ctx, CancelRequest{Order: o, Mark: m, At: at})
+			if err != nil || cancelled.Status == ReportRejected {
+				rt.Fatalf("cancelling a limit order refused it: %+v %v", cancelled, err)
+			}
 		}
 		if errA != nil || a.Status != ReportFilled {
 			return

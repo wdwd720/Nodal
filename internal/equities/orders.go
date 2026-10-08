@@ -46,9 +46,11 @@ type OrderRequest struct {
 	IdempotencyKey string
 	ActorType      security.ActorType
 	ActorID        string
-	// AgentID and AgentAuthority are set exactly when an agent proposes.
+	// AgentID and AgentAuthority are set exactly when an agent proposes;
+	// DelegationID names the delegation it acts under, for the AuthorityReader.
 	AgentID        string
 	AgentAuthority agentauthority.Level
+	DelegationID   string
 	StrategyRef    string
 	CorrelationID  string
 }
@@ -138,7 +140,7 @@ func (s *Service) SubmitOrderIntent(ctx context.Context, tx pgx.Tx, req OrderReq
 	in, existing, err := s.intents.Submit(ctx, tx, econ.Intent{
 		AccountID: req.AccountID, Kind: intentKindFor(req.Side), Mode: req.Mode, Capability: gates.Equities,
 		ActorType: req.ActorType, ActorID: req.ActorID, AgentID: req.AgentID, StrategyRef: req.StrategyRef,
-		InstrumentID: req.InstrumentID.String(), AssetID: &share, Quantity: &qty, Terms: terms,
+		DelegationID: req.DelegationID, InstrumentID: req.InstrumentID.String(), AssetID: &share, Quantity: &qty, Terms: terms,
 		IdempotencyKey: req.IdempotencyKey, CorrelationID: req.CorrelationID,
 	})
 	if err != nil || existing {
@@ -259,6 +261,11 @@ func (s *Service) AcceptOrder(ctx context.Context, tx pgx.Tx, intentID econ.Inte
 		return Order{}, err
 	} else if blocking != nil {
 		return s.reject(ctx, tx, in, o, RejectCorporateActionPending, []string{string(blocking.Type) + ":" + blocking.ID.String()})
+	}
+	if split, err := splitAppliedSince(ctx, tx, iid, in.CreatedAt); err != nil {
+		return Order{}, err
+	} else if split != nil {
+		return s.reject(ctx, tx, in, o, RejectIntentPredatesSplit, []string{string(split.Type) + ":" + split.ID.String()})
 	}
 	// 3. Price discovery: what the reservation is sized against.
 	mark, err := s.markFor(ctx, tx, l, now)
@@ -499,6 +506,24 @@ func (s *Service) evaluateRisk(ctx context.Context, tx pgx.Tx, in econ.Intent, l
 		KillSwitches: switches,
 		Now:          now,
 	}
+	// The authority and strategy sections come from their registers when the
+	// composition root wires them; without one the section stays missing and
+	// the kernel refuses the order.
+	subject := RiskSubject{Intent: in, NotionalUSD: notional, At: now}
+	if in.ActorType == security.ActorAgent && s.authority != nil {
+		a, err := s.authority.Authority(ctx, tx, subject)
+		if err != nil {
+			return risk.AdvancedDecision{}, risk.DecisionID{}, err
+		}
+		input.Authority = &a
+	}
+	if in.StrategyRef != "" && s.strategies != nil {
+		st, err := s.strategies.Strategy(ctx, tx, subject)
+		if err != nil {
+			return risk.AdvancedDecision{}, risk.DecisionID{}, err
+		}
+		input.Strategy = &st
+	}
 	d := risk.EvaluateAdvanced(s.riskPolicy, input)
 	did, err := s.riskStore.RecordAdvancedDecision(ctx, tx, input, d, in.CorrelationID)
 	if err != nil {
@@ -636,7 +661,9 @@ func (s *Service) executionBlocked(ctx context.Context, q db.Querier, l Listing,
 
 // PlaceAtVenue submits an ACCEPTED order to the venue with the current mark.
 // It writes nothing; the caller applies the answer with ApplyOrderReport in a
-// transaction of its own, or MarkSubmissionUnknown when there is none.
+// transaction of its own, or MarkSubmissionUnknown when there is none. Only a
+// PENDING submission is sent: one whose outcome is UNKNOWN is never sent
+// again, and is resolved with PollVenue.
 func (s *Service) PlaceAtVenue(ctx context.Context, q db.Querier, oid OrderID) (OrderReport, error) {
 	o, mark, now, err := s.venueContext(ctx, q, oid)
 	if err != nil {
@@ -644,6 +671,18 @@ func (s *Service) PlaceAtVenue(ctx context.Context, q db.Querier, oid OrderID) (
 	}
 	if o.Status != OrderAccepted {
 		return OrderReport{}, errs.Newf(errs.CodeInvalidStateTransition, "equities: order %s is %s and was placed already", o.ID, o.Status)
+	}
+	e, ok, err := s.effects.GetByKey(ctx, q, submitKey(o.ID))
+	if err != nil {
+		return OrderReport{}, err
+	}
+	if !ok {
+		return OrderReport{}, errs.New(errs.CodeInternal, "equities: an accepted order has no submission effect")
+	}
+	if e.Status != econ.EffectPending {
+		return OrderReport{}, errs.Newf(errs.CodeReconciliationRequired,
+			"equities: the submission of order %s is %s; it is resolved by polling the venue, never sent again", o.ID, e.Status).
+			WithField("order_id", o.ID.String()).WithField("effect_id", e.ID.String())
 	}
 	return s.adapter.PlaceOrder(ctx, PlaceOrderRequest{Order: o.BrokerOrder(), Mark: mark, At: now})
 }

@@ -168,17 +168,59 @@ func TestIntegration_DatabaseGuardsTheEquitiesRegisters(t *testing.T) {
 	err = exec(`UPDATE equity_settlements SET settled_at = now() WHERE fill_id = $1`, of.ID)
 	require.Error(t, err, "settled without its journal")
 	assert.Equal(t, db.SQLStateCheckViolation, db.SQLState(err))
+	// A settlement is recorded unsettled; it never arrives settled.
+	err = exec(`INSERT INTO equity_settlements (id, fill_id, order_id, account_id, instrument_id, asset_id, quantity, trade_date,
+		due_date, settled_at, journal_transaction_id)
+		SELECT $2, fill_id, order_id, account_id, instrument_id, asset_id, quantity, trade_date, due_date, settled_at, journal_transaction_id
+		  FROM equity_settlements WHERE id = $1`, st.ID, uuid.New())
+	require.Error(t, err)
+	assert.Equal(t, "EQ004", db.SQLState(err), "%v", err)
 
-	// LIVE is not a mode an order can be stored in.
-	_, err = owner.Exec(w.ctx, `INSERT INTO equity_orders (id, account_id, instrument_id, intent_id, share_asset_id, cash_asset_id,
-		symbol, exchange_mic, terms_version, side, order_type, mode, quantity, quantity_decimals, price_scale, tick_size, limit_price,
-		protection_price, extended_hours, session, trade_date, expires_at, status, rejection_code, rejection_reasons, reservation_id,
-		reserved_quantity, risk_decision_id, broker, actor_type, actor_id, created_at)
-		SELECT $2, account_id, instrument_id, intent_id, share_asset_id, cash_asset_id, symbol, exchange_mic, terms_version, side,
-		       order_type, 'LIVE', quantity, quantity_decimals, price_scale, tick_size, limit_price, protection_price, extended_hours,
-		       session, trade_date, expires_at, status, rejection_code, rejection_reasons, reservation_id, reserved_quantity,
-		       risk_decision_id, broker, actor_type, actor_id, created_at
-		  FROM equity_orders WHERE id = $1`, filled.ID, uuid.New())
+	// At COMMIT an order is FILLED exactly when it has its fill: a fill that
+	// agrees with an OPEN order but leaves it OPEN is refused, and so is an
+	// order made FILLED without one.
+	settleEffect, ok, err := w.effects.GetByKey(w.ctx, testDB, "equities:settlement:"+f.ID.String())
+	require.NoError(t, err)
+	require.True(t, ok)
+	err = exec(`INSERT INTO equity_fills (id, order_id, account_id, instrument_id, side, quantity, price, price_scale,
+		mark_mantissa, mark_scale, mark_source, mark_observed_at, slippage_bps, venue, venue_fill_id, executed_at, trade_date,
+		settlement_date, notional, spread_amount, platform_fees, venue_fees, total, fee_schedule_version, fee_schedule_hash,
+		fee_schedule, fee_disclosure, fee_disclosure_hash, journal_transaction_id, effect_id)
+		VALUES ($1,$2,$3,$4,'BUY',1000000,13900,2,13900,2,'forged',$5,0,'nodal-paper-equities',$6,$5,'2026-10-07','2026-10-08',
+		        1,0,0,0,1,'v',repeat('0',64),'{}','{}',repeat('0',64),$7,$8)`,
+		uuid.New(), open.ID, acct, l.Instrument.ID, open.CreatedAt, "forged-"+uuid.NewString(), *st.JournalTransactionID, settleEffect.ID)
+	require.Error(t, err)
+	assert.Equal(t, "EQ003", db.SQLState(err), "%v", err)
+	err = w.inTx(func(ctx context.Context, tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `INSERT INTO equity_order_transitions (id, order_id, from_status, to_status, actor_type, actor_id,
+			reason, occurred_at) VALUES ($1,$2,'OPEN','FILLED','SYSTEM','bypass','bypass',now())`, uuid.New(), open.ID); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `UPDATE equity_orders SET status = 'FILLED' WHERE id = $1`, open.ID)
+		return err
+	})
+	require.Error(t, err)
+	assert.Equal(t, "EQ003", db.SQLState(err), "%v", err)
+	assert.Equal(t, OrderOpen, w.order(open.ID).Status)
+
+	// An order is recorded ACCEPTED or REJECTED, and LIVE is not a mode it
+	// can be stored in.
+	cloneOrder := func(status, mode string) error {
+		_, err := owner.Exec(w.ctx, `INSERT INTO equity_orders (id, account_id, instrument_id, intent_id, share_asset_id, cash_asset_id,
+			symbol, exchange_mic, terms_version, side, order_type, mode, quantity, quantity_decimals, price_scale, tick_size, limit_price,
+			protection_price, extended_hours, session, trade_date, expires_at, status, rejection_code, rejection_reasons, reservation_id,
+			reserved_quantity, risk_decision_id, broker, actor_type, actor_id, created_at)
+			SELECT $2, account_id, instrument_id, intent_id, share_asset_id, cash_asset_id, symbol, exchange_mic, terms_version, side,
+			       order_type, $4, quantity, quantity_decimals, price_scale, tick_size, limit_price, protection_price, extended_hours,
+			       session, trade_date, expires_at, $3, rejection_code, rejection_reasons, reservation_id, reserved_quantity,
+			       risk_decision_id, broker, actor_type, actor_id, created_at
+			  FROM equity_orders WHERE id = $1`, filled.ID, uuid.New(), status, mode)
+		return err
+	}
+	err = cloneOrder("FILLED", "PAPER")
+	require.Error(t, err)
+	assert.Equal(t, "EQ001", db.SQLState(err), "%v", err)
+	err = cloneOrder("ACCEPTED", "LIVE")
 	require.Error(t, err)
 	assert.Equal(t, db.SQLStateCheckViolation, db.SQLState(err))
 	assert.Equal(t, "equity_orders_mode_check", db.ConstraintName(err))
@@ -237,6 +279,28 @@ func TestIntegration_DatabaseGuardsTheEquitiesRegisters(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.Equal(t, "EQ005", db.SQLState(err), "a cancelled action stays cancelled")
+
+	// A corporate action is recorded ANNOUNCED, and each type carries only
+	// its own fields: a symbol change with a record date, or with a ratio, is
+	// refused.
+	rawAction := func(status string, recordDate, ratioNumerator any) error {
+		return exec(`INSERT INTO equity_corporate_actions (id, instrument_id, action_type, status, effective_date, share_asset_id,
+			cash_asset_id, new_symbol, record_date, ratio_numerator, rounding_policy, reason, content_hash, announced_by_actor_type,
+			announced_by_actor_id, applied_at)
+			VALUES ($1,$2,'SYMBOL_CHANGE',$3::text,'2026-10-14',$4,$5,'RAWSYM',$6::date,$7::bigint,'SHARES_DOWN_CASH_DOWN','raw',$8,
+			        'SYSTEM','raw',CASE WHEN $3::text = 'APPLIED' THEN now() END)`,
+			uuid.New(), l.Instrument.ID, status, l.ShareAsset.ID, w.cash.ID, recordDate, ratioNumerator, make([]byte, 32))
+	}
+	err = rawAction("APPLIED", nil, nil)
+	require.Error(t, err)
+	assert.Equal(t, "EQ005", db.SQLState(err), "%v", err)
+	err = rawAction("ANNOUNCED", "2026-10-14", nil)
+	require.Error(t, err)
+	assert.Equal(t, "equity_corporate_actions_dividend_shape", db.ConstraintName(err), "%v", err)
+	err = rawAction("ANNOUNCED", nil, 2)
+	require.Error(t, err)
+	assert.Equal(t, "equity_corporate_actions_ratio_shape", db.ConstraintName(err), "%v", err)
+	require.NoError(t, rawAction("ANNOUNCED", nil, nil), "the same row carrying only its own fields is accepted")
 
 	// Holidays are append-only and never on a weekend.
 	err = exec(`UPDATE equity_calendar_holidays SET name = 'x'`)

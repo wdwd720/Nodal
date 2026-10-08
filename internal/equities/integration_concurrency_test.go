@@ -4,6 +4,7 @@ package equities
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 
@@ -267,20 +268,27 @@ func TestIntegration_ConcurrentSettlementSettlesOnce(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			var settled []Settlement
-			err := inTxRetrying(w.ctx, func(ctx context.Context, tx pgx.Tx) error {
-				var err error
-				settled, err = w.svc.SettleDue(ctx, tx, 500)
-				return err
-			})
-			errsCh <- err
 			mine := 0
-			for _, s := range settled {
-				if s.FillID == f.ID {
-					mine++
+			defer func() { counts <- mine }()
+			for {
+				var settled []Settlement
+				if err := inTxRetrying(w.ctx, func(ctx context.Context, tx pgx.Tx) error {
+					var err error
+					settled, err = w.svc.SettleDue(ctx, tx, 500)
+					return err
+				}); err != nil {
+					errsCh <- err
+					return
+				}
+				if len(settled) == 0 {
+					return
+				}
+				for _, s := range settled {
+					if s.FillID == f.ID {
+						mine++
+					}
 				}
 			}
-			counts <- mine
 		}()
 	}
 	wg.Wait()
@@ -297,4 +305,74 @@ func TestIntegration_ConcurrentSettlementSettlesOnce(t *testing.T) {
 	assert.Equal(t, 1, w.count(`SELECT count(*) FROM journal_transactions WHERE idempotency_key = $1`, "equities:settlement:"+f.ID.String()))
 	assert.Equal(t, "3000000", w.cust(acct, ledger.CodeWallet, l.ShareAsset.ID).String())
 	assert.True(t, w.cust(acct, ledger.CodeUnsettledReceivable, l.ShareAsset.ID).IsZero())
+}
+
+// TestIntegration_SettlementWorkersAcrossAccountsNeverDeadlock: workers
+// draining the due settlements of many accounts and instruments at once --
+// each transaction settles one account, with its instrument locks taken
+// before anything is posted -- finish without a deadlock or a retry, and
+// every settlement settles exactly once.
+func TestIntegration_SettlementWorkersAcrossAccountsNeverDeadlock(t *testing.T) {
+	w := newWorld(t)
+	listings := []Listing{w.list(1, 1), w.list(1, 1), w.list(1, 1)}
+	for _, l := range listings {
+		w.mark(l, 15_000)
+	}
+	var fills []FillID
+	for range 4 {
+		acct := w.account()
+		w.fund(acct, w.cash.ID, 10_000_000_000)
+		for _, l := range listings {
+			o := w.trade(acct, l, market(SideBuy, 1_000_000))
+			require.Equal(t, OrderFilled, o.Status)
+			f, ok, err := w.svc.FillForOrder(w.ctx, testDB, o.ID)
+			require.NoError(t, err)
+			require.True(t, ok)
+			fills = append(fills, f.ID)
+		}
+	}
+	w.at(2026, 10, 8, 9, 0)
+
+	const workers = 8
+	var wg sync.WaitGroup
+	errsCh := make(chan error, workers)
+	for range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				var settled []Settlement
+				// No retries: a deadlock would surface here as an error.
+				if err := w.inTx(func(ctx context.Context, tx pgx.Tx) error {
+					var err error
+					settled, err = w.svc.SettleDue(ctx, tx, 500)
+					return err
+				}); err != nil {
+					errsCh <- err
+					return
+				}
+				if len(settled) == 0 {
+					return
+				}
+				for _, s := range settled[1:] {
+					if s.AccountID != settled[0].AccountID {
+						errsCh <- fmt.Errorf("one batch settled accounts %s and %s", settled[0].AccountID, s.AccountID)
+						return
+					}
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	close(errsCh)
+	for err := range errsCh {
+		require.NoError(t, err)
+	}
+	for _, fid := range fills {
+		st, ok, err := w.svc.SettlementForFill(w.ctx, testDB, fid)
+		require.NoError(t, err)
+		require.True(t, ok)
+		assert.True(t, st.Settled())
+		assert.Equal(t, 1, w.count(`SELECT count(*) FROM journal_transactions WHERE idempotency_key = $1`, "equities:settlement:"+fid.String()))
+	}
 }

@@ -112,8 +112,9 @@ func dateArg(d Date) any {
 	return d.Time()
 }
 
-// insertAction inserts an ANNOUNCED action, or returns the existing action
-// with the same (instrument, type, effective date) and inserted=false.
+// insertAction inserts an ANNOUNCED action, or returns the live (not
+// cancelled) action with the same (instrument, type, effective date) and
+// inserted=false. A cancelled action does not hold its date.
 func insertAction(ctx context.Context, tx pgx.Tx, a CorporateAction) (CorporateAction, bool, error) {
 	var num, den any
 	if a.Ratio != nil {
@@ -131,7 +132,7 @@ func insertAction(ctx context.Context, tx pgx.Tx, a CorporateAction) (CorporateA
 		cash_in_lieu_price, cash_in_lieu_price_scale, ex_date, record_date, pay_date, final_date, new_symbol, rounding_policy,
 		reason, content_hash, announced_by_actor_type, announced_by_actor_id, created_at, updated_at)
 		VALUES ($1,$2,$3,'ANNOUNCED',$4,$5,$6,$7,$8,$9::numeric,$10,$11::numeric,$12,$13,$14,$15,$16,NULLIF($17,''),$18,$19,$20,$21,$22,$23,$23)
-		ON CONFLICT (instrument_id, action_type, effective_date) DO NOTHING
+		ON CONFLICT (instrument_id, action_type, effective_date) WHERE status <> 'CANCELLED' DO NOTHING
 		RETURNING `+actionColumns,
 		a.ID, a.InstrumentID, string(a.Type), a.EffectiveDate.Time(), a.ShareAssetID, a.CashAssetID, num, den, perShare,
 		perShareScale, inLieu, inLieuScale, dateArg(a.ExDate), dateArg(a.RecordDate), dateArg(a.PayDate), dateArg(a.FinalDate),
@@ -143,7 +144,12 @@ func insertAction(ctx context.Context, tx pgx.Tx, a CorporateAction) (CorporateA
 		return CorporateAction{}, false, storeErr("announce corporate action", err)
 	}
 	existing, err := scanAction(tx.QueryRow(ctx, `SELECT `+actionColumns+` FROM equity_corporate_actions
-		WHERE instrument_id = $1 AND action_type = $2 AND effective_date = $3`, a.InstrumentID, string(a.Type), a.EffectiveDate.Time()))
+		WHERE instrument_id = $1 AND action_type = $2 AND effective_date = $3 AND status <> 'CANCELLED'`,
+		a.InstrumentID, string(a.Type), a.EffectiveDate.Time()))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return CorporateAction{}, false, errs.New(errs.CodeConflict,
+			"equities: the corporate action holding this date was cancelled concurrently; announce again")
+	}
 	if err != nil {
 		return CorporateAction{}, false, storeErr("load corporate action", err)
 	}
@@ -163,6 +169,22 @@ func getAction(ctx context.Context, q db.Querier, aid CorporateActionID, forUpda
 		return CorporateAction{}, storeErr("load corporate action", err)
 	}
 	return a, nil
+}
+
+// splitAppliedSince returns the first split or reverse split of an instrument
+// applied at or after since, if any: an intent recorded before it states its
+// quantity and limit in units the instrument no longer trades in.
+func splitAppliedSince(ctx context.Context, q db.Querier, iid instruments.InstrumentID, since time.Time) (*CorporateAction, error) {
+	a, err := scanAction(q.QueryRow(ctx, `SELECT `+actionColumns+` FROM equity_corporate_actions
+		WHERE instrument_id = $1 AND action_type IN ('SPLIT','REVERSE_SPLIT') AND status = 'APPLIED' AND applied_at >= $2
+		ORDER BY applied_at, id LIMIT 1`, iid, since.UTC()))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, storeErr("load applied splits", err)
+	}
+	return &a, nil
 }
 
 // openActions returns the ANNOUNCED and APPLYING actions of an instrument.

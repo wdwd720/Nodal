@@ -31,13 +31,21 @@
 //
 //     SubmitOrderIntent: econ intent RECEIVED, routed -> ROUTED (or REJECTED).
 //     AcceptOrder: authorize, validate, price, risk, reserve; the order is
-//     ACCEPTED (or REJECTED) and the intent RISK_APPROVED (or REJECTED).
+//     ACCEPTED (or REJECTED) and the intent RISK_APPROVED (or REJECTED). An
+//     intent recorded before a split or reverse split was applied is refused:
+//     its quantity and limit are in units the instrument no longer trades in.
 //     PlaceAtVenue / PollVenue / CancelAtVenue: the venue call, outside any
-//     transaction; it writes nothing.
+//     transaction; it writes nothing. Only a PENDING submission is placed.
 //     ApplyOrderReport: OPEN, FILLED (trade posted, settlement scheduled),
 //     REJECTED, CANCELLED or EXPIRED; the intent becomes EXECUTING (or ends).
-//     SettleDue: EQUITY_SETTLEMENT on the settlement date; the intent
-//     COMPLETED.
+//     SettleDue: EQUITY_SETTLEMENT on the settlement date, one account per
+//     transaction; the intent COMPLETED.
+//
+//   - Risk: Risk Kernel V2 with every section it requires. An agent's order
+//     needs the authority section and a strategy-originated order the
+//     strategy section; equities keeps neither register, so the composition
+//     root wires an AuthorityReader and a StrategyReader, and without them
+//     such orders are refused (the section is missing).
 //
 //   - Trade-date accounting (SIM_TRADE): a buyer pays at trade date and the
 //     shares wait in UNSETTLED_RECEIVABLE until settlement; a seller's shares
@@ -50,7 +58,8 @@
 //   - Corporate actions: split, reverse split (cash-in-lieu for fractional
 //     remainders under an explicit rounding policy), cash dividend for
 //     holders of record, symbol change (a terms amendment, no posting) and
-//     delisting (instrument DELISTING, then DELISTED).
+//     delisting (instrument DELISTING, then DELISTED). One live action per
+//     instrument, type and effective date; a cancelled action frees its date.
 //
 // # Market orders outside regular hours
 //
@@ -68,7 +77,11 @@
 // refuses any other ex-date. Entitlement is the trade-date position
 // (WALLET plus UNSETTLED_RECEIVABLE shares) at 00:00 New York time on the
 // ex-date, read from the ledger itself, which under that rule is exactly the
-// settled position at the end of the record date.
+// settled position at the end of the record date. It is counted in the units
+// of the ex-date: a split effective before the ex-date counts even when it was
+// applied later (nothing trades in between), and the dividend waits until
+// every such split is applied; a split effective on or after the ex-date
+// never counts.
 //
 // # What this package must never do
 //
@@ -87,11 +100,11 @@
 //     fill per order, one settlement per fill and one application per
 //     account per action.
 //   - Change an order or corporate-action status without a transition row,
-//     edit fills or applications, or settle a settlement twice (the
-//     database refuses each).
+//     edit fills or applications, record a fill its order does not end
+//     FILLED with, or settle a settlement twice (the database refuses each).
 //   - Let an agent apply an effect: agents propose intents only, and an
-//     agent's order without its delegated authority is refused by the risk
-//     kernel.
+//     agent's order without delegated authority the AuthorityReader vouches
+//     for is refused by the risk kernel.
 //   - Create a settlement asset: the sandbox dollar is the platform's, and
 //     every listing is given it.
 //   - Send an order to the venue before it is recorded, or retry a
