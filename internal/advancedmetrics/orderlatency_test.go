@@ -43,8 +43,10 @@ func TestOrderLatency_RecordsEachSubmitAndCancelOnceInMillisecondsByOutcome(t *t
 	require.NoError(t, err)
 	ctx := context.Background()
 	l.ObserveCommand(ctx, orders.CommandTiming{Kind: orders.CommandNewOrder, Elapsed: 1999 * time.Microsecond})
-	l.ObserveCommand(ctx, orders.CommandTiming{Kind: orders.CommandNewOrder, Elapsed: 40 * time.Millisecond,
-		Err: errs.New(errs.CodeRiskRejected, "refused")})
+	l.ObserveCommand(ctx, orders.CommandTiming{
+		Kind: orders.CommandNewOrder, Elapsed: 40 * time.Millisecond,
+		Err: errs.New(errs.CodeRiskRejected, "refused"),
+	})
 	l.ObserveCommand(ctx, orders.CommandTiming{Kind: orders.CommandCancel, Elapsed: 7 * time.Millisecond, Err: errors.New("connection reset")})
 	l.ObserveCommand(ctx, orders.CommandTiming{Kind: orders.CommandReplace, Elapsed: time.Second})
 
@@ -79,14 +81,18 @@ func TestAdvancedVolumes_AreInUSDMinorUnits(t *testing.T) {
 func TestCommandOutcome_IsTheErrorsStatusClass(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, OutcomeOK, CommandOutcome(nil))
-	for _, c := range []errs.Code{errs.CodeValidationFailed, errs.CodeForbidden, errs.CodeNotFound, errs.CodeConflict,
+	for _, c := range []errs.Code{
+		errs.CodeValidationFailed, errs.CodeForbidden, errs.CodeNotFound, errs.CodeConflict,
 		errs.CodeRiskRejected, errs.CodeInsufficientBuyingPower, errs.CodeCapabilityNotApproved, errs.CodeKillSwitchActive,
-		errs.CodeStaleMarketData} {
+		errs.CodeStaleMarketData,
+	} {
 		assert.Equal(t, OutcomeRefused, CommandOutcome(errs.New(c, "refused")), c)
 		assert.Equal(t, OutcomeRefused, CommandOutcome(fmt.Errorf("wrapped: %w", errs.New(c, "refused"))), c)
 	}
-	for _, err := range []error{errs.New(errs.CodeInternal, "broken"), errs.New(errs.CodeVenueUnavailable, "down"),
-		errors.New("not coded"), context.Canceled} {
+	for _, err := range []error{
+		errs.New(errs.CodeInternal, "broken"), errs.New(errs.CodeVenueUnavailable, "down"),
+		errors.New("not coded"), context.Canceled,
+	} {
 		assert.Equal(t, OutcomeFailed, CommandOutcome(err), "%v", err)
 	}
 }

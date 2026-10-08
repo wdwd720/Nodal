@@ -56,12 +56,16 @@ func TestIntegration_ThePipelineTimesEachSubmitAndCancelOnce(t *testing.T) {
 	require.Equal(t, StatusRejected, refused.Order.Status, "a refusal a stage recorded")
 	require.Len(t, obs.snapshot(), 2)
 
-	_, err = pipe.Replace(f.ctx, ReplaceRequest{OrderID: rest.Order.ID, AccountID: seller, NewPrice: *m.price(t, "102.00"),
-		NewQuantity: units(1), IdempotencyKey: "itest-" + uuid.NewString(), ActorType: security.ActorUser, ActorID: seller.String()})
+	_, err = pipe.Replace(f.ctx, ReplaceRequest{
+		OrderID: rest.Order.ID, AccountID: seller, NewPrice: *m.price(t, "102.00"),
+		NewQuantity: units(1), IdempotencyKey: "itest-" + uuid.NewString(), ActorType: security.ActorUser, ActorID: seller.String(),
+	})
 	require.NoError(t, err)
 	require.Len(t, obs.snapshot(), 2, "a replace is not timed")
-	cancelled, err := pipe.Cancel(f.ctx, CancelRequest{OrderID: rest.Order.ID, AccountID: seller, ActorType: security.ActorUser,
-		ActorID: seller.String()})
+	cancelled, err := pipe.Cancel(f.ctx, CancelRequest{
+		OrderID: rest.Order.ID, AccountID: seller, ActorType: security.ActorUser,
+		ActorID: seller.String(),
+	})
 	require.NoError(t, err)
 	require.Equal(t, StatusCancelled, cancelled.Order.Status)
 

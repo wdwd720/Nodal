@@ -184,8 +184,10 @@ func (s *admitter) RequestSwap(ctx context.Context, tx pgx.Tx, req SwapRequest) 
 	if action == ActionReduceExposure {
 		exposure = pay
 	}
-	terms, err := json.Marshal(swapTerms{Action: string(req.Action), VenueID: venue.ID.String(), ReceiveAssetID: recv.ID.String(),
-		RequestNonce: strconv.FormatUint(req.Nonce, 10), MaxSlippageBPS: strconv.FormatInt(int64(req.MaxSlippageBPS), 10)})
+	terms, err := json.Marshal(swapTerms{
+		Action: string(req.Action), VenueID: venue.ID.String(), ReceiveAssetID: recv.ID.String(),
+		RequestNonce: strconv.FormatUint(req.Nonce, 10), MaxSlippageBPS: strconv.FormatInt(int64(req.MaxSlippageBPS), 10),
+	})
 	if err != nil {
 		return SwapTicket{}, errs.Wrap(err, errs.CodeInternal, "delegation: encode terms")
 	}
@@ -253,8 +255,10 @@ func (s *admitter) RequestSwap(ctx context.Context, tx pgx.Tx, req SwapRequest) 
 	if req.MaxSlippageBPS > s.signing.MaxSlippageBPS {
 		return refuse(errs.CodeValidationFailed, ReasonSlippageAbovePolicy, "the slippage bound is above the signing policy's")
 	}
-	quote, err := ComputeQuote(QuoteInput{AmountIn: amountIn, PayDecimals: pay.Decimals, ReceiveDecimals: recv.Decimals,
-		PayPrice: payPrice, ReceivePrice: recvPrice, SpreadBPS: venue.SpreadBPS, MaxSlippageBPS: req.MaxSlippageBPS})
+	quote, err := ComputeQuote(QuoteInput{
+		AmountIn: amountIn, PayDecimals: pay.Decimals, ReceiveDecimals: recv.Decimals,
+		PayPrice: payPrice, ReceivePrice: recvPrice, SpreadBPS: venue.SpreadBPS, MaxSlippageBPS: req.MaxSlippageBPS,
+	})
 	if err != nil {
 		if r := reasonOf(err); r == ReasonSlippageExceeded || r == ReasonAmountTooSmall {
 			return refuse(errs.CodeOf(err), r, err.Error())
@@ -276,9 +280,11 @@ func (s *admitter) RequestSwap(ctx context.Context, tx pgx.Tx, req SwapRequest) 
 	if err != nil {
 		return SwapTicket{}, err
 	}
-	check := c.Check(Use{AccountID: req.AccountID, AgentID: agent.ID, StrategyID: agent.StrategyID, Action: action,
+	check := c.Check(Use{
+		AccountID: req.AccountID, AgentID: agent.ID, StrategyID: agent.StrategyID, Action: action,
 		Classes: classes, Chain: venue.Chain, Destination: venue.Address, Notional: quote.NotionalUSD, DayUsed: dayUsed,
-		TotalUsed: totalUsed, Environment: s.env, Mode: c.Terms.Mode, Now: now})
+		TotalUsed: totalUsed, Environment: s.env, Mode: c.Terms.Mode, Now: now,
+	})
 	if !classified {
 		check.InScope = false
 		check.Codes = sortedCodes(append(check.Codes, ReasonInstrumentNotGranted))
@@ -368,8 +374,10 @@ func (s *admitter) RequestSwap(ctx context.Context, tx pgx.Tx, req SwapRequest) 
 		}
 	}
 	if err := s.auditEvent(ctx, tx, Actor{Type: security.ActorAgent, ID: agent.ID}, "delegation.swap.requested", "delegated_swap",
-		sid.String(), req.AccountID, "agent requested a delegated swap", map[string]any{"swap_id": sid.String(),
-			"capability_id": c.ID.String(), "plan_hash": hex.EncodeToString(planHash[:]), "notional_usd": quote.NotionalUSD.String()}); err != nil {
+		sid.String(), req.AccountID, "agent requested a delegated swap", map[string]any{
+			"swap_id":       sid.String(),
+			"capability_id": c.ID.String(), "plan_hash": hex.EncodeToString(planHash[:]), "notional_usd": quote.NotionalUSD.String(),
+		}); err != nil {
 		return SwapTicket{}, err
 	}
 	return SwapTicket{Swap: sw}, nil
@@ -464,7 +472,8 @@ func (s *admitter) venueSpare(ctx context.Context, tx pgx.Tx, v Venue, asset ass
 // action as SwapAction derived it -- never the agent's label.
 func (s *admitter) evaluateSwapRisk(ctx context.Context, tx pgx.Tx, in econ.Intent, action ActionClass, agent agentRow,
 	exposure, pay assets.Asset, payPrice money.Price, payPar bool, recvPrice money.Price, recvPar bool, venue Venue, quote Quote,
-	check AuthorityCheck, now time.Time) (risk.AdvancedDecision, error) {
+	check AuthorityCheck, now time.Time,
+) (risk.AdvancedDecision, error) {
 	acct, err := s.loadAccount(ctx, tx, in.AccountID)
 	if err != nil {
 		return risk.AdvancedDecision{}, err
@@ -513,10 +522,12 @@ func (s *admitter) evaluateSwapRisk(ctx context.Context, tx pgx.Tx, in econ.Inte
 	}
 	input := risk.AdvancedInput{
 		Stage: risk.StagePreTrade,
-		Intent: risk.AdvancedIntent{ID: in.ID.String(), Kind: string(in.Kind), AccountID: in.AccountID.String(),
+		Intent: risk.AdvancedIntent{
+			ID: in.ID.String(), Kind: string(in.Kind), AccountID: in.AccountID.String(),
 			ActorType: string(in.ActorType), AgentID: agent.ID, StrategyRef: in.StrategyRef,
 			StrategyVersionID: agent.StrategyVersionID, Capability: string(in.Capability), Mode: string(in.Mode),
-			InstrumentKind: string(class), NotionalUSD: quote.NotionalUSD, RiskIncreasing: action == ActionAcquireExposure},
+			InstrumentKind: string(class), NotionalUSD: quote.NotionalUSD, RiskIncreasing: action == ActionAcquireExposure,
+		},
 		Identity:     &risk.IdentitySnapshot{Verified: verified},
 		Account:      &risk.AdvancedAccountSnapshot{Status: string(acct.Status)},
 		Instrument:   &risk.InstrumentSnapshot{Status: string(exposure.Status), SessionOpen: true, Expired: false},
@@ -558,8 +569,10 @@ func (s *admitter) transitionSwap(ctx context.Context, tx pgx.Tx, sw Swap, to Sw
 		return Swap{}, dbErr("move swap", err)
 	}
 	if err := s.auditEvent(ctx, tx, actor, "delegation.swap."+strings.ToLower(string(to)), "delegated_swap", sw.ID.String(),
-		sw.AccountID, reason, map[string]any{"swap_id": sw.ID.String(), "from": string(sw.Status), "to": string(to),
-			"tx_id": string(out.TxID), "failure_code": out.FailureCode}); err != nil {
+		sw.AccountID, reason, map[string]any{
+			"swap_id": sw.ID.String(), "from": string(sw.Status), "to": string(to),
+			"tx_id": string(out.TxID), "failure_code": out.FailureCode,
+		}); err != nil {
 		return Swap{}, err
 	}
 	return out, nil
@@ -717,9 +730,11 @@ func (s *Service) swapStanding(ctx context.Context, tx pgx.Tx, sw Swap, now time
 	if err != nil {
 		return "", "", err
 	}
-	if check := c.Check(Use{AccountID: sw.AccountID, AgentID: sw.AgentID, StrategyID: agent.StrategyID, Action: action,
+	if check := c.Check(Use{
+		AccountID: sw.AccountID, AgentID: sw.AgentID, StrategyID: agent.StrategyID, Action: action,
 		Classes: classes, Chain: sw.Chain, Destination: venue.Address, Notional: sw.NotionalUSD, DayUsed: dayUsed,
-		TotalUsed: totalUsed, Environment: s.env, Mode: sw.Mode, Now: now}); !check.OK() {
+		TotalUsed: totalUsed, Environment: s.env, Mode: sw.Mode, Now: now,
+	}); !check.OK() {
 		return check.Codes[0], "the capability no longer covers the swap: " + strings.Join(check.Codes, ","), nil
 	}
 	return "", "", nil
@@ -801,8 +816,10 @@ func (s *Service) SignSwap(ctx context.Context, tx pgx.Tx, sid SwapID) (SignOutc
 	if sw, err = s.setSwapColumns(ctx, tx, sw, subjectSet{message: msgBytes, recentBlockhash: &tip.Hash, blockhashHeight: &height}); err != nil {
 		return SignOutcome{}, err
 	}
-	decision, err := s.signer.Sign(ctx, tx, SignRequest{Kind: SubjectSwap, SubjectID: sw.ID.String(), Message: msgBytes,
-		MessageSHA256: sha256.Sum256(msgBytes)})
+	decision, err := s.signer.Sign(ctx, tx, SignRequest{
+		Kind: SubjectSwap, SubjectID: sw.ID.String(), Message: msgBytes,
+		MessageSHA256: sha256.Sum256(msgBytes),
+	})
 	if err != nil {
 		return SignOutcome{}, err
 	}
@@ -830,9 +847,11 @@ func (s *Service) SignSwap(ctx context.Context, tx pgx.Tx, sid SwapID) (SignOutc
 		return SignOutcome{}, err
 	}
 	fee, _ := HostFees(s.host)(sw.Chain)
-	txID, err := InspectSwapTransaction(SwapExpectation{Plan: sw.Plan, PlanHash: sw.PlanHash, Blockhash: tip.Hash,
+	txID, err := InspectSwapTransaction(SwapExpectation{
+		Plan: sw.Plan, PlanHash: sw.PlanHash, Blockhash: tip.Hash,
 		Wallet: sw.Wallet, AllowedChains: c.Terms.ChainAllowlist, AllowedDestinations: c.Terms.DestinationAllowlist,
-		ChainFee: fee, MaxFee: s.signer.Policy().MaxFeePerTx}, raw)
+		ChainFee: fee, MaxFee: s.signer.Policy().MaxFeePerTx,
+	}, raw)
 	if err != nil {
 		return refuse(RefusalSigningRejected, "the signed transaction failed inspection: "+reasonOf(err))
 	}
@@ -1033,9 +1052,11 @@ func (s *Service) SettleSwap(ctx context.Context, tx pgx.Tx, sid SwapID) (Settle
 		if err != nil {
 			return SettleResult{}, err
 		}
-		if _, err := s.effects.Apply(ctx, tx, *sw.EffectID, econ.ApplyRequest{JournalTransactionID: &posted.TransactionID,
-			ReservationID: sw.ReservationID.String(), ExternalRef: externalRef(sw.Chain, sw.TxID), Evidence: &ev, Actor: serviceActor,
-			Reason: "finalized on chain and reconciled"}); err != nil {
+		if _, err := s.effects.Apply(ctx, tx, *sw.EffectID, econ.ApplyRequest{
+			JournalTransactionID: &posted.TransactionID,
+			ReservationID:        sw.ReservationID.String(), ExternalRef: externalRef(sw.Chain, sw.TxID), Evidence: &ev, Actor: serviceActor,
+			Reason: "finalized on chain and reconciled",
+		}); err != nil {
 			return SettleResult{}, err
 		}
 		if err := s.finishIntent(ctx, tx, sw.IntentID, true, "finalized on chain and posted"); err != nil {

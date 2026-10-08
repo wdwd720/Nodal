@@ -220,16 +220,20 @@ func (f *fixture) customer() customer {
 	require.NoError(f.t, err)
 	_, err = testDB.Pool().Exec(f.ctx, `INSERT INTO compliance_profiles (user_id, identity_state, verified_at) VALUES ($1, 'VERIFIED', now())`, u.ID)
 	require.NoError(f.t, err)
-	return customer{user: u.ID, account: a.ID, p: security.Principal{SubjectID: u.ID.String(), ActorType: security.ActorUser,
-		Roles: []security.Role{security.RoleCustomer}, AccountIDs: []string{a.ID.String()}, AuthTime: f.clk.Now(), AMR: []string{"pwd", "mfa"}}}
+	return customer{user: u.ID, account: a.ID, p: security.Principal{
+		SubjectID: u.ID.String(), ActorType: security.ActorUser,
+		Roles: []security.Role{security.RoleCustomer}, AccountIDs: []string{a.ID.String()}, AuthTime: f.clk.Now(), AMR: []string{"pwd", "mfa"},
+	}}
 }
 
 func (f *fixture) post(kind ledger.Kind, entries ...ledger.Entry) {
 	f.t.Helper()
 	f.inTx(func(ctx context.Context, tx pgx.Tx) error {
 		ref := uuid.NewString()
-		_, err := f.ledger.Post(ctx, tx, ledger.Posting{Kind: kind, IdempotencyKey: "advancedmetrics:" + ref,
-			Reference: ledger.FinancialEventReference{Type: "advancedmetrics_itest", ID: ref}, EffectiveAt: f.clk.Now(), Entries: entries})
+		_, err := f.ledger.Post(ctx, tx, ledger.Posting{
+			Kind: kind, IdempotencyKey: "advancedmetrics:" + ref,
+			Reference: ledger.FinancialEventReference{Type: "advancedmetrics_itest", ID: ref}, EffectiveAt: f.clk.Now(), Entries: entries,
+		})
 		return err
 	})
 }
@@ -244,9 +248,11 @@ func (f *fixture) fund(acct accounts.AccountID, asset assets.AssetID, qty money.
 func (f *fixture) simAsset(prefix string, decimals uint8) assets.Asset {
 	f.t.Helper()
 	sym := prefix + strings.ToUpper(strings.ReplaceAll(uuid.NewString(), "-", "")[:6])
-	a, err := f.assets.Create(f.ctx, testDB, assets.Asset{Chain: assets.SandboxChain, Kind: assets.KindSimulated,
+	a, err := f.assets.Create(f.ctx, testDB, assets.Asset{
+		Chain: assets.SandboxChain, Kind: assets.KindSimulated,
 		ValueDomain: valuedomain.Simulated, Symbol: sym, Name: sym + " (simulated)", Decimals: decimals,
-		RiskClass: assets.RiskMajor, Status: assets.StatusActive})
+		RiskClass: assets.RiskMajor, Status: assets.StatusActive,
+	})
 	require.NoError(f.t, err)
 	return a
 }
@@ -255,8 +261,10 @@ func (f *fixture) mark(asset assets.AssetID, price string) {
 	f.t.Helper()
 	p, err := money.PriceFromDecimalString(price, f.usd.ID.String(), "advancedmetrics-itest", f.clk.Now())
 	require.NoError(f.t, err)
-	_, err = f.prices.RecordPrice(f.ctx, testDB, valuation.PriceObservation{AssetID: asset, QuoteAssetID: f.usd.ID,
-		Mantissa: p.Mantissa, Scale: p.Scale, Source: "advancedmetrics-itest", ObservedAt: f.clk.Now()})
+	_, err = f.prices.RecordPrice(f.ctx, testDB, valuation.PriceObservation{
+		AssetID: asset, QuoteAssetID: f.usd.ID,
+		Mantissa: p.Mantissa, Scale: p.Scale, Source: "advancedmetrics-itest", ObservedAt: f.clk.Now(),
+	})
 	require.NoError(f.t, err)
 }
 
@@ -274,26 +282,34 @@ func (f *fixture) leveraged() (customer, assets.Asset) {
 	f.t.Helper()
 	sol := f.simAsset("AMSOL", 9)
 	f.inTx(func(ctx context.Context, tx pgx.Tx) error {
-		_, err := f.margin.SeedFacilities(ctx, tx, margin.SeedRequest{Asset: f.usd.ID, PoolAmount: units(1_000_000, 6),
-			FundAmount: units(100_000, 6), Key: "advancedmetrics-seed-" + uuid.NewString(), Actor: f.system})
+		_, err := f.margin.SeedFacilities(ctx, tx, margin.SeedRequest{
+			Asset: f.usd.ID, PoolAmount: units(1_000_000, 6),
+			FundAmount: units(100_000, 6), Key: "advancedmetrics-seed-" + uuid.NewString(), Actor: f.system,
+		})
 		return err
 	})
 	c := f.customer()
 	f.fund(c.account, f.usd.ID, units(1_000, 6))
 	req := margin.Requester{Type: security.ActorUser, ID: c.user.String()}
 	f.inTx(func(ctx context.Context, tx pgx.Tx) error {
-		_, err := f.margin.OpenAccount(ctx, tx, margin.OpenRequest{AccountID: c.account, MarginMode: margin.ModeCross,
-			Mode: gates.ModePaper, NumeraireAssetID: f.usd.ID, Actor: econ.Actor{Type: security.ActorUser, ID: c.user.String()}})
+		_, err := f.margin.OpenAccount(ctx, tx, margin.OpenRequest{
+			AccountID: c.account, MarginMode: margin.ModeCross,
+			Mode: gates.ModePaper, NumeraireAssetID: f.usd.ID, Actor: econ.Actor{Type: security.ActorUser, ID: c.user.String()},
+		})
 		return err
 	})
 	f.mark(sol.ID, "100")
 	f.inTx(func(ctx context.Context, tx pgx.Tx) error {
-		if _, err := f.margin.PostCollateral(ctx, tx, margin.CollateralRequest{AccountID: c.account, AssetID: f.usd.ID,
-			Quantity: units(1_000, 6), IdempotencyKey: "advancedmetrics-post-" + uuid.NewString(), Requester: req}); err != nil {
+		if _, err := f.margin.PostCollateral(ctx, tx, margin.CollateralRequest{
+			AccountID: c.account, AssetID: f.usd.ID,
+			Quantity: units(1_000, 6), IdempotencyKey: "advancedmetrics-post-" + uuid.NewString(), Requester: req,
+		}); err != nil {
 			return err
 		}
-		_, err := f.margin.OpenLeveragedSpot(ctx, tx, margin.SpotRequest{AccountID: c.account, AssetID: sol.ID,
-			Quantity: units(20, sol.Decimals), IdempotencyKey: "advancedmetrics-buy-" + uuid.NewString(), Requester: req})
+		_, err := f.margin.OpenLeveragedSpot(ctx, tx, margin.SpotRequest{
+			AccountID: c.account, AssetID: sol.ID,
+			Quantity: units(20, sol.Decimals), IdempotencyKey: "advancedmetrics-buy-" + uuid.NewString(), Requester: req,
+		})
 		return err
 	})
 	return c, sol
@@ -366,10 +382,12 @@ func TestIntegration_GaugesEqualTheRowDerivedTruth(t *testing.T) {
 	require.NoError(t, err)
 	holder := f.customer()
 	f.fund(holder.account, f.usd.ID, units(500, 6))
-	minted, err := f.stable.Mint(security.WithPrincipal(f.ctx, holder.p), stableasset.MintRequest{StableAssetID: sa.ID,
-		AccountID: holder.account, Quantity: units(200, 6), ReserveAssetID: f.usd.ID, IdempotencyKey: "advancedmetrics-mint-" + uuid.NewString(),
+	minted, err := f.stable.Mint(security.WithPrincipal(f.ctx, holder.p), stableasset.MintRequest{
+		StableAssetID: sa.ID,
+		AccountID:     holder.account, Quantity: units(200, 6), ReserveAssetID: f.usd.ID, IdempotencyKey: "advancedmetrics-mint-" + uuid.NewString(),
 		Mode: gates.ModeSandbox, Actor: econ.Actor{Type: security.ActorUser, ID: holder.user.String()},
-		Facts: stableasset.AccountFacts{Verification: valuedomain.VerificationNodalIdentity, IdentityVerified: true}})
+		Facts: stableasset.AccountFacts{Verification: valuedomain.VerificationNodalIdentity, IdentityVerified: true},
+	})
 	require.NoError(t, err)
 	require.Equal(t, stableasset.MintIssued, minted.Request.Status)
 
@@ -393,25 +411,31 @@ func TestIntegration_GaugesEqualTheRowDerivedTruth(t *testing.T) {
 			return err
 		}
 		ref := uuid.NewString()
-		_, err = f.ledger.Post(ctx, tx, ledger.Posting{Kind: ledger.KindHouseFunding, IdempotencyKey: "advancedmetrics-house:" + ref,
+		_, err = f.ledger.Post(ctx, tx, ledger.Posting{
+			Kind: ledger.KindHouseFunding, IdempotencyKey: "advancedmetrics-house:" + ref,
 			Reference: ledger.FinancialEventReference{Type: "advancedmetrics_itest", ID: ref}, EffectiveAt: f.clk.Now(),
 			Entries: []ledger.Entry{
 				{Account: h.Account(ledger.CodeHouseInventory, f.usd.ID), Side: ledger.Debit, Quantity: units(30, 6)},
 				{Account: h.Account(ledger.CodeHouseCapital, f.usd.ID), Side: ledger.Credit, Quantity: units(30, 6)},
-			}})
+			},
+		})
 		return err
 	})
 	for _, kind := range []reconciliation.Kind{reconciliation.KindStableReserve, reconciliation.KindBridge} {
 		f.inTx(func(ctx context.Context, tx pgx.Tx) error {
-			_, err := f.recon.Open(ctx, tx, reconciliation.OpenRequest{Kind: kind, Mode: reconciliation.ModePeriodic,
+			_, err := f.recon.Open(ctx, tx, reconciliation.OpenRequest{
+				Kind: kind, Mode: reconciliation.ModePeriodic,
 				ScopeType: "advancedmetrics_itest", ScopeID: uuid.NewString(), Status: reconciliation.StatusMismatch, Material: true,
-				Reason: "advancedmetrics integration test"})
+				Reason: "advancedmetrics integration test",
+			})
 			return err
 		})
 	}
 	f.inTx(func(ctx context.Context, tx pgx.Tx) error {
-		e, _, err := f.effects.Begin(ctx, tx, econ.BeginRequest{Key: "advancedmetrics:" + uuid.NewString(), Subsystem: econ.SubsystemTransfers,
-			Kind: "P2P_TRANSFER", AccountID: a.account.String(), Request: map[string]string{"test": "unknown"}, PostsLedger: true, Actor: f.system})
+		e, _, err := f.effects.Begin(ctx, tx, econ.BeginRequest{
+			Key: "advancedmetrics:" + uuid.NewString(), Subsystem: econ.SubsystemTransfers,
+			Kind: "P2P_TRANSFER", AccountID: a.account.String(), Request: map[string]string{"test": "unknown"}, PostsLedger: true, Actor: f.system,
+		})
 		if err != nil {
 			return err
 		}
@@ -559,9 +583,11 @@ func TestIntegration_CountersCountEachNewRowOncePerProcess(t *testing.T) {
 	live := clock.System()
 	liveIntents := econ.NewIntentStore(live, event.NewOutbox(live), audit.NewWriterWithBuildVersion("advancedmetrics-itest"))
 	f.inTx(func(ctx context.Context, tx pgx.Tx) error {
-		in, _, err := liveIntents.Submit(ctx, tx, econ.Intent{AccountID: borrower.account, Kind: econ.KindTransferValue,
+		in, _, err := liveIntents.Submit(ctx, tx, econ.Intent{
+			AccountID: borrower.account, Kind: econ.KindTransferValue,
 			Mode: gates.ModePaper, Capability: gates.P2PTransfers, ActorType: security.ActorUser, ActorID: borrower.user.String(),
-			IdempotencyKey: "advancedmetrics-" + uuid.NewString()})
+			IdempotencyKey: "advancedmetrics-" + uuid.NewString(),
+		})
 		if err != nil {
 			return err
 		}
@@ -631,9 +657,11 @@ func (f *fixture) limit(c customer, inst instruments.InstrumentID, base assets.A
 	f.t.Helper()
 	p, err := money.PriceFromDecimalString(price, f.usd.ID.String(), "order", f.clk.Now())
 	require.NoError(f.t, err)
-	return orders.OrderRequest{InstrumentID: inst, AccountID: c.account, Side: side, Type: orders.TypeLimit, TimeInForce: orders.GTC,
+	return orders.OrderRequest{
+		InstrumentID: inst, AccountID: c.account, Side: side, Type: orders.TypeLimit, TimeInForce: orders.GTC,
 		Price: &p, Quantity: units(whole, base.Decimals), IdempotencyKey: "advancedmetrics-" + uuid.NewString(),
-		ActorType: security.ActorUser, ActorID: c.user.String()}
+		ActorType: security.ActorUser, ActorID: c.user.String(),
+	}
 }
 
 // spotBook opens a fee-free PAPER book for a fresh simulated asset against
@@ -644,22 +672,28 @@ func (f *fixture) spotBook() (instruments.InstrumentID, assets.Asset) {
 	eth := f.simAsset("AMETH", 8)
 	var inst instruments.InstrumentID
 	f.inTx(func(ctx context.Context, tx pgx.Tx) error {
-		ins, err := f.instr.CreateSpotPair(ctx, tx, instruments.SpotPairSpec{Base: eth.ID, Quote: f.usd.ID, Settlement: f.usd.ID,
-			CanonicalName: eth.Symbol + "/SBX-USD", RiskClass: assets.RiskMajor, Status: assets.StatusActive, ActiveFrom: f.clk.Now().Add(-time.Hour)})
+		ins, err := f.instr.CreateSpotPair(ctx, tx, instruments.SpotPairSpec{
+			Base: eth.ID, Quote: f.usd.ID, Settlement: f.usd.ID,
+			CanonicalName: eth.Symbol + "/SBX-USD", RiskClass: assets.RiskMajor, Status: assets.StatusActive, ActiveFrom: f.clk.Now().Add(-time.Hour),
+		})
 		if err != nil {
 			return err
 		}
 		inst = ins.ID
 		base, quote := eth.ID, f.usd.ID
-		terms := instruments.Terms{Kind: instruments.TypeSpotPair, Symbol: eth.Symbol + "/SBX-USD", VenueCode: "NODAL-SIM",
+		terms := instruments.Terms{
+			Kind: instruments.TypeSpotPair, Symbol: eth.Symbol + "/SBX-USD", VenueCode: "NODAL-SIM",
 			BaseAssetID: &base, QuoteAssetID: &quote, SettlementAssetID: quote, ContractMultiplier: money.QuantityFromInt64(1),
 			PriceScale: 2, TickSize: money.QuantityFromInt64(1), LotSize: money.QuantityFromInt64(10_000), MinQuantity: money.QuantityFromInt64(10_000),
 			QuantityDecimals: eth.Decimals, SettlementStyle: instruments.SettlePhysical, TradingCalendar: "24x7", OracleMaxAgeMS: 30_000,
-			MarginModel: instruments.MarginNone, CorporateActionBehavior: instruments.CorporateActionsNone, Transferability: instruments.Transferable}
+			MarginModel: instruments.MarginNone, CorporateActionBehavior: instruments.CorporateActionsNone, Transferability: instruments.Transferable,
+		}
 		zero := fees.ZeroSchedule(f.usd.ID, 6)
 		zero.Version = "advancedmetrics-zero"
-		_, err = f.orders.OpenBook(ctx, tx, orders.OpenBookRequest{InstrumentID: ins.ID, Mode: gates.ModePaper, SpotTerms: &terms,
-			MakerSchedule: zero, TakerSchedule: zero, SnapshotInterval: 2, Actor: f.system})
+		_, err = f.orders.OpenBook(ctx, tx, orders.OpenBookRequest{
+			InstrumentID: ins.ID, Mode: gates.ModePaper, SpotTerms: &terms,
+			MakerSchedule: zero, TakerSchedule: zero, SnapshotInterval: 2, Actor: f.system,
+		})
 		return err
 	})
 	f.mark(eth.ID, "2500.00")

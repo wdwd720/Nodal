@@ -294,8 +294,10 @@ func (s *admitter) ProposeWithdrawal(ctx context.Context, tx pgx.Tx, req Proposa
 		return WithdrawalTicket{}, err
 	}
 	now := dbTime(s.clk.Now())
-	terms, err := json.Marshal(withdrawalTerms{DestinationID: dest.ID.String(), DestinationAddress: dest.Address.String(),
-		Chain: string(dest.Chain), ProposalNonce: strconv.FormatUint(req.Nonce, 10), ProposedByAgent: agent.ID})
+	terms, err := json.Marshal(withdrawalTerms{
+		DestinationID: dest.ID.String(), DestinationAddress: dest.Address.String(),
+		Chain: string(dest.Chain), ProposalNonce: strconv.FormatUint(req.Nonce, 10), ProposedByAgent: agent.ID,
+	})
 	if err != nil {
 		return WithdrawalTicket{}, errs.Wrap(err, errs.CodeInternal, "delegation: encode terms")
 	}
@@ -369,9 +371,11 @@ func (s *admitter) ProposeWithdrawal(ctx context.Context, tx pgx.Tx, req Proposa
 	if err != nil {
 		return WithdrawalTicket{}, err
 	}
-	check := c.Check(Use{AccountID: req.AccountID, AgentID: agent.ID, StrategyID: agent.StrategyID, Action: ActionProposeWithdrawal,
+	check := c.Check(Use{
+		AccountID: req.AccountID, AgentID: agent.ID, StrategyID: agent.StrategyID, Action: ActionProposeWithdrawal,
 		Classes: classes, Chain: dest.Chain, Destination: dest.Address, Notional: notional, DayUsed: dayUsed, TotalUsed: totalUsed,
-		Environment: s.env, Mode: c.Terms.Mode, Now: now})
+		Environment: s.env, Mode: c.Terms.Mode, Now: now,
+	})
 	acct, err := s.loadAccount(ctx, tx, req.AccountID)
 	if err != nil {
 		return WithdrawalTicket{}, err
@@ -506,7 +510,8 @@ func (s *admitter) ProposeWithdrawal(ctx context.Context, tx pgx.Tx, req Proposa
 	if err := s.auditEvent(ctx, tx, Actor{Type: security.ActorAgent, ID: agent.ID}, "delegation.withdrawal.proposed",
 		"delegated_withdrawal", wid.String(), req.AccountID, "agent proposed a delegated withdrawal", map[string]string{
 			"withdrawal_id": wid.String(), "plan_hash": hex.EncodeToString(planHash[:]), "outcome": string(ev.Outcome),
-			"risk_score": strconv.Itoa(ev.RiskScore)}); err != nil {
+			"risk_score": strconv.Itoa(ev.RiskScore),
+		}); err != nil {
 		return WithdrawalTicket{}, err
 	}
 	return WithdrawalTicket{Withdrawal: w}, nil
@@ -641,7 +646,8 @@ func (s *admitter) sanctionsClear(ctx context.Context, q db.Querier, acct accoun
 // value leaves, so an account freeze stops it in the kernel too.
 func (s *admitter) evaluateWithdrawalRisk(ctx context.Context, tx pgx.Tx, in econ.Intent, agent agentRow, acct accounts.Account,
 	asset assets.Asset, price money.Price, amount money.Quantity, notional money.USD, dest Destination, c Capability,
-	check AuthorityCheck, facts withdrawalFacts, now time.Time) (risk.AdvancedDecision, error) {
+	check AuthorityCheck, facts withdrawalFacts, now time.Time,
+) (risk.AdvancedDecision, error) {
 	verified, err := s.identity.IdentityVerified(ctx, tx, in.AccountID)
 	if err != nil {
 		return risk.AdvancedDecision{}, err
@@ -669,10 +675,12 @@ func (s *admitter) evaluateWithdrawalRisk(ctx context.Context, tx pgx.Tx, in eco
 	class, _ := ClassifyAsset(asset)
 	input := risk.AdvancedInput{
 		Stage: risk.StagePreTrade,
-		Intent: risk.AdvancedIntent{ID: in.ID.String(), Kind: string(in.Kind), AccountID: in.AccountID.String(),
+		Intent: risk.AdvancedIntent{
+			ID: in.ID.String(), Kind: string(in.Kind), AccountID: in.AccountID.String(),
 			ActorType: string(in.ActorType), AgentID: agent.ID, StrategyRef: in.StrategyRef,
 			StrategyVersionID: agent.StrategyVersionID, Capability: string(in.Capability), Mode: string(in.Mode),
-			InstrumentKind: string(class), NotionalUSD: notional, RiskIncreasing: true},
+			InstrumentKind: string(class), NotionalUSD: notional, RiskIncreasing: true,
+		},
 		Identity:     &risk.IdentitySnapshot{Verified: verified},
 		Account:      &risk.AdvancedAccountSnapshot{Status: string(acct.Status)},
 		Balance:      &risk.BalanceSnapshot{Available: available, Required: required},
@@ -695,7 +703,8 @@ func (s *admitter) evaluateWithdrawalRisk(ctx context.Context, tx pgx.Tx, in eco
 // transitionWithdrawal moves a withdrawal and writes the transition row, the
 // set-once columns and the audit event.
 func (s *admitter) transitionWithdrawal(ctx context.Context, tx pgx.Tx, w Withdrawal, to WithdrawalStatus, actor Actor, reason string,
-	set subjectSet) (Withdrawal, error) {
+	set subjectSet,
+) (Withdrawal, error) {
 	if !CanTransitionWithdrawal(w.Status, to) {
 		return Withdrawal{}, errs.Newf(errs.CodeInvalidStateTransition, "delegation: withdrawal %s cannot move %s -> %s", w.ID, w.Status, to)
 	}
@@ -714,8 +723,10 @@ func (s *admitter) transitionWithdrawal(ctx context.Context, tx pgx.Tx, w Withdr
 		return Withdrawal{}, dbErr("move withdrawal", err)
 	}
 	if err := s.auditEvent(ctx, tx, actor, "delegation.withdrawal."+strings.ToLower(string(to)), "delegated_withdrawal", w.ID.String(),
-		w.AccountID, reason, map[string]string{"withdrawal_id": w.ID.String(), "from": string(w.Status), "to": string(to),
-			"tx_id": string(out.TxID), "failure_code": out.FailureCode}); err != nil {
+		w.AccountID, reason, map[string]string{
+			"withdrawal_id": w.ID.String(), "from": string(w.Status), "to": string(to),
+			"tx_id": string(out.TxID), "failure_code": out.FailureCode,
+		}); err != nil {
 		return Withdrawal{}, err
 	}
 	return out, nil
@@ -902,9 +913,11 @@ func (s *Service) withdrawalStanding(ctx context.Context, tx pgx.Tx, w Withdrawa
 	if err != nil {
 		return "", "", err
 	}
-	if check := c.Check(Use{AccountID: w.AccountID, AgentID: w.AgentID, StrategyID: agent.StrategyID, Action: ActionProposeWithdrawal,
+	if check := c.Check(Use{
+		AccountID: w.AccountID, AgentID: w.AgentID, StrategyID: agent.StrategyID, Action: ActionProposeWithdrawal,
 		Classes: classes, Chain: w.Chain, Destination: w.DestinationAddress, Notional: w.NotionalUSD, DayUsed: dayUsed,
-		TotalUsed: totalUsed, Environment: s.env, Mode: w.Mode, Now: now}); !check.OK() {
+		TotalUsed: totalUsed, Environment: s.env, Mode: w.Mode, Now: now,
+	}); !check.OK() {
 		return check.Codes[0], "the capability no longer covers the withdrawal: " + strings.Join(check.Codes, ","), nil
 	}
 	return "", "", nil
@@ -977,8 +990,10 @@ func (s *Service) SignWithdrawal(ctx context.Context, tx pgx.Tx, wid WithdrawalI
 	if w, err = s.setWithdrawalColumns(ctx, tx, w, subjectSet{message: msgBytes, recentBlockhash: &tip.Hash, blockhashHeight: &height}); err != nil {
 		return SignOutcome{}, err
 	}
-	decision, err := s.signer.Sign(ctx, tx, SignRequest{Kind: SubjectWithdrawal, SubjectID: w.ID.String(), Message: msgBytes,
-		MessageSHA256: sha256.Sum256(msgBytes)})
+	decision, err := s.signer.Sign(ctx, tx, SignRequest{
+		Kind: SubjectWithdrawal, SubjectID: w.ID.String(), Message: msgBytes,
+		MessageSHA256: sha256.Sum256(msgBytes),
+	})
 	if err != nil {
 		return SignOutcome{}, err
 	}
@@ -998,9 +1013,11 @@ func (s *Service) SignWithdrawal(ctx context.Context, tx pgx.Tx, wid WithdrawalI
 		return SignOutcome{}, err
 	}
 	fee, _ := HostFees(s.host)(w.Chain)
-	txID, err := InspectWithdrawalTransaction(WithdrawalExpectation{Plan: w.Plan, PlanHash: w.PlanHash, Blockhash: tip.Hash,
+	txID, err := InspectWithdrawalTransaction(WithdrawalExpectation{
+		Plan: w.Plan, PlanHash: w.PlanHash, Blockhash: tip.Hash,
 		Wallet: w.Wallet, AllowedChains: c.Terms.ChainAllowlist, AllowedDestinations: c.Terms.DestinationAllowlist,
-		CustomerDestination: dest.Address, ChainFee: fee, MaxFee: s.signer.Policy().MaxFeePerTx}, raw)
+		CustomerDestination: dest.Address, ChainFee: fee, MaxFee: s.signer.Policy().MaxFeePerTx,
+	}, raw)
 	if err != nil {
 		return refuse(RefusalSigningRejected, "the signed transaction failed inspection: "+reasonOf(err))
 	}
@@ -1162,9 +1179,11 @@ func (s *Service) SettleWithdrawal(ctx context.Context, tx pgx.Tx, wid Withdrawa
 		if err != nil {
 			return SettleResult{}, err
 		}
-		if _, err := s.effects.Apply(ctx, tx, *w.EffectID, econ.ApplyRequest{JournalTransactionID: &posted.TransactionID,
-			ReservationID: w.ReservationID.String(), ExternalRef: externalRef(w.Chain, w.TxID), Evidence: &ev, Actor: withdrawActor,
-			Reason: "finalized on chain and reconciled"}); err != nil {
+		if _, err := s.effects.Apply(ctx, tx, *w.EffectID, econ.ApplyRequest{
+			JournalTransactionID: &posted.TransactionID,
+			ReservationID:        w.ReservationID.String(), ExternalRef: externalRef(w.Chain, w.TxID), Evidence: &ev, Actor: withdrawActor,
+			Reason: "finalized on chain and reconciled",
+		}); err != nil {
 			return SettleResult{}, err
 		}
 		if err := s.finishIntent(ctx, tx, w.IntentID, true, "finalized on chain and posted"); err != nil {

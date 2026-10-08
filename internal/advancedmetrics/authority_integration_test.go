@@ -85,8 +85,10 @@ func (f *fixture) delegationWorld() *delegationWorld {
 	var authSeed [32]byte
 	_, err = rand.Read(authSeed[:])
 	require.NoError(f.t, err)
-	d := &delegationWorld{f: f, clk: sys, chain: chain, ledger: ledger.NewService(sys, "advancedmetrics-itest"),
-		prices: valuation.NewPriceStore(sys), signer: signer, mintAuth: devnet.NewKeypairFromSeed(authSeed)}
+	d := &delegationWorld{
+		f: f, clk: sys, chain: chain, ledger: ledger.NewService(sys, "advancedmetrics-itest"),
+		prices: valuation.NewPriceStore(sys), signer: signer, mintAuth: devnet.NewKeypairFromSeed(authSeed),
+	}
 	d.svc, err = delegation.New(delegation.Deps{
 		DB: testDB, Clock: sys, Environment: config.EnvLocal, Host: chain.Host, Intents: econ.NewIntentStore(sys, out, aw),
 		Effects: econ.NewEffectStore(sys, out, aw), Authorizer: econ.NewAuthorizer(checker, kills), Kills: kills, Ledger: d.ledger,
@@ -100,8 +102,10 @@ func (f *fixture) delegationWorld() *delegationWorld {
 	require.NoError(f.t, chain.Host.Airdrop(f.ctx, devnethost.ChainSolana, d.mintAuth.PublicKey(), 1_000_000_000))
 	d.usd = d.devAsset("AMDU"+strings.ToUpper(tag[:6]), 6, true)
 	d.tok = d.devAsset("AMDT"+strings.ToUpper(tag[:6]), 9, false)
-	_, err = d.prices.RecordPrice(f.ctx, testDB, valuation.PriceObservation{AssetID: d.tok.ID, QuoteAssetID: econ.SandboxDollarID(),
-		Mantissa: money.QuantityFromInt64(10_000), Scale: 2, Source: "advancedmetrics-itest", ObservedAt: sys.Now()})
+	_, err = d.prices.RecordPrice(f.ctx, testDB, valuation.PriceObservation{
+		AssetID: d.tok.ID, QuoteAssetID: econ.SandboxDollarID(),
+		Mantissa: money.QuantityFromInt64(10_000), Scale: 2, Source: "advancedmetrics-itest", ObservedAt: sys.Now(),
+	})
 	require.NoError(f.t, err)
 
 	operator := f.operator()
@@ -111,8 +115,10 @@ func (f *fixture) delegationWorld() *delegationWorld {
 		if err != nil {
 			return err
 		}
-		d.venue, err = d.svc.RegisterVenue(ctx, tx, delegation.VenueSpec{Name: venueName, Chain: devnethost.ChainSolana,
-			Address: venueKey.PublicKey(), HouseAccountID: d.house.ID, SpreadBPS: 50}, operator)
+		d.venue, err = d.svc.RegisterVenue(ctx, tx, delegation.VenueSpec{
+			Name: venueName, Chain: devnethost.ChainSolana,
+			Address: venueKey.PublicKey(), HouseAccountID: d.house.ID, SpreadBPS: 50,
+		}, operator)
 		return err
 	})
 	d.fundHouse(d.tok, 1_000_000_000_000)
@@ -144,9 +150,11 @@ func (d *delegationWorld) devAsset(symbol string, decimals uint8, stable bool) a
 	mint := devnet.NewKeypairFromSeed(s).PublicKey()
 	require.NoError(d.f.t, d.chain.Host.EnsureMint(d.f.ctx, devnethost.ChainSolana,
 		devnet.MintConfig{Address: mint, Decimals: decimals, Authority: d.mintAuth.PublicKey()}))
-	a := assets.Asset{Chain: string(devnethost.ChainSolana), MintAddress: mint.String(), Kind: assets.KindSimulated,
+	a := assets.Asset{
+		Chain: string(devnethost.ChainSolana), MintAddress: mint.String(), Kind: assets.KindSimulated,
 		ValueDomain: valuedomain.Simulated, Symbol: symbol, Name: symbol + " (simulated devnet token)", Decimals: decimals,
-		RiskClass: assets.RiskMajor, Status: assets.StatusActive}
+		RiskClass: assets.RiskMajor, Status: assets.StatusActive,
+	}
 	if stable {
 		a.IsStablecoin, a.PegCurrency, a.RiskClass = true, valuation.USDPeg, assets.RiskSettlement
 	}
@@ -159,12 +167,14 @@ func (d *delegationWorld) fundHouse(a assets.Asset, q int64) {
 	d.f.t.Helper()
 	d.inTx(func(ctx context.Context, tx pgx.Tx) error {
 		ref := uuid.NewString()
-		_, err := d.ledger.Post(ctx, tx, ledger.Posting{Kind: ledger.KindHouseFunding, IdempotencyKey: "amdg-house:" + ref,
+		_, err := d.ledger.Post(ctx, tx, ledger.Posting{
+			Kind: ledger.KindHouseFunding, IdempotencyKey: "amdg-house:" + ref,
 			Reference: ledger.FinancialEventReference{Type: "house_funding", ID: ref}, EffectiveAt: d.clk.Now(),
 			Entries: []ledger.Entry{
 				{Account: d.house.Account(ledger.CodeHouseInventory, a.ID), Side: ledger.Debit, Quantity: money.QuantityFromInt64(q)},
 				{Account: d.house.Account(ledger.CodeHouseCapital, a.ID), Side: ledger.Credit, Quantity: money.QuantityFromInt64(q)},
-			}})
+			},
+		})
 		return err
 	})
 }
@@ -178,11 +188,13 @@ func (d *delegationWorld) mintTo(owner devnet.PublicKey, a assets.Asset, q uint6
 	require.NoError(d.f.t, err)
 	bh, err := h.LatestBlockhash(ctx, devnethost.ChainSolana)
 	require.NoError(d.f.t, err)
-	tx, err := devnet.Sign(devnet.Message{ChainID: devnethost.ChainSolana, RecentBlockhash: bh, FeePayer: d.mintAuth.PublicKey(),
+	tx, err := devnet.Sign(devnet.Message{
+		ChainID: devnethost.ChainSolana, RecentBlockhash: bh, FeePayer: d.mintAuth.PublicKey(),
 		Instructions: []devnet.Instruction{
 			devnet.TokenMintTo{Mint: mint, ToOwner: owner, Amount: q, Authority: d.mintAuth.PublicKey()},
 			devnet.Memo{Data: []byte(uuid.NewString())},
-		}}, d.mintAuth)
+		},
+	}, d.mintAuth)
 	require.NoError(d.f.t, err)
 	raw, err := tx.Encode()
 	require.NoError(d.f.t, err)
@@ -241,12 +253,14 @@ func (d *delegationWorld) delegator(usd int64) delegator {
 	c := delegator{user: u.ID, account: a.ID, agentID: agentID.String(), wallet: d.signer.PublicKey(a.ID, devnethost.ChainSolana)}
 	d.inTx(func(ctx context.Context, tx pgx.Tx) error {
 		ref := uuid.NewString()
-		_, err := d.ledger.Post(ctx, tx, ledger.Posting{Kind: ledger.KindSandboxFunding, IdempotencyKey: "amdg-fund:" + ref,
+		_, err := d.ledger.Post(ctx, tx, ledger.Posting{
+			Kind: ledger.KindSandboxFunding, IdempotencyKey: "amdg-fund:" + ref,
 			Reference: ledger.FinancialEventReference{Type: "sandbox_funding", ID: ref}, EffectiveAt: d.clk.Now(),
 			Entries: []ledger.Entry{
 				{Account: ledger.CustomerAccount(a.ID, ledger.CodeWallet, d.usd.ID), Side: ledger.Debit, Quantity: money.QuantityFromInt64(usd)},
 				{Account: ledger.CustomerAccount(a.ID, ledger.CodeCapital, d.usd.ID), Side: ledger.Credit, Quantity: money.QuantityFromInt64(usd)},
-			}})
+			},
+		})
 		return err
 	})
 	d.mintTo(c.wallet, d.usd, uint64(usd))
@@ -254,13 +268,17 @@ func (d *delegationWorld) delegator(usd int64) delegator {
 }
 
 func (d *delegationWorld) owner(c delegator) context.Context {
-	return security.WithPrincipal(d.f.ctx, security.Principal{SubjectID: c.user.String(), ActorType: security.ActorUser,
-		Roles: []security.Role{security.RoleCustomer}, AccountIDs: []string{c.account.String()}, AuthTime: d.clk.Now(), AMR: []string{"mfa"}})
+	return security.WithPrincipal(d.f.ctx, security.Principal{
+		SubjectID: c.user.String(), ActorType: security.ActorUser,
+		Roles: []security.Role{security.RoleCustomer}, AccountIDs: []string{c.account.String()}, AuthTime: d.clk.Now(), AMR: []string{"mfa"},
+	})
 }
 
 func (d *delegationWorld) agent(c delegator) context.Context {
-	return security.WithPrincipal(d.f.ctx, security.Principal{SubjectID: c.agentID, ActorType: security.ActorAgent,
-		AccountIDs: []string{c.account.String()}})
+	return security.WithPrincipal(d.f.ctx, security.Principal{
+		SubjectID: c.agentID, ActorType: security.ActorAgent,
+		AccountIDs: []string{c.account.String()},
+	})
 }
 
 // grant gives the customer's agent a sandbox capability over the venue,
@@ -299,15 +317,18 @@ func refusalReason(err error) string {
 // the token, labelled action, with a slippage bound: the ticket, refused or
 // not, is committed.
 func (d *delegationWorld) request(c delegator, cid delegation.CapabilityID, nonce uint64, amountIn int64, action delegation.ActionClass,
-	slippage money.BPS) delegation.SwapTicket {
+	slippage money.BPS,
+) delegation.SwapTicket {
 	d.f.t.Helper()
 	var ticket delegation.SwapTicket
 	d.inTx(func(_ context.Context, tx pgx.Tx) error {
 		var err error
-		ticket, err = d.svc.RequestSwap(d.agent(c), tx, delegation.SwapRequest{CapabilityID: cid, AccountID: c.account, Nonce: nonce,
+		ticket, err = d.svc.RequestSwap(d.agent(c), tx, delegation.SwapRequest{
+			CapabilityID: cid, AccountID: c.account, Nonce: nonce,
 			Action: action, VenueID: d.venue.ID, PayAssetID: d.usd.ID, ReceiveAssetID: d.tok.ID,
 			AmountIn: money.QuantityFromInt64(amountIn), MaxSlippageBPS: slippage, Jurisdiction: "US-CA",
-			CorrelationID: "corr-" + uuid.NewString()})
+			CorrelationID: "corr-" + uuid.NewString(),
+		})
 		return err
 	})
 	return ticket

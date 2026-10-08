@@ -92,8 +92,10 @@ func TestInstruments_AreNamespacedAndDescribed(t *testing.T) {
 	in.UnvaluedMatchTrades.Add(ctx, 1)
 	in.UnvaluedRouteFills.Add(ctx, 1)
 	got := collectMetrics(t, reader)
-	for _, name := range []string{"advanced_open_reconciliation_records", "advanced_unvalued_holdings", "advanced_unvalued_match_trades",
-		"advanced_unvalued_route_fills"} {
+	for _, name := range []string{
+		"advanced_open_reconciliation_records", "advanced_unvalued_holdings", "advanced_unvalued_match_trades",
+		"advanced_unvalued_route_fills",
+	} {
 		require.Contains(t, got, name)
 		assert.NotEmpty(t, got[name].Description, name)
 	}

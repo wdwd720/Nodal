@@ -337,8 +337,10 @@ func (c *Collector) margin(ctx context.Context, tx pgx.Tx, snap *Snapshot) error
 	if err != nil {
 		return err
 	}
-	f := &MarginFigures{Accounts: int64(agg.Accounts), Unvalued: int64(agg.Unvalued),
-		GrossExposure: agg.GrossExposure.Minor(), LiquidationBuffer: agg.LiquidationBuffer.Minor()}
+	f := &MarginFigures{
+		Accounts: int64(agg.Accounts), Unvalued: int64(agg.Unvalued),
+		GrossExposure: agg.GrossExposure.Minor(), LiquidationBuffer: agg.LiquidationBuffer.Minor(),
+	}
 	if bps, ok := agg.LeverageBPS(); ok {
 		v := int64(bps)
 		f.LeverageBPS = &v
@@ -456,15 +458,20 @@ func (c *Collector) counters(ctx context.Context, tx pgx.Tx, snap *Snapshot) err
 		// A window that has not moved counts nothing.
 		return nil
 	}
-	w := &Counted{From: *from, To: upper, RiskDenies: map[string]int64{}, SandboxKilled: map[string]int64{},
+	w := &Counted{
+		From: *from, To: upper, RiskDenies: map[string]int64{}, SandboxKilled: map[string]int64{},
 		IntentProposals: map[string]int64{}, DeniedIntents: map[string]int64{}, SigningRequests: map[string]int64{},
-		WithdrawalProposals: map[string]int64{}}
+		WithdrawalProposals: map[string]int64{},
+	}
 	for _, x := range []struct {
 		dst map[string]int64
 		sql string
 	}{
-		{w.RiskDenies, riskDeniesSQL}, {w.IntentProposals, intentProposalsSQL}, {w.DeniedIntents, deniedIntentsSQL},
-		{w.SigningRequests, signingRequestsSQL}, {w.WithdrawalProposals, withdrawalProposalsSQL},
+		{w.RiskDenies, riskDeniesSQL},
+		{w.IntentProposals, intentProposalsSQL},
+		{w.DeniedIntents, deniedIntentsSQL},
+		{w.SigningRequests, signingRequestsSQL},
+		{w.WithdrawalProposals, withdrawalProposalsSQL},
 	} {
 		if err := countBy(ctx, tx, x.dst, x.sql, w.From, w.To); err != nil {
 			return err

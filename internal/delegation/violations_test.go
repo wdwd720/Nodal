@@ -272,8 +272,10 @@ func TestAuthorityViolationRiskReasons_AreWhatAFailedCheckBecomes(t *testing.T) 
 			k.Terms.ActionClasses = []ActionClass{ActionReduceExposure}
 			regrant(k)
 		}, risk.ReasonAuthorityScope},
-		{"an instrument class not granted", func(_ *Capability, u *Use) { u.Classes = []InstrumentClass{ClassSpeculativeToken} },
-			risk.ReasonAuthorityScope},
+		{
+			"an instrument class not granted", func(_ *Capability, u *Use) { u.Classes = []InstrumentClass{ClassSpeculativeToken} },
+			risk.ReasonAuthorityScope,
+		},
 		{"a chain not granted", func(_ *Capability, u *Use) { u.Chain = devnethost.ChainEthereum }, risk.ReasonAuthorityScope},
 		{"a destination not granted", func(_ *Capability, u *Use) { u.Destination = ukey("elsewhere") }, risk.ReasonAuthorityScope},
 		{"over the single limit", func(_ *Capability, u *Use) { u.Notional = money.USDFromMinor(100_001) }, risk.ReasonAuthorityLimit},
@@ -298,8 +300,10 @@ func TestAuthorityViolationRiskReasons_AreWhatAFailedCheckBecomes(t *testing.T) 
 			}
 			d := risk.EvaluateAdvanced(risk.DefaultAdvancedPolicy(), risk.AdvancedInput{
 				Stage: risk.StagePreTrade, Now: u.Now,
-				Intent: risk.AdvancedIntent{ID: id.New[id.Any]().String(), Kind: "ACQUIRE_EXPOSURE",
-					AccountID: c.Terms.AccountID.String(), ActorType: "AGENT", AgentID: c.Terms.AgentID, Capability: string(gates.AgentSigning)},
+				Intent: risk.AdvancedIntent{
+					ID: id.New[id.Any]().String(), Kind: "ACQUIRE_EXPOSURE",
+					AccountID: c.Terms.AccountID.String(), ActorType: "AGENT", AgentID: c.Terms.AgentID, Capability: string(gates.AgentSigning),
+				},
 				Authority: check.Snapshot(),
 			})
 			require.Equal(t, risk.Reject, d.Verdict)

@@ -64,8 +64,10 @@ func TestIntegration_TheOrderPathRecordsEachSubmitAndCancelLatencyOnce(t *testin
 	_, err = pipe.Submit(f.ctx, f.limit(maker, inst, eth, orders.SideSell, "2500.001", 1))
 	require.Error(t, err)
 	assert.Equal(t, orders.ReasonPricePrecision, orders.ReasonOf(err), "refused before any order is recorded")
-	cancelled, err := pipe.Cancel(f.ctx, orders.CancelRequest{OrderID: resting.Order.ID, AccountID: maker.account,
-		ActorType: security.ActorUser, ActorID: maker.user.String()})
+	cancelled, err := pipe.Cancel(f.ctx, orders.CancelRequest{
+		OrderID: resting.Order.ID, AccountID: maker.account,
+		ActorType: security.ActorUser, ActorID: maker.user.String(),
+	})
 	require.NoError(t, err)
 	require.Equal(t, orders.StatusCancelled, cancelled.Order.Status)
 
@@ -162,9 +164,11 @@ func TestIntegration_ExternalRouteVolumeIsThePaperVenuesNotional(t *testing.T) {
 	c := f.collector()
 	require.Nil(t, f.collect(c).Counted)
 
-	filled, err := venue.Submit(f.ctx, testDB, orders.PaperOrderRequest{InstrumentID: inst, AccountID: buyer.account,
+	filled, err := venue.Submit(f.ctx, testDB, orders.PaperOrderRequest{
+		InstrumentID: inst, AccountID: buyer.account,
 		Side: orders.SideBuy, Quantity: units(2, eth.Decimals), IdempotencyKey: "advancedmetrics-paper-" + uuid.NewString(),
-		ActorType: security.ActorUser, ActorID: buyer.user.String()})
+		ActorType: security.ActorUser, ActorID: buyer.user.String(),
+	})
 	require.NoError(t, err)
 	require.NotNil(t, filled.Fill)
 	require.Equal(t, "5000000000", filled.Fill.NotionalAtReference.String(), "2 units at the 2500.00 mark, in sandbox dollar base units")

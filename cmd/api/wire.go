@@ -914,8 +914,10 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		}
 		var delegationSigner *delegation.DelegatedSigner
 		if delegationSigner, err = delegation.NewDelegatedSigner(sandboxSeed.Derive(sandboxchain.PurposeDelegatedSigner),
-			delegation.SignerConfig{Environment: cfg.Env, Clock: clk, Policy: delegation.DefaultSigningPolicy(),
-				Fees: delegation.HostFees(sandboxChain.Host)}); err != nil {
+			delegation.SignerConfig{
+				Environment: cfg.Env, Clock: clk, Policy: delegation.DefaultSigningPolicy(),
+				Fees: delegation.HostFees(sandboxChain.Host),
+			}); err != nil {
 			return nil, fmt.Errorf("delegated signer: %w", err)
 		}
 		delegationVenues := httpapi.DelegationSandboxVenues()

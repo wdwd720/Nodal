@@ -99,9 +99,13 @@ func (f *fixture) mintToEscrow(r bridge.Route, minter devnet.Keypair, q uint64) 
 	require.NoError(f.t, host.EnsureNativeBalance(f.ctx, r.SourceChain, minter.PublicKey(), 1_000_000, 100_000_000))
 	tip, err := host.Tip(f.ctx, r.SourceChain)
 	require.NoError(f.t, err)
-	tx, err := devnet.Sign(devnet.Message{ChainID: r.SourceChain, RecentBlockhash: tip.Hash, FeePayer: minter.PublicKey(),
-		Instructions: []devnet.Instruction{devnet.TokenMintTo{Mint: r.SourceMint, ToOwner: devnet.BridgeEscrowAddress(r.SourceChain),
-			Amount: q, Authority: minter.PublicKey()}}}, minter)
+	tx, err := devnet.Sign(devnet.Message{
+		ChainID: r.SourceChain, RecentBlockhash: tip.Hash, FeePayer: minter.PublicKey(),
+		Instructions: []devnet.Instruction{devnet.TokenMintTo{
+			Mint: r.SourceMint, ToOwner: devnet.BridgeEscrowAddress(r.SourceChain),
+			Amount: q, Authority: minter.PublicKey(),
+		}},
+	}, minter)
 	require.NoError(f.t, err)
 	raw, err := tx.Encode()
 	require.NoError(f.t, err)
@@ -219,14 +223,18 @@ func (f *fixture) refusedVersion(market *marketplace.Service, source string) mar
 	var v marketplace.Version
 	f.inTx(func(ctx context.Context, tx pgx.Tx) error {
 		var err error
-		_, v, err = market.CreateListing(ctx, tx, marketplace.ListingRequest{CreatorAccountID: creator.account, Creator: actor,
+		_, v, err = market.CreateListing(ctx, tx, marketplace.ListingRequest{
+			CreatorAccountID: creator.account, Creator: actor,
 			Title: "advancedmetrics " + inst[:8], Version: marketplace.VersionRequest{
 				Description: "a strategy the scanner refuses", RiskClass: marketplace.RiskModerate, SupportedInstrumentIDs: []string{inst},
-				Manifest: sandboxrt.Manifest{AllowedIntentKinds: []econ.IntentKind{econ.KindAcquireExposure}, AllowedInstrumentIDs: []string{inst},
-					MaxNotionalPerIntent: "100.00", MaxIntentsPerRun: 1, MinIntervalSeconds: 3600}.Canonicalize(),
+				Manifest: sandboxrt.Manifest{
+					AllowedIntentKinds: []econ.IntentKind{econ.KindAcquireExposure}, AllowedInstrumentIDs: []string{inst},
+					MaxNotionalPerIntent: "100.00", MaxIntentsPerRun: 1, MinIntervalSeconds: 3600,
+				}.Canonicalize(),
 				Source: sandboxrt.Source{"main.go": []byte(source)}, SourceCommit: "advancedmetrics-itest",
 				DataDependencies: []string{"closes"}, Config: map[string]string{"order_units": "1"},
-			}})
+			},
+		})
 		if err != nil {
 			return err
 		}
