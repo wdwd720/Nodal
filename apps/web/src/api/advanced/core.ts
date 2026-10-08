@@ -201,7 +201,14 @@ export const advancedInstrumentListSpec: Spec = {
 };
 
 export const termsVersionSpec: Spec = {
-  required: { version: "integer", terms_hash: "string", reason: "string", actor_type: "string", created_at: "timestamp" },
+  required: {
+    version: "integer",
+    terms_hash: "string",
+    reason: "string",
+    actor_type: "string",
+    actor_id: "string",
+    created_at: "timestamp",
+  },
 };
 
 export const advancedInstrumentDetailSpec: Spec = {
@@ -285,9 +292,17 @@ export const riskDecisionListSpec: Spec = {
 const buyingPowerV2Figures: Record<string, FieldKind> = {};
 for (const field of BUYING_POWER_V2_FIELDS) buyingPowerV2Figures[field] = "usd";
 
+/** An intent page states the value domain of the figures it carries. */
+export const economicIntentPageSpec: Spec = {
+  ...cursorPageSpec(economicIntentSpec),
+  required: { value_domain: SIMULATED },
+};
+
 export const buyingPowerV2Spec: Spec = {
   required: {
     value_domain: SIMULATED,
+    quote_asset_id: "uuid",
+    quote_symbol: "string",
     policy_version: "string",
     as_of: "timestamp",
     // Every component the page shows, each an exact two-decimal string.
@@ -387,7 +402,7 @@ export function useEconomicIntents(
           },
         },
       });
-      const page = validated<Schemas["EconomicIntentPage"]>(data, cursorPageSpec(economicIntentSpec), "/advanced/intents");
+      const page = validated<Schemas["EconomicIntentPage"]>(data, economicIntentPageSpec, "/advanced/intents");
       return { items: page.items, nextCursor: page.next_cursor };
     },
   });

@@ -195,8 +195,8 @@ const instrument = {
 const instrumentDetail = {
   ...instrument,
   versions: [
-    { version: 1, terms_hash: HASH, reason: "listed", actor_type: "OPERATOR", created_at: "2026-10-01T12:00:00Z" },
-    { version: 2, terms_hash: HASH, reason: "tick size", actor_type: "OPERATOR", created_at: "2026-10-02T12:00:00Z" },
+    { version: 1, terms_hash: HASH, reason: "listed", actor_type: "OPERATOR", actor_id: "op-1", created_at: "2026-10-01T12:00:00Z" },
+    { version: 2, terms_hash: HASH, reason: "tick size", actor_type: "OPERATOR", actor_id: "op-1", created_at: "2026-10-02T12:00:00Z" },
   ],
 };
 
@@ -324,6 +324,8 @@ test("a risk decision is accepted, and refused for an unknown verdict or missing
 
 const buyingPower: Record<string, unknown> = {
   value_domain: "SIMULATED",
+  quote_asset_id: SANDBOX_DOLLAR,
+  quote_symbol: "SBX-USD",
   policy_version: "buying-power/2|bp2-sandbox-v1",
   as_of: "2026-10-07T19:00:00Z",
   reasons: [{ code: "CAPITAL_RESERVED", detail: "open orders", amount: "10.00" }],

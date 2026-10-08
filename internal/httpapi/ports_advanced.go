@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/nodal/controlplane/internal/accounts"
+	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/capital/buyingpower"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/instruments"
@@ -21,6 +22,13 @@ type AdvancedInstrumentView struct {
 	History    []instruments.Version
 }
 
+// AdvancedBuyingPower is buying power V2 with the asset its figures are
+// valued in.
+type AdvancedBuyingPower struct {
+	V2    buyingpower.V2
+	Quote assets.Asset
+}
+
 // AdvancedCorePort serves the foundation of the advanced capabilities: their
 // gate decisions, the canonical instruments, the economic intents and effects
 // of an account, Risk Kernel V2 decisions and buying power V2.
@@ -32,5 +40,5 @@ type AdvancedCorePort interface {
 	Intent(ctx context.Context, id econ.IntentID) (econ.Intent, error)
 	Effects(ctx context.Context, account accounts.AccountID, cursor string, limit int) ([]econ.Effect, string, error)
 	RiskDecisions(ctx context.Context, account accounts.AccountID, limit int) ([]risk.AdvancedDecisionRecord, error)
-	BuyingPower(ctx context.Context, account accounts.AccountID) (buyingpower.V2, error)
+	BuyingPower(ctx context.Context, account accounts.AccountID) (AdvancedBuyingPower, error)
 }

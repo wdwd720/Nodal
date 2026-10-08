@@ -221,7 +221,10 @@ function InstrumentPanels(props: { readonly data: AdvancedInstrumentDetail }): R
                   <code className="mono-small">{version.terms_hash}</code>
                 </td>
                 <td className="cell-prose">{version.reason}</td>
-                <td>{version.actor_type}</td>
+                <td>
+                  {version.actor_type}
+                  <span className="cell-note mono-small">{version.actor_id}</span>
+                </td>
                 <td>
                   {formatInstant(version.created_at)}
                   <span className="cell-note">{exactInstant(version.created_at)}</span>

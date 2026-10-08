@@ -299,7 +299,7 @@ type BuyingPowerV2 = Schemas["BuyingPowerV2"];
 /** Every USD figure of a buying power V2 answer. */
 export type BuyingPowerComponent = Exclude<
   keyof BuyingPowerV2,
-  "value_domain" | "policy_version" | "as_of" | "reasons" | "lines"
+  "value_domain" | "quote_asset_id" | "quote_symbol" | "policy_version" | "as_of" | "reasons" | "lines"
 >;
 
 export interface BuyingPowerComponentCopy {

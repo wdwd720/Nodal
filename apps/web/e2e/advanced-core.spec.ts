@@ -9,7 +9,7 @@
  *   - LIVE is refused for every advanced capability, with the reason
  *     LIVE_NOT_IMPLEMENTED, and the capability table says exactly that;
  *   - buying power V2 renders either the backend's breakdown, figure for
- *     figure, or the backend's refusal with its code (NOT_FOUND while the
+ *     figure, or the backend's refusal with its code (UNSUPPORTED while the
  *     sandbox dollar is not provisioned) — never a zero standing in for a
  *     figure the backend did not compute.
  *
@@ -239,7 +239,7 @@ test("buying power V2 shows the backend's breakdown, or its refusal and code —
   }
 
   // The refusal branch. In a deployment without the sandbox dollar this is
-  // NOT_FOUND; whatever the code, it is the backend's, and it is on screen.
+  // UNSUPPORTED; whatever the code, it is the backend's, and it is on screen.
   expect(isProblem(body), "a refusal is a problem document with a stable code").toBe(true);
   const problem = body as Problem;
   const refusal = page.locator(".explain");
@@ -248,7 +248,7 @@ test("buying power V2 shows the backend's breakdown, or its refusal and code —
   if (problem.detail !== undefined && problem.detail !== "") {
     await expect(refusal).toContainText(problem.detail);
   }
-  if (problem.code === "NOT_FOUND") {
+  if (problem.code === "UNSUPPORTED") {
     await expect(refusal).toContainText("not an account worth zero");
   }
   // No component was drawn, and nothing money-shaped stands in for one.

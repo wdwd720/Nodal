@@ -10,8 +10,8 @@
  * When the backend cannot value the account it says why, and the page shows
  * that refusal with its code instead of figures. In a deployment that has not
  * provisioned the sandbox dollar — the unit every figure here is stated in —
- * that refusal is NOT_FOUND, and an account the backend cannot value is not an
- * account worth zero, so no zero is drawn.
+ * that refusal is UNSUPPORTED, and an account the backend cannot value is not
+ * an account worth zero, so no zero is drawn.
  */
 import type { ReactNode } from "react";
 
@@ -61,14 +61,14 @@ export function BuyingPowerSection(): ReactNode {
   );
 }
 
-/** What a NOT_FOUND means on this page. The backend's own words are shown above it. */
+/** What a refusal means on this page. The backend's own words are shown above it. */
 function refusalNote(error: unknown): ReactNode {
-  if (problemCode(error) !== "NOT_FOUND") return undefined;
+  if (problemCode(error) !== "UNSUPPORTED") return undefined;
   return (
     <p className="explain-body">
-      NOT_FOUND here means the backend could not find something buying power V2 needs: the sandbox dollar every
-      figure is stated in, or the account itself. Its own words above say which. No figure is shown in place of
-      the answer, because an account the backend cannot value is not an account worth zero.
+      UNSUPPORTED here means this deployment has not provisioned the sandbox dollar every figure is stated in, so
+      there is no simulated value to report. No figure is shown in place of the answer, because an account the
+      backend cannot value is not an account worth zero.
     </p>
   );
 }
@@ -92,6 +92,7 @@ function Breakdown(props: { readonly data: BuyingPowerV2 }): ReactNode {
             <>
               <p className="meta-row">
                 <ValueDomainPill value={data.value_domain} />
+                <span className="mono-small">valued in {data.quote_symbol} at par</span>
                 <span className="mono-small">policy {data.policy_version}</span>
               </p>
               <AsOf at={data.as_of} label="Computed at" />
