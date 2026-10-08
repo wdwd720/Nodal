@@ -26,19 +26,21 @@
 //
 // # Booking
 //
-// Book charges a disclosure to its payer as one exactly-once FEES effect,
-// every component on its own pair of accounts: the spread on the payer's
-// FEES_SPREAD against the platform's SPREAD_REVENUE, the platform fee and the
-// strategy fee (each its own pair) on FEES_PLATFORM against
-// PLATFORM_FEE_REVENUE, a venue pass-through on FEES_VENUE and a network cost
-// on FEES_NETWORK (pass-throughs are external and not platform revenue). The
-// payer's wallet is reserved first, so a fee never spends funds another
-// operation holds. RecordEmbedded registers the same charges when the caller
-// has already posted them inside its own journal (a trade's SIM_TRADE): the
-// journal is verified to carry exactly them. Reverse compensates a booking by
-// a COMPENSATION journal of exactly its amounts. fee_bookings and
-// fee_quote_disclosures are the audit record: SpreadAudit lists every charged
-// spread with its disclosure, schedule and journal.
+// A charge books every component on its own pair of accounts
+// (ChargeEntries): the spread on the payer's FEES_SPREAD against the
+// platform's SPREAD_REVENUE, the platform fee and the strategy fee (each its
+// own pair) on FEES_PLATFORM against PLATFORM_FEE_REVENUE, a venue
+// pass-through on FEES_VENUE and a network cost on FEES_NETWORK (pass-throughs
+// are external and not platform revenue). RecordEmbedded registers the charges
+// a subsystem posted inside its own journal (a trade's SIM_TRADE, a
+// liquidation's LIQUIDATION) and applied by its own effect: the journal is
+// verified to carry exactly them. That is how every fee a deployment charges
+// is booked. The POSTED path -- the fee ledger posting a charge on its own,
+// under its own FEES effect, after reserving the payer's wallet -- exists
+// unexported (book) until a fee charged on its own needs it. Reverse
+// compensates a booking by a COMPENSATION journal of exactly its amounts.
+// fee_bookings and fee_quote_disclosures are the audit record: SpreadAudit
+// lists every charged spread with its disclosure, schedule and journal.
 //
 // # How other subsystems call the fee ledger
 //
@@ -56,7 +58,7 @@
 //  3. The charge. Inside the subsystem's own journal (ChargeEntries, the
 //     disclosure's charges, every component on its own pair) applied by its
 //     own effect, then RecordEmbedded, which proves the journal carries
-//     exactly the disclosure; or, for a charge posted on its own, Book.
+//     exactly the disclosure.
 //
 // A charge of nothing is not booked (ReasonNothingToBook). A replay returns
 // the stored disclosure and booking. A charge of a risk-reducing operation (a
@@ -83,7 +85,8 @@
 //   - Change a published schedule, publish one that takes effect in the past,
 //     or let an agent publish one.
 //   - Book a fee whose disclosure no longer verifies, whose quote expired, or
-//     whose payer is not the disclosure's.
+//     whose payer is not the disclosure's, or register a journal that does
+//     not carry exactly the disclosed charges.
 //   - Charge a performance fee on a deposit, below the high-water mark or the
 //     hurdle, edit an accrual or statement line instead of appending a
 //     compensating one, or let a period chain break.

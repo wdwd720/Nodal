@@ -94,8 +94,8 @@ type Booking struct {
 	ReversedAt           *time.Time
 }
 
-// BookRequest charges a stored disclosure to its payer.
-type BookRequest struct {
+// bookRequest charges a stored disclosure to its payer.
+type bookRequest struct {
 	DisclosureID DisclosureID
 	AccountID    accounts.AccountID
 	// Kind is the journal kind of the economic event the fee accompanies
@@ -107,14 +107,20 @@ type BookRequest struct {
 	Actor         econ.Actor
 }
 
-// Book charges a disclosure to its payer as one exactly-once FEES effect
-// (key "fees:charge:<disclosure id>"), every component on its own pair of
-// accounts (ChargeEntries). The stored disclosure is re-verified from the
-// record first, an expired quote or another payer is refused, and the payer's
-// wallet is reserved for the charge (naming the economic intent it serves)
-// before anything is posted, so a fee never spends what another operation
-// holds. A replay returns the first booking.
-func (s *Service) Book(ctx context.Context, tx pgx.Tx, r BookRequest) (Booking, error) {
+// book is the POSTED path: it charges a disclosure to its payer as one
+// exactly-once FEES effect (key "fees:charge:<disclosure id>") posting its own
+// journal, every component on its own pair of accounts (ChargeEntries). The
+// stored disclosure is re-verified from the record first, an expired quote or
+// another payer is refused, and the payer's wallet is reserved for the charge
+// (naming the economic intent it serves) before anything is posted, so a fee
+// never spends what another operation holds. A replay returns the first
+// booking.
+//
+// It is kept, unexported, for a future fee charged on its own: every fee a
+// deployment charges today is posted inside the charging subsystem's own
+// journal and registered with RecordEmbedded, so nothing would call it. The
+// standalone charge that needs it re-exports it together with its caller.
+func (s *Service) book(ctx context.Context, tx pgx.Tx, r bookRequest) (Booking, error) {
 	if err := requireActor(r.Actor); err != nil {
 		return Booking{}, err
 	}

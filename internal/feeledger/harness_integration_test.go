@@ -248,7 +248,7 @@ func (f *fixture) quote(key string, quote assets.AssetID, payer *accounts.Accoun
 func (f *fixture) book(q StoredQuote, payer accounts.AccountID) Booking {
 	f.t.Helper()
 	b, err := do(f, func(ctx context.Context, tx pgx.Tx) (Booking, error) {
-		return f.svc.Book(ctx, tx, BookRequest{DisclosureID: q.ID, AccountID: payer, Kind: ledger.KindSimTrade, Mode: gates.ModePaper,
+		return f.svc.book(ctx, tx, bookRequest{DisclosureID: q.ID, AccountID: payer, Kind: ledger.KindSimTrade, Mode: gates.ModePaper,
 			Actor: service})
 	})
 	require.NoError(f.t, err)

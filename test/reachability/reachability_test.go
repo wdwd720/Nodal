@@ -77,6 +77,8 @@ var financialPackages = []string{
 	"internal/equities",
 	"internal/treasury",
 	"internal/orders",
+	// Every fee the services above charge is disclosed and booked through it.
+	"internal/feeledger",
 }
 
 // reachableFrom are the trees a deployment can actually run. A caller in
