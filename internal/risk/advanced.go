@@ -204,6 +204,11 @@ type AdvancedIntent struct {
 	// SandboxOriginated marks an intent proposed by code running in the
 	// strategy sandbox.
 	SandboxOriginated bool `json:"sandbox_originated"`
+	// StrategyVersionID is the strategy version the acting agent runs, when
+	// there is one: a STRATEGY_VERSION_DISABLE switch on it stops the
+	// intent's new risk. Omitted from the canonical input when empty, so an
+	// input without one hashes as it always has.
+	StrategyVersionID string `json:"strategy_version_id,omitempty"`
 }
 
 // Snapshot sections. A nil section means the caller did not supply it.
@@ -577,8 +582,9 @@ func (in AdvancedInput) normalized() AdvancedInput {
 
 // advancedKillSwitched: the global kill and CAPABILITY_DISABLE for the
 // intent's capability stop risk-increasing intents; ACCOUNT_FREEZE stops
-// everything that is not risk-reducing; INSTRUMENT_HALT stops everything on
-// the instrument.
+// everything that is not risk-reducing, and so do AGENT_PAUSE and
+// STRATEGY_VERSION_DISABLE for an intent of that agent or strategy version;
+// INSTRUMENT_HALT stops everything on the instrument.
 func advancedKillSwitched(in AdvancedInput) bool {
 	for _, ks := range in.KillSwitches {
 		switch ks.Kind {
@@ -596,6 +602,11 @@ func advancedKillSwitched(in AdvancedInput) bool {
 			}
 		case KillAgentPause:
 			if in.Intent.AgentID != "" && (ks.Scope == KillScopeAll || ks.Scope == in.Intent.AgentID) && in.Intent.RiskIncreasing {
+				return true
+			}
+		case KillStrategyVersionDisable:
+			if in.Intent.StrategyVersionID != "" && (ks.Scope == KillScopeAll || ks.Scope == in.Intent.StrategyVersionID) &&
+				in.Intent.RiskIncreasing {
 				return true
 			}
 		case KillInstrumentHalt:

@@ -332,7 +332,7 @@ func (s *Service) ProposeWithdrawal(ctx context.Context, tx pgx.Tx, req Proposal
 	if _, err := s.intents.Transition(ctx, tx, in.ID, econ.StatusRouted, withdrawActor, "routed through the settlement compiler", ""); err != nil {
 		return WithdrawalTicket{}, err
 	}
-	if code, detail, err := s.withdrawalBlocked(ctx, tx, req.AccountID, agent.ID); err != nil {
+	if code, detail, err := s.withdrawalBlocked(ctx, tx, req.AccountID, agent); err != nil {
 		return WithdrawalTicket{}, err
 	} else if code != "" {
 		ecode := errs.CodeKillSwitchActive
@@ -520,10 +520,12 @@ func (s *Service) replayWithdrawal(ctx context.Context, tx pgx.Tx, in econ.Inten
 	return WithdrawalTicket{}, errs.New(errs.CodeInternal, "delegation: an intent without its withdrawal").WithField("intent_id", in.ID.String())
 }
 
-// withdrawalBlocked is the freeze check every step before submission makes:
-// the account must be ACTIVE and no switch that stops withdrawals (or, for an
-// agent, its new activity) may apply.
-func (s *Service) withdrawalBlocked(ctx context.Context, tx pgx.Tx, account accounts.AccountID, agentID string) (string, string, error) {
+// withdrawalBlocked is the freeze check every step before submission makes
+// (proposal, approval, signing, the last check before the submission): the
+// account must be ACTIVE, no switch that stops withdrawals may apply, and no
+// switch that stops the proposing agent's activity -- on its account, the
+// agent itself or the strategy version it runs -- may apply either.
+func (s *Service) withdrawalBlocked(ctx context.Context, tx pgx.Tx, account accounts.AccountID, agent agentRow) (string, string, error) {
 	acct, err := s.loadAccount(ctx, tx, account)
 	if err != nil {
 		return "", "", err
@@ -531,10 +533,9 @@ func (s *Service) withdrawalBlocked(ctx context.Context, tx pgx.Tx, account acco
 	if acct.Status != accounts.StatusActive {
 		return RefusalAccountFrozen, "the account is " + string(acct.Status), nil
 	}
-	actions := []killswitch.Action{{Class: killswitch.Withdraw, AccountID: account.String(), Capability: string(gates.AgentWithdrawals)}}
-	if agentID != "" {
-		actions = append(actions, killswitch.Action{Class: killswitch.NewRisk, AccountID: account.String(), AgentID: agentID,
-			Capability: string(gates.AgentWithdrawals)})
+	actions := []killswitch.Action{
+		agent.killAction(killswitch.Withdraw, account, gates.AgentWithdrawals),
+		agent.killAction(killswitch.NewRisk, account, gates.AgentWithdrawals),
 	}
 	for _, a := range actions {
 		if err := s.kills.Check(ctx, tx, a); err != nil {
@@ -545,6 +546,20 @@ func (s *Service) withdrawalBlocked(ctx context.Context, tx pgx.Tx, account acco
 		}
 	}
 	return "", "", nil
+}
+
+// proposingAgent is the agent that proposed w, as it is now. An agent row
+// that cannot be found is its id alone, which a switch on the agent still
+// matches.
+func proposingAgent(ctx context.Context, q db.Querier, w Withdrawal) (agentRow, error) {
+	a, found, err := getAgent(ctx, q, w.AgentID)
+	if err != nil {
+		return agentRow{}, err
+	}
+	if !found {
+		return agentRow{ID: w.AgentID}, nil
+	}
+	return a, nil
 }
 
 // withdrawalFacts are the account's measured withdrawal history.
@@ -649,8 +664,9 @@ func (s *Service) evaluateWithdrawalRisk(ctx context.Context, tx pgx.Tx, in econ
 	input := risk.AdvancedInput{
 		Stage: risk.StagePreTrade,
 		Intent: risk.AdvancedIntent{ID: in.ID.String(), Kind: string(in.Kind), AccountID: in.AccountID.String(),
-			ActorType: string(in.ActorType), AgentID: agent.ID, StrategyRef: in.StrategyRef, Capability: string(in.Capability),
-			Mode: string(in.Mode), InstrumentKind: string(class), NotionalUSD: notional, RiskIncreasing: true},
+			ActorType: string(in.ActorType), AgentID: agent.ID, StrategyRef: in.StrategyRef,
+			StrategyVersionID: agent.StrategyVersionID, Capability: string(in.Capability), Mode: string(in.Mode),
+			InstrumentKind: string(class), NotionalUSD: notional, RiskIncreasing: true},
 		Identity:     &risk.IdentitySnapshot{Verified: verified},
 		Account:      &risk.AdvancedAccountSnapshot{Status: string(acct.Status)},
 		Balance:      &risk.BalanceSnapshot{Available: available, Required: required},
@@ -768,7 +784,11 @@ func (s *Service) DecideWithdrawal(ctx context.Context, tx pgx.Tx, d WithdrawalD
 		if err := s.authorizer.Require(ctx, tx, gates.AgentWithdrawals, w.Mode); err != nil {
 			return Withdrawal{}, err
 		}
-		if code, detail, err := s.withdrawalBlocked(ctx, tx, w.AccountID, ""); err != nil {
+		agent, err := proposingAgent(ctx, tx, w)
+		if err != nil {
+			return Withdrawal{}, err
+		}
+		if code, detail, err := s.withdrawalBlocked(ctx, tx, w.AccountID, agent); err != nil {
 			return Withdrawal{}, err
 		} else if code != "" {
 			ecode := errs.CodeKillSwitchActive
@@ -840,12 +860,15 @@ func (s *Service) withdrawalStanding(ctx context.Context, tx pgx.Tx, w Withdrawa
 		}
 		return "", "", err
 	}
-	if code, detail, err := s.withdrawalBlocked(ctx, tx, w.AccountID, ""); err != nil || code != "" {
-		return code, detail, err
-	}
 	agent, found, err := getAgent(ctx, tx, w.AgentID)
 	if err != nil {
 		return "", "", err
+	}
+	if !found {
+		agent = agentRow{ID: w.AgentID}
+	}
+	if code, detail, err := s.withdrawalBlocked(ctx, tx, w.AccountID, agent); err != nil || code != "" {
+		return code, detail, err
 	}
 	if !found || !agent.usable() {
 		return ReasonAgentNotActive, "the proposing agent may not act now", nil

@@ -20,12 +20,15 @@ import (
 // ended by delegation.Service.ExpireStaleSwap / ExpireStaleWithdrawal, each
 // in its own transaction: the reservation is released and the intent
 // REJECTED. The ones past their deadline -- a swap's venue quote, a
-// withdrawal's approval window -- are taken first, oldest deadline first;
-// the rest of the batch is a paged sweep over every pending one, which finds
-// those whose capability, account, agent, destination, gate or kill switch no
-// longer stands. The job only finds candidates; whether one is stale is the
-// package's own standing check, and one that still stands is left exactly as
-// it is.
+// withdrawal's approval window -- are taken first, oldest deadline first
+// (delegation.Service.DueSwaps / DueWithdrawals); the rest of the batch is a
+// paged sweep over every pending one (PendingSwaps / PendingWithdrawals),
+// which finds those whose capability, account, agent, destination, gate or
+// kill switch no longer stands. Which subjects are candidates is the
+// package's selection, and whether one is stale its own standing check: the
+// job only pages and drives, and one that still stands is left exactly as it
+// is. Neither selection can be held by subjects that stand: one past its
+// deadline is ended when taken, and the sweep moves past every other.
 //
 // Observation. delegation.Service.ReconcilePending then observes every
 // SIGNED, SUBMITTED or UNKNOWN swap and withdrawal by transaction id through
@@ -72,28 +75,8 @@ func NewDelegationUpkeep(d *db.DB, svc *delegation.Service, clk clock.Clock, s S
 // Spec implements Job.
 func (j *DelegationUpkeep) Spec() Spec { return j.spec }
 
-// The candidate reads. Read-only; delegation exports no lister. The status
-// sets are exactly the ones ExpireStaleSwap / ExpireStaleWithdrawal act on.
+// The reads of what is in flight, for the run's report. Read-only.
 const (
-	// dueSwapsSQL: pending swaps whose quote has expired, oldest deadline
-	// first.
-	dueSwapsSQL = `SELECT id FROM delegated_swaps
-		WHERE status IN ('ADMITTED','AWAITING_APPROVAL','APPROVED') AND quote_expires_at <= $1
-		ORDER BY quote_expires_at, id LIMIT $2`
-	// pendingSwapsSQL: every pending swap after a paging key, in id order.
-	pendingSwapsSQL = `SELECT id FROM delegated_swaps
-		WHERE status IN ('ADMITTED','AWAITING_APPROVAL','APPROVED') AND id > $1::uuid
-		ORDER BY id LIMIT $2`
-	// dueWithdrawalsSQL: withdrawals still waiting for a person after their
-	// approval deadline, oldest deadline first.
-	dueWithdrawalsSQL = `SELECT id FROM delegated_withdrawals
-		WHERE status = 'AWAITING_APPROVAL' AND approval_expires_at <= $1
-		ORDER BY approval_expires_at, id LIMIT $2`
-	// pendingWithdrawalsSQL: every pending withdrawal after a paging key, in
-	// id order.
-	pendingWithdrawalsSQL = `SELECT id FROM delegated_withdrawals
-		WHERE status IN ('AWAITING_APPROVAL','APPROVED') AND id > $1::uuid
-		ORDER BY id LIMIT $2`
 	// inFlightSwapsSQL and inFlightWithdrawalsSQL are what ReconcilePending
 	// observes -- SIGNED, SUBMITTED and UNKNOWN, oldest first, as many as it
 	// takes -- read before it runs so the run can say what moved.
@@ -112,6 +95,34 @@ func (u swapUnit) cursorKey() string { return u.id.String() }
 type withdrawalUnit struct{ id delegation.WithdrawalID }
 
 func (u withdrawalUnit) cursorKey() string { return u.id.String() }
+
+// swapUnits wraps selected swap ids for the pager.
+func swapUnits(ids []delegation.SwapID) []swapUnit {
+	out := make([]swapUnit, 0, len(ids))
+	for _, sid := range ids {
+		out = append(out, swapUnit{id: sid})
+	}
+	return out
+}
+
+// withdrawalUnits wraps selected withdrawal ids for the pager.
+func withdrawalUnits(ids []delegation.WithdrawalID) []withdrawalUnit {
+	out := make([]withdrawalUnit, 0, len(ids))
+	for _, wid := range ids {
+		out = append(out, withdrawalUnit{id: wid})
+	}
+	return out
+}
+
+// pageAfter is the pager's position as a subject id: the start of the walk
+// (nilUUID) is the zero id, which the selection reads as "from the first".
+func pageAfter[K any](after string, parse func(string) (K, error)) (K, error) {
+	var zero K
+	if after == nilUUID {
+		return zero, nil
+	}
+	return parse(after)
+}
 
 // Run expires what is stale, then observes what is in flight.
 func (j *DelegationUpkeep) Run(ctx context.Context) (Report, error) {
@@ -132,8 +143,8 @@ func (j *DelegationUpkeep) Run(ctx context.Context) (Report, error) {
 func (j *DelegationUpkeep) expireSwaps(ctx context.Context, now time.Time, rep *Report) error {
 	var due []swapUnit
 	if err := readOnly(ctx, j.db, func(ctx context.Context, tx pgx.Tx) error {
-		var err error
-		due, err = scanSubjects[swapUnit](ctx, tx, dueSwapsSQL, now, j.spec.Batch)
+		ids, err := j.svc.DueSwaps(ctx, tx, now, j.spec.Batch)
+		due = swapUnits(ids)
 		return err
 	}); err != nil {
 		return err
@@ -141,7 +152,12 @@ func (j *DelegationUpkeep) expireSwaps(ctx context.Context, now time.Time, rep *
 	units := due
 	if left := j.spec.Batch - len(due); left > 0 {
 		swept, err := readPage(ctx, &j.swaps, j.db, left, func(ctx context.Context, q db.Querier, after string, limit int) ([]swapUnit, error) {
-			return scanSubjects[swapUnit](ctx, q, pendingSwapsSQL, after, limit)
+			from, err := pageAfter(after, delegation.ParseSwapID)
+			if err != nil {
+				return nil, err
+			}
+			ids, err := j.svc.PendingSwaps(ctx, q, from, limit)
+			return swapUnits(ids), err
 		})
 		if err != nil {
 			return err
@@ -178,8 +194,8 @@ func (j *DelegationUpkeep) expireSwaps(ctx context.Context, now time.Time, rep *
 func (j *DelegationUpkeep) expireWithdrawals(ctx context.Context, now time.Time, rep *Report) error {
 	var due []withdrawalUnit
 	if err := readOnly(ctx, j.db, func(ctx context.Context, tx pgx.Tx) error {
-		var err error
-		due, err = scanSubjects[withdrawalUnit](ctx, tx, dueWithdrawalsSQL, now, j.spec.Batch)
+		ids, err := j.svc.DueWithdrawals(ctx, tx, now, j.spec.Batch)
+		due = withdrawalUnits(ids)
 		return err
 	}); err != nil {
 		return err
@@ -187,7 +203,12 @@ func (j *DelegationUpkeep) expireWithdrawals(ctx context.Context, now time.Time,
 	units := due
 	if left := j.spec.Batch - len(due); left > 0 {
 		swept, err := readPage(ctx, &j.withdrawals, j.db, left, func(ctx context.Context, q db.Querier, after string, limit int) ([]withdrawalUnit, error) {
-			return scanSubjects[withdrawalUnit](ctx, q, pendingWithdrawalsSQL, after, limit)
+			from, err := pageAfter(after, delegation.ParseWithdrawalID)
+			if err != nil {
+				return nil, err
+			}
+			ids, err := j.svc.PendingWithdrawals(ctx, q, from, limit)
+			return withdrawalUnits(ids), err
 		})
 		if err != nil {
 			return err
@@ -273,30 +294,6 @@ func (j *DelegationUpkeep) observe(ctx context.Context, rep *Report) error {
 	tally(swaps, swapsAfter)
 	tally(withdrawals, withdrawalsAfter)
 	return nil
-}
-
-// scanSubjects reads one column of subject ids.
-func scanSubjects[T swapUnit | withdrawalUnit](ctx context.Context, q db.Querier, sql string, args ...any) ([]T, error) {
-	rows, err := q.Query(ctx, sql, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []T
-	for rows.Next() {
-		var u T
-		switch p := any(&u).(type) {
-		case *swapUnit:
-			err = rows.Scan(&p.id)
-		case *withdrawalUnit:
-			err = rows.Scan(&p.id)
-		}
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, u)
-	}
-	return out, rows.Err()
 }
 
 // statuses reads (id, status) rows into a map.

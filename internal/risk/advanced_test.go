@@ -196,6 +196,46 @@ func TestAdvanced_KillSwitchesAndBreakers(t *testing.T) {
 	assert.Contains(t, EvaluateAdvanced(DefaultAdvancedPolicy(), cb).ReasonCodes, ReasonCircuitBreaker)
 }
 
+// TestAdvanced_StrategyVersionDisableStopsThatVersionsNewRisk: a
+// STRATEGY_VERSION_DISABLE switch stops a risk-increasing intent of an agent
+// running that strategy version, as AGENT_PAUSE does for the agent; it lets
+// through another version's intent, an intent that names no version, and a
+// risk-reducing intent of the disabled version. An input that names no
+// version is encoded exactly as before the field existed.
+func TestAdvanced_StrategyVersionDisableStopsThatVersionsNewRisk(t *testing.T) {
+	const version = "0193b2e0-0000-7000-8000-0000000000d1"
+	disabled := []KillSwitch{{Kind: KillStrategyVersionDisable, Scope: version}}
+
+	in := openPosition()
+	in.Intent.StrategyVersionID = version
+	require.Equal(t, Allow, EvaluateAdvanced(DefaultAdvancedPolicy(), in).Verdict, "nothing is switched off yet")
+	in.KillSwitches = disabled
+	d := EvaluateAdvanced(DefaultAdvancedPolicy(), in)
+	assert.Equal(t, Reject, d.Verdict)
+	assert.Contains(t, d.ReasonCodes, ReasonKillSwitch)
+
+	other := openPosition()
+	other.Intent.StrategyVersionID = "0193b2e0-0000-7000-8000-0000000000d2"
+	other.KillSwitches = disabled
+	assert.Equal(t, Allow, EvaluateAdvanced(DefaultAdvancedPolicy(), other).Verdict, "another version's switch")
+
+	unversioned := openPosition()
+	unversioned.KillSwitches = disabled
+	assert.Equal(t, Allow, EvaluateAdvanced(DefaultAdvancedPolicy(), unversioned).Verdict, "an intent that names no version")
+
+	reduce := openPosition()
+	reduce.Intent.Kind, reduce.Intent.RiskIncreasing, reduce.Intent.StrategyVersionID = "CLOSE_POSITION", false, version
+	reduce.KillSwitches = disabled
+	assert.Equal(t, Allow, EvaluateAdvanced(DefaultAdvancedPolicy(), reduce).Verdict, "reducing risk is never stopped by it")
+
+	plain, err := canonicalJSON(openPosition())
+	require.NoError(t, err)
+	assert.NotContains(t, string(plain), "strategy_version_id", "an unversioned input hashes as it always did")
+	versioned, err := canonicalJSON(in)
+	require.NoError(t, err)
+	assert.Contains(t, string(versioned), `"strategy_version_id":"`+version+`"`)
+}
+
 func TestAdvanced_VelocityAndDestination(t *testing.T) {
 	p := DefaultAdvancedPolicy()
 	p.MinDestinationAgeMS = int64(time.Hour / time.Millisecond)
