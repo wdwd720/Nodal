@@ -142,7 +142,7 @@ func build(ctx context.Context, in buildInput) (_ *worker, err error) {
 
 	// As cmd/api: one fee ledger, built before the services that charge fees
 	// (margin's liquidation fee, the internal book's fees, the paper venue's
-	// strategy fills), each of which refuses to start without it.
+	// strategy fills, equity fills), each of which refuses to start without it.
 	feeLedgerSvc, err := feeledger.NewService(feeledger.Config{
 		Clock: clk, Ledger: ledgerSvc, Capital: capitalSvc, Effects: effects(), Authorizer: authorizer(), Assets: assetRepo,
 		Audit: auditWriter,
@@ -228,7 +228,7 @@ func build(ctx context.Context, in buildInput) (_ *worker, err error) {
 	// --- paper equities, where the paper venue may run ------------------------------
 	if in.plan.wired(advancedjobs.NameEquitiesSettlement) {
 		equitiesSvc, err := newEquities(ctx, cfg, database, clk, intents(), effects(), authorizer(), killChecker, router,
-			capitalSvc, ledgerSvc, priceStore, auditWriter)
+			capitalSvc, ledgerSvc, priceStore, auditWriter, feeLedgerSvc)
 		if err != nil {
 			return nil, err
 		}
@@ -410,10 +410,13 @@ func build(ctx context.Context, in buildInput) (_ *worker, err error) {
 
 // newEquities builds paper equities exactly as cmd/api does: the paper venue
 // NewExecutionAdapter gives this environment and provider mode, on the XNYS
-// calendar with the closures recorded at start, and the sandbox schedule.
+// calendar with the closures recorded at start, the sandbox schedule, and the
+// fee ledger every fill's spread and fees are booked through.
 func newEquities(ctx context.Context, cfg *config.Config, database *db.DB, clk clock.Clock, intents *econ.IntentStore,
 	effects *econ.EffectStore, authorizer *econ.Authorizer, kills *killswitch.Checker, router *legalrouter.Router,
-	capitalSvc *capital.Service, ledgerSvc *ledger.Service, prices *valuation.PriceStore, auditWriter audit.Writer) (*equities.Service, error) {
+	capitalSvc *capital.Service, ledgerSvc *ledger.Service, prices *valuation.PriceStore, auditWriter audit.Writer,
+	feeLedgerSvc *feeledger.Service,
+) (*equities.Service, error) {
 	holidays, err := equities.Holidays(ctx, database, equities.CalendarXNYS)
 	if err != nil {
 		return nil, fmt.Errorf("equities holidays: %w", err)
@@ -434,6 +437,7 @@ func newEquities(ctx context.Context, cfg *config.Config, database *db.DB, clk c
 			Version: "equities-sandbox-v1", QuoteAsset: econ.SandboxDollarID(), QuoteDecimals: econ.SandboxDollarDecimals,
 			SpreadBPS: 10, PercentageFeeBPS: 10, StrategyFeeBPS: 5, SlippageReserveBPS: 50, Rounding: fees.DefaultRounding(),
 		}},
+		FeeLedger:       feeLedgerSvc,
 		MarketCollarBPS: 100, MinOrderNotional: money.USDFromMinor(1_00),
 		Verification: httpapi.AdvancedVerificationLevels{Rule: compliance.NewAccountVerification(clk)},
 	})
@@ -497,7 +501,8 @@ const registeredVenuesSQL = `SELECT name, address FROM delegation_venues ORDER B
 // co-signs; the service is whole so that every check it makes is the one a
 // deployment makes.
 func newDelegation(ctx context.Context, cfg *config.Config, database *db.DB, clk clock.Clock, chain sandboxchain.Chain,
-	seed sandboxchain.Seed, log *slog.Logger, d delegation.Deps) (*delegation.Service, error) {
+	seed sandboxchain.Seed, log *slog.Logger, d delegation.Deps,
+) (*delegation.Service, error) {
 	signer, err := delegation.NewDelegatedSigner(seed.Derive(sandboxchain.PurposeDelegatedSigner), delegation.SignerConfig{
 		Environment: cfg.Env, Clock: clk, Policy: delegation.DefaultSigningPolicy(), Fees: delegation.HostFees(chain.Host),
 	})
