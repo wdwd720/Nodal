@@ -852,7 +852,7 @@ func (e *scriptedEngine) Run(_ context.Context, req sandboxrt.RunRequest) (sandb
 func TestIntegration_AFollowValuesProposalsAtTheReferencePriceNeverTheStrategysLimit(t *testing.T) {
 	f := newFixture(t)
 	engine := &scriptedEngine{}
-	svc := f.newService(sandboxrt.NewService(f.clk, f.auth, engine, f.aw))
+	svc := f.newService(sandboxrt.NewService(f.clk, f.auth, engine, f.aw, testBudget))
 	_, v := f.approved("momentum")
 	in := f.install(v)
 	// The second instrument's price is an hour old by the time of the run.
@@ -886,7 +886,7 @@ func TestIntegration_AFollowValuesProposalsAtTheReferencePriceNeverTheStrategysL
 func TestIntegration_Prop_UntrustedOutputOnlyBecomesRiskCheckedIntents(t *testing.T) {
 	f := newFixture(t)
 	engine := &scriptedEngine{}
-	svc := f.newService(sandboxrt.NewService(f.clk, f.auth, engine, f.aw))
+	svc := f.newService(sandboxrt.NewService(f.clk, f.auth, engine, f.aw, testBudget))
 	_, v := f.approved("momentum")
 	in := f.install(v)
 	allKinds := append(econ.AllIntentKinds(), "SIGN_TRANSACTION", "EXPORT_KEY")

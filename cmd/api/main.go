@@ -62,6 +62,7 @@ import (
 	"github.com/nodal/controlplane/internal/config"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/observability"
+	"github.com/nodal/controlplane/internal/sandboxrt"
 )
 
 const (
@@ -155,6 +156,19 @@ func run(ctx context.Context, lookup func(string) (string, bool), stderr *os.Fil
 	}
 	defer database.Close()
 
+	// The sandbox budget's own small pool. A strategy run is reserved and
+	// charged on it while its caller's transaction holds one of the API's
+	// connections, so it must never be the API's pool: a second connection
+	// from the pool whose first is held is F-27. Opened here for the reason
+	// the database is: a pool with a process lifetime, closed when the
+	// process stops.
+	sandboxBudget, err := sandboxrt.OpenBudgetPool(ctx, database, sandboxrt.DefaultBudgetConns)
+	if err != nil {
+		log.Error("sandbox budget pool could not be opened", "error", err.Error())
+		return exitFailure
+	}
+	defer sandboxBudget.Close()
+
 	// Where the transport rate limiter keeps its counters. Opened here rather
 	// than inside build, for the same reason the database is: it is a
 	// connection pool with a process lifetime and it has to be closed when the
@@ -178,6 +192,7 @@ func run(ctx context.Context, lookup func(string) (string, bool), stderr *os.Fil
 		logger:            log,
 		rateLimitStore:    rlStore,
 		rateLimitFailOpen: rlFailOpen,
+		sandboxBudget:     sandboxBudget,
 	})
 	if err != nil {
 		log.Error("composition failed", "error", err.Error())

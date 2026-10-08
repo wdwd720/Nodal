@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -33,6 +34,8 @@ var (
 	testAppURL     = os.Getenv("CP_TEST_DATABASE_URL")
 	testMigrateURL = os.Getenv("CP_TEST_MIGRATE_DATABASE_URL")
 	testDB         *db.DB
+	// testBudget is the budget's own pool, as the binaries open it.
+	testBudget *pgxpool.Pool
 )
 
 func setupDatabase() (func(), error) {
@@ -48,8 +51,13 @@ func setupDatabase() (func(), error) {
 	if err != nil {
 		return nil, err
 	}
-	testDB = d
-	return d.Close, nil
+	budget, err := OpenBudgetPool(ctx, d, MaxBudgetConns)
+	if err != nil {
+		d.Close()
+		return nil, err
+	}
+	testDB, testBudget = d, budget
+	return func() { budget.Close(); d.Close() }, nil
 }
 
 func requireDB(t *testing.T) {
@@ -74,6 +82,8 @@ type svcFixture struct {
 	t      *testing.T
 	ctx    context.Context
 	clk    *clock.Fake
+	auth   *econ.Authorizer
+	aw     audit.Writer
 	svc    *Service
 	engine *countingEngine
 	fx     fixtureSet
@@ -92,10 +102,19 @@ func newSvcFixture(t *testing.T) *svcFixture {
 	require.NoError(t, err)
 	auth := econ.NewAuthorizer(checker, killswitch.NewChecker(killswitch.Policy{}))
 	engine := &countingEngine{inner: fx.runner}
-	f := &svcFixture{t: t, ctx: context.Background(), clk: clk, fx: fx, engine: engine,
-		svc: NewService(clk, auth, engine, audit.NewWriterWithBuildVersion("itest"))}
+	aw := audit.NewWriterWithBuildVersion("itest")
+	f := &svcFixture{t: t, ctx: context.Background(), clk: clk, auth: auth, aw: aw, fx: fx, engine: engine,
+		svc: NewService(clk, auth, engine, aw, testBudget)}
 	f.account = f.newAccount()
 	return f
+}
+
+// withEngine rebuilds the fixture's service around another engine, keeping
+// its budget.
+func (f *svcFixture) withEngine(e Engine) {
+	b := f.svc.Budget()
+	f.svc = NewService(f.clk, f.auth, e, f.aw, testBudget)
+	f.withBudget(b)
 }
 
 // newAccount creates a customer account to charge runs to.
@@ -172,6 +191,11 @@ func TestIntegration_ExecuteRecordsTheRunItsViolationsAndAnAudit(t *testing.T) {
 	assert.Equal(t, insA, e.Accepted[0].InstrumentID)
 }
 
+// TestIntegration_KillSwitchRefusesToRun: while CAPABILITY_DISABLE for
+// USER_CODE_SANDBOX or the global kill is active -- as the caller's own
+// transaction sees it -- the module is never started; the refusal is recorded
+// as a KILLED_BY_SWITCH run, charged one run and no CPU, in a transaction of
+// its own.
 func TestIntegration_KillSwitchRefusesToRun(t *testing.T) {
 	f := newSvcFixture(t)
 	digest := f.artifact("momentum")
@@ -214,8 +238,13 @@ func TestIntegration_KillSwitchRefusesToRun(t *testing.T) {
 			})
 			require.ErrorIs(t, err, rollback)
 			assert.Equal(t, before, f.engine.runs.Load(), "the module was never started")
-			_, err = f.svc.Run(f.ctx, testDB, runID)
-			assert.Equal(t, errs.CodeNotFound, errs.CodeOf(err))
+			// The refusal is the run's own record, committed with its charge
+			// in a transaction of its own: the caller's rollback -- which takes
+			// the switch back with it -- leaves the record, as one run of the
+			// window that cost no CPU.
+			rec, err := f.svc.Run(f.ctx, testDB, runID)
+			require.NoError(t, err)
+			assert.Equal(t, TerminationKilledBySwitch, rec.Termination)
 		})
 	}
 	// With the switch released (rolled back) the same request runs.
@@ -479,36 +508,53 @@ func TestIntegration_ACallBeyondItsBoundsIsRefusedBeforeAnythingRuns(t *testing.
 }
 
 // TestIntegration_ConcurrentRunsCannotOverspendTheBudget: N concurrent
-// transactions charge the same account; the budget's lock serializes them and
-// exactly the window's room succeeds.
+// callers, each in its own transaction, run code charged to one account whose
+// window has room for three. Each run is admitted against the account's
+// charges and every reservation not yet charged, in a short budget
+// transaction, and no lock is held while any of them runs -- so exactly the
+// window's three run and are charged, and every other caller is refused
+// RATE_LIMITED for the window, never INTERNAL, however loaded the machine is.
+// A caller refused only because the budget was contended (it waited longer
+// than the budget allows) retries, as a client would after its Retry-After;
+// that it can happen at all is the price of never waiting long.
 func TestIntegration_ConcurrentRunsCannotOverspendTheBudget(t *testing.T) {
 	f := newSvcFixture(t)
 	f.withBudget(smallBudget())
 	digest := f.artifact("momentum")
 	const n = 8
 	var wg sync.WaitGroup
-	var ok, refused atomic.Int64
+	var ok, windowRefused, contendedRetries atomic.Int64
 	for range n {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := f.execute(digest, testInput())
-			switch errs.CodeOf(err) {
-			case "":
-				ok.Add(1)
-			case errs.CodeRateLimited:
-				refused.Add(1)
-			default:
-				t.Errorf("unexpected: %v", err)
+			for attempt := 0; ; attempt++ {
+				_, err := f.execute(digest, testInput())
+				e, _ := errs.As(err)
+				switch {
+				case err == nil:
+					ok.Add(1)
+				case errs.CodeOf(err) == errs.CodeRateLimited && e.Fields["reason"] == BudgetContended && attempt < 20:
+					contendedRetries.Add(1)
+					continue
+				case errs.CodeOf(err) == errs.CodeRateLimited && e.Fields["reason"] == BudgetWindowRuns:
+					windowRefused.Add(1)
+				default:
+					t.Errorf("a concurrent run must run or be refused for the window, never this: %v", err)
+				}
+				return
 			}
 		}()
 	}
 	wg.Wait()
 	assert.Equal(t, int64(3), ok.Load(), "exactly the window's three runs")
-	assert.Equal(t, int64(n-3), refused.Load())
+	assert.Equal(t, int64(n-3), windowRefused.Load())
+	assert.Equal(t, int64(3), f.engine.runs.Load(), "a refused run never starts")
 	u, err := f.svc.UsageOf(f.ctx, testDB, f.account)
 	require.NoError(t, err)
 	assert.Equal(t, 3, u.Runs)
+	assert.Zero(t, u.InFlightRuns, "every reservation is charged or gone")
+	t.Logf("contended refusals retried: %d", contendedRetries.Load())
 }
 
 // TestIntegration_TheDatabaseRefusesAChargeThatIsNotTheRunsOrBeyondItsBudget

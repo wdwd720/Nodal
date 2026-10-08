@@ -206,7 +206,7 @@ func (f *fixture) marketplace() *marketplace.Service {
 	f.t.Cleanup(func() { _ = runner.Close(context.Background()) })
 	svc, err := marketplace.NewService(marketplace.Config{
 		Clock: f.clk, Intents: f.intents, Effects: f.effects, Auth: f.authz, Risk: risk.NewStore(), RiskPolicy: risk.DefaultAdvancedPolicy(),
-		Router: f.router, Sandbox: sandboxrt.NewService(f.clk, f.authz, runner, f.audit), Builder: builder, Sections: unfollowed{},
+		Router: f.router, Sandbox: sandboxrt.NewService(f.clk, f.authz, runner, f.audit, testDB.Pool()), Builder: builder, Sections: unfollowed{},
 		Executor: unfollowed{}, Audit: f.audit, ServiceID: "advancedmetrics-itest",
 	})
 	require.NoError(f.t, err)

@@ -60,13 +60,91 @@
 //     reference price in the terms, and refuses without one.
 //   - Budget bounds the sandbox per call and per account per window: runs,
 //     CPU and wall time. A call is admitted whole or refused before anything
-//     runs, and every run is charged to its account under an advisory lock, so
-//     concurrent callers cannot overspend; a refusal is RATE_LIMITED with a
-//     stable SANDBOX_BUDGET_* reason. The database refuses a run nobody was
-//     charged for (SX002) and a charge beyond the budget it carries (SX003).
-//   - Service persists artifacts (immutable), runs, violations and usage
-//     (append-only), and refuses to run at all while CAPABILITY_DISABLE for
+//     runs, every run is reserved before it starts and charged when it ends,
+//     and no lock is held while code runs ("Budget" below), so concurrent
+//     callers can neither overspend nor wait on one another's runs; a refusal
+//     is RATE_LIMITED with a stable SANDBOX_BUDGET_* reason. The database
+//     refuses a run nobody was charged for (SX002) and a charge beyond the
+//     budget it carries (SX003).
+//   - Service persists artifacts (immutable; in the caller's transaction),
+//     runs, violations and usage (append-only; in the budget's own short
+//     transactions), and refuses to run at all while CAPABILITY_DISABLE for
 //     USER_CODE_SANDBOX (or the global kill) is active.
+//
+// # Provider
+//
+// SandboxRuntimeProvider is the external system the sandbox depends on
+// (advanced goal §27): the isolated runtime strategy code runs in, and the
+// builder that turns scanned source into what it runs. Its one implementation
+// is LocalRuntime -- the wazero Runner and, where a Go toolchain is found, the
+// local Builder -- and its mode is sandbox. A deterministic in-process
+// simulation is fake where it fakes an external system; LocalRuntime fakes
+// nothing. It is the sandbox itself: the isolation boundary ADR-0020 decision 4
+// describes, with no filesystem, no environment, no network and a wall-time,
+// memory and output limit each enforced for real, not a stand-in for a
+// runtime that exists somewhere else. A hosted isolation service would be
+// another sandbox implementation; a fake would be a test double of one, and
+// none is built here.
+//
+// NewRuntimeProvider refuses live in every environment, before it looks at
+// the environment (USER_CODE_SANDBOX has no LIVE: gates.AdvancedSpecs);
+// refuses fake where the environment refuses fakes (STAGING, PROD) and,
+// where it allows them, because no fake runtime exists; and builds the local
+// runtime in sandbox mode in every environment -- in STAGING and PROD the
+// USER_CODE_SANDBOX gate must still be ACTIVE before code reaches it. The
+// binaries ask for RuntimeModeFor(env), which is sandbox: nothing configures
+// the mode, and the environment cannot choose anything else that exists.
+// NewService refuses an engine that says it is live. A closed runtime is an
+// error to its caller, never a run the strategy is blamed for.
+//
+// # Budget
+//
+// The budget is charged atomically and no lock is held while code runs. A
+// run takes three steps (Service.Execute):
+//
+//  1. Reserve. In one short transaction of the budget's own, the account's
+//     budget lock is taken, the window is checked against the account's
+//     charges and every reservation not yet charged, and the run is reserved
+//     in the caller's transaction; the budget transaction commits before the
+//     code starts. A call Admit admitted is reserved whole, the same way,
+//     and its runs take up its reservations instead.
+//  2. Run. The caller's transaction holds the reservation and nothing else,
+//     and a reservation never blocks anyone.
+//  3. Charge. A second short budget transaction records the run, its
+//     violations, its audit event (on the account's audit stream) and its
+//     charge; the commit that makes the charge count retires the reservation.
+//
+// A reservation is a pair of shared transaction-level advisory locks held by
+// the caller's transaction: one names the account, one the run's granted CPU
+// and its tag (the low 32 bits of the run's id, which its charge carries).
+// Every check reads them from pg_locks under the account's budget lock and
+// counts a run until a charge carrying its tag commits. It lives exactly as
+// long as the caller's transaction: PostgreSQL ends it at commit, at rollback
+// and when the connection goes away, so no reservation can outlive the caller
+// that took it, nothing has to expire, and no migration was needed.
+//
+// The budget's transactions run on a small pool of their own
+// (OpenBudgetPool, at most MaxBudgetConns connections), never on the pool the
+// caller's transaction came from: a run is started inside its caller's
+// transaction, and a second connection from the pool whose first is held is
+// F-27. A connection is held only for one short transaction. A reservation
+// that cannot get its connection or the account's lock within budgetWait is
+// refused RATE_LIMITED (SANDBOX_BUDGET_CONTENDED, retry after a second) before
+// anything runs: a contended charge is a refusal, never an internal error. A
+// finished run's charge waits up to finalizeWait; a charge the window no
+// longer has room for when the run ends (SX003: another process's clock, a
+// run that overran its grant) is refused the same way, and nothing of the run
+// is recorded. The budget is never overspent: the reservation check counts
+// everything charged or reserved, and SX003 refuses any charge beyond it.
+//
+// A run whose caller rolls back still counts against the budget: it ran, and
+// its record and charge are committed in their own transaction before
+// Execute returns -- the conservative choice. Its reservation, and every
+// reservation the caller held and did not use (a call admitted and not run,
+// a run cut short before its charge), go with the caller's transaction and
+// count no longer. The caller's transaction must not hold the account's
+// audit stream or its account row FOR UPDATE when it runs code, and its
+// artifact must be committed: the run's own transaction needs them.
 //
 // # What this package must never do
 //
@@ -89,6 +167,8 @@
 //     build (the toolchain's telemetry is off in a build's HOME).
 //   - Value a proposal at a price the strategy chose, or run code for an
 //     account beyond its budget.
+//   - Hold the budget's lock, or a connection of the caller's pool, while
+//     code runs, or answer a contended budget with an internal error.
 //   - Hold mutable package-level state, read the wall clock implicitly, or
 //     use floating point.
 package sandboxrt

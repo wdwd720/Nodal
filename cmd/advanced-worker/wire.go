@@ -172,11 +172,17 @@ func build(ctx context.Context, in buildInput) (_ *worker, err error) {
 	add(advancedjobs.NewMarginLiquidation(database, marginSvc, settings(advancedjobs.NameMarginLiquidation)))
 
 	// --- derivatives -------------------------------------------------------------
+	// As cmd/api: the paper venue, in the mode this environment runs it in.
+	derivativesVenue, err := derivatives.NewExecutionAdapter(cfg.Env, derivatives.ExecutionModeFor(cfg.Env),
+		derivatives.PaperVenueConfig{Name: derivatives.DefaultPaperVenueName})
+	if err != nil {
+		return nil, fmt.Errorf("derivatives execution adapter: %w", err)
+	}
 	derivativesSvc, err := derivatives.NewService(derivatives.Config{
 		Clock: clk, Intents: intents(), Effects: effects(), Authorizer: authorizer(), Registry: econ.NewRegistry(),
 		Ledger: ledgerSvc, Capital: capitalSvc, RiskStore: risk.NewStore(), RiskPolicy: risk.DefaultAdvancedPolicy(),
 		Policy: derivatives.DefaultPolicy(), Prices: priceStore, Instruments: instrumentRepo, Router: router,
-		KillSwitches: killChecker, Reconciliation: reconRepo, USDAssetID: econ.SandboxDollarID(),
+		KillSwitches: killChecker, Reconciliation: reconRepo, USDAssetID: econ.SandboxDollarID(), Execution: derivativesVenue,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("derivatives service: %w", err)
@@ -238,13 +244,24 @@ func build(ctx context.Context, in buildInput) (_ *worker, err error) {
 	}
 
 	// --- the strategy marketplace ----------------------------------------------------
-	strategyRunner, err := sandboxrt.NewRunner(ctx, sandboxrt.RunnerConfig{})
+	// As cmd/api: the strategy runtime in the mode this environment runs it
+	// in -- without a builder: a scheduled follow runs an artifact the API
+	// built at validation -- and the budget's own small pool, never the
+	// worker's (a run is reserved and charged on it while its follow's
+	// transaction holds one of the worker's connections; F-27).
+	strategyRuntime, err := sandboxrt.NewRuntimeProvider(ctx, cfg.Env, sandboxrt.RuntimeModeFor(cfg.Env),
+		sandboxrt.RuntimeConfig{NoBuildReason: "the advanced worker builds no strategy; validation is the API's"})
 	if err != nil {
-		return nil, fmt.Errorf("strategy sandbox runner: %w", err)
+		return nil, fmt.Errorf("strategy runtime: %w", err)
 	}
-	w.closers = append(w.closers, func(ctx context.Context) { _ = strategyRunner.Close(ctx) })
+	w.closers = append(w.closers, func(ctx context.Context) { _ = strategyRuntime.Close(ctx) })
+	strategyBudget, err := sandboxrt.OpenBudgetPool(ctx, database, sandboxrt.DefaultBudgetConns)
+	if err != nil {
+		return nil, fmt.Errorf("strategy sandbox budget pool: %w", err)
+	}
+	w.closers = append(w.closers, func(context.Context) { strategyBudget.Close() })
 	strategyAuth := authorizer()
-	strategySandbox := sandboxrt.NewService(clk, strategyAuth, strategyRunner, auditWriter)
+	strategySandbox := sandboxrt.NewService(clk, strategyAuth, strategyRuntime, auditWriter, strategyBudget)
 	strategySections, err := httpapi.NewMarketplaceRiskSections(httpapi.MarketplaceSectionsConfig{
 		Clock: clk, Accounts: accountRepo, Instruments: instrumentRepo, Identity: compliance.NewAccountVerification(clk),
 		Prices: priceStore, KillSwitches: killChecker, MaxPriceAge: maxMarkAge, Verification: verificationResolver,
@@ -276,8 +293,8 @@ func build(ctx context.Context, in buildInput) (_ *worker, err error) {
 		Clock: clk, Intents: strategyIntents, Effects: effects(), Auth: strategyAuth, Risk: risk.NewStore(),
 		RiskPolicy: risk.DefaultAdvancedPolicy(), Router: router, Sandbox: strategySandbox,
 		// A scheduled follow runs an artifact the API built at validation; the
-		// worker builds nothing.
-		Builder:  httpapi.UnavailableStrategyBuilder{Reason: "the advanced worker builds no strategy; validation is the API's"},
+		// worker's runtime builds nothing and refuses to.
+		Builder: strategyRuntime, RuntimeVersion: strategyRuntime.Name(),
 		Sections: strategySections, Executor: strategyExecutor, Audit: auditWriter, MaxPriceAge: maxMarkAge,
 	})
 	if err != nil {
@@ -311,12 +328,19 @@ func build(ctx context.Context, in buildInput) (_ *worker, err error) {
 	}
 	if chain != nil {
 		network = chain.Network
+		// As cmd/api: the devnet host and the seed's signers, in the mode this
+		// environment runs them in.
+		stableProvider, err := stableasset.NewProvider(cfg.Env, stableasset.ProviderModeFor(cfg.Env), stableasset.ProviderConfig{
+			Host: chain.Host, Issuer: chain.Keys.Issuer, Custody: chain.Keys.Custody, Snapshots: chain.Keys.Snapshots,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("stable asset provider: %w", err)
+		}
 		if stableSvc, err = stableasset.New(stableasset.Deps{
-			DB: database, Clock: clk, Host: chain.Host, Intents: intents(), Effects: effects(), Authorizer: authorizer(),
+			DB: database, Clock: clk, Provider: stableProvider, Intents: intents(), Effects: effects(), Authorizer: authorizer(),
 			Facilities: econ.NewRegistry(), Ledger: ledgerSvc, Capital: capitalSvc, Risk: risk.NewStore(),
 			RiskPolicy: risk.DefaultAdvancedPolicy(), Router: router, Prices: priceStore, Kills: killChecker,
 			Reconciliation: reconRepo, Audit: auditWriter, Accounts: accountRepo, Assets: assetRepo,
-			Issuer: chain.Keys.Issuer, Custody: chain.Keys.Custody, Snapshots: chain.Keys.Snapshots,
 		}); err != nil {
 			return nil, fmt.Errorf("stable assets: %w", err)
 		}

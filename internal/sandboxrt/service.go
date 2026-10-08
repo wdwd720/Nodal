@@ -15,6 +15,7 @@ import (
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/audit"
 	"github.com/nodal/controlplane/internal/clock"
+	"github.com/nodal/controlplane/internal/config"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
@@ -23,24 +24,35 @@ import (
 	"github.com/nodal/controlplane/internal/security"
 )
 
-// Service persists artifacts and runs. Every mutating method runs in the
-// caller's transaction.
+// Service persists artifacts and runs. RecordArtifact runs in the caller's
+// transaction; a run is reserved, charged and recorded in short transactions
+// of the budget's own (Execute).
 type Service struct {
 	clk    clock.Clock
 	auth   *econ.Authorizer
 	engine Engine
 	audit  audit.Writer
 	budget Budget
+	conns  BudgetConns
+	// wait bounds how long an admission or a reservation waits for the
+	// budget (budgetWait).
+	wait time.Duration
 }
 
 // NewService wires a Service under DefaultBudget. Every dependency is
 // required: a service that could not see the kill switch would run code
-// through it.
-func NewService(clk clock.Clock, auth *econ.Authorizer, engine Engine, aud audit.Writer) *Service {
-	if clk == nil || auth == nil || engine == nil || aud == nil {
-		panic("sandboxrt: NewService requires a clock, an authorizer, an engine and an audit writer")
+// through it, and one without the budget's own connections could charge a
+// run only by holding the budget's lock in its caller's transaction. An
+// engine that says it runs in live mode is refused: no strategy runtime
+// does (NewRuntimeProvider).
+func NewService(clk clock.Clock, auth *econ.Authorizer, engine Engine, aud audit.Writer, conns BudgetConns) *Service {
+	if clk == nil || auth == nil || engine == nil || aud == nil || conns == nil {
+		panic("sandboxrt: NewService requires a clock, an authorizer, an engine, an audit writer and the budget's connections")
 	}
-	return &Service{clk: clk, auth: auth, engine: engine, audit: aud, budget: DefaultBudget()}
+	if m, ok := engine.(moded); ok && m.Mode() == config.ProviderModeLive {
+		panic("sandboxrt: a live strategy runtime is refused (" + ReasonLiveRuntimeUnsupported + ")")
+	}
+	return &Service{clk: clk, auth: auth, engine: engine, audit: aud, budget: DefaultBudget(), conns: conns, wait: budgetWait}
 }
 
 // WithBudget returns a copy of the service that charges runs under b instead.
@@ -187,18 +199,41 @@ type Execution struct {
 	StartedAt    time.Time
 }
 
-// Execute runs an artifact against an input and records the run, its
-// violations, its charge to the account's sandbox budget and an audit event
-// in the caller's transaction.
+// Execute runs an artifact against an input, records the run, its violations
+// and an audit event, and charges it to the account's sandbox budget. No lock
+// is held while the code runs (the package documentation's "Budget"):
 //
-// The account's budget is locked and checked before anything starts: a run
-// the window has no room for is refused (RATE_LIMITED with a stable reason)
-// and nothing is recorded. While CAPABILITY_DISABLE for USER_CODE_SANDBOX (or
-// the global kill) is active, the module is never started: the run is
-// recorded as KILLED_BY_SWITCH, charged nothing, and yields nothing. A run
-// that is not OK yields nothing either; only an OK run's proposals reach the
-// manifest, valued at the reference prices, and only the manifest's
-// survivors are returned as Accepted.
+//  1. The kill switch is read in the caller's transaction. While
+//     CAPABILITY_DISABLE for USER_CODE_SANDBOX (or the global kill) is active
+//     the module is never started: the run is recorded as KILLED_BY_SWITCH,
+//     charged one run and no CPU, and yields nothing.
+//  2. The run is reserved. A run of a call Admit admitted in tx takes up one
+//     of the call's reservations; any other run is admitted in a short budget
+//     transaction -- the account's budget lock, the window checked against
+//     its charges and every reservation not yet charged, the reservation
+//     taken in tx -- that commits before the code starts. A run the window
+//     has no room for is refused (RATE_LIMITED with a stable reason) and
+//     nothing is recorded; so is one that waited for the budget longer than
+//     it may (BudgetContended).
+//  3. The code runs. Nothing is locked but the reservation, which only ever
+//     counts against the window and never blocks anyone.
+//  4. The run is recorded and charged in a second short budget transaction:
+//     its row, its violations, its audit event (on the account's audit
+//     stream) and its charge, whose commit retires the reservation in the
+//     same instant it makes the charge count.
+//
+// A run is therefore recorded and charged in transactions of its own,
+// committed before Execute returns: a caller that rolls back afterwards
+// keeps the run on the account's budget -- it ran -- and nothing else of it:
+// the reservation goes with the caller's transaction. The artifact must be
+// committed, since the run's own transaction references it, and the caller's
+// transaction must not hold the account's audit stream (an account event
+// appended before the run) or the account's row FOR UPDATE: the run's record
+// would wait on them, and after finalizeWait be refused.
+//
+// A run that is not OK yields nothing; only an OK run's proposals reach the
+// manifest, valued at the reference prices, and only the manifest's survivors
+// are returned as Accepted.
 func (s *Service) Execute(ctx context.Context, tx pgx.Tx, req ExecuteRequest) (Execution, error) {
 	if err := validActor(req.Actor); err != nil {
 		return Execution{}, err
@@ -218,12 +253,6 @@ func (s *Service) Execute(ctx context.Context, tx pgx.Tx, req ExecuteRequest) (E
 	if req.Limits.WallTimeMS > s.budget.MaxCPUMSPerCall {
 		return Execution{}, budgetRefusal(BudgetCallCPU, fmt.Sprintf("one run may be granted at most %d ms of sandbox CPU", s.budget.MaxCPUMSPerCall), nil)
 	}
-	if err := lockBudget(ctx, tx, req.AccountID); err != nil {
-		return Execution{}, err
-	}
-	if err := s.fitsWindow(ctx, tx, req.AccountID, 1, req.Limits.WallTimeMS); err != nil {
-		return Execution{}, err
-	}
 	manifestHash, err := req.Manifest.Hash()
 	if err != nil {
 		return Execution{}, err
@@ -236,31 +265,37 @@ func (s *Service) Execute(ctx context.Context, tx pgx.Tx, req ExecuteRequest) (E
 	if err != nil {
 		return Execution{}, err
 	}
-	exec := Execution{RunID: NewRunID(), ManifestHash: manifestHash, StartedAt: s.clk.Now().UTC()}
-
+	killed := false
 	if err := s.auth.Require(ctx, tx, gates.UserCodeSandbox, gates.ModeSandbox); err != nil {
 		if errs.CodeOf(err) != errs.CodeKillSwitchActive {
 			return Execution{}, err
 		}
-		if _, err := s.Artifact(ctx, tx, req.ArtifactDigest); err != nil {
-			return Execution{}, err
-		}
-		res, err := Interpret(RawRun{Termination: TerminationKilledBySwitch, Detail: "CAPABILITY_DISABLE for USER_CODE_SANDBOX is active",
-			ArtifactDigest: req.ArtifactDigest, InputDigest: inputDigest}, req.Limits)
+		killed = true
+	}
+	runID, reserved, err := claim(ctx, tx, req.AccountID, req.Limits.WallTimeMS, s.clk.Now().UTC().Add(-s.budget.Window))
+	if err != nil {
+		return Execution{}, err
+	}
+	exec := Execution{RunID: runID, ManifestHash: manifestHash}
+
+	if killed {
+		res, err := Interpret(RawRun{
+			Termination: TerminationKilledBySwitch, Detail: "CAPABILITY_DISABLE for USER_CODE_SANDBOX is active",
+			ArtifactDigest: req.ArtifactDigest, InputDigest: inputDigest,
+		}, req.Limits)
 		if err != nil {
 			return Execution{}, err
 		}
 		exec.Result = res
-		return exec, s.record(ctx, tx, req, exec)
+		if err := s.recordKilled(ctx, req, &exec, reserved); err != nil {
+			return Execution{}, err
+		}
+		return exec, nil
 	}
 
-	var wasm []byte
-	err = tx.QueryRow(ctx, `SELECT wasm FROM strategy_artifacts WHERE artifact_digest = $1`, req.ArtifactDigest).Scan(&wasm)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return Execution{}, errs.New(errs.CodeNotFound, "sandboxrt: artifact not found")
-	}
+	wasm, err := s.reserve(ctx, tx, req, &exec, reserved)
 	if err != nil {
-		return Execution{}, dbErr("load artifact bytes", err)
+		return Execution{}, err
 	}
 	raw, err := s.engine.Run(ctx, RunRequest{Artifact: Artifact{Digest: req.ArtifactDigest, Wasm: wasm}, Input: req.Input, Limits: req.Limits})
 	if err != nil {
@@ -282,10 +317,88 @@ func (s *Service) Execute(ctx context.Context, tx pgx.Tx, req ExecuteRequest) (E
 		exec.Violations = append(exec.Violations, dropped...)
 	}
 	sortViolations(exec.Violations)
-	return exec, s.record(ctx, tx, req, exec)
+	if err := s.finalize(ctx, req, exec); err != nil {
+		return Execution{}, err
+	}
+	return exec, nil
 }
 
-func (s *Service) record(ctx context.Context, tx pgx.Tx, req ExecuteRequest, e Execution) error {
+// reserve loads the artifact a run executes -- as committed: the run's record
+// will reference it -- and, unless the run took up a reservation tx already
+// held, admits the run against the account's window and reserves it in tx,
+// all in one short budget transaction. It stamps the run's start.
+func (s *Service) reserve(ctx context.Context, tx pgx.Tx, req ExecuteRequest, exec *Execution, reserved bool) ([]byte, error) {
+	var wasm []byte
+	err := s.budgetTx(ctx, s.wait, func(ctx context.Context, btx pgx.Tx) error {
+		err := btx.QueryRow(ctx, `SELECT wasm FROM strategy_artifacts WHERE artifact_digest = $1`, req.ArtifactDigest).Scan(&wasm)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return errs.New(errs.CodeNotFound, "sandboxrt: artifact not found")
+		}
+		if err != nil {
+			return dbErr("load artifact bytes", err)
+		}
+		exec.StartedAt = s.clk.Now().UTC()
+		if reserved {
+			return nil
+		}
+		if err := lockBudget(ctx, btx, req.AccountID); err != nil {
+			return err
+		}
+		if err := s.fitsWindow(ctx, btx, req.AccountID, 1, req.Limits.WallTimeMS); err != nil {
+			return err
+		}
+		return reserveIn(ctx, tx, req.AccountID, req.Limits.WallTimeMS, []uint32{runTag(exec.RunID)})
+	})
+	if err != nil {
+		return nil, err
+	}
+	return wasm, nil
+}
+
+// sqlStateBudgetExceeded is SX003: a charge that is not its run's, or beyond
+// the budget it states (migration 00757).
+const sqlStateBudgetExceeded = "SX003"
+
+// finalize records and charges a run that ran, in a short budget transaction
+// that waits up to finalizeWait: the code has run, and its record is worth
+// the wait. A charge the window no longer has room for -- SX003, reached only
+// when the window's accounting moved under the run (a charge stamped by
+// another process's clock, a run that took longer than it was granted) -- is
+// BudgetContended, and nothing of the run is recorded.
+func (s *Service) finalize(ctx context.Context, req ExecuteRequest, e Execution) error {
+	err := s.budgetTx(ctx, finalizeWait, func(ctx context.Context, btx pgx.Tx) error { return s.record(ctx, btx, req, e) })
+	if db.SQLState(err) == sqlStateBudgetExceeded {
+		return contended("the run's charge no longer fits the account's window; nothing of the run is recorded")
+	}
+	return err
+}
+
+// recordKilled records a run the kill switch stopped before it started -- one
+// run and no CPU -- in one short budget transaction, admitted against the
+// account's window like any run unless it takes up a reservation tx already
+// held.
+func (s *Service) recordKilled(ctx context.Context, req ExecuteRequest, exec *Execution, reserved bool) error {
+	return s.budgetTx(ctx, s.wait, func(ctx context.Context, btx pgx.Tx) error {
+		if _, err := s.Artifact(ctx, btx, req.ArtifactDigest); err != nil {
+			return err
+		}
+		exec.StartedAt = s.clk.Now().UTC()
+		if !reserved {
+			if err := lockBudget(ctx, btx, req.AccountID); err != nil {
+				return err
+			}
+			if err := s.fitsWindow(ctx, btx, req.AccountID, 1, 0); err != nil {
+				return err
+			}
+		}
+		return s.record(ctx, btx, req, *exec)
+	})
+}
+
+// record writes a run in the budget transaction btx: its row, its violations,
+// its audit event and, last, its charge -- the statement that takes the
+// account's budget lock, so the lock is held only from there to the commit.
+func (s *Service) record(ctx context.Context, btx pgx.Tx, req ExecuteRequest, e Execution) error {
 	limits, err := audit.CanonicalJSON(req.Limits)
 	if err != nil {
 		return errs.Wrap(err, errs.CodeInternal, "sandboxrt: encode limits")
@@ -300,7 +413,7 @@ func (s *Service) record(ctx context.Context, tx pgx.Tx, req ExecuteRequest, e E
 	if output == nil {
 		output = []byte{}
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO sandbox_runs (id, artifact_digest, input_digest, limits_version, limits_hash, limits,
+	if _, err := btx.Exec(ctx, `INSERT INTO sandbox_runs (id, artifact_digest, input_digest, limits_version, limits_hash, limits,
 		termination_reason, termination_detail, exit_code, artifact_verified, wall_ms, output, output_bytes, stderr_bytes,
 		stderr_digest, peak_memory_bytes, output_digest, run_digest, proposals_count, accepted_count, violations_count,
 		manifest_hash, strategy_ref, actor_type, actor_id, correlation_id, started_at)
@@ -313,13 +426,10 @@ func (s *Service) record(ctx context.Context, tx pgx.Tx, req ExecuteRequest, e E
 		return dbErr("record sandbox run", err)
 	}
 	for i, v := range e.Violations {
-		if _, err := tx.Exec(ctx, `INSERT INTO sandbox_run_violations (id, run_id, seq, record_seq, code, detail)
+		if _, err := btx.Exec(ctx, `INSERT INTO sandbox_run_violations (id, run_id, seq, record_seq, code, detail)
 			VALUES ($1,$2,$3,$4,$5,$6)`, id.New[id.Any](), e.RunID, i+1, v.Seq, v.Code, truncate(v.Detail, 1000)); err != nil {
 			return dbErr("record sandbox violation", err)
 		}
-	}
-	if err := s.charge(ctx, tx, req, e); err != nil {
-		return err
 	}
 	payload, err := json.Marshal(map[string]any{
 		"run_id": e.RunID.String(), "termination": string(r.Termination), "strategy_ref": req.StrategyRef,
@@ -328,12 +438,17 @@ func (s *Service) record(ctx context.Context, tx pgx.Tx, req ExecuteRequest, e E
 	if err != nil {
 		return errs.Wrap(err, errs.CodeInternal, "sandboxrt: encode audit payload")
 	}
-	_, err = s.audit.Append(ctx, tx, audit.Event{
-		Stream: audit.SystemStream, ActorType: string(req.Actor.Type), ActorID: req.Actor.ID,
+	// The account's stream, not the system's: the run is charged to the
+	// account, and the system stream's lock is held by many transactions this
+	// one must never wait on.
+	if _, err := s.audit.Append(ctx, btx, audit.Event{
+		Stream: audit.AccountStream(req.AccountID.String()), ActorType: string(req.Actor.Type), ActorID: req.Actor.ID,
 		Action: "sandbox.run." + strings.ToLower(string(r.Termination)), ResourceType: "sandbox_run", ResourceID: e.RunID.String(),
 		CorrelationID: req.CorrelationID, Reason: truncate(r.Detail, 200), Payload: payload, OccurredAt: s.clk.Now().UTC(),
-	})
-	return err
+	}); err != nil {
+		return err
+	}
+	return s.charge(ctx, btx, req, e)
 }
 
 // RunRecord is a sandbox_runs row.

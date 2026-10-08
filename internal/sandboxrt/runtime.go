@@ -84,12 +84,18 @@ func NewRunner(ctx context.Context, cfg RunnerConfig) (*Runner, error) {
 	return &Runner{runtime: rt, capacity: cfg.ModuleCacheSize, modules: map[string]*compiledEntry{}}, nil
 }
 
-// Close releases the runtime and every compiled module.
+// Close releases the runtime and every compiled module. Run fails afterwards.
 func (r *Runner) Close(ctx context.Context) error {
 	r.mu.Lock()
 	r.closed = true
 	r.mu.Unlock()
 	return r.runtime.Close(ctx)
+}
+
+func (r *Runner) isClosed() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.closed
 }
 
 // Artifact is a compiled strategy: its wasm bytes and the digest they must
@@ -173,6 +179,11 @@ func (r *Runner) Run(ctx context.Context, req RunRequest) (RawRun, error) {
 	if err != nil {
 		if ctx.Err() != nil {
 			return RawRun{}, ctx.Err()
+		}
+		// A closed runner is the host's state, not the strategy's: never a
+		// run that "does not compile".
+		if r.isClosed() {
+			return RawRun{}, errs.New(errs.CodeInternal, "sandboxrt: the runner is closed")
 		}
 		raw.Termination, raw.Detail = TerminationInvalidModule, "module does not compile: "+truncate(err.Error(), 200)
 		return raw, nil

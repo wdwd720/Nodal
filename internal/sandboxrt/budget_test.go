@@ -33,7 +33,7 @@ func TestBudget_ValidateRefusesWhatIsOutsideThePolicy(t *testing.T) {
 		assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(err), name)
 	}
 	reasons := AllBudgetReasons()
-	assert.Len(t, reasons, 5)
+	assert.Len(t, reasons, 6)
 	for _, r := range reasons {
 		assert.Regexp(t, `^SANDBOX_BUDGET_[A-Z_]+$`, r, "a stable, machine-readable reason")
 	}

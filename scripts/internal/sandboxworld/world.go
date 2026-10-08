@@ -245,12 +245,18 @@ func wire(d *db.DB, o Options) (*World, error) {
 		return nil, fmt.Errorf("sandboxworld: margin: %w", err)
 	}
 	w.Instruments = instruments.NewRepository()
+	// As cmd/api: the paper venue, in the mode the world's environment runs it in.
+	venue, err := derivatives.NewExecutionAdapter(env, derivatives.ExecutionModeFor(env),
+		derivatives.PaperVenueConfig{Name: derivatives.DefaultPaperVenueName})
+	if err != nil {
+		return nil, fmt.Errorf("sandboxworld: derivatives execution adapter: %w", err)
+	}
 	w.Derivatives, err = derivatives.NewService(derivatives.Config{
 		Clock: clk, Intents: w.Intents, Effects: w.Effects, Authorizer: w.Authorizer, Registry: w.Registry,
 		Ledger: led, Capital: w.Capital, RiskStore: w.Risk, RiskPolicy: risk.DefaultAdvancedPolicy(),
 		Policy: derivatives.DefaultPolicy(), Prices: w.Prices, Instruments: w.Instruments, Router: router,
 		KillSwitches: kills, Reconciliation: reconciliation.NewRepository(clk, out, aw),
-		USDAssetID: econ.SandboxDollarID(), ClearingHouseName: "Sandbox clearing house",
+		USDAssetID: econ.SandboxDollarID(), ClearingHouseName: "Sandbox clearing house", Execution: venue,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("sandboxworld: derivatives: %w", err)
@@ -298,11 +304,19 @@ func (w *World) wireChains(ctx context.Context, d *db.DB, component string) erro
 	w.Host = chain.Host
 	w.Custody, w.Issuer, w.Snapshots, w.Attester = chain.Keys.Custody, chain.Keys.Issuer, chain.Keys.Snapshots, chain.Keys.Attester
 	recon := reconciliation.NewRepository(w.Clock, w.Outbox, w.Audit)
+	// As cmd/api: the devnet host and the seed's signers, in the mode the
+	// world's environment runs them in.
+	provider, err := stableasset.NewProvider(w.Env, stableasset.ProviderModeFor(w.Env), stableasset.ProviderConfig{
+		Host: w.Host, Issuer: w.Issuer, Custody: w.Custody, Snapshots: w.Snapshots,
+	})
+	if err != nil {
+		return fmt.Errorf("sandboxworld: stable asset provider: %w", err)
+	}
 	w.Stable, err = stableasset.New(stableasset.Deps{
-		DB: d, Clock: w.Clock, Host: w.Host, Intents: w.Intents, Effects: w.Effects, Authorizer: w.Authorizer,
+		DB: d, Clock: w.Clock, Provider: provider, Intents: w.Intents, Effects: w.Effects, Authorizer: w.Authorizer,
 		Facilities: w.Registry, Ledger: w.Ledger, Capital: w.Capital, Risk: w.Risk, RiskPolicy: risk.DefaultAdvancedPolicy(),
 		Router: w.Router, Prices: w.Prices, Kills: w.Kills, Reconciliation: recon, Audit: w.Audit,
-		Accounts: accounts.NewRepository(), Assets: w.Assets, Issuer: w.Issuer, Custody: w.Custody, Snapshots: w.Snapshots,
+		Accounts: accounts.NewRepository(), Assets: w.Assets,
 	})
 	if err != nil {
 		return fmt.Errorf("sandboxworld: stable assets: %w", err)

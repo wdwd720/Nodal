@@ -88,7 +88,7 @@ func TestIntegration_ScheduledFollowsRunEachDueInstallOnce(t *testing.T) {
 	svc, err := marketplace.NewService(marketplace.Config{
 		Clock: w.clk, Intents: w.intents, Effects: w.effects, Auth: w.authz, Risk: risk.NewStore(),
 		RiskPolicy: risk.DefaultAdvancedPolicy(), Router: w.router,
-		Sandbox: sandboxrt.NewService(w.clk, w.authz, runner, w.audit), Builder: builder,
+		Sandbox: sandboxrt.NewService(w.clk, w.authz, runner, w.audit, testDB.Pool()), Builder: builder,
 		Sections: refusingSections{}, Executor: refusingExecutor{}, Audit: w.audit,
 	})
 	require.NoError(t, err)

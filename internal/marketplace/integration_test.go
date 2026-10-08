@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/nodal/controlplane/internal/accounts"
@@ -47,6 +48,8 @@ var (
 	testBuilder    *sandboxrt.Builder
 	testRunner     *sandboxrt.Runner
 	toolchainErr   error
+	// testBudget is the sandbox budget's own pool, as the binaries open it.
+	testBudget *pgxpool.Pool
 )
 
 func TestMain(m *testing.M) { os.Exit(testMain(m)) }
@@ -67,6 +70,11 @@ func testMain(m *testing.M) int {
 		return 1
 	}
 	defer testDB.Close()
+	if testBudget, err = sandboxrt.OpenBudgetPool(ctx, testDB, sandboxrt.MaxBudgetConns); err != nil {
+		fmt.Fprintln(os.Stderr, "marketplace integration: sandbox budget pool:", err)
+		return 1
+	}
+	defer testBudget.Close()
 	dir, err := os.MkdirTemp("", "marketplace-itest-")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "marketplace integration: temp dir:", err)
@@ -276,7 +284,7 @@ func newFixture(t *testing.T) *fixture {
 	f := &fixture{t: t, ctx: context.Background(), clk: clk, intents: econ.NewIntentStore(clk, out, aw), effects: econ.NewEffectStore(clk, out, aw),
 		auth: auth, sections: &staticSections{clk: clk}, router: router, aw: aw, prices: valuation.NewPriceStore(clk)}
 	f.exec = &recordingExecutor{intents: f.intents}
-	f.sandbox = sandboxrt.NewService(clk, auth, testRunner, aw)
+	f.sandbox = sandboxrt.NewService(clk, auth, testRunner, aw, testBudget)
 	f.svc = f.newService(f.sandbox)
 	f.creatorAccount, f.creator = f.account()
 	f.follower, f.followerActor = f.account()

@@ -97,6 +97,12 @@ type buildInput struct {
 	// a process lifetime, and build has no shutdown of its own to close it in.
 	rateLimitStore    ratelimit.Store
 	rateLimitFailOpen bool
+
+	// sandboxBudget is the strategy sandbox budget's own small pool
+	// (sandboxrt.OpenBudgetPool), opened and closed by main like the
+	// database: never the API's pool, whose connections the callers of a
+	// strategy run hold while it is reserved and charged (F-27).
+	sandboxBudget sandboxrt.BudgetConns
 }
 
 // build constructs every dependency explicitly and returns the mounted server.
@@ -420,6 +426,14 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 			return nil, fmt.Errorf("derivatives legal router: %w", err)
 		}
 	}
+	// Where orders execute (goal §27): the paper venue, in the mode this
+	// environment runs it in -- sandbox, the only one there is; live and fake
+	// are refused by derivatives.NewExecutionAdapter. Nothing configures it.
+	derivativesVenue, err := derivatives.NewExecutionAdapter(cfg.Env, derivatives.ExecutionModeFor(cfg.Env),
+		derivatives.PaperVenueConfig{Name: derivatives.DefaultPaperVenueName})
+	if err != nil {
+		return nil, fmt.Errorf("derivatives execution adapter: %w", err)
+	}
 	derivativesSvc, err := derivatives.NewService(derivatives.Config{
 		Clock: clk, Intents: econ.NewIntentStore(clk, outbox, auditWriter), Effects: econ.NewEffectStore(clk, outbox, auditWriter),
 		Authorizer: econ.NewAuthorizer(gateChecker, killChecker), Registry: econ.NewRegistry(), Ledger: ledgerSvc,
@@ -428,6 +442,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		KillSwitches: killChecker, Reconciliation: reconciliation.NewRepository(clk, outbox, auditWriter),
 		// Margin snapshots and books are valued in the sandbox dollar.
 		USDAssetID: econ.SandboxDollarID(),
+		Execution:  derivativesVenue,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("derivatives service: %w", err)
@@ -652,15 +667,24 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 				return nil, fmt.Errorf("stable asset legal router: %w", err)
 			}
 		}
+		// The chain and the key custody the asset depends on (goal §27): the
+		// devnet host and the seed's signers, in the mode this environment
+		// runs them in -- sandbox, the only one there is; live and fake are
+		// refused by stableasset.NewProvider.
+		stableProvider, perr := stableasset.NewProvider(cfg.Env, stableasset.ProviderModeFor(cfg.Env), stableasset.ProviderConfig{
+			Host: chain.Host, Issuer: chain.Keys.Issuer, Custody: chain.Keys.Custody, Snapshots: chain.Keys.Snapshots,
+		})
+		if perr != nil {
+			return nil, fmt.Errorf("stable asset provider: %w", perr)
+		}
 		var stableSvc *stableasset.Service
 		if stableSvc, err = stableasset.New(stableasset.Deps{
-			DB: database, Clock: clk, Host: chain.Host,
+			DB: database, Clock: clk, Provider: stableProvider,
 			Intents: econ.NewIntentStore(clk, outbox, auditWriter), Effects: econ.NewEffectStore(clk, outbox, auditWriter),
 			Authorizer: econ.NewAuthorizer(gateChecker, killChecker), Facilities: econ.NewRegistry(), Ledger: ledgerSvc,
 			Capital: capitalSvc, Risk: risk.NewStore(), RiskPolicy: risk.DefaultAdvancedPolicy(), Router: stableRouter,
 			Prices: priceStore, Kills: killChecker, Reconciliation: reconciliation.NewRepository(clk, outbox, auditWriter),
 			Audit: auditWriter, Accounts: accountRepo, Assets: assetRepo,
-			Issuer: chain.Keys.Issuer, Custody: chain.Keys.Custody, Snapshots: chain.Keys.Snapshots,
 		}); err != nil {
 			return nil, fmt.Errorf("stable assets: %w", err)
 		}
@@ -783,13 +807,18 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// collaborators: fresh econ stores, the authorizer over the gate checker
 	// and kill switches, the risk store and default Risk V2 policy, the
 	// deployment's legal router (conservative by default, as for transfers)
-	// and a wazero runner. The sandbox charges every run to an account under
-	// sandboxrt.DefaultBudget, and the builder builds under its default bounds
-	// (two minutes, a 32 MiB module, 1 GiB of compiler and linker memory).
+	// and the strategy runtime (goal §27): the wazero runner and, where a Go
+	// toolchain is found, the local builder, in the mode this environment runs
+	// them in -- sandbox, the only one there is; live and fake are refused by
+	// sandboxrt.NewRuntimeProvider. The sandbox charges every run to an account
+	// under sandboxrt.DefaultBudget, reserving and charging it on the budget's
+	// own small pool (in.sandboxBudget, opened by main) so that no lock and no
+	// second connection of the API's pool is held while code runs; the builder
+	// builds under its default bounds (two minutes, a 32 MiB module, 1 GiB of
+	// compiler and linker memory) and, without a toolchain, refuses.
 	// internal/httpapi carries the adapters: risk sections read from the
-	// database, the order book's paper venue as the executor of risk-approved
-	// paper intents, and -- only where no Go toolchain is found -- a builder
-	// that refuses.
+	// database and the order book's paper venue as the executor of
+	// risk-approved paper intents.
 	strategyRouter, err := legalRouterFor(cfg.Env, in.cfg.API.LegalPolicy)
 	if err != nil {
 		return nil, err
@@ -799,12 +828,6 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 			return nil, fmt.Errorf("marketplace legal router: %w", err)
 		}
 	}
-	strategyRunner, err := sandboxrt.NewRunner(ctx, sandboxrt.RunnerConfig{})
-	if err != nil {
-		return nil, fmt.Errorf("strategy sandbox runner: %w", err)
-	}
-	strategyAuth := econ.NewAuthorizer(gateChecker, killChecker)
-	strategySandbox := sandboxrt.NewService(clk, strategyAuth, strategyRunner, auditWriter)
 	// The builder is found, not configured: the go command on PATH, made
 	// absolute as sandboxrt.Builder requires. This user's cache directory
 	// holds only its read-only seed -- the standard library compiled once --
@@ -812,9 +835,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// (MaxDiskBytes) and removed when the build ends; at most
 	// MaxConcurrentBuilds run at once. Without a toolchain, validation answers
 	// UNSUPPORTED and records nothing.
-	var strategyBuilder marketplace.ArtifactBuilder = httpapi.UnavailableStrategyBuilder{
-		Reason: "no go command was found on PATH when this process started",
-	}
+	runtimeCfg := sandboxrt.RuntimeConfig{NoBuildReason: "no go command was found on PATH when this process started"}
 	if goBin, lookErr := exec.LookPath("go"); lookErr == nil {
 		if goBin, lookErr = filepath.Abs(goBin); lookErr == nil {
 			strategyCache := ""
@@ -826,15 +847,21 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 			}
 			built, buildErr := sandboxrt.NewBuilder(sandboxrt.BuilderConfig{GoBinary: goBin, CacheDir: strategyCache, Clock: clk})
 			if buildErr != nil {
-				strategyBuilder = httpapi.UnavailableStrategyBuilder{Reason: "the go command found on PATH is unusable: " + buildErr.Error()}
+				runtimeCfg.NoBuildReason = "the go command found on PATH is unusable: " + buildErr.Error()
 			} else {
-				strategyBuilder = built
+				runtimeCfg = sandboxrt.RuntimeConfig{Builder: built}
 			}
 		}
 	}
-	if _, refuses := strategyBuilder.(httpapi.UnavailableStrategyBuilder); refuses {
-		log.Warn("no usable Go toolchain; strategy validation answers UNSUPPORTED")
+	if runtimeCfg.Builder == nil {
+		log.Warn("no usable Go toolchain; strategy validation answers UNSUPPORTED", "reason", runtimeCfg.NoBuildReason)
 	}
+	strategyRuntime, err := sandboxrt.NewRuntimeProvider(ctx, cfg.Env, sandboxrt.RuntimeModeFor(cfg.Env), runtimeCfg)
+	if err != nil {
+		return nil, fmt.Errorf("strategy runtime: %w", err)
+	}
+	strategyAuth := econ.NewAuthorizer(gateChecker, killChecker)
+	strategySandbox := sandboxrt.NewService(clk, strategyAuth, strategyRuntime, auditWriter, in.sandboxBudget)
 	strategySections, err := httpapi.NewMarketplaceRiskSections(httpapi.MarketplaceSectionsConfig{
 		Clock: clk, Accounts: accountRepo, Instruments: instrumentRepo, Identity: compliance.NewAccountVerification(clk),
 		Prices: priceStore, KillSwitches: killChecker,
@@ -878,8 +905,8 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	strategyMarketplace, err := marketplace.NewService(marketplace.Config{
 		Clock: clk, Intents: strategyIntents, Effects: econ.NewEffectStore(clk, outbox, auditWriter),
 		Auth: strategyAuth, Risk: risk.NewStore(), RiskPolicy: risk.DefaultAdvancedPolicy(), Router: strategyRouter,
-		Sandbox: strategySandbox, Builder: strategyBuilder, Sections: strategySections, Executor: strategyExecutor,
-		Audit: auditWriter, MaxPriceAge: 5 * time.Minute,
+		Sandbox: strategySandbox, Builder: strategyRuntime, Sections: strategySections, Executor: strategyExecutor,
+		Audit: auditWriter, MaxPriceAge: 5 * time.Minute, RuntimeVersion: strategyRuntime.Name(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("strategy marketplace: %w", err)

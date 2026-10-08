@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/compliance"
 	"github.com/nodal/controlplane/internal/econ"
@@ -22,25 +24,28 @@ import (
 
 // Strategies is the strategy marketplace and the sandbox it runs strategies
 // in, wired over the world exactly as cmd/api wires them (the
-// "advanced:marketplace services" block of cmd/api/wire.go): the builder is
-// the go command found on PATH, made absolute, building under
-// sandboxrt.Builder's default bounds with the shared strategy build cache in
-// this user's cache directory; the runner is wazero with WASI preview1 only;
-// the sandbox charges every run to an account under sandboxrt.DefaultBudget;
-// the risk sections are read from the database; and a risk-approved paper
-// intent fills on the order book's paper venue under the one published
-// schedule (httpapi.MarketplacePaperSchedule), booked through the world's fee
-// ledger.
+// "advanced:marketplace services" block of cmd/api/wire.go): the strategy
+// runtime (sandboxrt.NewRuntimeProvider, in the mode the world's environment
+// runs it in) is wazero with WASI preview1 only and a builder that is the go
+// command found on PATH, made absolute, building under sandboxrt.Builder's
+// default bounds with the shared strategy build cache in this user's cache
+// directory; the sandbox charges every run to an account under
+// sandboxrt.DefaultBudget, on the budget's own small pool; the risk sections
+// are read from the database; and a risk-approved paper intent fills on the
+// order book's paper venue under the one published schedule
+// (httpapi.MarketplacePaperSchedule), booked through the world's fee ledger.
 //
 // The one difference from cmd/api: where no Go toolchain is found, cmd/api
 // wires a builder that answers UNSUPPORTED; a demonstration of a build cannot
 // demonstrate anything without one, so OpenStrategies refuses instead.
 type Strategies struct {
-	Builder  *sandboxrt.Builder
-	Runner   *sandboxrt.Runner
+	// Runtime is the strategy runtime: the runner and the builder.
+	Runtime  sandboxrt.SandboxRuntimeProvider
 	Sandbox  *sandboxrt.Service
 	Executor *httpapi.MarketplacePaperExecutor
 	Market   *marketplace.Service
+	// budget is the sandbox budget's own pool, opened as cmd/api opens it.
+	budget *pgxpool.Pool
 }
 
 // StrategyMaxPriceAge is the bound cmd/api gives the marketplace's reference
@@ -48,7 +53,7 @@ type Strategies struct {
 const StrategyMaxPriceAge = 5 * time.Minute
 
 // OpenStrategies wires the marketplace over the world. Close releases the
-// runner.
+// runtime and the budget's pool.
 func (w *World) OpenStrategies(ctx context.Context) (*Strategies, error) {
 	goBin, err := exec.LookPath("go")
 	if err != nil {
@@ -68,20 +73,25 @@ func (w *World) OpenStrategies(ctx context.Context) (*Strategies, error) {
 	if err != nil {
 		return nil, fmt.Errorf("sandboxworld: strategy builder: %w", err)
 	}
-	runner, err := sandboxrt.NewRunner(ctx, sandboxrt.RunnerConfig{})
+	runtime, err := sandboxrt.NewRuntimeProvider(ctx, w.Env, sandboxrt.RuntimeModeFor(w.Env), sandboxrt.RuntimeConfig{Builder: builder})
 	if err != nil {
-		return nil, fmt.Errorf("sandboxworld: strategy sandbox runner: %w", err)
+		return nil, fmt.Errorf("sandboxworld: strategy runtime: %w", err)
 	}
-	s, err := w.strategies(builder, runner)
+	budget, err := sandboxrt.OpenBudgetPool(ctx, w.DB, sandboxrt.DefaultBudgetConns)
 	if err != nil {
-		return nil, errors.Join(err, runner.Close(context.WithoutCancel(ctx)))
+		return nil, errors.Join(fmt.Errorf("sandboxworld: strategy sandbox budget pool: %w", err), runtime.Close(context.WithoutCancel(ctx)))
+	}
+	s, err := w.strategies(runtime, budget)
+	if err != nil {
+		budget.Close()
+		return nil, errors.Join(err, runtime.Close(context.WithoutCancel(ctx)))
 	}
 	return s, nil
 }
 
-func (w *World) strategies(builder *sandboxrt.Builder, runner *sandboxrt.Runner) (*Strategies, error) {
+func (w *World) strategies(runtime sandboxrt.SandboxRuntimeProvider, budget *pgxpool.Pool) (*Strategies, error) {
 	auth := econ.NewAuthorizer(w.Gates, w.Kills)
-	sandbox := sandboxrt.NewService(w.Clock, auth, runner, w.Audit)
+	sandbox := sandboxrt.NewService(w.Clock, auth, runtime, w.Audit, budget)
 	verification, err := identity.NewVerificationResolver(w.DB)
 	if err != nil {
 		return nil, fmt.Errorf("sandboxworld: verification resolver: %w", err)
@@ -111,14 +121,17 @@ func (w *World) strategies(builder *sandboxrt.Builder, runner *sandboxrt.Runner)
 	}
 	market, err := marketplace.NewService(marketplace.Config{
 		Clock: w.Clock, Intents: intents, Effects: econ.NewEffectStore(w.Clock, w.Outbox, w.Audit), Auth: auth,
-		Risk: risk.NewStore(), RiskPolicy: risk.DefaultAdvancedPolicy(), Router: w.Router, Sandbox: sandbox, Builder: builder,
-		Sections: sections, Executor: executor, Audit: w.Audit, MaxPriceAge: StrategyMaxPriceAge,
+		Risk: risk.NewStore(), RiskPolicy: risk.DefaultAdvancedPolicy(), Router: w.Router, Sandbox: sandbox, Builder: runtime,
+		Sections: sections, Executor: executor, Audit: w.Audit, MaxPriceAge: StrategyMaxPriceAge, RuntimeVersion: runtime.Name(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("sandboxworld: strategy marketplace: %w", err)
 	}
-	return &Strategies{Builder: builder, Runner: runner, Sandbox: sandbox, Executor: executor, Market: market}, nil
+	return &Strategies{Runtime: runtime, Sandbox: sandbox, Executor: executor, Market: market, budget: budget}, nil
 }
 
-// Close releases the runner and every module it compiled.
-func (s *Strategies) Close(ctx context.Context) error { return s.Runner.Close(ctx) }
+// Close releases the runtime, every module it compiled, and the budget's pool.
+func (s *Strategies) Close(ctx context.Context) error {
+	s.budget.Close()
+	return s.Runtime.Close(ctx)
+}

@@ -119,7 +119,7 @@ func newMarketplaceItest(t *testing.T) *marketplaceItest {
 	runner, err := sandboxrt.NewRunner(context.Background(), sandboxrt.RunnerConfig{})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = runner.Close(context.Background()) })
-	sandbox := sandboxrt.NewService(clk, auth, runner, aw)
+	sandbox := sandboxrt.NewService(clk, auth, runner, aw, d.Pool())
 
 	w := &marketplaceItest{t: t, d: d, prices: valuation.NewPriceStore(clk), ledger: ledger.NewService(clk, "httpapi-itest")}
 	// A real build when the toolchain is here, as cmd/api decides; the
