@@ -2,18 +2,20 @@
  * INSTALLS AND PAPER-FOLLOW, for the account the area is reading.
  *
  * An install adds an approved strategy to an account in PAPER mode, the only
- * mode an install can have. Following it runs the strategy in the sandbox on
- * one market snapshot: every proposal its manifest permits becomes an
- * economic intent that faces routing and Risk Kernel V2 with sections the
- * backend reads from its own records, never from the snapshot, and only an
- * ALLOW reaches paper execution. The history below lists every follow run
- * with each intent it produced and the risk decision about it.
+ * mode an install can have, with a paper book that starts with the paper
+ * capital the backend states. Following it runs the strategy in the sandbox,
+ * now, on an input the backend builds itself -- the install's paper book and
+ * the reference prices it reads from the price store -- so the page sends
+ * nothing about the market or the portfolio. Every proposal the manifest
+ * permits becomes an economic intent that faces routing and Risk Kernel V2,
+ * and only an ALLOW reaches paper execution. The history below lists every
+ * follow run with each intent it produced and the risk decision about it.
  *
- * Equity, turnover and performance are PAPER results computed from the
- * snapshots supplied when following; they are not a record of what this
- * account earned.
+ * The paper balance, equity, turnover and performance are PAPER results
+ * computed by the backend from the install's own fills at reference prices;
+ * they are not a record of what this account earned.
  */
-import { useId, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import {
@@ -34,7 +36,7 @@ import { Disclosure, Field, FieldGrid, Identifier, Page, Panel, Pill, Table } fr
 import { SimulatedNotice } from "../../../components/SimulatedNotice.tsx";
 import { FIRST_PAGE, back, forward, verdictTone, type CursorTrail } from "../../../lib/advanced.ts";
 import { SIMULATED_RESULTS_NOTICE } from "../../../lib/honesty.ts";
-import { FOLLOW_OUTCOMES, OUTCOME_MEANING, outcomeTone, parseSnapshot } from "../../../lib/marketplace.ts";
+import { FOLLOW_OUTCOMES, OUTCOME_MEANING, outcomeTone } from "../../../lib/marketplace.ts";
 import { exactInstant, formatInstant } from "../../../lib/time.ts";
 import { useAdvancedAccount } from "../area.ts";
 import { Codes, CursorPager, NoAccount, ScrollTable } from "../shared.tsx";
@@ -60,7 +62,11 @@ export function InstallsPage(): ReactNode {
       <SimulatedNotice />
       <Disclosure title="Paper results">
         <p>{SIMULATED_RESULTS_NOTICE}</p>
-        <p>Equity, turnover and performance come from the snapshots supplied when following.</p>
+        <p>
+          The paper balance, equity, turnover and performance come from each install&apos;s paper book: the paper capital it
+          started with, moved by its own fills, valued at reference prices the backend reads itself. Nobody supplies a
+          snapshot, and the figures are before the paper venue&apos;s disclosed charges.
+        </p>
       </Disclosure>
       {accountId === undefined ? (
         <Panel title="Your installs">
@@ -140,6 +146,9 @@ function InstallsPanel(props: {
                     version {String(install.version_number)}
                     <span className="cell-note">
                       <VersionState status={install.version_status} moderation={install.version_moderation} />
+                    </span>
+                    <span className="cell-note">
+                      paper capital <SimulatedAmount value={install.paper_capital} />
                     </span>
                   </td>
                   <td>
@@ -250,13 +259,10 @@ function FollowPanel(props: {
 }): ReactNode {
   const follow = useFollowInstall();
   const action = usePrepared<FollowInput>();
-  const [snapshot, setSnapshot] = useState("");
-  const [problem, setProblem] = useState<string | undefined>(undefined);
-  const snapshotId = useId();
   return (
     <Panel
       title={`Paper-follow ${props.install.listing_title}`}
-      description={`Runs ${props.install.strategy_ref} once on the snapshot below, stamped with the moment you confirm.`}
+      description={`Runs ${props.install.strategy_ref} once, now, on the input the backend builds itself.`}
       actions={
         <Button variant="quiet" onClick={props.onClose}>
           Close
@@ -268,57 +274,23 @@ function FollowPanel(props: {
         noValidate
         onSubmit={(event) => {
           event.preventDefault();
-          if (action.prepared !== undefined) {
-            follow.mutate(action.prepared);
-            return;
-          }
-          const parsed = parseSnapshot(snapshot, new Date().toISOString());
-          if (!parsed.ok) {
-            setProblem(parsed.error);
-            return;
-          }
-          setProblem(undefined);
           follow.mutate(
-            action.prepare((idempotencyKey) => ({
-              accountId: props.accountId,
-              installId: props.install.id,
-              snapshot: parsed.value,
-              idempotencyKey,
-            })),
+            action.prepared ??
+              action.prepare((idempotencyKey) => ({ accountId: props.accountId, installId: props.install.id, idempotencyKey })),
           );
         }}
       >
-        <div className="form-row">
-          <label htmlFor={snapshotId}>Market and portfolio snapshot (JSON)</label>
-          <textarea
-            id={snapshotId}
-            className="input"
-            rows={10}
-            spellCheck={false}
-            value={snapshot}
-            onChange={(event) => {
-              setSnapshot(event.target.value);
-              action.clear();
-              follow.reset();
-            }}
-          />
-          <p className="field-note">
-            An object with an instruments array (instrument_id, kind, base_decimals, quote_decimals, mark, optional
-            best_bid, best_ask and closes, every price a decimal string) and a portfolio (balance, the uninvested
-            simulated dollars, as a decimal string, and positions in base units). It is the strategy's input only: the
-            backend reads the account, identity, instrument, reference price and kill switches from its own records.
-            The manifest's interval bounds how often an install can be followed, and a snapshot older than five minutes
-            is refused.
-          </p>
-        </div>
-        {problem !== undefined && (
-          <p className="field-error" role="alert">
-            {problem}
-          </p>
-        )}
+        <p className="note">
+          The strategy sees the install&apos;s paper book -- its paper capital moved by its own fills -- and, for every
+          instrument it names, the freshest reference price the backend holds (no older than five minutes) with its
+          recent history. Nothing you type reaches it. Every proposal is valued at the reference price, never at a price
+          the strategy chose; an allowed one fills on the paper venue at the mark, with its spread and fees disclosed on
+          the fill, and only if this account&apos;s wallet covers it. The manifest&apos;s interval bounds how often an
+          install can be followed, and each run counts against the account&apos;s sandbox budget.
+        </p>
         <div className="form-actions">
           <Button variant="primary" submit busy={follow.isPending} busyLabel="Running the strategy…">
-            {action.prepared === undefined ? "Follow on this snapshot" : "Retry the same follow"}
+            {action.prepared === undefined ? "Follow now" : "Retry the same follow"}
           </Button>
         </div>
         {follow.isError && <Explanation error={follow.error} />}
@@ -378,7 +350,7 @@ function FollowRunView(props: { readonly run: StrategyFollowRun }): ReactNode {
   return (
     <section className="callout" aria-label={`Follow run ${run.id}`}>
       <FieldGrid columns={4}>
-        <Field label="Snapshot time" note={exactInstant(run.as_of)}>
+        <Field label="Run time" note={exactInstant(run.as_of)}>
           {formatInstant(run.as_of)}
           {run.replayed === true && <span className="cell-note">already followed: nothing ran again</span>}
         </Field>
@@ -394,7 +366,14 @@ function FollowRunView(props: { readonly run: StrategyFollowRun }): ReactNode {
           {String(run.intents_submitted)} submitted: {String(run.intents_dispatched)} dispatched,{" "}
           {String(run.intents_risk_rejected)} refused by risk, {String(run.intents_failed)} failed
         </Field>
-        <Field label="Snapshot equity" note="A paper figure from the supplied snapshot.">
+        <Field label="Uninvested paper balance" note="The install's paper book when the run started.">
+          {run.paper_cash === undefined ? (
+            <span className="absent">not recorded: this run predates paper books</span>
+          ) : (
+            <SimulatedAmount value={run.paper_cash} />
+          )}
+        </Field>
+        <Field label="Paper book equity" note="The uninvested balance plus every position at its reference price, before charges.">
           <SimulatedAmount value={run.equity} />
         </Field>
         <Field label="Turnover dispatched" note="A paper figure.">
@@ -407,6 +386,26 @@ function FollowRunView(props: { readonly run: StrategyFollowRun }): ReactNode {
           <Identifier value={run.evidence_ref} />
         </Field>
       </FieldGrid>
+      {run.marks.length === 0 ? (
+        <p className="note">No reference price was recorded for this run.</p>
+      ) : (
+        <ScrollTable caption={`Reference prices of follow run ${run.id}`} headers={["Instrument", "Reference price", "Observed"]}>
+          {run.marks.map((mark) => (
+            <tr key={mark.instrument_id}>
+              <th scope="row">
+                <code className="mono-small">{mark.instrument_id}</code>
+              </th>
+              <td>
+                <SimulatedAmount value={mark.mark} />
+                <span className="cell-note">
+                  observation <code className="mono-small">{mark.price_id}</code>
+                </span>
+              </td>
+              <td>{formatInstant(mark.observed_at)}</td>
+            </tr>
+          ))}
+        </ScrollTable>
+      )}
       {run.intents.length === 0 ? (
         <p className="note">This run produced no intent.</p>
       ) : (
@@ -420,6 +419,11 @@ function FollowRunView(props: { readonly run: StrategyFollowRun }): ReactNode {
               <td>{intent.kind}</td>
               <td>
                 <SimulatedAmount value={intent.notional} />
+                {intent.reference_price !== undefined && (
+                  <span className="cell-note">
+                    at the reference price <SimulatedAmount value={intent.reference_price} />
+                  </span>
+                )}
               </td>
               <td>
                 <OutcomePill outcome={intent.outcome} />

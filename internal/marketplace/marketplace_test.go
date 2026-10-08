@@ -145,7 +145,7 @@ func TestRoute_ASandboxProposalRoutesAsASimulation(t *testing.T) {
 	require.NoError(t, err)
 	a := sandboxrt.AcceptedProposal{Proposal: sandboxrt.Proposal{Seq: 1, Kind: econ.KindAcquireExposure,
 		InstrumentID: "0193b2e0-0000-7000-8000-00000000000a", Side: sandboxrt.SideBuy, Quantity: money.QuantityFromInt64(1_000_000)},
-		InstrumentKind: "SPOT_PAIR", Notional: "150.25000000", PriceSource: sandboxrt.PriceMark}
+		InstrumentKind: "SPOT_PAIR", Notional: "150.25000000", ReferencePrice: "150.25"}
 	in, err := a.Intent(sandboxrt.IntentContext{AccountID: accounts.AccountID(econ.NewIntentID()), Mode: gates.ModePaper,
 		Capability: gates.StrategyMarketplace, ActorID: "marketplace", StrategyRef: "0193b2e0-0000-7000-8000-000000000001@1",
 		RunID: sandboxrt.NewRunID(), RunDigest: make([]byte, 32), ArtifactDigest: make([]byte, 32), KeyPrefix: "mkt-follow:x"})

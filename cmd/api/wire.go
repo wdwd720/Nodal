@@ -751,11 +751,13 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// collaborators: fresh econ stores, the authorizer over the gate checker
 	// and kill switches, the risk store and default Risk V2 policy, the
 	// deployment's legal router (conservative by default, as for transfers)
-	// and a wazero runner. Three collaborators have no production
-	// implementation in this build, so internal/httpapi carries the thinnest
-	// honest ones: risk sections read from the database, an executor that
-	// refuses every dispatch (no paper venue executes economic intents yet),
-	// and -- only where no Go toolchain is found -- a builder that refuses.
+	// and a wazero runner. The sandbox charges every run to an account under
+	// sandboxrt.DefaultBudget, and the builder builds under its default bounds
+	// (two minutes, a 32 MiB module, 1 GiB of compiler and linker memory).
+	// internal/httpapi carries the adapters: risk sections read from the
+	// database, the order book's paper venue as the executor of risk-approved
+	// paper intents, and -- only where no Go toolchain is found -- a builder
+	// that refuses.
 	strategyRouter, err := legalRouterFor(cfg.Env, in.cfg.API.LegalPolicy)
 	if err != nil {
 		return nil, err
@@ -812,11 +814,34 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("marketplace risk sections: %w", err)
 	}
+	// A strategy's allowed paper intent fills on the order book's paper venue:
+	// at the reference mark -- no older than the five minutes the follow's own
+	// reference prices may be -- priced through the one published schedule
+	// (httpapi.MarketplacePaperSchedule) whose spread (10 bps), platform fee
+	// (10 bps) and strategy fee (5 bps) are itemized on every fill's stored
+	// disclosure and posted to their own accounts. The account's wallet pays
+	// it; the venue refuses what the wallet cannot cover, and the follow
+	// records the dispatch as failed.
+	strategyIntents := econ.NewIntentStore(clk, outbox, auditWriter)
+	strategyExecutor, err := httpapi.NewMarketplacePaperExecutor(httpapi.MarketplacePaperExecutorConfig{
+		Venue: orders.PaperConfig{
+			Clock: clk, Ledger: ledgerSvc, Capital: capitalSvc, Intents: strategyIntents,
+			Effects: econ.NewEffectStore(clk, outbox, auditWriter), Authorizer: strategyAuth, Risk: risk.NewStore(),
+			RiskPolicy: risk.DefaultAdvancedPolicy(), Router: strategyRouter, Instruments: instrumentRepo, Assets: assetRepo,
+			Prices: priceStore, KillSwitches: killChecker, MaxMarkAge: 5 * time.Minute,
+			Verification: httpapi.AdvancedVerificationLevels{Rule: compliance.NewAccountVerification(clk)},
+		},
+		Schedule: httpapi.MarketplacePaperSchedule(),
+		Intents:  strategyIntents,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marketplace paper executor: %w", err)
+	}
 	strategyMarketplace, err := marketplace.NewService(marketplace.Config{
-		Clock: clk, Intents: econ.NewIntentStore(clk, outbox, auditWriter), Effects: econ.NewEffectStore(clk, outbox, auditWriter),
+		Clock: clk, Intents: strategyIntents, Effects: econ.NewEffectStore(clk, outbox, auditWriter),
 		Auth: strategyAuth, Risk: risk.NewStore(), RiskPolicy: risk.DefaultAdvancedPolicy(), Router: strategyRouter,
-		Sandbox: strategySandbox, Builder: strategyBuilder, Sections: strategySections, Executor: httpapi.UnwiredPaperExecutor{},
-		Audit: auditWriter,
+		Sandbox: strategySandbox, Builder: strategyBuilder, Sections: strategySections, Executor: strategyExecutor,
+		Audit: auditWriter, MaxPriceAge: 5 * time.Minute,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("strategy marketplace: %w", err)

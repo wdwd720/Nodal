@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
@@ -139,6 +140,9 @@ func (s *Service) createListing(ctx context.Context, tx pgx.Tx, req ListingReque
 		return Listing{}, Version{}, errs.New(errs.CodeValidationFailed, "marketplace: title must be 1..200 characters")
 	}
 	if err := req.Version.validate(); err != nil {
+		return Listing{}, Version{}, err
+	}
+	if err := requireOwner(ctx, tx, req.Creator, req.CreatorAccountID, "publish a strategy"); err != nil {
 		return Listing{}, Version{}, err
 	}
 	if err := s.authorize(ctx, tx, gates.ModeSandbox); err != nil {
@@ -310,44 +314,186 @@ type Validation struct {
 	ToolchainVersion string
 	SDKVersion       string
 	RuntimeVersion   string
+	// BuildLog is the compiler's (bounded) output, kept so the author of a
+	// version that did not compile can see why. Empty when nothing was
+	// compiled (a refused scan) and for validations recorded before review-2
+	// F12.
+	BuildLog []byte
+	// ClaimID is the build claim the outcome was recorded under (zero for a
+	// validation recorded before review-2 F12).
+	ClaimID *ValidationClaimID
 }
 
-// Validate scans and builds a SUBMITTED version. A clean scan and a
-// successful build record the artifact and move the version to VALIDATED; a
-// refused scan, a compile error or a build timeout moves it to REJECTED with
-// the reason as its rejection code. Any other failure changes nothing.
+// ValidationClaimID identifies a build claim.
+type ValidationClaimID = id.ID[claimKind]
+
+type claimKind struct{}
+
+// ValidationClaim is a version claimed for one build.
+type ValidationClaim struct {
+	ID         ValidationClaimID
+	VersionID  VersionID
+	By         econ.Actor
+	ClaimedAt  time.Time
+	LeaseUntil time.Time
+}
+
+// Validate is the transactional form of validation that earlier releases
+// had. It changes nothing and refuses: a build is untrusted work of unbounded
+// cost and never runs inside a database transaction, where it would hold the
+// version's row lock for its whole duration (review-2 F12). RunValidation
+// claims the version in one transaction, builds between transactions and
+// records the outcome in another.
+func (s *Service) Validate(context.Context, pgx.Tx, VersionID, econ.Actor) (Version, Validation, error) {
+	return Version{}, Validation{}, errs.New(errs.CodeUnsupported,
+		"marketplace: a build never runs inside a database transaction; validate with RunValidation, which claims the version, "+
+			"builds between transactions and records the outcome")
+}
+
+// RunValidation scans and builds a SUBMITTED version, outside any database
+// transaction:
 //
-// The build runs inside the caller's transaction, holding the version's row
-// lock for its duration (seconds, bounded by the builder's timeout): run
-// validation from a worker, not from a request path.
-func (s *Service) Validate(ctx context.Context, tx pgx.Tx, vid VersionID, by econ.Actor) (Version, Validation, error) {
+//  1. CLAIM, in one transaction: the version is SUBMITTED and unvalidated,
+//     nobody else holds a live claim on it, the gate allows it, and its
+//     stored source still hashes to its digest. The claim is leased for
+//     ValidationLease, so a builder that vanishes never wedges the version.
+//  2. BUILD, in none: the builder's own bounds (time, output, memory) apply.
+//  3. RECORD, in another transaction, if the claim is still the version's
+//     latest and the version still SUBMITTED: a clean scan and a successful
+//     build record the artifact and move the version to VALIDATED; a refused
+//     scan, a compile error or a build past a bound -- time, output or memory
+//     -- moves it to REJECTED with the reason as its rejection code. Either
+//     way the bounded compiler output is stored with the validation. A build
+//     that could not run at all (no toolchain, the caller went away) releases
+//     the claim and records nothing: the version stays SUBMITTED and may be
+//     claimed again at once.
+func (s *Service) RunValidation(ctx context.Context, d Transactor, vid VersionID, by econ.Actor) (Version, Validation, error) {
 	if err := requireActor(by, TransitionActorTypes(), "validate a strategy"); err != nil {
 		return Version{}, Validation{}, err
 	}
+	var claim ValidationClaim
+	var src sandboxrt.Source
+	err := d.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted}, func(ctx context.Context, tx pgx.Tx) error {
+		var err error
+		claim, src, err = s.claimValidation(ctx, tx, vid, by)
+		return err
+	})
+	if err != nil {
+		return Version{}, Validation{}, err
+	}
+
+	build, buildErr := s.cfg.Builder.Build(ctx, src)
+
+	var v Version
+	var val Validation
+	rejected := buildErr != nil && errs.CodeOf(buildErr) == errs.CodeStrategyRejected && build.Failure != ""
+	if buildErr != nil && !rejected {
+		// Nothing about the strategy was learned: release the claim (on a
+		// context of its own, so a caller that went away still frees it) and
+		// report the failure.
+		release := context.WithoutCancel(ctx)
+		if err := d.InTx(release, db.TxOptions{Isolation: pgx.ReadCommitted}, func(ctx context.Context, tx pgx.Tx) error {
+			return s.releaseClaim(ctx, tx, claim, "build did not run: "+string(errs.CodeOf(buildErr)))
+		}); err != nil {
+			return Version{}, Validation{}, errors.Join(buildErr, err)
+		}
+		return Version{}, Validation{}, buildErr
+	}
+	err = d.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted}, func(ctx context.Context, tx pgx.Tx) error {
+		var err error
+		v, val, err = s.recordValidation(ctx, tx, claim, build, rejected)
+		return err
+	})
+	return v, val, err
+}
+
+// claimValidation is RunValidation's first transaction.
+func (s *Service) claimValidation(ctx context.Context, tx pgx.Tx, vid VersionID, by econ.Actor) (ValidationClaim, sandboxrt.Source, error) {
 	v, err := s.loadVersion(ctx, tx, vid, true)
+	if err != nil {
+		return ValidationClaim{}, nil, err
+	}
+	if v.Status != StatusSubmitted {
+		return ValidationClaim{}, nil, errs.Newf(errs.CodeInvalidStateTransition, "marketplace: a %s version is not awaiting validation", v.Status)
+	}
+	if _, ok, err := s.ValidationOf(ctx, tx, vid); err != nil {
+		return ValidationClaim{}, nil, err
+	} else if ok {
+		return ValidationClaim{}, nil, errs.New(errs.CodeInvalidStateTransition, "marketplace: the version already has a validation")
+	}
+	if err := s.authorize(ctx, tx, gates.ModeSandbox); err != nil {
+		return ValidationClaim{}, nil, err
+	}
+	now := s.now()
+	var holder string
+	var until time.Time
+	err = tx.QueryRow(ctx, `SELECT c.claimed_by_actor_id, c.lease_until FROM marketplace_validation_claims c
+		WHERE c.version_id = $1 AND c.lease_until > $2
+		  AND NOT EXISTS (SELECT 1 FROM marketplace_validation_claim_releases r WHERE r.claim_id = c.id)
+		ORDER BY c.claimed_at DESC, c.id DESC LIMIT 1`, vid, now).Scan(&holder, &until)
+	switch {
+	case err == nil:
+		return ValidationClaim{}, nil, errs.New(errs.CodeConflict, "marketplace: the version is being built under another claim").
+			WithField("version_id", vid.String()).WithField("lease_until", until.UTC())
+	case !errors.Is(err, pgx.ErrNoRows):
+		return ValidationClaim{}, nil, dbErr("find build claim", err)
+	}
+	src, err := s.Source(ctx, tx, vid)
+	if err != nil {
+		return ValidationClaim{}, nil, err
+	}
+	if !bytes.Equal(src.Digest(), v.SourceDigest) {
+		return ValidationClaim{}, nil, errs.New(errs.CodeInternal, "marketplace: stored source does not match its digest")
+	}
+	claim := ValidationClaim{ID: id.New[claimKind](), VersionID: vid, By: by, ClaimedAt: now, LeaseUntil: now.Add(s.cfg.ValidationLease)}
+	if _, err := tx.Exec(ctx, `INSERT INTO marketplace_validation_claims (id, version_id, claimed_by_actor_type, claimed_by_actor_id,
+		claimed_at, lease_until) VALUES ($1,$2,$3,$4,$5,$6)`, claim.ID, vid, by.Type, by.ID, claim.ClaimedAt, claim.LeaseUntil); err != nil {
+		return ValidationClaim{}, nil, dbErr("claim the version for a build", err)
+	}
+	if err := s.auditEvent(ctx, tx, audit.SystemStream, by, "marketplace.version.build_claimed", "marketplace_listing_version", vid.String(),
+		"claimed for a build", map[string]any{"claim_id": claim.ID.String(), "lease_until": claim.LeaseUntil}); err != nil {
+		return ValidationClaim{}, nil, err
+	}
+	return claim, src, nil
+}
+
+// releaseClaim ends a claim whose build did not run.
+func (s *Service) releaseClaim(ctx context.Context, tx pgx.Tx, claim ValidationClaim, reason string) error {
+	if _, err := tx.Exec(ctx, `INSERT INTO marketplace_validation_claim_releases (claim_id, reason, released_at) VALUES ($1,$2,$3)
+		ON CONFLICT (claim_id) DO NOTHING`, claim.ID, truncate(reason, 500), s.now()); err != nil {
+		return dbErr("release build claim", err)
+	}
+	return s.auditEvent(ctx, tx, audit.SystemStream, claim.By, "marketplace.version.build_released", "marketplace_listing_version",
+		claim.VersionID.String(), truncate(reason, 200), map[string]string{"claim_id": claim.ID.String()})
+}
+
+// recordValidation is RunValidation's last transaction.
+func (s *Service) recordValidation(ctx context.Context, tx pgx.Tx, claim ValidationClaim, build sandboxrt.Build, rejected bool) (Version, Validation, error) {
+	v, err := s.loadVersion(ctx, tx, claim.VersionID, true)
 	if err != nil {
 		return Version{}, Validation{}, err
 	}
 	if v.Status != StatusSubmitted {
-		return Version{}, Validation{}, errs.Newf(errs.CodeInvalidStateTransition, "marketplace: a %s version is not awaiting validation", v.Status)
+		return Version{}, Validation{}, errs.Newf(errs.CodeInvalidStateTransition,
+			"marketplace: the version became %s while it was being built; the build is not recorded", v.Status)
 	}
-	if err := s.authorize(ctx, tx, gates.ModeSandbox); err != nil {
-		return Version{}, Validation{}, err
+	var latest ValidationClaimID
+	if err := tx.QueryRow(ctx, `SELECT id FROM marketplace_validation_claims WHERE version_id = $1 ORDER BY claimed_at DESC, id DESC LIMIT 1`,
+		claim.VersionID).Scan(&latest); err != nil {
+		return Version{}, Validation{}, dbErr("find build claim", err)
 	}
-	src, err := s.Source(ctx, tx, vid)
-	if err != nil {
-		return Version{}, Validation{}, err
+	if latest != claim.ID {
+		return Version{}, Validation{}, errs.New(errs.CodeConflict, "marketplace: the build claim lapsed and the version was claimed again; this build is not recorded").
+			WithField("claim_id", claim.ID.String())
 	}
-	if !bytes.Equal(src.Digest(), v.SourceDigest) {
-		return Version{}, Validation{}, errs.New(errs.CodeInternal, "marketplace: stored source does not match its digest")
+	by := claim.By
+	cid := claim.ID
+	val := Validation{VersionID: v.ID, ScanCodes: build.Scan.Codes(), ToolchainVersion: build.ToolchainVersion, SDKVersion: build.SDKVersion,
+		RuntimeVersion: s.cfg.RuntimeVersion, BuildLog: build.BuildLog, ClaimID: &cid}
+	if val.BuildLog == nil {
+		val.BuildLog = []byte{}
 	}
-	build, buildErr := s.cfg.Builder.Build(ctx, src)
-	val := Validation{VersionID: vid, ScanCodes: build.Scan.Codes(), ToolchainVersion: build.ToolchainVersion,
-		SDKVersion: build.SDKVersion, RuntimeVersion: s.cfg.RuntimeVersion}
-	if buildErr != nil {
-		if errs.CodeOf(buildErr) != errs.CodeStrategyRejected || build.Failure == "" {
-			return Version{}, Validation{}, buildErr
-		}
+	if rejected {
 		val.Outcome, val.FailureReason = ValidationFailed, build.Failure
 	} else {
 		if !bytes.Equal(build.SourceDigest, v.SourceDigest) {
@@ -365,16 +511,23 @@ func (s *Service) Validate(ctx context.Context, tx pgx.Tx, vid VersionID, by eco
 	var logDigest any
 	if len(build.BuildLogDigest) == 32 {
 		logDigest = build.BuildLogDigest
+	} else if len(val.BuildLog) > 0 {
+		return Version{}, Validation{}, errs.New(errs.CodeInternal, "marketplace: a build log without its digest")
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO marketplace_version_validations (id, version_id, outcome, artifact_digest, failure_reason, scan_codes,
-		build_log_digest, toolchain_version, sdk_version, runtime_version, validated_by_actor_type, validated_by_actor_id, validated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-		id.New[id.Any](), vid, val.Outcome, val.ArtifactDigest, failure, val.ScanCodes, logDigest, val.ToolchainVersion,
-		val.SDKVersion, val.RuntimeVersion, by.Type, by.ID, s.now()); err != nil {
+		build_log_digest, toolchain_version, sdk_version, runtime_version, validated_by_actor_type, validated_by_actor_id, validated_at,
+		claim_id, build_log)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+		id.New[id.Any](), v.ID, val.Outcome, val.ArtifactDigest, failure, val.ScanCodes, logDigest, val.ToolchainVersion,
+		val.SDKVersion, val.RuntimeVersion, by.Type, by.ID, s.now(), claim.ID, val.BuildLog); err != nil {
 		return Version{}, Validation{}, dbErr("record validation", err)
 	}
 	if val.Outcome == ValidationFailed {
-		out, err := s.transition(ctx, tx, v, StatusRejected, by, "validation failed: "+strings.Join(val.ScanCodes, ","), val.FailureReason)
+		reason := "validation failed: " + val.FailureReason
+		if codes := strings.Join(val.ScanCodes, ","); codes != "" {
+			reason += " (" + codes + ")"
+		}
+		out, err := s.transition(ctx, tx, v, StatusRejected, by, reason, val.FailureReason)
 		return out, val, err
 	}
 	out, err := s.transition(ctx, tx, v, StatusValidated, by, "scan and build passed", "")
@@ -385,9 +538,9 @@ func (s *Service) Validate(ctx context.Context, tx pgx.Tx, vid VersionID, by eco
 func (s *Service) ValidationOf(ctx context.Context, q db.Querier, vid VersionID) (Validation, bool, error) {
 	val := Validation{VersionID: vid}
 	var failure *string
-	err := q.QueryRow(ctx, `SELECT outcome, artifact_digest, failure_reason, scan_codes, toolchain_version, sdk_version, runtime_version
-		FROM marketplace_version_validations WHERE version_id = $1`, vid).Scan(&val.Outcome, &val.ArtifactDigest, &failure, &val.ScanCodes,
-		&val.ToolchainVersion, &val.SDKVersion, &val.RuntimeVersion)
+	err := q.QueryRow(ctx, `SELECT outcome, artifact_digest, failure_reason, scan_codes, toolchain_version, sdk_version, runtime_version,
+		build_log, claim_id FROM marketplace_version_validations WHERE version_id = $1`, vid).Scan(&val.Outcome, &val.ArtifactDigest, &failure,
+		&val.ScanCodes, &val.ToolchainVersion, &val.SDKVersion, &val.RuntimeVersion, &val.BuildLog, &val.ClaimID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return Validation{}, false, nil
@@ -402,17 +555,23 @@ func (s *Service) ValidationOf(ctx context.Context, q db.Querier, vid VersionID)
 
 // requireReviewer refuses anyone but an OPERATOR who neither created the
 // listing nor authored the version: dual control. The database enforces the
-// same rule on every review row (MK002).
+// same rule on every review row (MK002) and on the transitions into review and
+// approval (MK011).
 func (s *Service) requireReviewer(ctx context.Context, q pgx.Tx, v Version, reviewer econ.Actor) error {
 	if err := requireActor(reviewer, ReviewerActorTypes(), "review a strategy"); err != nil {
 		return err
 	}
+	return s.requireNotCreator(ctx, q, v, reviewer, "review")
+}
+
+// requireNotCreator refuses the listing's creator and the version's author.
+func (s *Service) requireNotCreator(ctx context.Context, q pgx.Tx, v Version, actor econ.Actor, what string) error {
 	l, err := s.Listing(ctx, q, v.ListingID)
 	if err != nil {
 		return err
 	}
-	if reviewer.ID == l.Creator.ID || reviewer.ID == v.CreatedBy.ID {
-		return errs.New(errs.CodeForbidden, "marketplace: the creator of a strategy cannot review it").
+	if actor.ID == l.Creator.ID || actor.ID == v.CreatedBy.ID {
+		return errs.New(errs.CodeForbidden, "marketplace: the creator of a strategy cannot "+what+" it").
 			WithField("version_id", v.ID.String())
 	}
 	return nil
@@ -507,8 +666,11 @@ func (s *Service) Deprecate(ctx context.Context, tx pgx.Tx, vid VersionID, by ec
 	return s.transition(ctx, tx, v, StatusDeprecated, by, reason, "")
 }
 
-// Moderate flags, takes down or re-clears a version. Operators only. A
-// flagged or taken-down version cannot be installed or followed.
+// Moderate flags, takes down or re-clears a version. Operators only, and
+// never the version's creator or author: an operator who wrote a strategy
+// cannot re-clear it after someone flagged it (review-2 F14; the database
+// refuses the moderation row too, MK011). A flagged or taken-down version
+// cannot be installed or followed.
 func (s *Service) Moderate(ctx context.Context, tx pgx.Tx, vid VersionID, operator econ.Actor, to Moderation, reason string) (Version, error) {
 	if err := requireActor(operator, ReviewerActorTypes(), "moderate a strategy"); err != nil {
 		return Version{}, err
@@ -518,6 +680,9 @@ func (s *Service) Moderate(ctx context.Context, tx pgx.Tx, vid VersionID, operat
 	}
 	v, err := s.loadVersion(ctx, tx, vid, true)
 	if err != nil {
+		return Version{}, err
+	}
+	if err := s.requireNotCreator(ctx, tx, v, operator, "moderate"); err != nil {
 		return Version{}, err
 	}
 	return s.moderate(ctx, tx, v, to, operator, reason)

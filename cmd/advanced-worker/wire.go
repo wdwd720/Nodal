@@ -239,13 +239,31 @@ func build(ctx context.Context, in buildInput) (_ *worker, err error) {
 	if err != nil {
 		return nil, fmt.Errorf("marketplace risk sections: %w", err)
 	}
+	// As cmd/api: a scheduled follow's allowed paper intent fills on the order
+	// book's paper venue at the reference mark, priced through the one
+	// published schedule (httpapi.MarketplacePaperSchedule), its spread and
+	// fees itemized on the fill and paid from the account's wallet.
+	strategyIntents := intents()
+	strategyExecutor, err := httpapi.NewMarketplacePaperExecutor(httpapi.MarketplacePaperExecutorConfig{
+		Venue: orders.PaperConfig{
+			Clock: clk, Ledger: ledgerSvc, Capital: capitalSvc, Intents: strategyIntents, Effects: effects(),
+			Authorizer: strategyAuth, Risk: risk.NewStore(), RiskPolicy: risk.DefaultAdvancedPolicy(), Router: router,
+			Instruments: instrumentRepo, Assets: assetRepo, Prices: priceStore, KillSwitches: killChecker, MaxMarkAge: maxMarkAge,
+			Verification: httpapi.AdvancedVerificationLevels{Rule: compliance.NewAccountVerification(clk)},
+		},
+		Schedule: httpapi.MarketplacePaperSchedule(),
+		Intents:  strategyIntents,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marketplace paper executor: %w", err)
+	}
 	strategyMarketplace, err := marketplace.NewService(marketplace.Config{
-		Clock: clk, Intents: intents(), Effects: effects(), Auth: strategyAuth, Risk: risk.NewStore(),
+		Clock: clk, Intents: strategyIntents, Effects: effects(), Auth: strategyAuth, Risk: risk.NewStore(),
 		RiskPolicy: risk.DefaultAdvancedPolicy(), Router: router, Sandbox: strategySandbox,
 		// A scheduled follow runs an artifact the API built at validation; the
 		// worker builds nothing.
 		Builder:  httpapi.UnavailableStrategyBuilder{Reason: "the advanced worker builds no strategy; validation is the API's"},
-		Sections: strategySections, Executor: httpapi.UnwiredPaperExecutor{}, Audit: auditWriter,
+		Sections: strategySections, Executor: strategyExecutor, Audit: auditWriter, MaxPriceAge: maxMarkAge,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("strategy marketplace: %w", err)

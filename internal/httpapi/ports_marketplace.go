@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"time"
 
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/econ"
@@ -16,43 +15,27 @@ import (
 // behind it (internal/sandboxrt). Every figure behind this port is value
 // domain SIMULATED, and every performance figure is a PAPER result.
 
-// MarketplaceVersionSummary is the part of a listing version a list shows.
-type MarketplaceVersionSummary struct {
-	ID            marketplace.VersionID
-	ListingID     marketplace.ListingID
-	Number        int
-	Status        marketplace.Status
-	Moderation    marketplace.Moderation
-	RiskClass     marketplace.RiskClass
-	Description   string
-	RejectionCode string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
-}
-
-// MarketplaceListingSummary is a listing with the one version a list shows:
-// the newest installable one in the catalogue, the newest of any status in an
-// account's own list.
-type MarketplaceListingSummary struct {
-	Listing marketplace.Listing
-	Latest  MarketplaceVersionSummary
-}
-
-// MarketplaceReview is one marketplace_reviews row.
-type MarketplaceReview struct {
-	Decision   marketplace.ReviewDecision
-	ReasonCode string
-	Note       string
-	Reviewer   econ.Actor
-	ReviewedAt time.Time
-}
-
-// MarketplaceEvaluation is a recorded simulation as read back.
-type MarketplaceEvaluation struct {
-	Evaluation     marketplace.Evaluation
-	SnapshotsCount int
-	CreatedAt      time.Time
-}
+// The lists behind this port are the marketplace package's own reads
+// (internal/marketplace/reads.go), so its rules about what may be shown --
+// the catalogue lists only installable versions, and performance is only what
+// a paper book proved -- hold here too. These are their types.
+type (
+	// MarketplaceVersionSummary is the part of a listing version a list shows.
+	MarketplaceVersionSummary = marketplace.VersionSummary
+	// MarketplaceListingSummary is a listing with the one version a list
+	// shows: the newest installable one in the catalogue, the newest of any
+	// status in an account's own list.
+	MarketplaceListingSummary = marketplace.ListingSummary
+	// MarketplaceReview is one recorded review decision.
+	MarketplaceReview = marketplace.Review
+	// MarketplaceEvaluation is a recorded simulation as read back.
+	MarketplaceEvaluation = marketplace.EvaluationRecord
+	// MarketplaceQueueItem is a version awaiting validation or review.
+	MarketplaceQueueItem = marketplace.QueueItem
+	// MarketplaceInstallView is an install with the listing and version it
+	// installed and the newest performance its paper book proved, if any.
+	MarketplaceInstallView = marketplace.InstallSummary
+)
 
 // MarketplaceVersionView is one version with everything recorded about it.
 type MarketplaceVersionView struct {
@@ -71,21 +54,6 @@ type MarketplaceVersionView struct {
 type MarketplaceListingView struct {
 	Listing  marketplace.Listing
 	Versions []MarketplaceVersionView
-}
-
-// MarketplaceQueueItem is a version awaiting validation or review.
-type MarketplaceQueueItem struct {
-	Listing marketplace.Listing
-	Version MarketplaceVersionSummary
-}
-
-// MarketplaceInstallView is an install with the listing and version it
-// installed and its latest paper performance snapshot, if any.
-type MarketplaceInstallView struct {
-	Install           marketplace.Install
-	Listing           marketplace.Listing
-	Version           MarketplaceVersionSummary
-	LatestPerformance *marketplace.PerformanceSnapshot
 }
 
 // MarketplaceEffectState is what became of a dispatch effect.
@@ -136,9 +104,11 @@ type MarketplaceFork struct {
 	Version  marketplace.VersionRequest
 }
 
-// MarketplaceSimulate runs a built version against a fixed snapshot set.
+// MarketplaceSimulate runs a built version against a fixed snapshot set,
+// charged to the creator's account.
 type MarketplaceSimulate struct {
 	VersionID      marketplace.VersionID
+	Account        accounts.AccountID
 	Actor          econ.Actor
 	DatasetVersion string
 	Snapshots      []sandboxrt.Input
@@ -152,11 +122,11 @@ type MarketplaceInstallRequest struct {
 	Actor     econ.Actor
 }
 
-// MarketplaceFollowRequest runs one explicit paper follow of an install.
+// MarketplaceFollowRequest runs one explicit paper follow of an install, now,
+// on the input the service builds itself: no caller supplies one.
 type MarketplaceFollowRequest struct {
 	InstallID     marketplace.InstallID
 	Actor         econ.Actor
-	Input         sandboxrt.Input
 	CorrelationID string
 }
 

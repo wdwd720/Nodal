@@ -7,6 +7,8 @@ import (
 	"embed"
 	"encoding/hex"
 	"errors"
+	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -33,14 +35,41 @@ var sdkSources embed.FS
 // downloads one).
 const strategyGoVersion = "1.27"
 
-// Build failure reasons.
+// Build failure reasons. Each is a refusal of the strategy, recorded as such:
+// the source was refused, did not compile, or its build went past a resource
+// bound (time, output, memory). None is ever a reason to try again.
 const (
 	BuildFailureScan    = "SCAN_REJECTED"
 	BuildFailureCompile = "COMPILE_FAILED"
 	BuildFailureTimeout = "BUILD_TIMEOUT"
+	// BuildFailureOutputLimit: the module the build produced (or was
+	// producing) is larger than MaxArtifactBytes.
+	BuildFailureOutputLimit = "BUILD_OUTPUT_LIMIT"
+	// BuildFailureMemoryLimit: the build's processes together held more
+	// resident memory than MaxMemoryBytes.
+	BuildFailureMemoryLimit = "BUILD_MEMORY_LIMIT"
 )
 
-// BuilderConfig configures a Builder.
+// AllBuildFailures returns every build failure reason
+// (marketplace_version_validations_failure_reason_check).
+func AllBuildFailures() []string {
+	return []string{BuildFailureScan, BuildFailureCompile, BuildFailureTimeout, BuildFailureOutputLimit, BuildFailureMemoryLimit}
+}
+
+// Build resource bounds.
+const (
+	// MaxArtifactBytesCap is the largest artifact strategy_artifacts accepts.
+	MaxArtifactBytesCap = 64 << 20
+	// MaxBuildLogBytesCap is the largest build log a validation stores.
+	MaxBuildLogBytesCap  = 64 << 10
+	defaultArtifactBytes = 32 << 20
+	defaultBuildMemory   = 1 << 30
+	minBuildMemory       = 64 << 20
+	defaultSampleEvery   = 100 * time.Millisecond
+)
+
+// BuilderConfig configures a Builder. Every bound has a safe default; a bound
+// outside its policy range is refused rather than clamped.
 type BuilderConfig struct {
 	// GoBinary is the absolute path of the go command.
 	GoBinary string
@@ -53,8 +82,24 @@ type BuilderConfig struct {
 	TempDir string
 	// Timeout bounds one build (default 2 minutes).
 	Timeout time.Duration
-	// MaxLogBytes bounds the captured build log (default 64 KiB).
+	// MaxLogBytes bounds the captured build log (default and at most 64 KiB:
+	// the log is stored with the validation, for the strategy's author).
 	MaxLogBytes int
+	// MaxArtifactBytes bounds the built module (default 32 MiB, at most the
+	// 64 MiB strategy_artifacts accepts). A build whose output grows past it
+	// is stopped and refused (BUILD_OUTPUT_LIMIT); the host never reads more
+	// of a module than this.
+	MaxArtifactBytes int64
+	// MaxMemoryBytes bounds the resident memory of the whole build: the go
+	// command and every compiler and linker process it starts, measured
+	// together while they run and again from the peak they report when they
+	// finish (default 1 GiB, at least 64 MiB; a cold build of a strategy
+	// holds about a quarter of the default). A build past it is stopped and
+	// refused (BUILD_MEMORY_LIMIT).
+	MaxMemoryBytes uint64
+	// SampleInterval is how often a running build's memory and output are
+	// measured (default 100 ms).
+	SampleInterval time.Duration
 	// Limits bounds the source tree (DefaultScanLimits when zero).
 	Limits ScanLimits
 	// Clock stamps builds (clock.System when nil).
@@ -78,12 +123,16 @@ type Build struct {
 	ToolchainVersion string
 	SDKVersion       string
 	BuildLogDigest   []byte
-	// BuildLog is the (bounded) compiler output, kept for the author.
+	// BuildLog is the (bounded) compiler output, kept for the author, with
+	// the build directory's path replaced by $BUILD.
 	BuildLog []byte
 	Scan     ScanReport
 	Failure  string
 	BuiltAt  time.Time
 	Duration time.Duration
+	// PeakMemoryBytes is the largest resident set the build's processes
+	// reported (0 where the platform cannot tell).
+	PeakMemoryBytes uint64
 }
 
 // NewBuilder validates the configuration and loads the embedded SDK.
@@ -101,7 +150,26 @@ func NewBuilder(cfg BuilderConfig) (*Builder, error) {
 		cfg.Timeout = 2 * time.Minute
 	}
 	if cfg.MaxLogBytes <= 0 {
-		cfg.MaxLogBytes = 64 << 10
+		cfg.MaxLogBytes = MaxBuildLogBytesCap
+	}
+	if cfg.MaxArtifactBytes <= 0 {
+		cfg.MaxArtifactBytes = defaultArtifactBytes
+	}
+	if cfg.MaxMemoryBytes == 0 {
+		cfg.MaxMemoryBytes = defaultBuildMemory
+	}
+	if cfg.SampleInterval <= 0 {
+		cfg.SampleInterval = defaultSampleEvery
+	}
+	switch {
+	case cfg.MaxLogBytes > MaxBuildLogBytesCap:
+		return nil, errs.Newf(errs.CodeValidationFailed, "sandboxrt: the build log bound is at most %d bytes", MaxBuildLogBytesCap)
+	case cfg.MaxArtifactBytes > MaxArtifactBytesCap:
+		return nil, errs.Newf(errs.CodeValidationFailed, "sandboxrt: the artifact bound is at most %d bytes", MaxArtifactBytesCap)
+	case cfg.MaxMemoryBytes < minBuildMemory:
+		return nil, errs.Newf(errs.CodeValidationFailed, "sandboxrt: the build memory bound is at least %d bytes", minBuildMemory)
+	case cfg.SampleInterval > time.Second:
+		return nil, errs.New(errs.CodeValidationFailed, "sandboxrt: a running build is measured at least once a second")
 	}
 	if cfg.Limits == (ScanLimits{}) {
 		cfg.Limits = DefaultScanLimits()
@@ -197,43 +265,90 @@ func (b *Builder) compile(ctx context.Context, src Source, rep ScanReport) (Buil
 	defer cancel()
 	env := b.environment(root)
 
-	timedOut := func() (Build, error) {
-		out.Failure = BuildFailureTimeout
-		return out, errs.New(errs.CodeStrategyRejected, "sandboxrt: the build exceeded its time limit").
-			WithField("reason", BuildFailureTimeout)
+	refuse := func(reason, detail string) (Build, error) {
+		out.Failure = reason
+		return out, errs.New(errs.CodeStrategyRejected, "sandboxrt: "+detail).WithField("reason", reason)
 	}
-	version, err := b.goCommand(ctx, srcDir, env, b.cfg.MaxLogBytes, "env", "GOVERSION")
+	version, _, err := b.goCommand(ctx, srcDir, env, nil, "env", "GOVERSION")
 	if err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return timedOut()
+			return refuse(BuildFailureTimeout, "the build exceeded its time limit")
 		}
 		return out, errs.Wrap(err, errs.CodeInternal, "sandboxrt: read toolchain version")
 	}
 	out.ToolchainVersion = strings.TrimSpace(string(version))
 
 	wasmPath := filepath.Join(outDir, "strategy.wasm")
-	log, buildErr := b.goCommand(ctx, srcDir, env, b.cfg.MaxLogBytes, "build", "-o", wasmPath, ".")
+	watch := &buildWatch{output: wasmPath, maxOutput: b.cfg.MaxArtifactBytes, maxMemory: b.cfg.MaxMemoryBytes, every: b.cfg.SampleInterval}
+	log, peak, buildErr := b.goCommand(ctx, srcDir, env, watch, "build", "-o", wasmPath, ".")
+	log = sanitizeBuildLog(log, root)
 	sum := sha256.Sum256(log)
-	out.BuildLogDigest, out.BuildLog = sum[:], log
-	if buildErr != nil {
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return timedOut()
-		}
-		if ctx.Err() != nil {
-			return out, ctx.Err()
-		}
+	out.BuildLogDigest, out.BuildLog, out.PeakMemoryBytes = sum[:], log, peak
+	// A bound the build went past is the strategy's refusal whatever else
+	// happened: the memory bound is judged both while the build runs and on
+	// the peak the finished processes report.
+	switch tripped := watch.tripped(); {
+	case tripped == BuildFailureMemoryLimit || peak > b.cfg.MaxMemoryBytes:
+		return refuse(BuildFailureMemoryLimit, fmt.Sprintf("the build held more than its %d bytes of memory", b.cfg.MaxMemoryBytes))
+	case tripped == BuildFailureOutputLimit:
+		return refuse(BuildFailureOutputLimit, fmt.Sprintf("the build produced a module larger than its %d bytes", b.cfg.MaxArtifactBytes))
+	case buildErr != nil && errors.Is(ctx.Err(), context.DeadlineExceeded):
+		return refuse(BuildFailureTimeout, "the build exceeded its time limit")
+	case buildErr != nil && ctx.Err() != nil:
+		return out, ctx.Err()
+	case buildErr != nil:
 		out.Failure = BuildFailureCompile
 		return out, errs.New(errs.CodeStrategyRejected, "sandboxrt: the strategy does not compile").
 			WithField("reason", BuildFailureCompile).
 			WithField("build_log", truncate(string(log), 4096))
 	}
-	wasm, err := os.ReadFile(wasmPath) // #nosec G304 -- a path inside the build directory this function created
+	wasm, err := readBounded(wasmPath, b.cfg.MaxArtifactBytes)
+	if errors.Is(err, errArtifactTooLarge) {
+		return refuse(BuildFailureOutputLimit, fmt.Sprintf("the build produced a module larger than its %d bytes", b.cfg.MaxArtifactBytes))
+	}
 	if err != nil {
 		return out, errs.Wrap(err, errs.CodeInternal, "sandboxrt: read the built module")
 	}
 	digest := sha256.Sum256(wasm)
 	out.Wasm, out.ArtifactDigest = wasm, digest[:]
 	return out, nil
+}
+
+var errArtifactTooLarge = errors.New("sandboxrt: artifact larger than its bound")
+
+// readBounded reads a file that must be at most max bytes, and never reads
+// more than max+1 of it.
+func readBounded(path string, max int64) ([]byte, error) {
+	f, err := os.Open(path) // #nosec G304 -- a path inside the build directory this package created
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	if st, err := f.Stat(); err == nil && st.Size() > max {
+		return nil, errArtifactTooLarge
+	}
+	b, err := io.ReadAll(io.LimitReader(f, max+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(b)) > max {
+		return nil, errArtifactTooLarge
+	}
+	return b, nil
+}
+
+// sanitizeBuildLog replaces the build directory's path -- as created and as
+// the toolchain may resolve it through symbolic links -- in the compiler's
+// output, so the log kept for the author names files, never the host's
+// layout.
+func sanitizeBuildLog(log []byte, root string) []byte {
+	if root == "" {
+		return log
+	}
+	if real, err := filepath.EvalSymlinks(root); err == nil && real != root {
+		log = bytes.ReplaceAll(log, []byte(real), []byte("$BUILD"))
+	}
+	return bytes.ReplaceAll(log, []byte(root), []byte("$BUILD"))
 }
 
 // environment is the complete environment of every go command the builder
@@ -271,17 +386,94 @@ func BuildEnvironmentKeys() []string {
 	return keys
 }
 
-func (b *Builder) goCommand(ctx context.Context, dir string, env []string, maxLog int, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, b.cfg.GoBinary, args...) // #nosec G204 -- the configured toolchain with fixed arguments
+// goCommand runs the toolchain in its own process group. With a watch it
+// measures the group while it runs and stops it at the watch's bounds; it
+// returns the (bounded) log and the peak resident memory the finished
+// processes report.
+func (b *Builder) goCommand(ctx context.Context, dir string, env []string, watch *buildWatch, args ...string) ([]byte, uint64, error) {
+	runCtx, stop := context.WithCancelCause(ctx)
+	defer stop(nil)
+	cmd := exec.CommandContext(runCtx, b.cfg.GoBinary, args...) // #nosec G204 -- the configured toolchain with fixed arguments
 	cmd.Dir = dir
 	cmd.Env = env
 	cmd.Stdin = nil
-	log := &cappedBuffer{max: maxLog}
+	log := &cappedBuffer{max: b.cfg.MaxLogBytes}
 	cmd.Stdout, cmd.Stderr = log, log
 	cmd.WaitDelay = 5 * time.Second
 	configureProcessGroup(cmd)
-	err := cmd.Run()
-	return log.bytes(), err
+	if err := cmd.Start(); err != nil {
+		return nil, 0, err
+	}
+	done := make(chan struct{})
+	var wg sync.WaitGroup
+	if watch != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			watch.run(runCtx, cmd.Process.Pid, stop, done)
+		}()
+	}
+	err := cmd.Wait()
+	close(done)
+	wg.Wait()
+	return log.bytes(), peakRSS(cmd.ProcessState), err
+}
+
+// buildWatch bounds a running build: every interval it measures the module
+// the build is writing and the resident memory of the build's whole process
+// group (the go command, its compilers and its linker), and the first bound
+// passed stops the group and is remembered as the refusal.
+type buildWatch struct {
+	output    string
+	maxOutput int64
+	maxMemory uint64
+	every     time.Duration
+
+	mu     sync.Mutex
+	reason string
+}
+
+var (
+	errBuildOutputLimit = errors.New("sandboxrt: build output limit reached")
+	errBuildMemoryLimit = errors.New("sandboxrt: build memory limit reached")
+)
+
+func (w *buildWatch) run(ctx context.Context, pgid int, stop context.CancelCauseFunc, done <-chan struct{}) {
+	ticker := time.NewTicker(w.every)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-done:
+			return
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+		if st, err := os.Stat(w.output); err == nil && st.Size() > w.maxOutput {
+			w.trip(BuildFailureOutputLimit)
+			stop(errBuildOutputLimit)
+			return
+		}
+		if rss, ok := groupRSS(ctx, pgid); ok && rss > w.maxMemory {
+			w.trip(BuildFailureMemoryLimit)
+			stop(errBuildMemoryLimit)
+			return
+		}
+	}
+}
+
+func (w *buildWatch) trip(reason string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.reason == "" {
+		w.reason = reason
+	}
+}
+
+func (w *buildWatch) tripped() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.reason
 }
 
 func writeTree(dir string, src Source) error {

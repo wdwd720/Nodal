@@ -391,6 +391,10 @@ func registry() []pair {
 		{table: "marketplace_version_validations", constraint: "marketplace_version_validations_outcome_check", source: "marketplace.AllValidationOutcomes()", values: str(marketplace.AllValidationOutcomes())},
 		{table: "marketplace_version_validations", constraint: "marketplace_version_validations_validated_by_actor_type_check", source: "marketplace.TransitionActorTypes()", values: str(marketplace.TransitionActorTypes())},
 		{table: "sandbox_run_violations", constraint: "sandbox_run_violations_code_check", source: "sandboxrt.AllViolationCodes()", values: str(sandboxrt.AllViolationCodes())},
+		// 00757 marketplace and sandbox hardening.
+		{table: "marketplace_paper_fills", constraint: "marketplace_paper_fills_side_check", source: "sandboxrt.AllSides()", values: str(sandboxrt.AllSides())},
+		{table: "marketplace_validation_claims", constraint: "marketplace_validation_claims_claimed_by_actor_type_check", source: "marketplace.TransitionActorTypes()", values: str(marketplace.TransitionActorTypes())},
+		{table: "sandbox_usage", constraint: "sandbox_usage_purpose_check", source: "sandboxrt.AllRunPurposes()", values: str(sandboxrt.AllRunPurposes())},
 		{table: "sandbox_runs", constraint: "sandbox_runs_actor_type_check", source: "sandboxrt.RecordingActorTypes()", values: str(sandboxrt.RecordingActorTypes())},
 		{table: "sandbox_runs", constraint: "sandbox_runs_termination_reason_check", source: "sandboxrt.AllTerminations()", values: str(sandboxrt.AllTerminations())},
 		{table: "strategy_artifact_sources", constraint: "strategy_artifact_sources_created_by_actor_type_check", source: "sandboxrt.RecordingActorTypes()", values: str(sandboxrt.RecordingActorTypes())},

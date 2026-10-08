@@ -2,6 +2,7 @@ package sandboxrt
 
 import (
 	"context"
+	"crypto/sha256"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -92,7 +94,7 @@ func TestBuilder_EnvironmentCarriesNothingFromTheParent(t *testing.T) {
 	assert.Equal(t, "wasm", seen["GOARCH"])
 	assert.Equal(t, filepath.Dir(goBin), seen["PATH"])
 	for _, k := range []string{"GOCACHE", "GOPATH", "HOME"} {
-		assert.True(t, strings.Contains(seen[k], "nodal-strategy-build-"), "%s=%s lives in the build directory", k, seen[k])
+		assert.True(t, strings.HasPrefix(seen[k], "$BUILD/"), "%s=%s lives in the build directory, which the kept log does not name", k, seen[k])
 	}
 	assert.Len(t, b.environment("/x"), len(BuildEnvironmentKeys()))
 }
@@ -217,6 +219,133 @@ func TestBuilder_RejectsAnUnusableConfiguration(t *testing.T) {
 	assert.Error(t, err, "a relative toolchain path would be resolved through someone's PATH")
 	_, err = NewBuilder(BuilderConfig{GoBinary: "/nonexistent/go"})
 	assert.Error(t, err)
-	_, err = NewBuilder(BuilderConfig{GoBinary: fakeGo(t, "true"), CacheDir: "relative/cache"})
+	goBin := fakeGo(t, "true")
+	_, err = NewBuilder(BuilderConfig{GoBinary: goBin, CacheDir: "relative/cache"})
 	assert.Error(t, err)
+	for name, cfg := range map[string]BuilderConfig{
+		"log above what a validation stores":            {GoBinary: goBin, MaxLogBytes: MaxBuildLogBytesCap + 1},
+		"artifact above what the database accepts":      {GoBinary: goBin, MaxArtifactBytes: MaxArtifactBytesCap + 1},
+		"memory too small for any build":                {GoBinary: goBin, MaxMemoryBytes: 1 << 20},
+		"a running build measured less than per second": {GoBinary: goBin, SampleInterval: 2 * time.Second},
+	} {
+		_, err := NewBuilder(cfg)
+		assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(err), name)
+	}
+	b, err := NewBuilder(BuilderConfig{GoBinary: goBin})
+	require.NoError(t, err)
+	assert.Equal(t, int64(32<<20), b.cfg.MaxArtifactBytes, "safe defaults")
+	assert.Equal(t, uint64(1<<30), b.cfg.MaxMemoryBytes)
+	assert.Equal(t, MaxBuildLogBytesCap, b.cfg.MaxLogBytes)
 }
+
+// outputStub is a toolchain whose build writes a module of the given size.
+func outputStub(t *testing.T, kib int) string {
+	return fakeGo(t, `if [ "$1" = "env" ]; then echo go1.27.1; exit 0; fi
+/bin/dd if=/dev/zero of="$3" bs=1024 count=`+strconv.Itoa(kib)+` 2>/dev/null
+exit 0`)
+}
+
+// TestBuilder_AModuleBeyondItsOutputBoundIsARefusalNeverAnArtifact: a build
+// whose module is larger than MaxArtifactBytes is the strategy's recorded
+// refusal (BUILD_OUTPUT_LIMIT), and the host never reads it; one at the bound
+// is an artifact.
+func TestBuilder_AModuleBeyondItsOutputBoundIsARefusalNeverAnArtifact(t *testing.T) {
+	b, err := NewBuilder(BuilderConfig{GoBinary: outputStub(t, 2048), TempDir: t.TempDir(), MaxArtifactBytes: 1 << 20})
+	require.NoError(t, err)
+	build, err := b.Build(context.Background(), Source{"main.go": []byte(cleanStrategy)})
+	require.Error(t, err)
+	assert.Equal(t, errs.CodeStrategyRejected, errs.CodeOf(err), "a refusal of the strategy, never an internal error")
+	assert.Equal(t, BuildFailureOutputLimit, build.Failure)
+	assert.Empty(t, build.Wasm)
+	assert.Empty(t, build.ArtifactDigest)
+	assert.Len(t, build.BuildLogDigest, 32, "the refusal still carries what the build said")
+
+	b, err = NewBuilder(BuilderConfig{GoBinary: outputStub(t, 1024), TempDir: t.TempDir(), MaxArtifactBytes: 1 << 20})
+	require.NoError(t, err)
+	build, err = b.Build(context.Background(), Source{"main.go": []byte(cleanStrategy)})
+	require.NoError(t, err)
+	assert.Len(t, build.Wasm, 1<<20, "a module exactly at the bound is kept")
+}
+
+// TestBuilder_ATinySourceThatBuildsPastTheArtifactBoundIsRefused is review-2
+// S1 with the real toolchain: 547 bytes the scanner accepts fold into a
+// 64 MiB string constant; the build is stopped and refused under the default
+// bounds instead of handing the host a 72 MB module.
+func TestBuilder_ATinySourceThatBuildsPastTheArtifactBoundIsRefused(t *testing.T) {
+	f := requireFixtures(t)
+	b, err := NewBuilder(BuilderConfig{GoBinary: f.goBinary, TempDir: t.TempDir(), CacheDir: filepath.Join(fixturesDir, "gocache"),
+		Timeout: 5 * time.Minute})
+	require.NoError(t, err)
+	src := Source{"main.go": []byte(blobStrategy)}
+	require.True(t, Scan(src, DefaultScanLimits()).OK(), "the scanner has nothing to say about it")
+	build, err := b.Build(context.Background(), src)
+	require.Error(t, err)
+	assert.Equal(t, errs.CodeStrategyRejected, errs.CodeOf(err))
+	assert.Contains(t, []string{BuildFailureOutputLimit, BuildFailureMemoryLimit}, build.Failure)
+	assert.Empty(t, build.Wasm, "nothing of the module reached the host")
+}
+
+// TestBuilder_ABuildBeyondItsMemoryBoundIsStoppedAndRefused: the compiler and
+// linker processes together may hold at most MaxMemoryBytes; a build that
+// needs more is stopped while it runs and refused (BUILD_MEMORY_LIMIT).
+func TestBuilder_ABuildBeyondItsMemoryBoundIsStoppedAndRefused(t *testing.T) {
+	f := requireFixtures(t)
+	// A cold build (an empty cache) compiles the runtime, which needs well
+	// over the 64 MiB this builder grants.
+	b, err := NewBuilder(BuilderConfig{GoBinary: f.goBinary, TempDir: t.TempDir(), Timeout: 5 * time.Minute, MaxMemoryBytes: minBuildMemory,
+		SampleInterval: 20 * time.Millisecond})
+	require.NoError(t, err)
+	build, err := b.Build(context.Background(), Source{"main.go": []byte(cleanStrategy)})
+	require.Error(t, err)
+	assert.Equal(t, errs.CodeStrategyRejected, errs.CodeOf(err))
+	assert.Equal(t, BuildFailureMemoryLimit, build.Failure)
+	assert.Empty(t, build.Wasm)
+}
+
+// TestBuilder_TheKeptBuildLogIsBoundedAndNamesNoHostPath: the compiler's
+// output is kept for the author, capped at MaxLogBytes, with the build
+// directory's path replaced.
+func TestBuilder_TheKeptBuildLogIsBoundedAndNamesNoHostPath(t *testing.T) {
+	goBin := fakeGo(t, `if [ "$1" = "env" ]; then echo go1.27.1; exit 0; fi
+echo "$PWD/main.go:3:1: undefined: frobnicate"
+/usr/bin/yes "a very long compiler complaint" | /usr/bin/head -c 200000
+exit 1`)
+	tmp := t.TempDir()
+	b, err := NewBuilder(BuilderConfig{GoBinary: goBin, TempDir: tmp, MaxLogBytes: 4096})
+	require.NoError(t, err)
+	build, err := b.Build(context.Background(), Source{"main.go": []byte(cleanStrategy)})
+	require.Error(t, err)
+	assert.Equal(t, BuildFailureCompile, build.Failure)
+	assert.LessOrEqual(t, len(build.BuildLog), 4096)
+	assert.True(t, strings.HasPrefix(string(build.BuildLog), "$BUILD/src/main.go:3:1: undefined: frobnicate"), "%q", build.BuildLog)
+	assert.NotContains(t, string(build.BuildLog), tmp, "the host's directory layout is not the author's business")
+	sum := sha256.Sum256(build.BuildLog)
+	assert.Equal(t, sum[:], build.BuildLogDigest, "the digest is of the log as kept")
+}
+
+// blobStrategy is review-2's S1 source: each const line multiplies the
+// string by 8; blob is 64 MiB.
+const blobStrategy = `package main
+
+import sdk "nodal.dev/sdk"
+
+const a0 = "0123456789abcdef"
+const a1 = a0 + a0 + a0 + a0 + a0 + a0 + a0 + a0
+const a2 = a1 + a1 + a1 + a1 + a1 + a1 + a1 + a1
+const a3 = a2 + a2 + a2 + a2 + a2 + a2 + a2 + a2
+const a4 = a3 + a3 + a3 + a3 + a3 + a3 + a3 + a3
+const a5 = a4 + a4 + a4 + a4 + a4 + a4 + a4 + a4
+const a6 = a5 + a5 + a5 + a5 + a5 + a5 + a5 + a5
+const a7 = a6 + a6 + a6 + a6 + a6 + a6 + a6 + a6
+
+var blob = a7 + a7
+
+func main() {
+	sdk.Run(func(s *sdk.Session) error {
+		if len(blob) == 0 {
+			return nil
+		}
+		return nil
+	})
+}
+`

@@ -729,9 +729,9 @@ type PaperOutcome struct {
 	Rejection error
 }
 
-// PaperAccept records the paper order's intent and routes it (RECEIVED ->
+// paperAccept records the paper order's intent and routes it (RECEIVED ->
 // ROUTED, or REJECTED). It is idempotent on (account, idempotency key).
-func (v *PaperVenue) PaperAccept(ctx context.Context, tx pgx.Tx, r PaperOrderRequest) (PaperOutcome, error) {
+func (v *PaperVenue) paperAccept(ctx context.Context, tx pgx.Tx, r PaperOrderRequest) (PaperOutcome, error) {
 	if r.AccountID.IsZero() || !r.Side.Valid() || !r.Quantity.IsPositive() {
 		return PaperOutcome{}, rejection(ReasonInvalidRequest, "a paper order needs an account, a side and a positive quantity")
 	}
@@ -817,9 +817,9 @@ func (v *PaperVenue) paperSettled(ctx context.Context, q db.Querier, in econ.Int
 	return out, nil
 }
 
-// PaperApprove authorizes SPREAD_ENGINE in the intent's mode and evaluates
+// paperApprove authorizes SPREAD_ENGINE in the intent's mode and evaluates
 // Risk Kernel V2 (ROUTED -> RISK_APPROVED, or REJECTED).
-func (v *PaperVenue) PaperApprove(ctx context.Context, tx pgx.Tx, iid econ.IntentID) (PaperOutcome, error) {
+func (v *PaperVenue) paperApprove(ctx context.Context, tx pgx.Tx, iid econ.IntentID) (PaperOutcome, error) {
 	in, err := lockIntent(ctx, tx, v.intents, iid)
 	if err != nil {
 		return PaperOutcome{}, err
@@ -958,9 +958,9 @@ func (v *PaperVenue) balance(ctx context.Context, q db.Querier, in econ.Intent, 
 	return &risk.BalanceSnapshot{Available: a, Required: r}, nil
 }
 
-// PaperFillStage fills a risk-approved paper intent (RISK_APPROVED ->
+// paperFillStage fills a risk-approved paper intent (RISK_APPROVED ->
 // EXECUTING) or records why it could not be filled (-> REJECTED).
-func (v *PaperVenue) PaperFillStage(ctx context.Context, tx pgx.Tx, iid econ.IntentID) (PaperOutcome, error) {
+func (v *PaperVenue) paperFillStage(ctx context.Context, tx pgx.Tx, iid econ.IntentID) (PaperOutcome, error) {
 	in, err := lockIntent(ctx, tx, v.intents, iid)
 	if err != nil {
 		return PaperOutcome{}, err
@@ -1000,8 +1000,8 @@ func paperRefusal(err error) (string, bool) {
 	return "", false
 }
 
-// PaperComplete moves a filled paper intent to COMPLETED.
-func (v *PaperVenue) PaperComplete(ctx context.Context, tx pgx.Tx, iid econ.IntentID) (PaperOutcome, error) {
+// paperComplete moves a filled paper intent to COMPLETED.
+func (v *PaperVenue) paperComplete(ctx context.Context, tx pgx.Tx, iid econ.IntentID) (PaperOutcome, error) {
 	in, err := lockIntent(ctx, tx, v.intents, iid)
 	if err != nil {
 		return PaperOutcome{}, err
@@ -1028,13 +1028,13 @@ func (v *PaperVenue) Submit(ctx context.Context, d *db.DB, r PaperOrderRequest) 
 		})
 		return out, err
 	}
-	out, err := run(func(ctx context.Context, tx pgx.Tx) (PaperOutcome, error) { return v.PaperAccept(ctx, tx, r) })
+	out, err := run(func(ctx context.Context, tx pgx.Tx) (PaperOutcome, error) { return v.paperAccept(ctx, tx, r) })
 	if err != nil || out.Rejection != nil {
 		return out, firstErr(err, out.Rejection)
 	}
 	iid := out.Intent.ID
 	var filled *PaperFill
-	for _, stage := range []func(context.Context, pgx.Tx, econ.IntentID) (PaperOutcome, error){v.PaperApprove, v.PaperFillStage, v.PaperComplete} {
+	for _, stage := range []func(context.Context, pgx.Tx, econ.IntentID) (PaperOutcome, error){v.paperApprove, v.paperFillStage, v.paperComplete} {
 		out, err = run(func(ctx context.Context, tx pgx.Tx) (PaperOutcome, error) { return stage(ctx, tx, iid) })
 		if err != nil || out.Rejection != nil {
 			return out, firstErr(err, out.Rejection)

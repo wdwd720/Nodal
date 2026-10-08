@@ -4,10 +4,12 @@
  * validation, its reviews, its provenance chain, the simulations run on it
  * and the paper performance of installs of it.
  *
- * Evaluations and performance figures are SIMULATED and PAPER results,
- * computed by the backend from snapshots supplied by whoever ran them. They
- * are labelled as such wherever they appear, and never as a record of what
- * any account earned.
+ * Evaluations are SIMULATED results over the snapshot set whoever ran them
+ * supplied. Performance figures are PAPER results the backend computes from
+ * each install's paper book -- its paper capital moved by its own fills,
+ * valued at reference prices the backend reads itself. Both are labelled as
+ * such wherever they appear, and never as a record of what any account
+ * earned.
  */
 import { useId, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -32,6 +34,7 @@ import { SimulatedNotice } from "../../../components/SimulatedNotice.tsx";
 import { formatSeconds } from "../../../lib/advanced.ts";
 import { SIMULATED_RESULTS_NOTICE } from "../../../lib/honesty.ts";
 import {
+  BUILD_FAILURE_MEANING,
   MAX_SIMULATION_SNAPSHOTS,
   STATUS_MEANING,
   canFork,
@@ -44,7 +47,7 @@ import {
 import { exactInstant, formatInstant } from "../../../lib/time.ts";
 import { useAdvancedAccount } from "../area.ts";
 import { Codes, ScrollTable } from "../shared.tsx";
-import { BasisPoints, SimulatedAmount, TerminationPill, VersionState, strategyHref, usePrepared } from "./parts.tsx";
+import { BasisPoints, BuildLog, SimulatedAmount, TerminationPill, VersionState, strategyHref, usePrepared } from "./parts.tsx";
 
 export function ListingDetailPage(): ReactNode {
   const { listingId } = useParams();
@@ -59,8 +62,10 @@ export function ListingDetailPage(): ReactNode {
       <Disclosure title="Simulated and paper results">
         <p>{SIMULATED_RESULTS_NOTICE}</p>
         <p>
-          Evaluations run a version against a fixed set of snapshots; paper performance is computed from the follow
-          history of installs. Both come from snapshots supplied by whoever ran them.
+          Evaluations run a version against a fixed set of snapshots supplied by whoever ran them. Paper performance is
+          computed by the backend from each install&apos;s paper book: its paper capital moved by its own fills, valued at
+          reference prices the backend reads itself, before the paper venue&apos;s disclosed charges. Nobody supplies the
+          figures it is computed from.
         </p>
       </Disclosure>
       <AsyncPanel
@@ -247,7 +252,12 @@ function Validation(props: { readonly version: StrategyVersionDetail }): ReactNo
         <FieldGrid columns={3}>
           <Field label="Outcome">
             <Pill tone={val.outcome === "PASSED" ? "good" : "bad"}>{val.outcome}</Pill>
-            {val.failure_reason !== undefined && <Codes codes={[val.failure_reason]} />}
+            {val.failure_reason !== undefined && (
+              <>
+                <Codes codes={[val.failure_reason]} />
+                <span className="cell-note">{BUILD_FAILURE_MEANING[val.failure_reason]}</span>
+              </>
+            )}
           </Field>
           <Field label="Scan findings">
             <Codes codes={val.scan_codes} none="none" />
@@ -266,6 +276,7 @@ function Validation(props: { readonly version: StrategyVersionDetail }): ReactNo
           </Field>
         </FieldGrid>
       )}
+      {val?.build_log !== undefined && <BuildLog log={val.build_log} />}
     </>
   );
 }
