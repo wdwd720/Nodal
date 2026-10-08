@@ -98,8 +98,10 @@ func genExecution(t *rapid.T) ExecutionRequest {
 	}
 	return ExecutionRequest{
 		Spec: s, Side: side, Quantity: q(rapid.Int64Range(1, 10_000).Draw(t, "qty")),
-		Mark: Mark{ID: newMarkID(), InstrumentID: s.InstrumentID, MarkScale: s.PriceScale,
-			MarkMantissa: q(rapid.Int64Range(0, 2_000_000).Draw(t, "mark_ticks")).Mul(s.Tick)},
+		Mark: Mark{
+			ID: newMarkID(), InstrumentID: s.InstrumentID, MarkScale: s.PriceScale,
+			MarkMantissa: q(rapid.Int64Range(0, 2_000_000).Draw(t, "mark_ticks")).Mul(s.Tick),
+		},
 		MaxSlippageBPS: money.BPS(rapid.Int64Range(0, 9_999).Draw(t, "slip")),
 		At:             executionAt,
 	}
@@ -145,8 +147,10 @@ func TestPaperVenue_RefusesAMalformedRequest(t *testing.T) {
 	venue, err := NewExecutionAdapter(config.EnvTest, config.ProviderModeSandbox, PaperVenueConfig{Name: "paper-refusals"})
 	require.NoError(t, err)
 	s := perpSpec(t)
-	good := ExecutionRequest{Spec: s, Side: Buy, Quantity: q(3),
-		Mark: Mark{ID: newMarkID(), MarkScale: s.PriceScale, MarkMantissa: q(6_500_000)}, MaxSlippageBPS: 10, At: executionAt}
+	good := ExecutionRequest{
+		Spec: s, Side: Buy, Quantity: q(3),
+		Mark: Mark{ID: newMarkID(), MarkScale: s.PriceScale, MarkMantissa: q(6_500_000)}, MaxSlippageBPS: 10, At: executionAt,
+	}
 	_, err = venue.Execute(context.Background(), good)
 	require.NoError(t, err)
 	for name, mutate := range map[string]func(*ExecutionRequest){
@@ -177,8 +181,10 @@ func TestExecutionCheck_RefusesEveryBrokenPromise(t *testing.T) {
 	s := perpSpec(t)
 	mark := q(6_500_000) // $65 000.00, on the 0.50 grid
 	req := func(side FillSide) ExecutionRequest {
-		return ExecutionRequest{Spec: s, Side: side, Quantity: q(1),
-			Mark: Mark{ID: newMarkID(), MarkScale: s.PriceScale, MarkMantissa: mark}, MaxSlippageBPS: 10, At: executionAt}
+		return ExecutionRequest{
+			Spec: s, Side: side, Quantity: q(1),
+			Mark: Mark{ID: newMarkID(), MarkScale: s.PriceScale, MarkMantissa: mark}, MaxSlippageBPS: 10, At: executionAt,
+		}
 	}
 	// 10 bps of $65 000.00 is $65.00: a buy fills at $65 065.00 at most, a
 	// sell at $64 935.00 at least.

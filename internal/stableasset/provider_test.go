@@ -88,8 +88,10 @@ func sandboxParts(t *testing.T, store devnethost.Store, network string, env conf
 	attester := devnet.NewKeypairFromSeed(seed("attester-" + label)).PublicKey()
 	host, err := devnethost.Open(context.Background(), store, devnethost.DefaultConfig(network, env, attester), clock.NewFake(providerClock))
 	require.NoError(t, err)
-	return ProviderConfig{Host: host, Issuer: NewIssuerSigner(seed("issuer-" + label)),
-		Custody: NewCustodialWalletSigner(seed("custody-" + label)), Snapshots: NewSnapshotSigner(seed("snapshots-" + label))}
+	return ProviderConfig{
+		Host: host, Issuer: NewIssuerSigner(seed("issuer-" + label)),
+		Custody: NewCustodialWalletSigner(seed("custody-" + label)), Snapshots: NewSnapshotSigner(seed("snapshots-" + label)),
+	}
 }
 
 func providerReason(t *testing.T, err error) any {
@@ -269,10 +271,12 @@ func TestContract_SandboxProviderKeepsTheProviderContract(t *testing.T) {
 	require.NoError(t, p.EnsureNativeBalance(ctx, devnethost.ChainSolana, holder, 1_000_000, 100_000_000))
 	tip, err := p.Tip(ctx, devnethost.ChainSolana)
 	require.NoError(t, err)
-	burn := BurnPlan{Version: burnPlanVersion, RequestID: uuid.NewString(), StableAssetID: "s", AccountID: alice.String(),
+	burn := BurnPlan{
+		Version: burnPlanVersion, RequestID: uuid.NewString(), StableAssetID: "s", AccountID: alice.String(),
 		Chain: string(devnethost.ChainSolana), Mint: mint.String(), Holder: holder.String(), Amount: "100", FeePayer: holder.String(),
 		RecentBlockhash: tip.Hash.String(), BlockhashHeight: strconv.FormatUint(tip.Height, 10), PayoutAssetID: "p",
-		PayoutQuantity: "100", RedemptionMode: "INSTANT", Peg: priceDoc(price(1, 0))}
+		PayoutQuantity: "100", RedemptionMode: "INSTANT", Peg: priceDoc(price(1, 0)),
+	}
 	burnMsg, err := burn.Message()
 	require.NoError(t, err)
 	_, err = p.SignHolderBurn(bob, burn, burnMsg)

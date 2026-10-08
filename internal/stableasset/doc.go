@@ -88,6 +88,44 @@
 // of them from the snapshots and the public key alone. A snapshot is not an
 // attestation and says so in its body.
 //
+// # Provider
+//
+// StableAssetProvider is the external system a stable asset depends on
+// (advanced goal §27): the chain its mint authority mints on and its holders
+// burn on, and the custody of the keys that sign there -- the mint authority,
+// every holder's wallet and the reserve snapshot key. The service reaches the
+// chain and the keys only through it, at the seam it always used: effects
+// (mints, the faucet, submissions, block production) between transactions,
+// one consistent ChainView read through the caller's transaction, and
+// signing only after the inspector proved a transaction is its plan's.
+//
+// Its one implementation is SandboxProvider -- the persistent devnet host
+// (internal/devnethost) and the in-process signers whose keys derive from
+// the sandbox seed (internal/sandboxchain) -- and its mode is sandbox. A
+// deterministic in-process simulation is fake where it fakes an external
+// system; the devnet host fakes no chain this asset lives on. The asset
+// exists only as SIMULATED value on the simulated chain, and that chain is
+// its sandbox: journaled in PostgreSQL, shared by every replica, replayed to
+// recorded state hashes, reconciled against as external truth, signed with
+// real Ed25519 keys held by the custody the sandbox has. Its one test device,
+// fault injection, is already confined to the environments that allow fakes.
+// A public testnet with a custodian's sandbox would be another sandbox
+// implementation; a fake would be a test double of either, and none is built
+// here.
+//
+// NewProvider refuses live in every environment, before it looks at the
+// environment (the stable asset capabilities have no LIVE:
+// gates.AdvancedSpecs); refuses fake where the environment refuses fakes
+// (STAGING, PROD) and, where it allows them, because no fake provider exists;
+// refuses a host opened for another environment (whose fault injection the
+// environment may not allow); and builds the sandbox provider in every
+// environment -- in STAGING and PROD the asset's gates must still be ACTIVE
+// before a mint reaches it. The binaries ask for ProviderModeFor(env), which
+// is sandbox: nothing configures the mode, and the sandbox chain itself is
+// configured (CP_SANDBOX_DEVNET_*) or not wired at all. New refuses a provider
+// that says it is live, and takes the four parts in its place only as the
+// sandbox provider NewProvider would build.
+//
 // # What this package must never do
 //
 //   - Move or represent real value, use a public stablecoin's name or brand,

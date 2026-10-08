@@ -31,10 +31,12 @@
 //     recorded by the run, funding those recorded by the interval's end, the
 //     final settlement those recorded by expiry -- so nobody chooses an
 //     expiry or a funding price with hindsight.
-//   - Trading (fill.go, intents.go). OpenPosition and ClosePosition are paper
-//     fills at a fresh mark plus disclosed slippage, applied by executeFill,
-//     the one path a trade takes (unexported: nothing outside the package
-//     applies a fill). A fill is accepted only on the Risk V2 decision that
+//   - Trading (fill.go, intents.go, execution.go). OpenPosition and
+//     ClosePosition ask the execution adapter ("Execution" below) how the
+//     order executes -- for the paper venue, a fill at the mark plus the
+//     disclosed slippage -- and apply its answer through executeFill, the one
+//     path a trade takes (unexported: nothing outside the package applies a
+//     fill). A fill is accepted only on the Risk V2 decision that
 //     allowed exactly it -- an ALLOW for its own account, intent and
 //     instrument under the DERIVATIVES capability, made no later than the
 //     fill, backing no other trade (DV006). Every intent-driven operation
@@ -103,6 +105,41 @@
 //   - Reconciliation kind CLEARING (clearing.go): the clearing house's books
 //     against the cash-flow register.
 //
+// # Execution
+//
+// DerivativesExecutionAdapter is where a derivative order executes (advanced
+// goal §27). It sits at the seam OpenPosition and ClosePosition always priced
+// through: asked once per order, inside the order's transaction and under the
+// clearing house's lock, before the risk kernel decides; the kernel judges the
+// order at exactly the adapter's price and the fill applies exactly that
+// price. Every answer is checked against the contract (Execution.Check) before
+// anything is priced at it: a trade source, no more slippage than the
+// customer was told, a price on the tick grid that is never better than the
+// mark for the customer and never worse than the mark moved by the slippage.
+//
+// Its one implementation is the paper venue, and its mode is sandbox. A
+// deterministic in-process simulation is fake where it fakes an external
+// system; the paper venue fakes no venue. Derivatives here are novated to
+// Nodal's own SIMULATED clearing house, and a paper fill -- the mark moved
+// against the customer by the disclosed slippage, rounded onto the tick grid
+// against the customer, recorded on the fill as PAPER -- is that clearing
+// house's execution: the sandbox itself, not a stand-in for an exchange
+// somewhere else. A partner venue's test environment would be another sandbox
+// implementation, and it would need the two-phase seam equities has, because
+// this one is inside a transaction; a fake would be a test double of such a
+// venue, and none is built here.
+//
+// NewExecutionAdapter refuses live in every environment, before it looks at
+// the environment (DERIVATIVES has no LIVE: gates.AdvancedSpecs); refuses
+// fake where the environment refuses fakes (STAGING, PROD) and, where it
+// allows them, because no fake venue exists; and builds the paper venue in
+// sandbox mode in every environment -- in STAGING and PROD the DERIVATIVES
+// gate must still be ACTIVE before an order reaches it. The binaries ask for
+// ExecutionModeFor(env), which is sandbox: nothing configures the mode
+// (Providers.Execution names the spot router and the equities broker, never
+// this venue). NewService refuses an adapter that says it is live; without
+// one, it executes on the paper venue, the adapter every environment builds.
+//
 // # Concurrency
 //
 // Every operation that can move value through the clearing house -- trades,
@@ -120,7 +157,8 @@
 //
 //   - Move real value. Every asset it settles in is SIMULATED (Spec refuses
 //     anything else, the database refuses it again), and LIVE is not a mode
-//     it implements.
+//     it implements: no execution adapter is live, and none is accepted.
+//   - Price a trade at an execution that breaks the execution contract.
 //   - Post a cash flow that does not pass through the clearing house, or one
 //     that is missing from the cash-flow register (the database refuses the
 //     register row that disagrees with its journal, DV004).
