@@ -20,12 +20,12 @@ packages named; `go run ./scripts/inttest -pkg '^\./internal/<pkg>$'` runs a pac
 
 | # | Threat | Subsystem | Status of this entry |
 |---|---|---|---|
-| 1 | Stable mint compromise | `internal/stableasset` | written when the stable-asset subsystem merges |
-| 2 | Reserve falsification | `internal/stableasset` | written when the stable-asset subsystem merges |
+| 1 | Stable mint compromise | `internal/stableasset`, `internal/sandboxchain` | below |
+| 2 | Reserve falsification | `internal/stableasset`, ledger | below |
 | 3 | Margin bypass | `internal/margin` | below |
 | 4 | Liquidation manipulation | `internal/margin` | below |
 | 5 | Mark-price manipulation | valuation, `internal/margin`, `internal/derivatives` | below |
-| 6 | Matching-engine race | `internal/matching`, `internal/orders` | engine below; persistent book when `internal/orders` merges |
+| 6 | Matching-engine race | `internal/matching`, `internal/orders` | below (engine and persistent book) |
 | 7 | Transfer replay | `internal/transfers` | below |
 | 8 | House/customer asset commingling | ledger, `internal/econ` | below (treasury book when it merges) |
 | 9 | Fee manipulation | `internal/fees`, fee ledger | written when the fee ledger merges |
@@ -34,11 +34,69 @@ packages named; `go run ./scripts/inttest -pkg '^\./internal/<pkg>$'` runs a pac
 | 12 | Agent capability escalation | kernel, settlement compiler, delegation | kernel below; delegation when it merges |
 | 13 | Signing transaction substitution | delegation | written when delegated signing merges |
 | 14 | Withdrawal address substitution | delegation | written when delegated withdrawals merge |
-| 15 | Bridge double counting | `internal/bridge` | written when the bridge merges |
+| 15 | Bridge double counting | `internal/bridge`, buying power V2 | below |
 | 16 | Oracle manipulation | `internal/predmarket`, `internal/derivatives` | below |
 | 17 | Prediction resolution corruption | `internal/predmarket` | below |
 
 ---
+
+## 1. Stable mint compromise
+
+- **Asset:** the platform stable asset's supply: every unit minted is a claim on the reserve.
+- **Attacker:** a customer minting without paying, an insider or compromised process asking the issuer to sign
+  a mint nobody booked, or a binary configured with the wrong keys.
+- **Entry point:** the mint workflow (`stableasset.Service.Mint` / `PrepareMint`) and the issuer signer.
+- **Privilege needed:** `sandbox:stable` for a customer mint; process access for the signer.
+- **Attack:** mint more than the reserve backs or the cap allows; mint without the reserve payment; get the
+  issuer to sign a transaction other than the planned one; submit twice; mint with keys the chain does not
+  know.
+- **Controls:** the mint authority key lives only in `IssuerSigner`, which signs exactly the hashed mint plan
+  after `InspectMintTransaction` verifies the transaction is that plan (instruction, mint, recipient, amount,
+  memo = plan hash, signer set, fee payer); admission is fully reserved under the asset's row lock and again in
+  the posting transaction; the database refuses at COMMIT supply above the cap (SV003), an issuance without
+  its full eligible cash-equivalent backing (SV004) and any illegal request transition (SV001); the reserve
+  payment is a capital reservation consumed only by the posting; the posting happens only after finality;
+  the submission is recorded before it happens, so a timeout is UNKNOWN and reconciled, never resubmitted;
+  every key derives from one configured seed through `internal/sandboxchain`, and a binary with another seed
+  fails closed when it opens the network (the host's genesis pins the attester). Out-of-band mints are caught
+  by supply reconciliation, which trips the breaker.
+- **Residual risk:** the issuer signer is in-process: a compromise of the process that holds the seed can sign
+  planned-looking mints, which reconciliation detects after the fact rather than prevents (an HSM or a remote
+  signer is the production answer, ADR-0020). Values are SIMULATED.
+- **Tests:** `TestIssuerSigner_SignsExactlyThePlannedMint`, `TestInspection_RefusesEveryDeviationFromThePlan`,
+  `TestSigners_NeverRevealTheirKeys`, `TestIntegration_SupplyCannotExceedThePolicyCap`,
+  `TestIntegration_TheDatabaseRefusesUnderReservedIssuanceAndOverpayingRedemption`,
+  `TestIntegration_ConcurrentMintsPreserveTheInvariants`, `TestIntegration_ADuplicateMintRequestIsIdempotent`,
+  `TestIntegration_AnUnknownSubmissionIsReconciledNotRetried`, `TestIntegration_ReconciliationDetectsAnOutOfBandMint`
+  (`internal/stableasset`); `TestIntegration_AWrongSeedFailsClosedOnAnExistingNetwork`,
+  `TestDerive_TheDerivationIsPinned` (`internal/sandboxchain`); demo Scenarios A and I.
+
+## 2. Reserve falsification
+
+- **Asset:** the published claim that the stable asset is fully reserved.
+- **Attacker:** an operator or process that wants the reserve to look larger, or the supply smaller, than it is.
+- **Entry point:** the reserve ledger, the supply reconciliation and the signed reserve snapshots.
+- **Privilege needed:** operator, or write access to the snapshot table.
+- **Attack:** count a customer's pending payment as reserve as well as a receivable; value a cash equivalent
+  above par; publish a snapshot that misstates supply or reserve; rewrite an old snapshot; hide units held
+  outside customer wallets.
+- **Controls:** the reserve ledger states every figure's origin and counts a pending mint's payment once (as a
+  receivable, then as reserve after the posting); a cash equivalent is valued at the lower of its fresh price
+  and par, times its eligibility factor, and an unpriced reserve counts zero; coverage rounds down, deviation
+  rounds up; snapshots are canonical JSON, Ed25519-signed by the snapshot signer, hash-linked to their
+  predecessor and append-only — the database refuses one that does not extend the chain (SV007) and any
+  update; supply reconciliation compares outstanding supply with every holding of the asset on the ledger
+  (`ledger.HoldingCodes`: wallets, collateral, bridge escrow, house inventory, collected fees) and with the
+  chain's supply, and a mismatch opens a material STABLE_RESERVE record that blocks new risk and trips the
+  breaker.
+- **Residual risk:** the snapshot signer key has the same in-process exposure as the issuer key (threat 1);
+  external attestation by an independent party does not exist in a sandbox.
+- **Tests:** `TestIntegration_ReserveCannotBeDoubleCounted`, `TestCapAtPar_ACashEquivalentIsNeverWorthMoreThanADollar`,
+  `TestRatios_CoverageRoundsDownAndDeviationRoundsUp`, `TestIntegration_SnapshotsAreSignedHashLinkedAndVerifiable`,
+  `TestVerifySnapshotChain_DetectsEveryKindOfTampering`, `TestIntegration_AReserveShortfallFreezesIssuance`,
+  `TestIntegration_SupplyReconcilesWhereverTheUnitsAreHeld`, `TestProp_SupplyNeverExceedsEligibleReserve`
+  (`internal/stableasset`); `TestHoldingCodes_EveryCodeIsClassifiedOnPurpose` (`internal/ledger`); demo
+  Scenarios A and G.
 
 ## 3. Margin bypass
 
@@ -108,7 +166,7 @@ packages named; `go run ./scripts/inttest -pkg '^\./internal/<pkg>$'` runs a pac
   `TestHaircut_StaleMissingFutureOrStuckIsWorthless`, `TestEvaluate_StaleMarkIsZeroCollateralAndCallsMargin`
   (`internal/margin`); `TestIntegration_AMarkValuedAssetFailsClosedWithoutAFreshMark` (`internal/transfers`).
 
-## 6. Matching-engine race (engine)
+## 6. Matching-engine race
 
 - **Asset:** resting orders and the fills they produce.
 - **Attacker:** a participant submitting, cancelling or replacing orders concurrently or replaying them.
@@ -120,10 +178,25 @@ packages named; `go run ./scripts/inttest -pkg '^\./internal/<pkg>$'` runs a pac
   command; price-time priority through a FIFO per price level; every filled quantity is bounded by what was
   submitted; self-trade prevention; an order id is consumed by its first submission whatever the outcome, so a
   retry cannot create a second order; the journal replays to byte-identical events and the same state hash.
-- **Residual risk:** persistence, reservations and posting of fills belong to the persistent book
-  (`internal/orders`), whose controls are added here when it merges.
-- **Tests:** matching property and replay tests in `internal/matching`; `make perf-advanced` measures replay
-  determinism (full replay and snapshot + tail reproduce the live state hash).
+- **Controls (persistent book, `internal/orders`):** every command is journaled with its sequence and the
+  state hash after it, and the database refuses a journal row that does not extend the book's cursor (OB001,
+  OB002) or a snapshot whose hash is not the one the journal recorded (OB005); the order status machine is
+  enforced in SQL with every change bound to a transition row (OB003, OB004), and the database refuses an
+  overfill, a self-trade, an unruled house/customer crossing and a duplicate client order id; each order's
+  funds are a capital reservation consumed only by its fills, so concurrent buys cannot overspend a wallet;
+  a book's row lock serializes its commands across processes, and the in-memory engine is a cache checked
+  against the journal on every command; a crash after execution is completed by the sweep; every fill posts
+  one SIM_TRADE with an exactly-once effect and archived evidence.
+- **Residual risk:** one book is one serialization point (throughput is bounded per instrument, measured in
+  `make perf-advanced`); kill switches stop new orders but resting orders stay until cancelled.
+- **Tests:** matching property and replay tests in `internal/matching`;
+  `TestIntegration_TheDatabaseRefusesABrokenJournal`, `TestIntegration_TheDatabaseRefusesOverfillAndIllegalOrderStates`,
+  `TestIntegration_TheDatabaseRefusesSelfTradesUnruledCrossingAndDuplicateClientIDs`,
+  `TestIntegration_ConcurrentBuysCannotOverspendTheWallet`, `TestIntegration_CancelRaceHasExactlyOneOutcome`,
+  `TestIntegration_ConcurrentSubmitsReplayToTheLiveStateHash`, `TestIntegration_ACrashAfterExecuteIsCompletedBySweep`,
+  `TestProp_QuantitiesAreConservedAndNoOrderOverfillsThroughTheService`,
+  `TestProp_NoCrossedRestingBookAfterEveryCommandThroughTheService` (`internal/orders`); `make perf-advanced`
+  measures replay determinism; demo Scenarios D and H.
 
 ## 7. Transfer replay
 
@@ -219,6 +292,34 @@ packages named; `go run ./scripts/inttest -pkg '^\./internal/<pkg>$'` runs a pac
 - **Tests:** `TestRoute_TheCompilerForbidsAgentTransfersAtEveryLevel`, `TestIntegration_AnAgentNeverTransfersAndTheCompilerAgrees`
   (`internal/transfers`); `TestNoOperationAdmitsAnAgent` (`internal/httpapi`); `TestIntegration_AnAgentCannotTouchTheMarketplace`
   (`internal/marketplace`); `TestProp_NoStrategyOutputBecomesATransferOrWithdrawal` (`internal/sandboxrt`).
+
+## 15. Bridge double counting
+
+- **Asset:** cross-chain buying power and the bridged twin's supply.
+- **Attacker:** a customer who wants the same value counted on both chains, an attester or relayer that
+  releases twice, or a reorg that undoes a lock after its release.
+- **Entry point:** the bridge workflow (`bridge.Service.Bridge`, release attempts, refunds) and buying power V2.
+- **Privilege needed:** `sandbox:bridge` for a customer; process access for the attester.
+- **Attack:** spend source value that is locked and in flight; get a release minted twice or after a refund;
+  count in-flight value as final collateral; release on a lock a reorg removed.
+- **Controls:** the leg moves AVAILABLE → RESERVED → BRIDGE_REQUESTED → SOURCE_FINALIZED → MESSAGE_IN_FLIGHT →
+  DESTINATION_FINALIZED → RECONCILED along a status machine the database enforces (BR001) with frozen
+  identity (BR002); every bridge journal is bound to exactly one leg (BR005) and preserves the route's
+  conservation identity (BR003): locked on the source = twins outstanding on the destination; the attester
+  signs exactly the release its plan names, and a release is minted at most once; a release is attempted only
+  after the lock is final, and finality never reverts; in-flight value is BRIDGE_IN_FLIGHT, which buying power
+  counts only at the policy's haircut (zero by default) and which `ledger.HoldingCodes` treats as a mirror of
+  the bridge's BRIDGE_LOCKED, so supply reconciliation counts the units once; route reconciliation compares the
+  ledger with both chains and pauses the route on a mismatch.
+- **Residual risk:** the attester is one key (no multi-party attestation in the sandbox); a release stuck
+  beyond its attempt budget goes to manual review.
+- **Tests:** `TestIntegration_ABridgeMovesValueOnceAndReconciles`, `TestIntegration_ADuplicateReleaseMintsNothingTwice`,
+  `TestIntegration_ConcurrentDuplicatesSettleOnce`, `TestIntegration_AReorgNeverRevertsFinalityOrDoubleCounts`,
+  `TestIntegration_ADelayedBridgeCreatesNoPhantomCapital`, `TestProp_IntegrationNoDoubleCounting`,
+  `TestProp_EachLegIsCountedOnceWhereItsValueIs`, `TestIntegration_TheDatabaseRefusesBridgeBookkeepingBypasses`,
+  `TestIntegration_BridgeReconciliationDetectsAnOutOfBandLock`, `TestAttester_SignsExactlyTheExpectedRelease`
+  (`internal/bridge`); `TestIntegration_SupplyReconcilesWhereverTheUnitsAreHeld` (`internal/stableasset`); demo
+  Scenario G.
 
 ## 16. Oracle manipulation (prediction markets and derivatives)
 

@@ -357,6 +357,50 @@ var operationPolicies = map[string]operationPolicy{
 	"PostAdvancedPredictionMarketsMarketIdSettle":             {AnyOf: perms(security.PermSandboxResolve), StepUp: true, Mutating: true},
 
 	// >>> advanced:marketplace operations
+	//
+	// The catalogue and a listing are read under the read permissions; what a
+	// reader sees of a listing that is not public is decided per request (its
+	// creator's account, or an operator who may read any account). Creating,
+	// versioning, forking, submitting and simulating one's own strategies,
+	// installing in PAPER, following and recording performance are the
+	// customer's own writes under sandbox:strategy, scoped per request to an
+	// account the principal owns. Validation (a build that holds a lock),
+	// review, moderation and deprecation are operator decisions with step-up;
+	// the service additionally refuses a reviewer who created the strategy.
+	"GetAdvancedStrategiesCatalog":                       {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedStrategiesListings":                      {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"PostAdvancedStrategiesListings":                     {AnyOf: perms(security.PermSandboxStrategy), Mutating: true},
+	"GetAdvancedStrategiesListingsListingId":             {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"PostAdvancedStrategiesListingsListingIdVersions":    {AnyOf: perms(security.PermSandboxStrategy), Mutating: true},
+	"PostAdvancedStrategiesVersionsVersionIdForks":       {AnyOf: perms(security.PermSandboxStrategy), Mutating: true},
+	"PostAdvancedStrategiesVersionsVersionIdSubmit":      {AnyOf: perms(security.PermSandboxStrategy), Mutating: true},
+	"PostAdvancedStrategiesVersionsVersionIdSimulations": {AnyOf: perms(security.PermSandboxStrategy), Mutating: true},
+	"PostAdvancedStrategiesVersionsVersionIdValidate": {
+		AnyOf: perms(security.PermSandboxOperate, security.PermSandboxResolve), StepUp: true, Mutating: true,
+	},
+	"PostAdvancedStrategiesVersionsVersionIdReview": {
+		AnyOf: perms(security.PermSandboxOperate, security.PermSandboxResolve), StepUp: true, Mutating: true,
+	},
+	"PostAdvancedStrategiesVersionsVersionIdApprove": {
+		AnyOf: perms(security.PermSandboxOperate, security.PermSandboxResolve), StepUp: true, Mutating: true,
+	},
+	"PostAdvancedStrategiesVersionsVersionIdReject": {
+		AnyOf: perms(security.PermSandboxOperate, security.PermSandboxResolve), StepUp: true, Mutating: true,
+	},
+	"PostAdvancedStrategiesVersionsVersionIdModeration": {
+		AnyOf: perms(security.PermSandboxOperate, security.PermSandboxResolve), StepUp: true, Mutating: true,
+	},
+	"PostAdvancedStrategiesVersionsVersionIdDeprecate": {
+		AnyOf: perms(security.PermSandboxOperate, security.PermSandboxResolve), StepUp: true, Mutating: true,
+	},
+	"GetAdvancedStrategiesReviewQueue":                   {AnyOf: perms(security.PermSandboxOperate, security.PermSandboxResolve)},
+	"GetAdvancedStrategiesInstalls":                      {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"PostAdvancedStrategiesInstalls":                     {AnyOf: perms(security.PermSandboxStrategy), Mutating: true},
+	"PostAdvancedStrategiesInstallsInstallIdRemove":      {AnyOf: perms(security.PermSandboxStrategy), Mutating: true},
+	"PostAdvancedStrategiesInstallsInstallIdFollows":     {AnyOf: perms(security.PermSandboxStrategy), Mutating: true},
+	"PostAdvancedStrategiesInstallsInstallIdPerformance": {AnyOf: perms(security.PermSandboxStrategy), Mutating: true},
+	"GetAdvancedStrategiesFollows":                       {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedStrategiesRuns":                          {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
 
 	// >>> advanced:delegation operations
 

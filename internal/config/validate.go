@@ -6,17 +6,24 @@ import (
 	"math/big"
 	"net"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/nodal/controlplane/internal/ratelimit"
 )
 
+// devnetNetworkPattern is the devnet host's network name rule
+// (internal/devnethost Config.Validate), checked here too so a bad name fails
+// at startup rather than when the chain is first opened.
+var devnetNetworkPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
+
 // Rule names a validation rule. Every Violation carries one so that tests and
 // operators can identify exactly which rule failed.
 type Rule string
 
 // Rules applied in every environment.
+
 const (
 	// RuleField is a basic well-formedness violation (empty, unparsable,
 	// out of range).
@@ -548,6 +555,18 @@ func (c *Config) Validate() error {
 	// ---- seed --------------------------------------------------------------
 	if prodLike && c.Seed.Enabled {
 		add(RuleNoSeed, "Seed.Enabled", "must be false in STAGING/PROD")
+	}
+
+	// ---- sandbox chains ----------------------------------------------------
+	// The network and the seed come together or not at all: a network with
+	// no seed cannot sign, and a seed with no network names nothing.
+	switch {
+	case c.Sandbox.DevnetNetwork != "" && !devnetNetworkPattern.MatchString(c.Sandbox.DevnetNetwork):
+		add(RuleField, "Sandbox.DevnetNetwork", "must be 1..63 of [a-z0-9-], starting with a letter or digit")
+	case c.Sandbox.DevnetNetwork != "" && c.Sandbox.DevnetSeedRef.IsZero():
+		add(RuleField, "Sandbox.DevnetSeedRef", "must be set when Sandbox.DevnetNetwork is")
+	case c.Sandbox.DevnetNetwork == "" && !c.Sandbox.DevnetSeedRef.IsZero():
+		add(RuleField, "Sandbox.DevnetNetwork", "must be set when Sandbox.DevnetSeedRef is")
 	}
 
 	// ---- retention ---------------------------------------------------------

@@ -55,6 +55,10 @@ var inScope = []string{
 	"docs/audit/INDEPENDENT_AUDIT.md",
 	"docs/build/MASTER_BUILD_STATE.md",
 	"docs/build/ADVERSARIAL_VALIDATION.md",
+	// The advanced capabilities (ADR-0020): every control a threat entry or a
+	// capability row claims is proven by a test it names.
+	"docs/threat-model/ADVANCED_THREAT_MODEL.md",
+	"docs/build/ADVANCED_CAPABILITIES_MATRIX.md",
 }
 
 var (
