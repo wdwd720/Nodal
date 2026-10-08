@@ -38,6 +38,7 @@ import (
 	"github.com/nodal/controlplane/internal/derivatives"
 	"github.com/nodal/controlplane/internal/devnethost"
 	"github.com/nodal/controlplane/internal/econ"
+	"github.com/nodal/controlplane/internal/equities"
 	"github.com/nodal/controlplane/internal/event"
 	"github.com/nodal/controlplane/internal/feeledger"
 	"github.com/nodal/controlplane/internal/gates"
@@ -94,8 +95,9 @@ type World struct {
 	Capital    *capital.Service
 
 	// FeeLedger books every fee and spread the services charge: the internal
-	// book's maker and taker fees and margin's liquidation fee are disclosed
-	// and booked through it in the charging transaction.
+	// book's maker and taker fees, margin's liquidation fee and an equity
+	// fill's spread and fees are disclosed and booked through it in the
+	// charging transaction.
 	FeeLedger   *feeledger.Service
 	Transfers   *transfers.Service
 	Faucet      *sandboxfund.Faucet
@@ -113,6 +115,9 @@ type World struct {
 	// Predictions.RecordObservation and stored in the database.
 	Predictions *predmarket.Service
 	Oracle      *predmarket.SandboxOracle
+	// Equities runs paper equities on the deterministic paper venue, every
+	// fill's spread and fees booked through FeeLedger (equities.go).
+	Equities *equities.Service
 
 	// Host is the persistent simulated chain host (sbx-solana and
 	// sbx-ethereum, journaled in the database). Custody holds the
@@ -158,6 +163,10 @@ func Open(ctx context.Context, o Options) (*World, error) {
 	}
 	w, err := wire(d, o)
 	if err != nil {
+		d.Close()
+		return nil, err
+	}
+	if err := w.wireEquities(ctx); err != nil {
 		d.Close()
 		return nil, err
 	}

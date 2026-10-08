@@ -25,6 +25,7 @@ import (
 	"github.com/nodal/controlplane/internal/equities"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/event"
+	"github.com/nodal/controlplane/internal/feeledger"
 	"github.com/nodal/controlplane/internal/fees"
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/gen/api"
@@ -84,15 +85,24 @@ func TestIntegration_EquitiesBuySettlesTPlusOneThroughHTTP(t *testing.T) {
 		Name: "nodal-paper-equities", Calendar: cal, SlippageBPS: 10,
 	})
 	require.NoError(t, err)
+	capitalSvc := capital.NewService(clk, capital.OutboxEmitter{Outbox: outbox, Clock: clk})
+	// The fee ledger every fill's spread and fees are booked through, as
+	// cmd/api builds it.
+	feeLedger, err := feeledger.NewService(feeledger.Config{
+		Clock: clk, Ledger: led, Capital: capitalSvc, Effects: econ.NewEffectStore(clk, outbox, aw),
+		Authorizer: econ.NewAuthorizer(checker, kills), Assets: assets.NewRepository(), Audit: aw,
+	})
+	require.NoError(t, err)
 	svc, err := equities.NewService(equities.Config{
 		Clock: clk, Intents: econ.NewIntentStore(clk, outbox, aw), Effects: econ.NewEffectStore(clk, outbox, aw),
 		Authorizer: econ.NewAuthorizer(checker, kills), KillSwitches: kills, Router: router,
-		RiskPolicy: risk.DefaultAdvancedPolicy(), Capital: capital.NewService(clk, capital.OutboxEmitter{Outbox: outbox, Clock: clk}),
+		RiskPolicy: risk.DefaultAdvancedPolicy(), Capital: capitalSvc,
 		Ledger: led, Prices: prices, Audit: aw, Adapter: venue,
 		Schedules: []fees.Schedule{{
 			Version: "equities-sandbox-v1", QuoteAsset: econ.SandboxDollarID(), QuoteDecimals: econ.SandboxDollarDecimals,
 			SpreadBPS: 10, PercentageFeeBPS: 10, StrategyFeeBPS: 5, SlippageReserveBPS: 50, Rounding: fees.DefaultRounding(),
 		}},
+		FeeLedger:       feeLedger,
 		MarketCollarBPS: 100, MinOrderNotional: money.USDFromMinor(1_00),
 		Verification: AdvancedVerificationLevels{Rule: compliance.NewAccountVerification(clk)},
 	})
@@ -155,8 +165,10 @@ func TestIntegration_EquitiesBuySettlesTPlusOneThroughHTTP(t *testing.T) {
 	mark := func(cents int64) {
 		t.Helper()
 		clk.Advance(time.Second)
-		_, err := prices.RecordPrice(ctx, d, valuation.PriceObservation{AssetID: shareAsset, QuoteAssetID: usd,
-			Mantissa: money.QuantityFromInt64(cents), Scale: 2, Source: "httpapi-itest", ObservedAt: clk.Now().Add(-time.Second)})
+		_, err := prices.RecordPrice(ctx, d, valuation.PriceObservation{
+			AssetID: shareAsset, QuoteAssetID: usd,
+			Mantissa: money.QuantityFromInt64(cents), Scale: 2, Source: "httpapi-itest", ObservedAt: clk.Now().Add(-time.Second),
+		})
 		require.NoError(t, err)
 	}
 	mark(15_000)
@@ -434,8 +446,10 @@ func TestIntegration_EquitiesBuySettlesTPlusOneThroughHTTP(t *testing.T) {
 	assert.True(t, closure, "the recorded holiday is in the calendar")
 
 	// --- a two-for-one split applies to the settled holding, once ---------------------
-	split := map[string]any{"instrument_id": inst, "type": "SPLIT", "ratio": map[string]any{"numerator": 2, "denominator": 1},
-		"effective_date": "2026-10-09", "reason": "itest two-for-one split"}
+	split := map[string]any{
+		"instrument_id": inst, "type": "SPLIT", "ratio": map[string]any{"numerator": 2, "denominator": 1},
+		"effective_date": "2026-10-09", "reason": "itest two-for-one split",
+	}
 	res = post(operator, base+"/corporate-actions", split, key("split"))
 	require.Equal(t, http.StatusCreated, res.Code, "body=%s", res.Body.String())
 	var splitAction api.AdvancedEquityCorporateAction

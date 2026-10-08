@@ -26,6 +26,7 @@ import (
 	"github.com/nodal/controlplane/internal/db/migrate"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/event"
+	"github.com/nodal/controlplane/internal/feeledger"
 	"github.com/nodal/controlplane/internal/fees"
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/instruments"
@@ -102,19 +103,21 @@ func (e capitalEmitter) Emit(ctx context.Context, tx pgx.Tx, topic string, paylo
 // dollar (so platform revenue accounts are the test's alone), the real
 // services over the shared test database.
 type world struct {
-	t        *testing.T
-	ctx      context.Context
-	clk      *clock.Fake
-	svc      *Service
-	venue    *PaperVenue
-	ledger   *ledger.Service
-	capital  *capital.Service
-	prices   *valuation.PriceStore
-	intents  *econ.IntentStore
-	effects  *econ.EffectStore
-	cash     assets.Asset
-	schedule fees.Schedule
-	sys      econ.Actor
+	t       *testing.T
+	ctx     context.Context
+	clk     *clock.Fake
+	svc     *Service
+	venue   *PaperVenue
+	ledger  *ledger.Service
+	capital *capital.Service
+	prices  *valuation.PriceStore
+	intents *econ.IntentStore
+	effects *econ.EffectStore
+	// feeLedger is the fee ledger every fill's charges are booked through.
+	feeLedger *feeledger.Service
+	cash      assets.Asset
+	schedule  fees.Schedule
+	sys       econ.Actor
 }
 
 type worldOption func(*Config)
@@ -176,11 +179,20 @@ func newWorld(t *testing.T, opts ...worldOption) *world {
 	for _, o := range opts {
 		o(&cfg)
 	}
+	// The fee ledger as cmd/api builds it, over the same authorizer: a kill
+	// switch an option wires stops what it would stop in a deployment.
+	cfg.FeeLedger, err = feeledger.NewService(feeledger.Config{
+		Clock: clk, Ledger: led, Capital: capSvc, Effects: effects, Authorizer: cfg.Authorizer, Assets: assets.NewRepository(),
+		Audit: aw,
+	})
+	require.NoError(t, err)
 	svc, err := NewService(cfg)
 	require.NoError(t, err)
-	return &world{t: t, ctx: ctx, clk: clk, svc: svc, venue: venue, ledger: led, capital: capSvc,
-		prices: valuation.NewPriceStore(clk), intents: intents, effects: effects, cash: cash, schedule: sch,
-		sys: econ.Actor{Type: security.ActorOperator, ID: "equities-itest-operator"}}
+	return &world{
+		t: t, ctx: ctx, clk: clk, svc: svc, venue: venue, ledger: led, capital: capSvc,
+		prices: valuation.NewPriceStore(clk), intents: intents, effects: effects, feeLedger: cfg.FeeLedger, cash: cash, schedule: sch,
+		sys: econ.Actor{Type: security.ActorOperator, ID: "equities-itest-operator"},
+	}
 }
 
 func (w *world) inTx(fn func(ctx context.Context, tx pgx.Tx) error) error {
@@ -237,8 +249,10 @@ func (w *world) post(kind ledger.Kind, entries []ledger.Entry) ledger.PostResult
 	require.NoError(w.t, w.inTx(func(ctx context.Context, tx pgx.Tx) error {
 		ref := uuid.NewString()
 		var err error
-		res, err = w.ledger.Post(ctx, tx, ledger.Posting{Kind: kind, IdempotencyKey: "itest:" + ref,
-			Reference: ledger.FinancialEventReference{Type: "itest", ID: ref}, EffectiveAt: w.clk.Now(), Entries: entries})
+		res, err = w.ledger.Post(ctx, tx, ledger.Posting{
+			Kind: kind, IdempotencyKey: "itest:" + ref,
+			Reference: ledger.FinancialEventReference{Type: "itest", ID: ref}, EffectiveAt: w.clk.Now(), Entries: entries,
+		})
 		return err
 	}))
 	return res
@@ -256,8 +270,10 @@ func (w *world) fund(acct accounts.AccountID, asset assets.AssetID, qty int64) {
 // mark records the share price (mantissa at scale 2) observed a second ago.
 func (w *world) mark(l Listing, cents int64) {
 	w.t.Helper()
-	_, err := w.prices.RecordPrice(w.ctx, testDB, valuation.PriceObservation{AssetID: l.ShareAsset.ID, QuoteAssetID: w.cash.ID,
-		Mantissa: q(cents), Scale: 2, Source: "itest-feed", ObservedAt: w.clk.Now().Add(-time.Second)})
+	_, err := w.prices.RecordPrice(w.ctx, testDB, valuation.PriceObservation{
+		AssetID: l.ShareAsset.ID, QuoteAssetID: w.cash.ID,
+		Mantissa: q(cents), Scale: 2, Source: "itest-feed", ObservedAt: w.clk.Now().Add(-time.Second),
+	})
 	require.NoError(w.t, err)
 }
 
@@ -296,8 +312,10 @@ func (w *world) request(acct accounts.AccountID, l Listing, s orderSpec) OrderRe
 	if key == "" {
 		key = "itest-" + uuid.NewString()
 	}
-	r := OrderRequest{AccountID: acct, InstrumentID: l.Instrument.ID, Side: s.side, Type: s.typ, Quantity: q(s.qty),
-		ExtendedHours: s.extended, Mode: gates.ModePaper, IdempotencyKey: key, ActorType: security.ActorUser, ActorID: acct.String()}
+	r := OrderRequest{
+		AccountID: acct, InstrumentID: l.Instrument.ID, Side: s.side, Type: s.typ, Quantity: q(s.qty),
+		ExtendedHours: s.extended, Mode: gates.ModePaper, IdempotencyKey: key, ActorType: security.ActorUser, ActorID: acct.String(),
+	}
 	if s.typ == OrderLimit {
 		r.LimitPrice = &PricePoint{Mantissa: q(s.limit), Scale: 2}
 	}

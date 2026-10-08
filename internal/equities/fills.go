@@ -14,6 +14,7 @@ import (
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
+	"github.com/nodal/controlplane/internal/feeledger"
 	"github.com/nodal/controlplane/internal/fees"
 	"github.com/nodal/controlplane/internal/id"
 	"github.com/nodal/controlplane/internal/instruments"
@@ -60,6 +61,10 @@ type fillEvidence struct {
 	FeeScheduleHash      string         `json:"fee_schedule_hash"`
 	FeeDisclosureHash    string         `json:"fee_disclosure_hash"`
 	JournalTransactionID string         `json:"journal_transaction_id"`
+	// FeeScheduleKey and FeeDisclosureID name the fill's disclosure in the fee
+	// ledger, when it charged anything.
+	FeeScheduleKey  string `json:"fee_schedule_key,omitempty"`
+	FeeDisclosureID string `json:"fee_disclosure_id,omitempty"`
 }
 
 // checkFill refuses a venue fill that contradicts the order it is for. The
@@ -129,8 +134,10 @@ func (s *Service) applyFill(ctx context.Context, tx pgx.Tx, o Order, r OrderRepo
 	if err != nil {
 		return Order{}, errs.Wrap(err, errs.CodeValidationFailed, "equities: fill price")
 	}
-	qin := fees.QuoteInput{Side: feeSide(o.Side), BaseQty: vf.Quantity, BaseDecimals: o.QuantityDecimals,
-		QuoteDecimals: l.CashAsset.Decimals, ReferencePrice: ref, StrategyOriginated: in.StrategyRef != ""}
+	qin := fees.QuoteInput{
+		Side: feeSide(o.Side), BaseQty: vf.Quantity, BaseDecimals: o.QuantityDecimals,
+		QuoteDecimals: l.CashAsset.Decimals, ReferencePrice: ref, StrategyOriginated: in.StrategyRef != "",
+	}
 	quote, err := sch.Quote(qin)
 	if err != nil {
 		return Order{}, err
@@ -164,23 +171,39 @@ func (s *Service) applyFill(ctx context.Context, tx pgx.Tx, o Order, r OrderRepo
 	if err != nil {
 		return Order{}, err
 	}
-	entries, err := TradeEntries(o.AccountID, o.Side, l.ShareAsset.ID, l.CashAsset.ID, vf.Quantity, charges)
+	// What is posted is exactly the disclosure's charges, every component on
+	// its own pair: the fee ledger's entries (feebooking.go).
+	charged := feeledger.ChargesOf(disclosure)
+	entries, err := TradeEntries(o.AccountID, o.Side, l.ShareAsset.ID, l.CashAsset.ID, vf.Quantity, charges, charged)
 	if err != nil {
 		return Order{}, err
 	}
 
-	// Consume, claim, post, evidence, apply. The reservation is consumed
-	// first so that every path takes the account's capital lock before its
-	// audit stream lock, as AcceptOrder does.
+	// Consume, disclose, claim, post, evidence, apply, book. The reservation
+	// is consumed first so that every path takes the account's capital lock
+	// before its audit stream lock, as AcceptOrder does.
 	if _, err := s.capital.ConsumeFinal(ctx, tx, *o.ReservationID, consume, 0, o.ID.String()); err != nil {
 		return Order{}, err
+	}
+	// The payer's disclosure is recorded in the fee ledger under the schedule
+	// that priced the fill, byte for byte the one the fill stores. A fill that
+	// charges nothing books nothing.
+	var feeQuote *feeledger.StoredQuote
+	if !charged.IsZero() {
+		fq, err := s.discloseFill(ctx, tx, o, l, sch, qin, discBytes, discHash, now)
+		if err != nil {
+			return Order{}, err
+		}
+		feeQuote = &fq
 	}
 	fillID := id.New[fillKind]()
 	effect, replay, err := s.effects.Begin(ctx, tx, econ.BeginRequest{
 		Key: tradeKey(o.ID), Subsystem: econ.SubsystemEquities, Kind: "EQUITY_TRADE", IntentID: &o.IntentID,
 		AccountID: o.AccountID.String(), PostsLedger: true, Actor: s.actor, CorrelationID: o.CorrelationID,
-		Request: tradeRequest{OrderID: o.ID.String(), Venue: o.Broker, VenueFillID: vf.VenueFillID, Quantity: vf.Quantity,
-			Price: vf.Price, PriceScale: vf.PriceScale, ExecutedAt: vf.ExecutedAt, DisclosureHash: discHash},
+		Request: tradeRequest{
+			OrderID: o.ID.String(), Venue: o.Broker, VenueFillID: vf.VenueFillID, Quantity: vf.Quantity,
+			Price: vf.Price, PriceScale: vf.PriceScale, ExecutedAt: vf.ExecutedAt, DisclosureHash: discHash,
+		},
 	})
 	if err != nil {
 		return Order{}, err
@@ -196,13 +219,15 @@ func (s *Service) applyFill(ctx context.Context, tx pgx.Tx, o Order, r OrderRepo
 		EffectiveAt: vf.ExecutedAt, CorrelationID: o.CorrelationID,
 		Description: "equity " + strings.ToLower(string(o.Side)) + " " + o.Symbol,
 		Entries:     entries,
-		Metadata: map[string]any{"order_id": o.ID.String(), "fill_id": fillID.String(), "venue_fill_id": vf.VenueFillID,
-			"fee_disclosure_hash": discHash},
+		Metadata: map[string]any{
+			"order_id": o.ID.String(), "fill_id": fillID.String(), "venue_fill_id": vf.VenueFillID,
+			"fee_disclosure_hash": discHash,
+		},
 	})
 	if err != nil {
 		return Order{}, err
 	}
-	ev, err := econ.RecordEvidence(ctx, tx, econ.Evidence{Key: "equities/fill/" + o.ID.String(), Document: fillEvidence{
+	evidence := fillEvidence{
 		Kind: "equities.fill.v1", OrderID: o.ID.String(), FillID: fillID.String(), IntentID: o.IntentID.String(),
 		AccountID: o.AccountID.String(), InstrumentID: o.InstrumentID.String(), Side: o.Side, OrderType: o.Type,
 		Venue: o.Broker, VenueFillID: vf.VenueFillID, Quantity: vf.Quantity, Price: vf.Price, PriceScale: vf.PriceScale,
@@ -210,7 +235,11 @@ func (s *Service) applyFill(ctx context.Context, tx pgx.Tx, o Order, r OrderRepo
 		SettlementDate: settleDate.String(), RiskDecisionID: decisionString(o), Notional: charges.Notional,
 		Spread: charges.Spread, PlatformFees: charges.PlatformFees, VenueFees: charges.VenueFees, Total: charges.Total,
 		FeeScheduleHash: quote.ScheduleHash, FeeDisclosureHash: discHash, JournalTransactionID: posted.TransactionID.String(),
-	}})
+	}
+	if feeQuote != nil {
+		evidence.FeeScheduleKey, evidence.FeeDisclosureID = feeQuote.ScheduleKey, feeQuote.ID.String()
+	}
+	ev, err := econ.RecordEvidence(ctx, tx, econ.Evidence{Key: "equities/fill/" + o.ID.String(), Document: evidence})
 	if err != nil {
 		return Order{}, err
 	}
@@ -219,6 +248,13 @@ func (s *Service) applyFill(ctx context.Context, tx pgx.Tx, o Order, r OrderRepo
 		Evidence: &ev, Actor: s.actor, Reason: "equity fill posted",
 	}); err != nil {
 		return Order{}, err
+	}
+	// The charges posted inside the fill's journal are registered against it
+	// and the effect that applied it (FW001 refuses the fill without them).
+	if feeQuote != nil {
+		if err := s.bookFill(ctx, tx, o, *feeQuote, posted.TransactionID, effect.ID); err != nil {
+			return Order{}, err
+		}
 	}
 	fill, err := insertFill(ctx, tx, Fill{
 		ID: fillID, OrderID: o.ID, AccountID: o.AccountID, InstrumentID: o.InstrumentID, Side: o.Side, Quantity: vf.Quantity,
@@ -241,8 +277,10 @@ func (s *Service) applyFill(ctx context.Context, tx pgx.Tx, o Order, r OrderRepo
 	}); err != nil {
 		return Order{}, err
 	}
-	out, err := transitionOrder(ctx, tx, o, orderTransition{to: OrderFilled, actor: s.actor, reason: "filled at the venue",
-		brokerOrderID: r.BrokerOrderID}, now)
+	out, err := transitionOrder(ctx, tx, o, orderTransition{
+		to: OrderFilled, actor: s.actor, reason: "filled at the venue",
+		brokerOrderID: r.BrokerOrderID,
+	}, now)
 	if err != nil {
 		return Order{}, err
 	}
@@ -491,8 +529,10 @@ func (s *Service) SettleDueBatch(ctx context.Context, tx pgx.Tx, limit int) (Set
 			return SettlementBatch{}, err
 		}
 		if failed != nil {
-			out.Failures = append(out.Failures, SettlementFailure{SettlementID: st.ID, FillID: st.FillID, AccountID: st.AccountID,
-				Attempts: failed.attempts, RetryAfter: failed.retryAfter, Err: failed.err})
+			out.Failures = append(out.Failures, SettlementFailure{
+				SettlementID: st.ID, FillID: st.FillID, AccountID: st.AccountID,
+				Attempts: failed.attempts, RetryAfter: failed.retryAfter, Err: failed.err,
+			})
 			continue
 		}
 		out.Settled = append(out.Settled, settled)
@@ -510,8 +550,10 @@ func (s *Service) settleOne(ctx context.Context, tx pgx.Tx, st Settlement, now t
 	effect, replay, err := s.effects.Begin(ctx, tx, econ.BeginRequest{
 		Key: key, Subsystem: econ.SubsystemEquities, Kind: "EQUITY_SETTLEMENT", IntentID: &o.IntentID,
 		AccountID: st.AccountID.String(), PostsLedger: true, Actor: s.actor, CorrelationID: o.CorrelationID,
-		Request: settlementRequest{SettlementID: st.ID.String(), FillID: st.FillID.String(), AssetID: st.AssetID.String(),
-			Quantity: st.Quantity, DueDate: st.DueDate.String()},
+		Request: settlementRequest{
+			SettlementID: st.ID.String(), FillID: st.FillID.String(), AssetID: st.AssetID.String(),
+			Quantity: st.Quantity, DueDate: st.DueDate.String(),
+		},
 	})
 	if err != nil {
 		return Settlement{}, err
@@ -544,8 +586,10 @@ func (s *Service) settleOne(ctx context.Context, tx pgx.Tx, st Settlement, now t
 	if err != nil {
 		return Settlement{}, err
 	}
-	if _, err := s.effects.Apply(ctx, tx, effect.ID, econ.ApplyRequest{JournalTransactionID: &posted.TransactionID,
-		Evidence: &ev, Actor: s.actor, Reason: "settled"}); err != nil {
+	if _, err := s.effects.Apply(ctx, tx, effect.ID, econ.ApplyRequest{
+		JournalTransactionID: &posted.TransactionID,
+		Evidence:             &ev, Actor: s.actor, Reason: "settled",
+	}); err != nil {
 		return Settlement{}, err
 	}
 	out, err := scanSettlement(tx.QueryRow(ctx, `UPDATE equity_settlements SET settled_at = $2, journal_transaction_id = $3
@@ -557,6 +601,8 @@ func (s *Service) settleOne(ctx context.Context, tx pgx.Tx, st Settlement, now t
 		return Settlement{}, err
 	}
 	return out, s.record(ctx, tx, audit.AccountStream(st.AccountID.String()), "equities.settlement.settled", "equity_settlement",
-		st.ID.String(), "settled", map[string]string{"fill_id": st.FillID.String(), "quantity": st.Quantity.String(),
-			"due_date": st.DueDate.String(), "journal_transaction_id": posted.TransactionID.String()})
+		st.ID.String(), "settled", map[string]string{
+			"fill_id": st.FillID.String(), "quantity": st.Quantity.String(),
+			"due_date": st.DueDate.String(), "journal_transaction_id": posted.TransactionID.String(),
+		})
 }

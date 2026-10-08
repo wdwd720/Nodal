@@ -12,6 +12,7 @@ import (
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/errs"
+	"github.com/nodal/controlplane/internal/feeledger"
 	"github.com/nodal/controlplane/internal/fees"
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/money"
@@ -44,9 +45,31 @@ func drawSchedule(rt *rapid.T) fees.Schedule {
 	return s
 }
 
+func btoi(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// sameEntries reports whether a and b are the same entries in the same order.
+func sameEntries(a, b []ledger.Entry) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Account != b[i].Account || a[i].Side != b[i].Side || !a[i].Quantity.Equal(b[i].Quantity) {
+			return false
+		}
+	}
+	return true
+}
+
 func posting(kind ledger.Kind, e []ledger.Entry) ledger.Posting {
-	return ledger.Posting{Kind: kind, IdempotencyKey: "equities-test", Reference: ledger.FinancialEventReference{Type: "test", ID: "1"},
-		EffectiveAt: time.Unix(1_800_000_000, 0).UTC(), Entries: e}
+	return ledger.Posting{
+		Kind: kind, IdempotencyKey: "equities-test", Reference: ledger.FinancialEventReference{Type: "test", ID: "1"},
+		EffectiveAt: time.Unix(1_800_000_000, 0).UTC(), Entries: e,
+	}
 }
 
 // net returns Σ debits − Σ credits of the entries on (code, asset).
@@ -68,10 +91,14 @@ func net(e []ledger.Entry, code ledger.Code, asset assets.AssetID) money.Quantit
 // TestProp_TradePostingsBalancePerPartyAndDiscloseEveryCharge: for any
 // schedule, side, price and quantity the SIM_TRADE posting passes the
 // ledger's own validation (balanced per asset and per party, simulated-only
-// kind), the customer's WALLET moves by exactly the quote's total, the spread
-// booked to FEES_SPREAD and SPREAD_REVENUE is exactly the disclosed spread,
-// and the venue's notional leaves through TRADING_OUTFLOW or arrives through
-// TRADING_INFLOW unbooked anywhere else.
+// kind), its charges are exactly the fee ledger's entries for the disclosure
+// (feeledger.ChargeEntries: every component on its own pair, the strategy fee
+// apart from the platform fee), the customer's WALLET moves by exactly the
+// quote's total (a buy) or not at all (a sell, whose charges come out of the
+// proceeds), the spread booked to FEES_SPREAD and SPREAD_REVENUE is exactly
+// the disclosed spread, and the venue's notional leaves through
+// TRADING_OUTFLOW or arrives through TRADING_INFLOW unbooked anywhere else.
+// Charges that are not the fill's own build nothing.
 func TestProp_TradePostingsBalancePerPartyAndDiscloseEveryCharge(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		sch := drawSchedule(rt)
@@ -81,8 +108,10 @@ func TestProp_TradePostingsBalancePerPartyAndDiscloseEveryCharge(t *testing.T) {
 		if err != nil {
 			rt.Fatal(err)
 		}
-		in := fees.QuoteInput{Side: feeSide(side), BaseQty: qty, BaseDecimals: 6, QuoteDecimals: 6, ReferencePrice: price,
-			StrategyOriginated: rapid.Bool().Draw(rt, "strategyOriginated")}
+		in := fees.QuoteInput{
+			Side: feeSide(side), BaseQty: qty, BaseDecimals: 6, QuoteDecimals: 6, ReferencePrice: price,
+			StrategyOriginated: rapid.Bool().Draw(rt, "strategyOriginated"),
+		}
 		quote, err := sch.Quote(in)
 		if err != nil {
 			return // a sell too small to cover its charges is refused by the schedule
@@ -97,12 +126,35 @@ func TestProp_TradePostingsBalancePerPartyAndDiscloseEveryCharge(t *testing.T) {
 			}
 			return
 		}
-		e, err := TradeEntries(testAccount, side, testShare, testCash, qty, c)
+		charged := feeledger.ChargesOf(quote.Disclosure())
+		e, err := TradeEntries(testAccount, side, testShare, testCash, qty, c, charged)
 		if err != nil {
 			rt.Fatal(err)
 		}
 		if err := posting(ledger.KindSimTrade, e).Validate(); err != nil {
 			rt.Fatalf("trade posting refused by the ledger's validation: %v", err)
+		}
+		// The charges are the fee ledger's own entries, in order, at the end
+		// of the posting: what RecordEmbedded registers against the journal.
+		fee := feeledger.ChargeEntries(testAccount, charged)
+		if len(e) < len(fee) || !sameEntries(fee, e[len(e)-len(fee):]) {
+			rt.Fatalf("the posting's charges are not the fee ledger's entries for the disclosure")
+		}
+		revenuePairs := 0
+		for _, x := range e {
+			if x.Account.Code == ledger.CodePlatformFeeRevenue {
+				revenuePairs++
+			}
+		}
+		if want := btoi(charged.Platform.IsPositive()) + btoi(charged.Strategy.IsPositive()); revenuePairs != want {
+			rt.Fatalf("%d PLATFORM_FEE_REVENUE legs; the platform fee and the strategy fee are %d pairs of their own", revenuePairs, want)
+		}
+		if charged.InQuoteAsset().IsPositive() {
+			off := charged
+			off.Spread = off.Spread.Add(q(1))
+			if _, err := TradeEntries(testAccount, side, testShare, testCash, qty, c, off); err == nil {
+				rt.Fatalf("charges one unit off the fill's own built a posting")
+			}
 		}
 		if !net(e, ledger.CodeFeesSpread, testCash).Equal(quote.Spread.Amount) || !net(e, ledger.CodeSpreadRevenue, testCash).Neg().Equal(quote.Spread.Amount) {
 			rt.Fatalf("spread booked is not the disclosed spread")
