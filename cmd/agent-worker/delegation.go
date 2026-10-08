@@ -2,16 +2,22 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/nodal/controlplane/internal/agent"
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/config"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/delegation"
+	"github.com/nodal/controlplane/internal/devnet"
+	"github.com/nodal/controlplane/internal/devnethost"
+	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/legalrouter"
-	"github.com/nodal/controlplane/internal/sandboxchain"
 )
 
 // envLegalPolicy is the API's legal policy variable, which the worker reads
@@ -19,13 +25,52 @@ import (
 // as the owner's decision on it.
 const envLegalPolicy = "CP_API_LEGAL_POLICY"
 
+// The sandbox chain's variables. The worker reads the network and nothing
+// else: the seed's reference is for the binaries that sign on the chain
+// (cmd/api, cmd/advanced-worker), and this one never reads it.
+const (
+	envSandboxNetwork = "CP_SANDBOX_DEVNET_NETWORK"
+	envSandboxSeedRef = "CP_SANDBOX_DEVNET_SEED_REF"
+)
+
 // delegatedNotWired is what every run is told, and what the worker logs,
 // when no sandbox chain is configured.
 const delegatedNotWired = "no sandbox chain is configured (CP_SANDBOX_DEVNET_NETWORK is empty): agents are offered no delegated tool"
 
-// registeredVenuesSQL lists the delegation venues by name. Read-only;
-// delegation exports no venue lister (cmd/advanced-worker reads the same).
-const registeredVenuesSQL = `SELECT name FROM delegation_venues ORDER BY name`
+// sandboxNetworkOnly reads the sandbox chain's network from the environment
+// and returns it with a lookup that shows the configuration loader neither
+// sandbox variable. The loader ties the network to the seed's reference --
+// every other binary that opens the chain signs on it -- and this one must
+// hold no seed: so the loader never sees the reference, and the network,
+// all the worker needs to read the chain, is read here. seedOffered reports
+// that the environment carries the reference anyway; its value is never
+// kept.
+func sandboxNetworkOnly(lookup func(string) (string, bool)) (network string, seedOffered bool, masked func(string) (string, bool)) {
+	if v, ok := lookup(envSandboxNetwork); ok {
+		network = strings.TrimSpace(v)
+	}
+	if v, ok := lookup(envSandboxSeedRef); ok && strings.TrimSpace(v) != "" {
+		seedOffered = true
+	}
+	return network, seedOffered, func(k string) (string, bool) {
+		if k == envSandboxNetwork || k == envSandboxSeedRef {
+			return "", false
+		}
+		return lookup(k)
+	}
+}
+
+// loadWorkerConfig is the worker's configuration: the CP_* configuration
+// loaded for this binary without the sandbox variables, the sandbox chain's
+// network, and whether the environment offered the seed's reference.
+func loadWorkerConfig(ctx context.Context, lookup func(string) (string, bool)) (*config.Config, string, bool, error) {
+	network, seedOffered, masked := sandboxNetworkOnly(lookup)
+	cfg, err := config.Load(ctx, config.ServiceAgentWorker, masked)
+	if err != nil {
+		return nil, "", false, err
+	}
+	return cfg, network, seedOffered, nil
+}
 
 // wireDelegation builds the agent's side of delegated authority when the
 // sandbox chain is configured, and only then: the admission facade
@@ -33,36 +78,30 @@ const registeredVenuesSQL = `SELECT name FROM delegation_venues ORDER BY name`
 // agent tree may hold -- it admits an agent's swap request, records its
 // withdrawal proposal and reads its capabilities, and can do nothing else.
 //
-// The keys derive from the sandbox seed exactly as cmd/api derives them: the
-// delegated wallet signer from PurposeDelegatedSigner, one co-signer per
-// registered venue from the venue's name. Their seeds go straight into the
-// facade, which keeps them out of reach: this binary never holds a signer,
-// and nothing it holds can sign, submit, settle or decide. Unconfigured, it
-// returns no facade and the reason, and the runtime tells every run so.
-func wireDelegation(ctx context.Context, cfg *config.Config, resolver config.Resolver, database *db.DB, clk clock.Clock) (*delegation.AgentAdmission, string, error) {
-	chain, seed, err := openSandboxChain(ctx, cfg, resolver, database, clk)
-	if err != nil {
-		return nil, "", err
-	}
-	if chain == nil {
+// What it is given is all this binary holds of delegated authority: the
+// deployment's settings and the sandbox chain opened for reading, without
+// its seed (openChainReader). No seed is resolved, no key is derived, and no
+// signer or venue co-signer exists in this process: the facade plans from
+// the delegated wallet key the owner's grant registered in cmd/api, and
+// counts a venue able to co-sign from its registration, and the binaries
+// that sign check the real keys again before anything is signed.
+// Unconfigured, it returns no facade and the reason, and the runtime tells
+// every run so.
+func wireDelegation(ctx context.Context, cfg *config.Config, network string, database *db.DB, clk clock.Clock) (*delegation.AgentAdmission, string, error) {
+	if network == "" {
 		return nil, delegatedNotWired, nil
 	}
-	venues, err := registeredVenueNames(ctx, database)
+	host, err := openChainReader(ctx, database, clk, cfg.Env, network)
 	if err != nil {
 		return nil, "", err
-	}
-	seeds := make(map[string][32]byte, len(venues))
-	for _, name := range venues {
-		seeds[name] = seed.VenueSeed(name)
 	}
 	router, err := legalRouterFor(cfg.Env, cfg.API.LegalPolicy)
 	if err != nil {
 		return nil, "", err
 	}
 	admission, err := delegation.NewAgentAdmission(delegation.AdmissionConfig{
-		DB: database, Clock: clk, Environment: cfg.Env, Host: chain.Host,
+		Clock: clk, Environment: cfg.Env, Host: host,
 		EnabledCapabilities: capabilityNames(cfg.API.EnabledCapabilities), Router: router, BuildVersion: cfg.BuildVersion,
-		SignerSeed: seed.Derive(sandboxchain.PurposeDelegatedSigner), VenueSeeds: seeds,
 	})
 	if err != nil {
 		return nil, "", fmt.Errorf("delegated authority: %w", err)
@@ -83,52 +122,82 @@ func delegatedFor(admission *delegation.AgentAdmission, clk clock.Clock, pauses 
 	}
 }
 
-// openSandboxChain is cmd/api's: the persistent simulated chain host with
-// every platform key derived from the configured seed, or nil when no
-// sandbox chain is configured. The seed is resolved through the binary's own
-// secret resolver and never logged.
-func openSandboxChain(ctx context.Context, cfg *config.Config, resolver config.Resolver, database *db.DB, clk clock.Clock) (*sandboxchain.Chain, sandboxchain.Seed, error) {
-	network := cfg.Sandbox.DevnetNetwork
-	if network == "" {
-		return nil, sandboxchain.Seed{}, nil
+// openChainReader opens the sandbox chain's network for reading, without its
+// seed. The host's configuration is the standard one (devnethost's default
+// parameters, as sandboxchain.Open builds it) naming the bridge attester's
+// public key that the network's GENESIS recorded -- the one key the
+// configuration names, and only its public half. The host replays and
+// verifies the whole recorded history, exactly as every other binary's host
+// does, over a history that refuses every append (readOnlyHistory): it
+// answers reads and can write nothing -- no genesis, no submission, no
+// block, no faucet top-up, no fault. A network with no recorded history is
+// refused: its genesis is written by a binary that holds the seed (cmd/api,
+// cmd/advanced-worker).
+func openChainReader(ctx context.Context, database *db.DB, clk clock.Clock, env config.Environment, network string) (*devnethost.Host, error) {
+	if err := devnethost.DefaultConfig(network, env, devnet.PublicKey{}).Validate(); err != nil {
+		return nil, fmt.Errorf("%s: %w", envSandboxNetwork, err)
 	}
-	text, err := resolver.Resolve(ctx, cfg.Sandbox.DevnetSeedRef)
+	attester, err := recordedAttester(ctx, database, network)
 	if err != nil {
-		return nil, sandboxchain.Seed{}, fmt.Errorf("sandbox chain seed: %w", err)
+		return nil, err
 	}
-	seed, err := sandboxchain.ParseSeed(text)
+	host, err := devnethost.Open(ctx, readOnlyHistory{devnethost.NewPgStore(database)}, devnethost.DefaultConfig(network, env, attester), clk)
 	if err != nil {
-		return nil, sandboxchain.Seed{}, fmt.Errorf("sandbox chain seed: %w", err)
+		return nil, fmt.Errorf("sandbox chain %s: %w", network, err)
 	}
-	chain, err := sandboxchain.Open(ctx, database, clk, cfg.Env, network, seed)
-	if err != nil {
-		return nil, sandboxchain.Seed{}, fmt.Errorf("sandbox chain: %w", err)
-	}
-	return &chain, seed, nil
+	return host, nil
 }
 
-// registeredVenueNames reads the names of the registered delegation venues.
-// A venue registered after the worker started is co-signable here only after
-// a restart; until then Risk V2 counts it unhealthy and a swap at it is
-// refused, never admitted.
-func registeredVenueNames(ctx context.Context, q db.Querier) ([]string, error) {
-	rows, err := q.Query(ctx, registeredVenuesSQL)
-	if err != nil {
-		return nil, fmt.Errorf("delegation venues: %w", err)
-	}
-	defer rows.Close()
-	var out []string
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return nil, fmt.Errorf("delegation venues: %w", err)
+// readOnlyHistory is the worker's view of the sandbox chain's recorded
+// history: it reads every event and appends none.
+type readOnlyHistory struct{ devnethost.Store }
+
+// Exclusive refuses: the history is written only by the binaries that hold
+// the sandbox chain's seed.
+func (readOnlyHistory) Exclusive(context.Context, string, uint64, func([]devnethost.Event) (*devnethost.Event, error)) error {
+	return errs.New(errs.CodeForbidden, "agent-worker: the sandbox chain is read-only here; its history is written by the binaries that hold its seed")
+}
+
+// genesisSQL reads a network's GENESIS document: the chain configuration its
+// history was produced under. Read-only.
+const genesisSQL = `SELECT args::text FROM devnet_events WHERE network = $1 AND seq = 1 AND kind = 'GENESIS'`
+
+// recordedAttester is the bridge attester's public key the network's
+// GENESIS recorded, which every chain of a standard host names alike. The
+// host that opens with it compares its whole configuration with the recorded
+// genesis, byte for byte, and refuses any difference -- so a genesis read
+// wrongly here fails closed.
+func recordedAttester(ctx context.Context, q db.Querier, network string) (devnet.PublicKey, error) {
+	var doc string
+	if err := q.QueryRow(ctx, genesisSQL, network).Scan(&doc); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return devnet.PublicKey{}, fmt.Errorf("sandbox chain %s has no recorded history: a binary that holds its seed "+
+				"(cmd/api, cmd/advanced-worker) opens it, and this one only reads it", network)
 		}
-		out = append(out, name)
+		return devnet.PublicKey{}, fmt.Errorf("sandbox chain %s: read its genesis: %w", network, err)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("delegation venues: %w", err)
+	var genesis struct {
+		Chains []struct {
+			BridgeAuthority string `json:"bridge_authority"`
+		} `json:"chains"`
 	}
-	return out, nil
+	if err := json.Unmarshal([]byte(doc), &genesis); err != nil || len(genesis.Chains) == 0 {
+		return devnet.PublicKey{}, fmt.Errorf("sandbox chain %s: its genesis does not describe its chains", network)
+	}
+	authority := genesis.Chains[0].BridgeAuthority
+	for _, c := range genesis.Chains[1:] {
+		if c.BridgeAuthority != authority {
+			return devnet.PublicKey{}, fmt.Errorf("sandbox chain %s: its chains name different bridge attesters, which no standard host does", network)
+		}
+	}
+	if authority == "" {
+		return devnet.PublicKey{}, nil
+	}
+	key, err := devnet.ParsePublicKey(authority)
+	if err != nil {
+		return devnet.PublicKey{}, fmt.Errorf("sandbox chain %s: its genesis names no valid bridge attester", network)
+	}
+	return key, nil
 }
 
 // capabilityNames splits the deployment's enabled-capability list; the

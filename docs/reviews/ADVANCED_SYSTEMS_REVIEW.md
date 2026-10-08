@@ -85,6 +85,23 @@ a regression test:
   Integrating it showed the admin reconciliation API's kind enum named none of the advanced kinds although the
   route returns them: `TestReconciliationRecord_TheAPIEnumsAreExactlyThePackagesValues`.
 
+- **The agent worker held private key material it never needed** (found while updating the traceability
+  matrix): the agent admission facade was built from the sandbox seed, so the delegated signer and the venue
+  co-signers lived, unreachable but present, in the process that runs agents. Admission is now its own type
+  with no field for a signer, co-signer or seed; it plans from the wallet public key the owner's grant
+  registers in the API process, and the agent worker never reads the seed and runs a chain host that refuses
+  every write. Tests: `TestTheAgentAdmissionHoldsNoKeyMaterial`, `TestNewAgentAdmissionTakesNoSeedAndNoSigner`,
+  `TestTheWorkerTakesNoSeed`, `TestIntegration_AGrantRegistersTheWalletKeyOnEveryChainItAllows`.
+- **Two integration packages failed as a whole and no per-merge run noticed** (found while writing
+  `docs/portfolio/TECHNICAL_EVIDENCE.md`, which ran every claim's command): `internal/gates`' database suite no
+  longer compiled — a test-only import cycle through the agent runtime (`3bc2096` moved the agent's gate reader
+  to `internal/agent/livegate`) — and buying power V2's composition test had failed since 00748 on a fixture a
+  bridge rule refuses (`e575c4b`, with `TestIntegration_TheV2LoaderCountsALegInFlightOnlyAsItsHaircut` driving a
+  real leg). Every merge now also runs `go vet -tags integration ./...`, and the evidence of record is a run of
+  every package at one commit.
+- **The browser suite had never run the advanced pages against a live API.** Its first live run (`7c493fa`)
+  found six failures, all in the specs, and no product defect; it now passes twice on fresh databases.
+
 ## Status
 
 All 27 findings of reviews 1 and 2 are fixed; none is open, and the batch upkeep defects found in integration

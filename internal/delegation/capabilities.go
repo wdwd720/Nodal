@@ -39,12 +39,47 @@ type GrantRequest struct {
 	IdempotencyKey        string
 }
 
-// GrantCapability records a grant. Only the account's owner, freshly
-// strongly authenticated, may grant; the capability is born ACTIVE with a
-// unique nonce and a content hash. It is idempotent on (account, key): the
-// same terms return the existing grant (existing=true), different terms are
-// INVALID_IDEMPOTENCY_REUSE.
+// GrantCapability records a grant and registers the account's delegated
+// wallet key on every chain the grant allows. Only the account's owner,
+// freshly strongly authenticated, may grant; the capability is born ACTIVE
+// with a unique nonce and a content hash. It is idempotent on (account,
+// key): the same terms return the existing grant (existing=true), different
+// terms are INVALID_IDEMPOTENCY_REUSE.
+//
+// The keys are registered here, in the grant's transaction, because this is
+// where the signer is: the delegated signer derives each wallet's public key
+// and registers it once (DelegatedSigner.EnsureKey), and a key already
+// registered for the account that is not the one it derives refuses the grant
+// (DELEGATION_SIGNER_KEY_MISMATCH). An agent's admission only reads the
+// registered key (admittedWallet), so it needs no signer, and every chain a
+// capability can be used on has its key from the moment of the grant.
 func (s *Service) GrantCapability(ctx context.Context, tx pgx.Tx, req GrantRequest) (Capability, bool, error) {
+	c, existing, err := s.recordGrant(ctx, tx, req)
+	if err != nil {
+		return Capability{}, false, err
+	}
+	if err := s.registerWalletKeys(ctx, tx, c.Terms); err != nil {
+		return Capability{}, false, err
+	}
+	return c, existing, nil
+}
+
+// registerWalletKeys registers the account's delegated wallet public key on
+// each chain terms allow. A replayed grant registers nothing new: the keys
+// are already there.
+func (s *Service) registerWalletKeys(ctx context.Context, tx pgx.Tx, terms CapabilityTerms) error {
+	for _, chain := range terms.ChainAllowlist {
+		if _, err := s.signer.EnsureKey(ctx, tx, terms.AccountID, chain); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// recordGrant is GrantCapability up to the record of the grant: the owner,
+// the agent, the terms, the idempotency key, the capability row, its
+// transition and its audit event -- and no key.
+func (s *Service) recordGrant(ctx context.Context, tx pgx.Tx, req GrantRequest) (Capability, bool, error) {
 	if k := req.IdempotencyKey; strings.TrimSpace(k) != k || k == "" || len(k) > 200 {
 		return Capability{}, false, errs.New(errs.CodeValidationFailed, "delegation: idempotency key must be 1..200 bytes without surrounding whitespace")
 	}
@@ -202,7 +237,7 @@ func (s *Service) GetCapability(ctx context.Context, q db.Querier, cid Capabilit
 }
 
 // ListCapabilities returns an account's capabilities, newest first.
-func (s *Service) ListCapabilities(ctx context.Context, q db.Querier, account accounts.AccountID) ([]Capability, error) {
+func (s *admitter) ListCapabilities(ctx context.Context, q db.Querier, account accounts.AccountID) ([]Capability, error) {
 	rows, err := q.Query(ctx, `SELECT `+capabilityColumns+` FROM delegated_capabilities WHERE account_id = $1
 		ORDER BY created_at DESC, id DESC LIMIT 200`, account)
 	if err != nil {

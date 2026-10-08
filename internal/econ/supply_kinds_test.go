@@ -93,7 +93,7 @@ func supplyKindTable() []supplyKindRow {
 		{ledger.KindFacilityFunding, refusedForAll, []guard{{margin, "(*Service).SeedFacilities"}, {derivatives, "(*Service).FundClearingHouse"}},
 			"margin's lending pool and insurance fund and the derivatives clearing house are the only facilities ever funded; " +
 				"a controller's own facility and a reserve, bridge or prediction facility book the asset only in their own kinds"},
-		{ledger.KindHouseFunding, refusedForAll, []guard{{treasury, "(*Service).Fund"}, {delegation, "(*Service).RequestSwap"}},
+		{ledger.KindHouseFunding, refusedForAll, []guard{{treasury, "(*Service).Fund"}, {delegation, "(*admitter).RequestSwap"}},
 			"treasury funds a treasury book; a delegation venue's house book is funded only outside the services, so a swap that " +
 				"would need its venue funded in a supply-controlled asset is refused at its admission"},
 		{ledger.KindP2PTransfer, allowedForAll, nil,
@@ -148,7 +148,7 @@ func supplyKindTable() []supplyKindRow {
 			"posted only in a period's fee asset, which never changes; opening the period is the one entry"},
 		{ledger.KindPerformanceFeeCrystallization, refusedForAll, []guard{{feeledger, "(*Service).OpenPeriod"}},
 			"posted only in a period's fee asset, which never changes; opening the period is the one entry"},
-		{ledger.KindSandboxWithdrawal, refusedForAll, []guard{{delegation, "(*Service).ProposeWithdrawal"}},
+		{ledger.KindSandboxWithdrawal, refusedForAll, []guard{{delegation, "(*admitter).ProposeWithdrawal"}},
 			"a delegated withdrawal is the one poster of SANDBOX_WITHDRAWAL, and a proposal is its one entry"},
 	}
 }

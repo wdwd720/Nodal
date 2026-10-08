@@ -18,6 +18,9 @@ import { randomBytes, randomUUID } from "node:crypto";
 
 import { expect, test, type Browser, type BrowserContext, type Locator, type Page, type Response } from "@playwright/test";
 
+import { goto } from "./pace.ts";
+import { signIn } from "./sign-in.ts";
+
 /** The accessible name of the notice every page of the area opens with. */
 const NOTICE = "Simulated value — sandbox only";
 const SECTION = "/advanced/transfers";
@@ -77,17 +80,23 @@ async function ownAccount(page: Page): Promise<string> {
   return id as string;
 }
 
-/** Signs a development identity in, in a fresh context, through the real OIDC flow. */
-async function signIn(browser: Browser, identity: string, mfa: boolean): Promise<{ context: BrowserContext; page: Page }> {
-  const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
-  const page = await context.newPage();
-  await page.goto("/v1/auth/login");
-  await expect(page.getByRole("heading", { name: "Choose an identity" })).toBeVisible();
-  const row = page.locator("li", { has: page.locator("code", { hasText: new RegExp(`^${identity}$`) }) });
-  await row.getByRole("link", { name: mfa ? "sign in with MFA" : "sign in", exact: true }).first().click();
-  await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
-  return { context, page };
+/**
+ * Customer-b's session, which this file's tests share. Signing in is rate
+ * limited -- CP_API_RATE_LIMIT_AUTH allows 30 requests a minute from one
+ * address by default, and a sign-in is four of them -- and the suite signs in
+ * far more often than a person would, so customer-b signs in once for the file.
+ */
+let recipientSession: { context: BrowserContext; page: Page } | undefined;
+
+async function customerB(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
+  recipientSession ??= await signIn(browser, "customer-b", false);
+  return recipientSession;
 }
+
+test.afterAll(async () => {
+  await recipientSession?.context.close();
+  recipientSession = undefined;
+});
 
 /** The response to the POST an action makes, observed as the page received it. */
 async function answerTo(page: Page, path: string, act: () => Promise<void>): Promise<Response> {
@@ -126,7 +135,7 @@ async function expectCode(scope: Locator, code: string): Promise<void> {
 
 /** Requests sandbox dollars through the page, so the sandbox dollar exists and the sender holds some. */
 async function fundThroughTheFaucet(page: Page, amount: string): Promise<void> {
-  await page.goto(SECTION);
+  await goto(page, SECTION);
   await settle(page);
   const faucet = page.getByRole("region", { name: "Sandbox faucet", exact: true });
   const form = faucet.getByRole("form", { name: "Request sandbox dollars" });
@@ -145,7 +154,7 @@ interface Recipient {
 }
 
 async function prepareRecipient(browser: Browser): Promise<{ recipient: Recipient; context: BrowserContext; page: Page }> {
-  const b = await signIn(browser, "customer-b", false);
+  const b = await customerB(browser);
   const accountId = await ownAccount(b.page);
   await b.page.goto(SECTION);
   await settle(b.page);
@@ -193,7 +202,7 @@ function transferIdOf(body: unknown): string | undefined {
 
 test.describe("the transfers section", () => {
   test("renders under the simulated-value notice and is reachable from the area's navigation", async ({ page }) => {
-    await page.goto("/advanced/overview");
+    await goto(page, "/advanced/overview");
     await page
       .getByRole("navigation", { name: "Advanced area", exact: true })
       .getByRole("link", { name: "Transfers", exact: true })
@@ -210,7 +219,7 @@ test.describe("the transfers section", () => {
   test("the faucet grants sandbox dollars, and the allowance falls by exactly the grant", async ({ page }) => {
     const id = await ownAccount(page);
     const before = await page.request.get(`/v1/advanced/transfers/faucet/allowance?account_id=${id}`);
-    await page.goto(SECTION);
+    await goto(page, SECTION);
     await settle(page);
     const faucet = page.getByRole("region", { name: "Sandbox faucet", exact: true });
 
@@ -366,7 +375,7 @@ test.describe("the transfers section", () => {
     }
 
     // The sender's history shows it with the status the backend gave it.
-    await page.goto(SECTION);
+    await goto(page, SECTION);
     await settle(page);
     const row = page.locator(`tr[data-transfer-id="${transfer.id}"]`);
     await expect(row).toContainText(transfer.status);
@@ -391,7 +400,6 @@ test.describe("the transfers section", () => {
       };
       expect(bList.items.some((item) => item.id === transfer.id)).toBe(false);
     }
-    await b.context.close();
   });
 
   test("a reversal takes two operators: one proposes, the proposer can never approve, and the backend decides", async ({
@@ -399,7 +407,6 @@ test.describe("the transfers section", () => {
     browser,
   }) => {
     const b = await prepareRecipient(browser);
-    await b.context.close();
     await fundThroughTheFaucet(page, "3");
     const send = page.getByRole("region", { name: "Send", exact: true });
     await reviewSend(send, b.recipient, "1", `e2e reversal ${hex(6)}`);
@@ -463,15 +470,19 @@ test.describe("the transfers section", () => {
     expect(other.status).toBe(409);
     expect((other.body as Problem).code).toBe("CONFLICT");
 
-    // A second, different operator decides: Finance, who holds the correction
-    // authority (ledger:post_correction) the routes admit and the service
-    // requires. Whether the approval executes -- its recent strong sign-in,
-    // the recipient still holding the funds -- is the backend's answer, and
-    // the page shows it.
+    // A second, different principal decides. Where the development identity
+    // "finance" holds the FINANCE operator role it has the correction authority
+    // (ledger:post_correction) the routes admit and the service requires, and
+    // whether the approval executes -- its recent strong sign-in, the
+    // recipient still holding the funds -- is the backend's answer, which the
+    // page shows. Operator roles come from the operator_roles table and never
+    // from the identity provider, and the LOCAL seed grants one to "admin"
+    // alone: there "finance" signs in as a customer, and is refused.
     const second = await signIn(browser, "finance", true);
     await second.page.goto(`${SECTION}/${transferId}`);
     await settle(second.page);
     const secondPanel = second.page.getByRole("region", { name: "Reversal under dual control", exact: true });
+    const seen = await second.page.request.get(`/v1/advanced/transfers/${transferId}`);
     const listed = await second.page.request.get(`${REVERSALS_PATH}?transfer_id=${transferId}`);
     let approved = false;
     if (listed.ok()) {
@@ -501,10 +512,23 @@ test.describe("the transfers section", () => {
         await expectCode(secondPanel, ((await decision.json()) as Problem).code);
       }
     } else {
-      // This operator may not read the proposals at all: the panel shows the refusal.
-      await expectCode(secondPanel, ((await listed.json()) as Problem).code);
+      // This principal may not read the proposals at all.
+      const refusal = (await listed.json()) as Problem;
+      expect(listed.status()).toBe(403);
+      expect(refusal.code).toBe("FORBIDDEN");
+      if (seen.ok()) {
+        // It reads the transfer, so the page draws the panel with the refusal.
+        await expectCode(secondPanel, refusal.code);
+      } else {
+        // It is not even allowed to read the transfer -- a customer reads only
+        // its own -- so the page answers NOT_FOUND and offers no reversal.
+        expect(seen.status()).toBe(404);
+        await expectCode(second.page.locator("main"), "NOT_FOUND");
+        await expect(secondPanel).toHaveCount(0);
+      }
       const attempt = await command(second.page, `${REVERSALS_PATH}/${proposal.id}/approve`, {});
-      expect(attempt.status).toBe(listed.status());
+      expect(attempt.status, "a principal that may not read the proposals may not approve one").toBe(listed.status());
+      expect((attempt.body as Problem).code).toBe(refusal.code);
     }
 
     const after = (await (await admin.page.request.get(`/v1/advanced/transfers/${transferId}`)).json()) as Transfer;
@@ -582,7 +606,7 @@ test.describe("the transfers section", () => {
       }
     };
     page.on("response", listener);
-    await page.goto(SECTION);
+    await goto(page, SECTION);
     await settle(page);
     page.off("response", listener);
 

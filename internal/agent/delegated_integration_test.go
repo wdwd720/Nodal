@@ -154,19 +154,20 @@ func newDelegatedFixture(t *testing.T) *delegatedFixture {
 	_, err = econ.EnsureSandboxDollar(ctx, testDB)
 	require.NoError(t, err)
 
-	// One configuration, two sides: what the platform builds and what the
-	// agent tree may hold.
+	// One deployment, two sides: the platform, which holds the seeds and
+	// whose grants register the delegated wallet keys, and what the agent
+	// tree may hold -- the same settings, and no seed or key.
 	venueName, venueSeed := "ag-"+tag, dgSeed("venue-"+tag)
-	cfg := delegation.AdmissionConfig{
+	deployment := delegationtest.Platform{
 		DB: testDB, Clock: f.clk, Environment: config.EnvTest, Host: host,
 		EnabledCapabilities: []string{"AGENT_SIGNING", "AGENT_WITHDRAWALS"}, BuildVersion: "agent-itest",
 		SignerSeed: dgSeed("master-" + tag), VenueSeeds: map[string][devnet.SeedSize]byte{venueName: venueSeed},
 	}
-	platform, err := delegationtest.NewService(cfg)
+	platform, err := delegationtest.NewService(deployment)
 	require.NoError(t, err)
-	admission, err := delegation.NewAgentAdmission(cfg)
+	admission, err := delegation.NewAgentAdmission(deployment.Admission())
 	require.NoError(t, err)
-	signer, err := delegation.NewDelegatedSigner(cfg.SignerSeed, delegation.SignerConfig{Environment: config.EnvTest, Clock: f.clk,
+	signer, err := delegation.NewDelegatedSigner(deployment.SignerSeed, delegation.SignerConfig{Environment: config.EnvTest, Clock: f.clk,
 		Policy: delegation.DefaultSigningPolicy(), Fees: delegation.HostFees(host)})
 	require.NoError(t, err)
 

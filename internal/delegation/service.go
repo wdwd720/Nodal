@@ -119,15 +119,31 @@ type Deps struct {
 	Params         Params
 }
 
-// Service is delegated agent authority: capabilities, delegated signing of
-// swaps and delegated withdrawals.
-type Service struct {
-	db         *db.DB
+// admitter is the half of delegated authority that admits: an agent's
+// delegated swap request (RequestSwap), its withdrawal proposal
+// (ProposeWithdrawal), the agent's authentication and the capability reads.
+// It holds every collaborator an admission reads or records through, and no
+// key of any kind -- by its type, not by how it was built:
+//
+//   - the delegated wallet an admission plans from is the public key
+//     registered when the account's owner granted a capability on that chain
+//     (admittedWallet; Service.GrantCapability registers it, where the
+//     signer is);
+//   - a venue counts as able to co-sign when its house book is ACTIVE and its
+//     co-signer's public key -- the address it was registered at -- is
+//     registered (venueCanCoSign); whether a signing process holds that
+//     co-signer is checked again where the co-signers are, at signing;
+//   - the chain is read (ChainReader), never written.
+//
+// A Service is an admitter with the delegated signer, the venue co-signers
+// and the chain's write side. The agent runtime's facade (AgentAdmission)
+// holds an admitter alone, so a process that only admits holds no private
+// key, no signer and no seed.
+type admitter struct {
 	clk        clock.Clock
 	env        config.Environment
-	host       ChainHost
+	chain      ChainReader
 	intents    *econ.IntentStore
-	effects    *econ.EffectStore
 	authorizer *econ.Authorizer
 	kills      *killswitch.Checker
 	ledger     *ledger.Service
@@ -138,14 +154,29 @@ type Service struct {
 	prices     *valuation.PriceStore
 	identity   IdentityReader
 	profiles   *compliance.Repository
-	recon      *reconciliation.Repository
 	audit      audit.Writer
 	accounts   *accounts.Repository
-	assets     *assets.Repository
-	signer     *DelegatedSigner
-	venues     map[devnet.PublicKey]*VenueSigner
-	random     io.Reader
-	params     Params
+	// signing is the signing policy, which an admission holds a swap's
+	// slippage bound to before any signer sees the swap. It is a policy, not
+	// a key: the signer applies the same one again when it signs.
+	signing SigningPolicy
+	params  Params
+}
+
+// Service is delegated agent authority: capabilities, delegated signing of
+// swaps and delegated withdrawals. It admits exactly as its admitter does,
+// and alone holds what signs -- the delegated signer and the venue
+// co-signers -- and what writes the chain.
+type Service struct {
+	admitter
+	db      *db.DB
+	host    ChainHost
+	effects *econ.EffectStore
+	recon   *reconciliation.Repository
+	assets  *assets.Repository
+	signer  *DelegatedSigner
+	venues  map[devnet.PublicKey]*VenueSigner
+	random  io.Reader
 }
 
 // New wires a Service.
@@ -195,11 +226,14 @@ func New(d Deps) (*Service, error) {
 		random = rand.Reader
 	}
 	return &Service{
-		db: d.DB, clk: d.Clock, env: d.Environment, host: d.Host, intents: d.Intents, effects: d.Effects,
-		authorizer: d.Authorizer, kills: d.Kills, ledger: d.Ledger, capital: d.Capital, risk: d.Risk, policy: d.RiskPolicy,
-		router: d.Router, prices: d.Prices, identity: d.Identity, profiles: d.Profiles, recon: d.Reconciliation,
-		audit: d.Audit, accounts: d.Accounts, assets: d.Assets, signer: d.Signer, venues: venues, random: random,
-		params: d.Params.withDefaults(),
+		admitter: admitter{
+			clk: d.Clock, env: d.Environment, chain: d.Host, intents: d.Intents, authorizer: d.Authorizer, kills: d.Kills,
+			ledger: d.Ledger, capital: d.Capital, risk: d.Risk, policy: d.RiskPolicy, router: d.Router, prices: d.Prices,
+			identity: d.Identity, profiles: d.Profiles, audit: d.Audit, accounts: d.Accounts, signing: d.Signer.Policy(),
+			params: d.Params.withDefaults(),
+		},
+		db: d.DB, host: d.Host, effects: d.Effects, recon: d.Reconciliation, assets: d.Assets, signer: d.Signer,
+		venues: venues, random: random,
 	}, nil
 }
 
@@ -224,7 +258,7 @@ var (
 
 // agentFor checks that the context's principal is an AGENT bound to the
 // account, and that the agent exists, belongs to the account and may act.
-func (s *Service) agentFor(ctx context.Context, q db.Querier, account accounts.AccountID) (security.Principal, agentRow, error) {
+func (s *admitter) agentFor(ctx context.Context, q db.Querier, account accounts.AccountID) (security.Principal, agentRow, error) {
 	p, ok := security.PrincipalFrom(ctx)
 	if !ok {
 		return security.Principal{}, agentRow{}, errs.New(errs.CodeUnauthenticated, "delegation: an agent request needs an authenticated agent")
@@ -291,7 +325,7 @@ func serviceContext(ctx context.Context) context.Context {
 
 // --- Shared reads ------------------------------------------------------------------
 
-func (s *Service) loadAccount(ctx context.Context, q db.Querier, account accounts.AccountID) (accounts.Account, error) {
+func (s *admitter) loadAccount(ctx context.Context, q db.Querier, account accounts.AccountID) (accounts.Account, error) {
 	return s.accounts.Get(ctx, q, account)
 }
 
@@ -348,7 +382,7 @@ func usageExcluding(ctx context.Context, q db.Querier, cid CapabilityID, own Usa
 // at par for a registry-declared USD-pegged unit, otherwise the freshest
 // observation no older than PriceMaxAge. A missing or stale price is
 // STALE_MARKET_DATA, never a guess.
-func (s *Service) priceOf(ctx context.Context, q db.Querier, a assets.Asset, now time.Time) (money.Price, bool, error) {
+func (s *admitter) priceOf(ctx context.Context, q db.Querier, a assets.Asset, now time.Time) (money.Price, bool, error) {
 	if a.IsStablecoin && a.PegCurrency == valuation.USDPeg {
 		p, err := money.NewPrice(money.QuantityFromInt64(1), 0, econ.SandboxDollarID().String(), "registry-usd-peg", now)
 		return p, true, err
@@ -358,7 +392,7 @@ func (s *Service) priceOf(ctx context.Context, q db.Querier, a assets.Asset, now
 }
 
 // killSwitches is the active switches as Risk V2 takes them.
-func (s *Service) killSwitches(ctx context.Context, q db.Querier) ([]risk.KillSwitch, error) {
+func (s *admitter) killSwitches(ctx context.Context, q db.Querier) ([]risk.KillSwitch, error) {
 	snap, err := s.kills.Snapshot(ctx, q)
 	if err != nil {
 		return nil, err
@@ -383,7 +417,7 @@ func unknownEffects(ctx context.Context, q db.Querier, account accounts.AccountI
 
 // --- Audit --------------------------------------------------------------------------
 
-func (s *Service) auditEvent(ctx context.Context, tx pgx.Tx, actor Actor, action, resourceType, resourceID string,
+func (s *admitter) auditEvent(ctx context.Context, tx pgx.Tx, actor Actor, action, resourceType, resourceID string,
 	account accounts.AccountID, reason string, payload any) error {
 	body, err := json.Marshal(payload)
 	if err != nil {

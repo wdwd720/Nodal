@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/nodal/controlplane/internal/agent"
+	"github.com/nodal/controlplane/internal/agent/livegate"
 	"github.com/nodal/controlplane/internal/security"
 )
 
@@ -29,7 +29,10 @@ import (
 //
 // This test lives here rather than in internal/agent because that package may
 // not import this one even in a test file, and test/security's boundary check
-// counts test files. The direction that is allowed is this one.
+// counts test files. The direction that is allowed is this one. It reads the
+// agent side through internal/agent/livegate, which imports only the database
+// layer: the agent runtime itself reaches this package through
+// internal/delegation, so importing it here would be an import cycle.
 //
 // It compares the two readers against the same row at the same instant, over
 // every condition that can change after activation without a state transition.
@@ -67,11 +70,11 @@ func TestIntegration_TheAgentGateReaderAgreesWithTheAuthority(t *testing.T) {
 	// agree reads both and fails if they differ, whatever the expected answer
 	// is. Reporting the disagreement itself is the point: a future change that
 	// makes them differ in the other direction must fail here too.
-	agree := func(t *testing.T, want bool, wantReason string) agent.LiveTrading {
+	agree := func(t *testing.T, want bool, wantReason string) livegate.LiveTrading {
 		t.Helper()
 		now := f.clk.Now()
 		v := Evaluate(mustLoad(t, c, f.env), true, now)
-		read, err := agent.Store{}.LiveTradingEnabled(context.Background(), testDB, f.env, now)
+		read, err := livegate.Read(context.Background(), testDB, f.env, now)
 		require.NoError(t, err)
 		assert.Equal(t, v.Active, read.Enabled,
 			"the authority says active=%t (%s) and the agent reader says enabled=%t (%s)",
@@ -133,7 +136,7 @@ func TestIntegration_TheAgentGateReaderAgreesWithTheAuthority(t *testing.T) {
 // for in an environment nothing bootstraps.
 func TestIntegration_TheAgentGateReaderFailsClosedWithNoRow(t *testing.T) {
 	requireEnv(t)
-	read, err := agent.Store{}.LiveTradingEnabled(context.Background(), testDB, "PROD", time.Now().UTC())
+	read, err := livegate.Read(context.Background(), testDB, "PROD", time.Now().UTC())
 	require.NoError(t, err)
 	assert.False(t, read.Enabled)
 	assert.Equal(t, "DISABLED", read.State)

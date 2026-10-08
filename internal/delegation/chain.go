@@ -10,21 +10,31 @@ import (
 	"github.com/nodal/controlplane/internal/errs"
 )
 
-// ChainHost is what this package needs of the simulated chains.
-// *devnethost.Host satisfies it; it never holds a key or signs.
-type ChainHost interface {
+// ChainReader is what an admission needs of the simulated chains: their
+// configuration (the network, each chain's fee) and whether a chain is
+// healthy. It submits nothing, produces no block and funds no wallet.
+// *devnethost.Host satisfies it, and so does a host whose history refuses
+// every append.
+type ChainReader interface {
 	Config() devnethost.Config
+	Health(ctx context.Context, chain devnet.ChainID) error
+}
+
+// ChainHost is what this package needs of the simulated chains to carry an
+// admitted swap or withdrawal to its end. *devnethost.Host satisfies it; it
+// never holds a key or signs.
+type ChainHost interface {
+	ChainReader
 	ViewIn(ctx context.Context, q db.Querier, fn func(v devnethost.View) error) error
 	Submit(ctx context.Context, chain devnet.ChainID, raw []byte) (devnet.TxID, error)
 	GetTransaction(ctx context.Context, chain devnet.ChainID, txID devnet.TxID) (devnet.TxRecord, error)
 	ProduceBlocks(ctx context.Context, chain devnet.ChainID, n uint64) (devnet.BlockInfo, error)
 	EnsureNativeBalance(ctx context.Context, chain devnet.ChainID, owner devnet.PublicKey, minimum, topUp uint64) error
-	Health(ctx context.Context, chain devnet.ChainID) error
 }
 
 // HostFees reads the fee per transaction of each chain from the host's
 // configuration: the fee the signing policy holds a plan to.
-func HostFees(h ChainHost) ChainFees {
+func HostFees(h ChainReader) ChainFees {
 	return func(chain devnet.ChainID) (uint64, bool) {
 		p, ok := h.Config().Params(chain)
 		return p.FeePerTx, ok

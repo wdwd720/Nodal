@@ -22,6 +22,8 @@ import { randomUUID } from "node:crypto";
 
 import { expect, test, type Page, type Response } from "@playwright/test";
 
+import { goto } from "./pace.ts";
+
 const NOTICE = "Simulated value — sandbox only";
 
 const PAGES: ReadonlyArray<{ readonly path: string; readonly heading: string }> = [
@@ -127,7 +129,7 @@ function collectUsd(value: unknown, into: Set<string>): void {
 test.describe("the derivatives section", () => {
   for (const { path, heading } of PAGES) {
     test(`${heading} renders under the simulated-value notice`, async ({ page }) => {
-      await page.goto(path);
+      await goto(page, path);
       await expect(page.getByRole("heading", { level: 1, name: heading, exact: true })).toBeVisible();
       const notice = page.getByRole("note", { name: NOTICE, exact: true });
       await expect(notice).toBeVisible();
@@ -140,7 +142,7 @@ test.describe("the derivatives section", () => {
   }
 
   test("is a section of the advanced area", async ({ page }) => {
-    await page.goto("/advanced/overview");
+    await goto(page, "/advanced/overview");
     await page
       .getByRole("navigation", { name: "Advanced area", exact: true })
       .getByRole("link", { name: "Derivatives", exact: true })
@@ -176,7 +178,7 @@ test("contracts are listed in the simulated domain and drawn as the backend sent
   expect(Number.isInteger(p.max_mark_lag_ms) && p.max_mark_lag_ms > 0, "marks are recorded within a stated lag").toBe(true);
   expect(p.settlement_override_max_bps > 0 && p.settlement_override_max_bps <= 10000, "an override is bounded").toBe(true);
 
-  await page.goto("/advanced/derivatives");
+  await goto(page, "/advanced/derivatives");
   await settle(page);
   if (list.items.length === 0) {
     await expect(page.getByText("No derivative contracts", { exact: true })).toBeVisible();
@@ -219,7 +221,7 @@ test("an account's positions are its own; another account's are refused and an a
   expect(((await absent.json()) as Problem).code).toBe("NOT_FOUND");
 
   // The page says what the backend said: the book, or the refusal with its code.
-  await page.goto("/advanced/derivatives/positions");
+  await goto(page, "/advanced/derivatives/positions");
   await settle(page);
   const bookPanel = page.getByRole("region", { name: "The open book", exact: true });
   if (body.book_status === "REFUSED") {
@@ -228,14 +230,14 @@ test("an account's positions are its own; another account's are refused and an a
     await expect(bookPanel).toContainText("Gross notional");
   }
 
-  await page.goto(`/advanced/derivatives/positions/${ABSENT}`);
+  await goto(page, `/advanced/derivatives/positions/${ABSENT}`);
   await settle(page);
   await expect(page.locator(".explain-meta").first()).toContainText("code NOT_FOUND");
 });
 
 test("commands are refused with their stable codes", async ({ page }) => {
   const own = await accountId(page);
-  await page.goto("/advanced/derivatives");
+  await goto(page, "/advanced/derivatives");
   await settle(page);
 
   const open = { account_id: own, instrument_id: ABSENT, side: "LONG", quantity: "1", mode: "PAPER" };
@@ -274,10 +276,19 @@ test("an open is confirmed once, and the page shows exactly what the backend ans
     items: ContractRow[];
   };
   const tradable = list.items.find((item) => !item.settled);
-  test.skip(tradable === undefined, "the seed lists no unsettled derivative contract to open a position in");
+  // What is missing is not in this suite's reach: no route of the API lists a
+  // derivative contract (openapi.yaml has no POST under
+  // /advanced/derivatives/contracts; contracts are created in-process only,
+  // through instruments.CreateAdvanced, as scripts/advanceddemo does on a
+  // database of its own) and no LOCAL seed creates one. So on a seeded
+  // database there is no contract to open a position in.
+  test.skip(
+    tradable === undefined,
+    "no unsettled derivative contract exists: neither the LOCAL seeds nor any API route create one",
+  );
   const contract = tradable as ContractRow;
 
-  await page.goto(`/advanced/derivatives/contracts/${contract.id}`);
+  await goto(page, `/advanced/derivatives/contracts/${contract.id}`);
   await settle(page);
   await expect(page.getByRole("heading", { level: 1, name: contract.terms.symbol, exact: true })).toBeVisible();
   if (!contract.marked) {
@@ -339,12 +350,12 @@ test("a dated contract states its settlement rule, and settling or overriding it
       expect(c.settlement_preview.settleable, "nothing settles before expiry").toBe(false);
       expect(c.settlement_preview.has_reference, "the reference is read at expiry").toBe(false);
     }
-    await page.goto(`/advanced/derivatives/contracts/${item.id}`);
+    await goto(page, `/advanced/derivatives/contracts/${item.id}`);
     await settle(page);
     await expect(page.getByRole("region", { name: "Settlement rule", exact: true })).toContainText("EXPIRY_MARK v1");
   }
 
-  await page.goto("/advanced/derivatives");
+  await goto(page, "/advanced/derivatives");
   await settle(page);
   const path = `/advanced/derivatives/contracts/${ABSENT}/settlement`;
   for (const body of [
@@ -374,7 +385,7 @@ test("the flow register and funding are read for the account and drawn as sent",
   const accruals = await page.request.get(`/v1/advanced/derivatives/funding-accruals?account_id=${own}`);
   expect(accruals.status()).toBe(200);
 
-  await page.goto("/advanced/derivatives/flows");
+  await goto(page, "/advanced/derivatives/flows");
   await settle(page);
   const register = page.getByRole("region", { name: "Flow register", exact: true });
   if (flowPage.items.length === 0) {
@@ -398,7 +409,7 @@ test("no money-shaped figure appears on the positions page that the API did not 
       ),
     );
   });
-  await page.goto("/advanced/derivatives/positions");
+  await goto(page, "/advanced/derivatives/positions");
   await settle(page);
   await Promise.all(pending);
   const allowed = new Set([...sent].map(renderedUsd));

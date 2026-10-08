@@ -49,7 +49,7 @@ func refuseSupplyControlledWithdrawal(ctx context.Context, q db.Querier, asset a
 // spare. A request whose intent is already recorded (intentKey) is a replay:
 // it is answered as it was the first time, however the venue's inventory has
 // moved since, so it is never refused here.
-func (s *Service) refuseUnfundableDelivery(ctx context.Context, tx pgx.Tx, account accounts.AccountID, intentKey string, v Venue,
+func (s *admitter) refuseUnfundableDelivery(ctx context.Context, tx pgx.Tx, account accounts.AccountID, intentKey string, v Venue,
 	recv assets.AssetID) error {
 	controller, err := econ.SupplyController(ctx, tx, recv)
 	if err != nil || controller == "" {

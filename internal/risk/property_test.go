@@ -426,7 +426,7 @@ func TestProp_ConstraintsNeverLooserThanPolicy(t *testing.T) {
 	})
 }
 
-// TestProp_NewRiskNeverAllowedUnderAnyMatchingKill: with a GLOBAL kill active
+// TestProp_NewRiskNeverAllowedUnderGlobalKill: with a GLOBAL kill active
 // no NEW_RISK intent is ever allowed, whatever the policy flags.
 func TestProp_NewRiskNeverAllowedUnderGlobalKill(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {

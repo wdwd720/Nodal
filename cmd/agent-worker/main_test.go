@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"go/ast"
+	"go/format"
 	"go/parser"
 	"go/token"
 	"os"
@@ -47,17 +49,149 @@ func TestRun_UsageErrors(t *testing.T) {
 }
 
 // TestWireDelegationOffersNothingWithoutASandboxChain: unconfigured, the
-// worker builds no facade, touches neither the secret resolver nor the
-// database, and says why -- and the runner gets no delegated factory.
+// worker builds no facade, touches no database, and says why -- and the
+// runner gets no delegated factory.
 func TestWireDelegationOffersNothingWithoutASandboxChain(t *testing.T) {
 	t.Parallel()
 	cfg := &config.Config{Env: config.EnvTest}
-	admission, reason, err := wireDelegation(context.Background(), cfg, nil, nil, clock.NewFake(time.Now()))
+	admission, reason, err := wireDelegation(context.Background(), cfg, "", nil, clock.NewFake(time.Now()))
 	require.NoError(t, err)
 	assert.Nil(t, admission)
 	assert.Equal(t, delegatedNotWired, reason)
 	assert.Contains(t, reason, "CP_SANDBOX_DEVNET_NETWORK")
 	assert.Nil(t, delegatedFor(nil, clock.NewFake(time.Now()), nil), "no facade, no delegated tool")
+}
+
+// TestTheWorkersConfigurationHoldsNoSeed: the worker's configuration takes
+// the sandbox chain's network and never its seed. With the published example
+// environment, which carries both, the configuration loader is never shown
+// the seed's reference, nothing the worker loads holds it, and the worker
+// knows only that it was offered one (to warn). With the network alone the
+// worker's configuration loads -- where the API's, which signs on the chain,
+// is refused without the seed.
+func TestTheWorkersConfigurationHoldsNoSeed(t *testing.T) {
+	t.Parallel()
+	example, err := config.ParseDotEnv(strings.NewReader(config.ExampleEnv()))
+	require.NoError(t, err)
+	seedRef := example[envSandboxSeedRef]
+	require.NotEmpty(t, seedRef, "the example environment offers the seed's reference")
+	require.NotEmpty(t, example[envSandboxNetwork])
+
+	var asked []string
+	recorded := func(lookup func(string) (string, bool)) func(string) (string, bool) {
+		return func(k string) (string, bool) {
+			asked = append(asked, k)
+			return lookup(k)
+		}
+	}
+	_, _, masked := sandboxNetworkOnly(exampleEnv(t, nil))
+	cfg, err := config.Load(context.Background(), config.ServiceAgentWorker, recorded(masked))
+	require.NoError(t, err)
+	assert.Contains(t, asked, envSandboxSeedRef, "the loader asks for the seed's reference")
+	got, ok := masked(envSandboxSeedRef)
+	assert.False(t, ok, "and is never given it")
+	assert.Empty(t, got)
+	assert.True(t, cfg.Sandbox.DevnetSeedRef.IsZero())
+	assert.NotContains(t, fmt.Sprintf("%#v", *cfg), seedRef, "no part of the worker's configuration holds the seed")
+	// The control: loaded the way every other binary loads it, the same
+	// environment's configuration does hold it, where the check can see it.
+	unmasked, err := config.Load(context.Background(), config.ServiceAgentWorker, exampleEnv(t, nil))
+	require.NoError(t, err)
+	require.Contains(t, fmt.Sprintf("%#v", *unmasked), seedRef)
+
+	cfg, network, offered, err := loadWorkerConfig(context.Background(), exampleEnv(t, nil))
+	require.NoError(t, err)
+	assert.Equal(t, example[envSandboxNetwork], network, "the network is read beside the configuration")
+	assert.True(t, offered, "the worker knows the environment offered a seed, to warn")
+	assert.True(t, cfg.Sandbox.DevnetSeedRef.IsZero())
+
+	noSeed := exampleEnv(t, map[string]string{envSandboxSeedRef: "-"})
+	_, network, offered, err = loadWorkerConfig(context.Background(), noSeed)
+	require.NoError(t, err, "the worker needs no seed")
+	assert.Equal(t, example[envSandboxNetwork], network)
+	assert.False(t, offered)
+	_, err = config.Load(context.Background(), config.ServiceAPI, noSeed)
+	require.Error(t, err, "the API, which signs on the chain, cannot open it without the seed")
+	assert.Contains(t, err.Error(), "DevnetSeedRef")
+}
+
+// TestTheWorkerTakesNoSeed proves at the source level what the worker's
+// wiring holds of the sandbox chain: never the package of its seeds and
+// platform keys (internal/sandboxchain), never the seed's reference, a
+// seed, a key derivation, a key pair or a signer constructor -- and the one
+// secret its secret resolver resolves is its database URL: the resolver is
+// used once, for that, and handed to nothing.
+func TestTheWorkerTakesNoSeed(t *testing.T) {
+	t.Parallel()
+	entries, err := os.ReadDir(".")
+	require.NoError(t, err)
+	forbidden := map[string]bool{
+		"DevnetSeedRef": true, "Seed": true, "ParseSeed": true, "Derive": true, "DeriveKeys": true, "VenueSeed": true,
+		"Keys": true, "Keypair": true, "NewKeypairFromSeed": true, "SeedSize": true, "PurposeDelegatedSigner": true,
+		"NewDelegatedSigner": true, "NewVenueSigner": true, "DelegatedSigner": true, "VenueSigner": true,
+	}
+	fset := token.NewFileSet()
+	var files []*ast.File
+	resolvers := map[string]bool{} // the variables config.NewResolver's result is bound to
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, name, nil, parser.SkipObjectResolution)
+		require.NoError(t, err)
+		files = append(files, f)
+		for _, imp := range f.Imports {
+			assert.NotEqual(t, `"github.com/nodal/controlplane/internal/sandboxchain"`, imp.Path.Value,
+				"%s imports the package of the sandbox chain's seed and platform keys", name)
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			switch x := n.(type) {
+			case *ast.SelectorExpr:
+				assert.False(t, forbidden[x.Sel.Name], "%s names %s", fset.Position(x.Pos()), x.Sel.Name)
+			case *ast.AssignStmt:
+				for i, rhs := range x.Rhs {
+					call, ok := rhs.(*ast.CallExpr)
+					if !ok {
+						continue
+					}
+					sel, ok := call.Fun.(*ast.SelectorExpr)
+					if !ok || sel.Sel.Name != "NewResolver" || i >= len(x.Lhs) {
+						continue
+					}
+					if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "config" {
+						if id, ok := x.Lhs[i].(*ast.Ident); ok {
+							resolvers[id.Name] = true
+						}
+					}
+				}
+			}
+			return true
+		})
+	}
+	require.Len(t, resolvers, 1, "the worker builds one secret resolver")
+	uses, resolved := 0, []string{}
+	for _, f := range files {
+		ast.Inspect(f, func(n ast.Node) bool {
+			switch x := n.(type) {
+			case *ast.CallExpr:
+				if sel, ok := x.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "Resolve" {
+					if id, ok := sel.X.(*ast.Ident); ok && resolvers[id.Name] && len(x.Args) == 2 {
+						var arg strings.Builder
+						require.NoError(t, format.Node(&arg, fset, x.Args[1]))
+						resolved = append(resolved, arg.String())
+					}
+				}
+			case *ast.Ident:
+				if resolvers[x.Name] {
+					uses++
+				}
+			}
+			return true
+		})
+	}
+	assert.Equal(t, []string{"cfg.Database.AppURL"}, resolved, "the one secret the worker resolves is its database URL")
+	assert.Equal(t, 2, uses, "the resolver is bound once and used once, to resolve that URL, and handed to nothing")
 }
 
 // TestTheWorkerHoldsOnlyTheAdmissionFacade proves at the source level what

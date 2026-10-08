@@ -27,6 +27,9 @@ import { randomBytes, randomUUID } from "node:crypto";
 
 import { expect, test, type Browser, type BrowserContext, type Locator, type Page, type Response } from "@playwright/test";
 
+import { goto } from "./pace.ts";
+import { signIn } from "./sign-in.ts";
+
 const NOTICE = "Simulated value — sandbox only";
 const SECTION = "/advanced/agent-authority";
 
@@ -89,17 +92,24 @@ async function ownAccount(page: Page): Promise<string> {
   return id as string;
 }
 
-/** Signs a development identity in, in a fresh context, through the real OIDC flow. */
-async function signIn(browser: Browser, identity: string, mfa: boolean): Promise<{ context: BrowserContext; page: Page }> {
-  const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
-  const page = await context.newPage();
-  await page.goto("/v1/auth/login");
-  await expect(page.getByRole("heading", { name: "Choose an identity" })).toBeVisible();
-  const row = page.locator("li", { has: page.locator("code", { hasText: new RegExp(`^${identity}$`) }) });
-  await row.getByRole("link", { name: mfa ? "sign in with MFA" : "sign in", exact: true }).first().click();
-  await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
-  return { context, page };
+/**
+ * Customer-a's strong session, which this file's tests share. Signing in is
+ * rate limited -- CP_API_RATE_LIMIT_AUTH allows 30 requests a minute from one
+ * address by default, and a sign-in is four of them -- and the suite signs in
+ * far more often than a person would, so customer-a signs in with MFA once for
+ * the file. A strong sign-in stays recent far longer than this file takes.
+ */
+let strongSession: { context: BrowserContext; page: Page } | undefined;
+
+async function strongCustomer(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
+  strongSession ??= await signIn(browser, "customer-a", true);
+  return strongSession;
 }
+
+test.afterAll(async () => {
+  await strongSession?.context.close();
+  strongSession = undefined;
+});
 
 /** The response to the POST an action makes, observed as the page received it. */
 async function answerTo(page: Page, path: string, act: () => Promise<void>): Promise<Response> {
@@ -153,7 +163,7 @@ async function fillGrant(page: Page, agentId: string, destination: string): Prom
 test.describe("the agent authority section", () => {
   for (const { path, heading } of PAGES) {
     test(`${heading} renders under the simulated-value notice`, async ({ page }) => {
-      await page.goto(path);
+      await goto(page, path);
       await expect(page.getByRole("heading", { level: 1, name: heading, exact: true })).toBeVisible();
       const notice = page.getByRole("note", { name: NOTICE, exact: true });
       await expect(notice).toBeVisible();
@@ -165,7 +175,7 @@ test.describe("the agent authority section", () => {
   }
 
   test("the section is reachable from the advanced area's navigation", async ({ page }) => {
-    await page.goto("/advanced/overview");
+    await goto(page, "/advanced/overview");
     await expect(page.locator("h1")).toHaveCount(1);
     await page
       .getByRole("navigation", { name: "Advanced area", exact: true })
@@ -182,7 +192,7 @@ test.describe("the agent authority section", () => {
 
 test("an unwired deployment says UNSUPPORTED instead of drawing empty tables", async ({ page }) => {
   test.skip(await delegationRuns(page), "this deployment runs delegated authority; the wired case is covered below");
-  await page.goto(SECTION);
+  await goto(page, SECTION);
   await settle(page);
   await expectCode(page.getByRole("region", { name: "Capabilities", exact: true }), "UNSUPPORTED");
   await expectCode(page.getByRole("region", { name: "Signing requests", exact: true }), "UNSUPPORTED");
@@ -192,7 +202,7 @@ test("an unwired deployment says UNSUPPORTED instead of drawing empty tables", a
 test("the lists show exactly the rows the API returned", async ({ page }) => {
   test.skip(!(await delegationRuns(page)), "this deployment does not run delegated authority");
   const id = await ownAccount(page);
-  await page.goto(SECTION);
+  await goto(page, SECTION);
   await settle(page);
   for (const { path, panel, empty, attribute } of [
     { path: "capabilities", panel: "Capabilities", empty: "No capabilities", attribute: "data-capability-id" },
@@ -220,7 +230,7 @@ test("the lists show exactly the rows the API returned", async ({ page }) => {
 
 test("a grant without a recent strong sign-in is refused, and a retry sends the same key", async ({ page }) => {
   test.skip(!(await delegationRuns(page)), "this deployment does not run delegated authority");
-  await page.goto(SECTION);
+  await goto(page, SECTION);
   await settle(page);
   const review = await fillGrant(page, unknownId(), (await aVenueAddress(page)) ?? freshAddress());
   const first = await answerTo(page, "/v1/advanced/delegation/capabilities", () =>
@@ -242,89 +252,81 @@ test("a grant without a recent strong sign-in is refused, and a retry sends the 
 
 test("a grant to an agent that is not the account's is refused by the backend, with its code", async ({ browser, page }) => {
   test.skip(!(await delegationRuns(page)), "this deployment does not run delegated authority");
-  const strong = await signIn(browser, "customer-a", true);
-  try {
-    await strong.page.goto(SECTION);
-    await settle(strong.page);
-    const review = await fillGrant(strong.page, unknownId(), (await aVenueAddress(strong.page)) ?? freshAddress());
-    const response = await answerTo(strong.page, "/v1/advanced/delegation/capabilities", () =>
-      review.getByRole("button", { name: "Confirm and grant", exact: true }).click(),
-    );
-    expect(response.status(), "an agent of another account, or of nobody, is never granted anything").toBe(403);
-    const problem = (await response.json()) as Problem;
-    expect(problem.code).toBe("FORBIDDEN");
-    await expectCode(review, "FORBIDDEN");
-  } finally {
-    await strong.context.close();
-  }
+  const strong = await strongCustomer(browser);
+  await strong.page.goto(SECTION);
+  await settle(strong.page);
+  const review = await fillGrant(strong.page, unknownId(), (await aVenueAddress(strong.page)) ?? freshAddress());
+  const response = await answerTo(strong.page, "/v1/advanced/delegation/capabilities", () =>
+    review.getByRole("button", { name: "Confirm and grant", exact: true }).click(),
+  );
+  expect(response.status(), "an agent of another account, or of nobody, is never granted anything").toBe(403);
+  const problem = (await response.json()) as Problem;
+  expect(problem.code).toBe("FORBIDDEN");
+  await expectCode(review, "FORBIDDEN");
 });
 
 test("the owner keeps the allow-list and writes a policy version, each with a strong sign-in", async ({ browser, page }) => {
   test.skip(!(await delegationRuns(page)), "this deployment does not run delegated authority");
-  const strong = await signIn(browser, "customer-a", true);
-  try {
-    const owner = strong.page;
-    const id = await ownAccount(owner);
-    await owner.goto(`${SECTION}/destinations`);
-    await settle(owner);
+  const strong = await strongCustomer(browser);
+  const owner = strong.page;
+  const id = await ownAccount(owner);
+  await owner.goto(`${SECTION}/destinations`);
+  await settle(owner);
 
-    // Allow-list a fresh destination.
-    const address = freshAddress();
-    const label = `e2e ${address.slice(0, 6)}`;
-    const add = owner.getByRole("form", { name: "Add a destination" });
-    await add.getByLabel("Address", { exact: true }).fill(address);
-    await add.getByLabel("Label", { exact: true }).fill(label);
-    await add.getByRole("button", { name: "Review the destination", exact: true }).click();
-    const added = await answerTo(owner, "/v1/advanced/delegation/destinations", () =>
-      add.getByRole("button", { name: "Confirm and add", exact: true }).click(),
-    );
-    expect(added.status()).toBe(200);
-    const destination = (await added.json()) as { id: string; status: string };
-    expect(destination.status).toBe("ACTIVE");
-    await expect(owner.locator(`[data-added-destination="${destination.id}"]`)).toBeVisible();
+  // Allow-list a fresh destination.
+  const address = freshAddress();
+  const label = `e2e ${address.slice(0, 6)}`;
+  const add = owner.getByRole("form", { name: "Add a destination" });
+  await add.getByLabel("Address", { exact: true }).fill(address);
+  await add.getByLabel("Label", { exact: true }).fill(label);
+  await add.getByRole("button", { name: "Review the destination", exact: true }).click();
+  const added = await answerTo(owner, "/v1/advanced/delegation/destinations", () =>
+    add.getByRole("button", { name: "Confirm and add", exact: true }).click(),
+  );
+  expect(added.status()).toBe(200);
+  const destination = (await added.json()) as { id: string; status: string };
+  expect(destination.status).toBe("ACTIVE");
+  await expect(owner.locator(`[data-added-destination="${destination.id}"]`)).toBeVisible();
 
-    // The list shows it, as the API does; then remove it.
-    await owner.reload();
-    await settle(owner);
-    const row = owner.locator(`[data-destination-id="${destination.id}"]`);
-    await expect(row).toContainText("ACTIVE");
-    await row.getByRole("button", { name: `Remove ${label}`, exact: true }).click();
-    await row.getByLabel("Reason", { exact: true }).fill("end-to-end clean-up");
-    await row.getByRole("button", { name: `Remove ${label}`, exact: true }).click();
-    const removed = await answerTo(owner, `/v1/advanced/delegation/destinations/${destination.id}/remove`, () =>
-      row.getByRole("button", { name: "Confirm removal", exact: true }).click(),
-    );
-    expect(removed.status()).toBe(200);
-    expect(((await removed.json()) as { status: string }).status).toBe("REMOVED");
+  // The list shows it, as the API does; then remove it.
+  await owner.reload();
+  await settle(owner);
+  const row = owner.locator(`[data-destination-id="${destination.id}"]`);
+  await expect(row).toContainText("ACTIVE");
+  await row.getByRole("button", { name: `Remove ${label}`, exact: true }).click();
+  await row.getByLabel("Reason", { exact: true }).fill("end-to-end clean-up");
+  await row.getByRole("button", { name: `Remove ${label}`, exact: true }).click();
+  const removed = await answerTo(owner, `/v1/advanced/delegation/destinations/${destination.id}/remove`, () =>
+    row.getByRole("button", { name: "Confirm removal", exact: true }).click(),
+  );
+  expect(removed.status()).toBe(200);
+  expect(((await removed.json()) as { status: string }).status).toBe("REMOVED");
 
-    // A new policy version, exactly as typed.
-    const before = (await (await owner.request.get(`/v1/advanced/delegation/withdrawal-policy?account_id=${id}`)).json()) as {
-      current?: { version: number };
-    };
-    const form = owner.getByRole("form", { name: "Write a new policy version" });
-    await form.getByLabel("Per withdrawal at most (sandbox dollars)", { exact: true }).fill("250.00");
-    await form.getByLabel("Per day at most (sandbox dollars)", { exact: true }).fill("1000.00");
-    await form.getByLabel("Withdrawals per 24 hours at most", { exact: true }).fill("10");
-    await form.getByLabel("Highest risk score accepted", { exact: true }).fill("80");
-    await form.getByLabel("Automatic approval at most (sandbox dollars)", { exact: true }).fill("0.00");
-    await form.getByRole("button", { name: "Review the new version", exact: true }).click();
-    const written = await answerTo(owner, "/v1/advanced/delegation/withdrawal-policy", () =>
-      form.getByRole("button", { name: "Confirm the new version", exact: true }).click(),
-    );
-    expect(written.status()).toBe(200);
-    const policy = (await written.json()) as { version: number; per_withdrawal_limit_usd: string; value_domain: string };
-    expect(policy.version, "versions are never edited; a change is the next version").toBe((before.current?.version ?? 0) + 1);
-    expect(policy.per_withdrawal_limit_usd).toBe("250.00");
-    expect(policy.value_domain).toBe("SIMULATED");
-    await expect(owner.locator(`[data-policy-version="${String(policy.version)}"]`)).toBeVisible();
-  } finally {
-    await strong.context.close();
-  }
+  // A new policy version, exactly as typed.
+  const before = (await (await owner.request.get(`/v1/advanced/delegation/withdrawal-policy?account_id=${id}`)).json()) as {
+    current?: { version: number };
+  };
+  const form = owner.getByRole("form", { name: "Write a new policy version" });
+  await form.getByLabel("Per withdrawal at most (sandbox dollars)", { exact: true }).fill("250.00");
+  await form.getByLabel("Per day at most (sandbox dollars)", { exact: true }).fill("1000.00");
+  await form.getByLabel("Withdrawals per 24 hours at most", { exact: true }).fill("10");
+  await form.getByLabel("Highest risk score accepted", { exact: true }).fill("80");
+  await form.getByLabel("Automatic approval at most (sandbox dollars)", { exact: true }).fill("0.00");
+  await form.getByRole("button", { name: "Review the new version", exact: true }).click();
+  const written = await answerTo(owner, "/v1/advanced/delegation/withdrawal-policy", () =>
+    form.getByRole("button", { name: "Confirm the new version", exact: true }).click(),
+  );
+  expect(written.status()).toBe(200);
+  const policy = (await written.json()) as { version: number; per_withdrawal_limit_usd: string; value_domain: string };
+  expect(policy.version, "versions are never edited; a change is the next version").toBe((before.current?.version ?? 0) + 1);
+  expect(policy.per_withdrawal_limit_usd).toBe("250.00");
+  expect(policy.value_domain).toBe("SIMULATED");
+  await expect(owner.locator(`[data-policy-version="${String(policy.version)}"]`)).toBeVisible();
 });
 
 test("a destination without a recent strong sign-in is refused with STEP_UP_REQUIRED", async ({ page }) => {
   test.skip(!(await delegationRuns(page)), "this deployment does not run delegated authority");
-  await page.goto(`${SECTION}/destinations`);
+  await goto(page, `${SECTION}/destinations`);
   await settle(page);
   const add = page.getByRole("form", { name: "Add a destination" });
   await add.getByLabel("Address", { exact: true }).fill(freshAddress());
@@ -342,7 +344,7 @@ test("the operator's view is refused to a customer, with the code on screen", as
   const capabilities = await page.request.get("/v1/advanced/delegation/ops/capabilities");
   expect(pending.status(), "a customer holds no sandbox:operate").toBe(403);
   expect(capabilities.status()).toBe(403);
-  await page.goto(`${SECTION}/operator`);
+  await goto(page, `${SECTION}/operator`);
   await settle(page);
   await expectCode(page.getByRole("region", { name: "Not yet at an end", exact: true }), ((await pending.json()) as Problem).code);
   await expectCode(
@@ -410,7 +412,7 @@ test("an unknown capability, signing request or withdrawal is answered NOT_FOUND
     const id = unknownId();
     const response = await page.request.get(`/v1/advanced/delegation/${kind}/${id}`);
     expect(response.status()).toBe(404);
-    await page.goto(`${SECTION}/${kind}/${id}`);
+    await goto(page, `${SECTION}/${kind}/${id}`);
     await expect(page.getByRole("heading", { level: 1, name: heading, exact: true })).toBeVisible();
     await settle(page);
     await expect(page.getByRole("note", { name: NOTICE, exact: true })).toBeVisible();
@@ -420,7 +422,7 @@ test("an unknown capability, signing request or withdrawal is answered NOT_FOUND
 
 test("no dead controls in the agent authority section", async ({ page }) => {
   for (const { path } of PAGES) {
-    await page.goto(path);
+    await goto(page, path);
     await settle(page);
     const buttons = page.locator("main button");
     const count = await buttons.count();
@@ -439,7 +441,7 @@ test("no dead controls in the agent authority section", async ({ page }) => {
 test("the agent authority pages reflow at 390px without sideways scrolling", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   for (const { path } of PAGES) {
-    await page.goto(path);
+    await goto(page, path);
     await settle(page);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow, `${path} does not scroll horizontally at 390px`).toBeLessThanOrEqual(1);

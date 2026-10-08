@@ -60,6 +60,11 @@ var inScope = []string{
 	"docs/threat-model/ADVANCED_THREAT_MODEL.md",
 	"docs/build/ADVANCED_CAPABILITIES_MATRIX.md",
 	"docs/reviews/ADVANCED_SYSTEMS_REVIEW.md",
+	"docs/reviews/SECURITY_RED_TEAM.md",
+	// The portfolio's evidence: every claim names the tests that prove it, so
+	// a claim whose test is renamed or deleted fails here instead of quietly
+	// citing nothing.
+	"docs/portfolio/TECHNICAL_EVIDENCE.md",
 }
 
 var (
