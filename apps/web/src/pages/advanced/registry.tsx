@@ -55,6 +55,7 @@ import { PredictionMarketsSection } from "./predmarket/PredictionMarkets.tsx";
 import { StrategiesSection } from "./marketplace/StrategiesSection.tsx";
 
 // >>> advanced:delegation import
+import { DelegationSection } from "./delegation/DelegationSection.tsx";
 
 // >>> advanced:operator import
 
@@ -186,6 +187,13 @@ export const ADVANCED_SECTIONS: readonly AdvancedSection[] = [
   },
 
   // >>> advanced:delegation section
+  {
+    path: "agent-authority",
+    title: "Agent authority",
+    description:
+      "What the account delegated to its own agents -- capability scope, limits and their use, expiry and revocation -- the signing requests they made with the inspected plan, and the withdrawals they proposed with destination, policy and your decision.",
+    element: <DelegationSection />,
+  },
 
   // >>> advanced:operator section
 ];
