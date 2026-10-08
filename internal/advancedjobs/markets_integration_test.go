@@ -210,7 +210,7 @@ func TestIntegration_ATamperedBookJournalProducesAReconciliationRecord(t *testin
 	var material bool
 	require.NoError(t, testDB.QueryRow(w.ctx, `SELECT kind, status, material FROM reconciliation_records WHERE scope_type = $1 AND scope_id = $2`,
 		ScopeOrderBook, book.ID.String()).Scan(&kind, &status, &material))
-	assert.Equal(t, string(reconciliation.KindLedgerInternal), kind)
+	assert.Equal(t, string(reconciliation.KindBookJournal), kind, "an order book's journal has a reconciliation kind of its own")
 	assert.Equal(t, string(reconciliation.StatusMismatch), status)
 	assert.True(t, material)
 
@@ -304,7 +304,7 @@ func TestIntegration_TransfersReconciliationRecordsADiscrepancyOnce(t *testing.T
 	var status, kind string
 	require.NoError(t, testDB.QueryRow(w.ctx, `SELECT kind, status FROM reconciliation_records WHERE scope_type = $1 AND scope_id = $2
 		ORDER BY opened_at DESC LIMIT 1`, ScopeTransfers, ScopeTransfersID).Scan(&kind, &status))
-	assert.Equal(t, string(reconciliation.KindLedgerInternal), kind)
+	assert.Equal(t, string(reconciliation.KindTransfers), kind, "the transfer register has a reconciliation kind of its own")
 	assert.Equal(t, string(reconciliation.StatusMismatch), status)
 
 	run(t, w.ctx, job)

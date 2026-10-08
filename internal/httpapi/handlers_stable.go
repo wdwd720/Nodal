@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
@@ -584,7 +586,11 @@ func (s *Server) PostAdvancedStableAssetsStableAssetIdRedemptionQueueRun(ctx con
 			if perr != nil {
 				return api.StableSettleReport{}, commandMeta{}, perr
 			}
-			return toAPIStableSettleReport(r), commandMeta{Status: http.StatusOK, ResourceType: "stable_asset", ResourceID: sid.String()}, nil
+			out, cerr := toAPIStableSettleReport(r)
+			if cerr != nil {
+				return api.StableSettleReport{}, commandMeta{}, cerr
+			}
+			return out, commandMeta{Status: http.StatusOK, ResourceType: "stable_asset", ResourceID: sid.String()}, nil
 		})
 	if err != nil {
 		return nil, err
@@ -608,7 +614,11 @@ func (s *Server) PostAdvancedStableAssetsOpsResolveUnknown(ctx context.Context, 
 			if rerr != nil {
 				return api.StableSettleReport{}, commandMeta{}, rerr
 			}
-			return toAPIStableSettleReport(r), commandMeta{Status: http.StatusOK, ResourceType: "stable_unknown_submissions"}, nil
+			out, cerr := toAPIStableSettleReport(r)
+			if cerr != nil {
+				return api.StableSettleReport{}, commandMeta{}, cerr
+			}
+			return out, commandMeta{Status: http.StatusOK, ResourceType: "stable_unknown_submissions"}, nil
 		})
 	if err != nil {
 		return nil, err
@@ -1034,11 +1044,27 @@ func toAPIStableSupply(r stableasset.SupplyReconciliation) api.StableSupplyRecon
 	return out
 }
 
-func toAPIStableSettleReport(r stableasset.SettleReport) api.StableSettleReport {
-	return api.StableSettleReport{
+func toAPIStableSettleReport(r stableasset.SettleReport) (api.StableSettleReport, error) {
+	out := api.StableSettleReport{
 		ValueDomain: api.SIMULATED, Examined: r.Examined, Issued: r.Issued, Redeemed: r.Redeemed, Queued: r.Queued,
-		Failed: r.Failed, Waiting: r.Waiting,
+		Failed: r.Failed, Waiting: r.Waiting, Failures: make([]api.StableRequestFailure, 0, len(r.Failures)),
 	}
+	for _, f := range r.Failures {
+		op := api.StableRequestFailureOperation(f.Operation)
+		if !op.Valid() {
+			return api.StableSettleReport{}, errs.New(errs.CodeInternal, "internal error").
+				WithField("operation", f.Operation)
+		}
+		id, err := uuid.Parse(f.RequestID)
+		if err != nil {
+			return api.StableSettleReport{}, errs.Wrap(err, errs.CodeInternal, "internal error")
+		}
+		code, detail := itemFailure(f.Err)
+		out.Failures = append(out.Failures, api.StableRequestFailure{
+			Operation: op, RequestId: id, Attempts: f.Attempts, RetryAfter: f.RetryAfter.UTC(), ErrorCode: code, Detail: detail,
+		})
+	}
+	return out, nil
 }
 
 func toAPIStableMonitor(v StableMonitorView) (api.StableMonitorReport, error) {

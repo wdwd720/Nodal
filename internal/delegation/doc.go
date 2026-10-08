@@ -93,4 +93,8 @@
 //     posting is a simulated-only kind.
 //   - Keep package-level mutable state, read the wall clock, or use floating
 //     point.
+//   - Sign, submit, observe or settle a swap or withdrawal of another devnet
+//     network than its host's (every one records the network it was admitted
+//     on, 00760), or let a subject the sweep cannot handle stop the others or
+//     be taken again before its backoff has passed.
 package delegation

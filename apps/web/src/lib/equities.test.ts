@@ -333,12 +333,23 @@ test("corporate actions, postings and the workers' runs are accepted only in the
     /^\/r\.replayed$/,
   );
 
-  assert.doesNotThrow(() =>
-    validated(
-      { value_domain: "SIMULATED", as_of: AT, trade_date: "2026-10-08", batches: 1, settled: [settlement] },
-      equitySettlementRunSpec,
-      "/sr",
-    ),
+  const settlementRun = { value_domain: "SIMULATED", as_of: AT, trade_date: "2026-10-08", batches: 1, settled: [settlement], failures: [] };
+  assert.doesNotThrow(() => validated(settlementRun, equitySettlementRunSpec, "/sr"));
+  const failure = {
+    settlement_id: ORDER,
+    fill_id: ORDER,
+    account_id: ACCOUNT,
+    attempts: 2,
+    retry_after: AT,
+    error_code: "CONFLICT",
+    detail: "the settlement's effect is claimed and not applied",
+  };
+  assert.doesNotThrow(() => validated({ ...settlementRun, failures: [failure] }, equitySettlementRunSpec, "/sr"));
+  // A run always says what it could not settle, even when that is nothing.
+  refuses(() => validated(broken(settlementRun, (v) => delete v["failures"]), equitySettlementRunSpec, "/sr"), /^\/sr\.failures$/);
+  refuses(
+    () => validated({ ...settlementRun, failures: [{ ...failure, retry_after: "soon" }] }, equitySettlementRunSpec, "/sr"),
+    /^\/sr\.failures\[0\]\.retry_after$/,
   );
   const venueRun = {
     value_domain: "SIMULATED",

@@ -55,5 +55,9 @@
 //   - import internal/ledger: WALLET balances are read directly from
 //     ledger_balances / ledger_accounts, never written;
 //   - compute or cache buying power: buyingpower_types.go only declares the
-//     output contract for the engine that lives elsewhere.
+//     output contract for the engine that lives elsewhere;
+//   - let a due reservation that cannot be expired stop the expiry of any
+//     other, or take it again before its backoff has passed: ExpireDueBatch
+//     expires each reservation in its own savepoint, deferred checks
+//     included, and records one that fails in upkeep_failures (00760).
 package capital

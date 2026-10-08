@@ -263,15 +263,19 @@ type Swap struct {
 	EffectID             *econ.EffectID
 	JournalTransactionID *ledger.TransactionID
 	FailureCode          string
-	CreatedAt            time.Time
-	UpdatedAt            time.Time
+	// Network is the devnet network the swap was admitted on, and is signed,
+	// submitted and observed on (migration 00760); "" for a swap admitted
+	// before networks were recorded that the migration could not attribute.
+	Network   string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 const swapColumns = `id, capability_id, account_id, agent_id::text, request_nonce::text, intent_id, usage_id, reservation_id,
 	venue_id, mode, action_class, chain_id, wallet, pay_asset_id, receive_asset_id, amount_in::text, amount_out::text,
 	min_amount_out::text, notional_usd_minor, requested_at, quote_expires_at, requires_approval, plan, plan_hash, status,
 	message, coalesce(recent_blockhash, ''), coalesce(blockhash_height, 0), signed_at, coalesce(tx_id, ''), signed_tx,
-	effect_id, journal_transaction_id, coalesce(failure_code, ''), created_at, updated_at`
+	effect_id, journal_transaction_id, coalesce(failure_code, ''), coalesce(network, ''), created_at, updated_at`
 
 func scanSwap(row pgx.Row) (Swap, error) {
 	var s Swap
@@ -281,7 +285,7 @@ func scanSwap(row pgx.Row) (Swap, error) {
 	if err := row.Scan(&s.ID, &s.CapabilityID, &s.AccountID, &s.AgentID, &nonce, &s.IntentID, &s.UsageID, &s.ReservationID,
 		&s.VenueID, &s.Mode, &s.Action, &s.Chain, &wallet, &s.PayAssetID, &s.ReceiveAssetID, &in, &out, &minOut, &notional,
 		&s.RequestedAt, &s.QuoteExpiresAt, &s.RequiresApproval, &plan, &hash, &s.Status, &s.Message, &bh, &height,
-		&s.SignedAt, &txID, &s.SignedTx, &s.EffectID, &s.JournalTransactionID, &s.FailureCode, &s.CreatedAt, &s.UpdatedAt); err != nil {
+		&s.SignedAt, &txID, &s.SignedTx, &s.EffectID, &s.JournalTransactionID, &s.FailureCode, &s.Network, &s.CreatedAt, &s.UpdatedAt); err != nil {
 		return Swap{}, err
 	}
 	var err error
@@ -479,15 +483,20 @@ type Withdrawal struct {
 	EffectID             *econ.EffectID
 	JournalTransactionID *ledger.TransactionID
 	FailureCode          string
-	CreatedAt            time.Time
-	UpdatedAt            time.Time
+	// Network is the devnet network the withdrawal was proposed on, and is
+	// signed, submitted and observed on (migration 00760); "" for one
+	// proposed before networks were recorded that the migration could not
+	// attribute.
+	Network   string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 const withdrawalColumns = `id, capability_id, account_id, agent_id::text, proposal_nonce::text, intent_id, usage_id, reservation_id,
 	policy_id, destination_id, environment, mode, chain_id, wallet, destination_address, asset_id, amount::text,
 	notional_usd_minor, proposed_at, approval_expires_at, executable_at, evaluation_outcome, risk_score, evaluation, plan,
 	plan_hash, status, message, coalesce(recent_blockhash, ''), coalesce(blockhash_height, 0), signed_at, coalesce(tx_id, ''),
-	signed_tx, effect_id, journal_transaction_id, coalesce(failure_code, ''), created_at, updated_at`
+	signed_tx, effect_id, journal_transaction_id, coalesce(failure_code, ''), coalesce(network, ''), created_at, updated_at`
 
 func scanWithdrawal(row pgx.Row) (Withdrawal, error) {
 	var w Withdrawal
@@ -498,7 +507,7 @@ func scanWithdrawal(row pgx.Row) (Withdrawal, error) {
 		&w.PolicyID, &w.DestinationID, &w.Environment, &w.Mode, &w.Chain, &wallet, &dest, &w.AssetID, &amount, &notional,
 		&w.ProposedAt, &w.ApprovalExpiresAt, &w.ExecutableAt, &w.EvaluationOutcome, &w.RiskScore, &evaluation, &plan, &hash,
 		&w.Status, &w.Message, &bh, &height, &w.SignedAt, &txID, &w.SignedTx, &w.EffectID, &w.JournalTransactionID,
-		&w.FailureCode, &w.CreatedAt, &w.UpdatedAt); err != nil {
+		&w.FailureCode, &w.Network, &w.CreatedAt, &w.UpdatedAt); err != nil {
 		return Withdrawal{}, err
 	}
 	var err error

@@ -72,9 +72,20 @@ a regression test:
   house order must be the result of an applied treasury action. Test: `TestIntegration_HouseOrdersExistOnlyThroughTheTreasury`.
 - **Dynamically built SQL** in the stable asset and delegated authority (`7ef8595`, `060fcf2`): rewritten as
   constant statements so `test/security`'s provenance check proves them.
+- **Batch upkeep stopped at its first bad item, read other networks' items and grew without bound** (00760),
+  found by running the advanced worker: one reservation, settlement, market, leg or request that could not be
+  processed failed every later run; a chain pass observed another network's legs and requests (and could fail
+  them as expired); every periodic pass wrote another MATCHED record. Each item now runs in its own savepoint
+  or transaction, and a failure is recorded with a doubling backoff in `upkeep_failures` (UK001) and reported,
+  never standing in front of the items behind it; every step that reads a chain refuses another network's
+  items, and a delegated swap or withdrawal records its network (UK002); a periodic match writes nothing while
+  a MATCHED record stands. Tests: `TestIntegration_AReservationThatCannotExpireNeverStopsTheOthers`,
+  `TestIntegration_ASettlementThatCannotSettleNeverStopsTheOthers`, `TestIntegration_AMintThatCannotSettleNeverStopsTheOthers`,
+  `TestIntegration_ALegOfAnotherNetworkIsNeverObservedOrSettledHere`, `TestIntegration_PeriodicMatchesConvergeOnOneMatchedRecord`.
+  Integrating it showed the admin reconciliation API's kind enum named none of the advanced kinds although the
+  route returns them: `TestReconciliationRecord_TheAPIEnumsAreExactlyThePackagesValues`.
 
 ## Status
 
-All 27 findings of reviews 1 and 2 are fixed; none is open. Robustness defects the advanced worker found in
-batch upkeep (a poison item blocking later runs, network filtering, reconciliation record growth) are being
-fixed (00760). The red-team review of the integrated system is the next review.
+All 27 findings of reviews 1 and 2 are fixed; none is open, and the batch upkeep defects found in integration
+are fixed (00760). The red-team review of the integrated system is `SECURITY_RED_TEAM.md`.

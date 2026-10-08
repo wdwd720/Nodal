@@ -266,8 +266,18 @@ func (s *Service) getRoute(ctx context.Context, q db.Querier, rid RouteID, forUp
 // the route's books, legs and attempts as of one instant, before it reads the
 // chains. Lock order: a leg, then its route; a transaction that holds a
 // route never waits for an existing leg.
+//
+// Every caller acts on the route's chains, so a route of another network is
+// refused here (onHost).
 func (s *Service) lockRoute(ctx context.Context, tx pgx.Tx, rid RouteID) (Route, error) {
-	return s.getRoute(ctx, tx, rid, true)
+	r, err := s.getRoute(ctx, tx, rid, true)
+	if err != nil {
+		return Route{}, err
+	}
+	if err := s.onHost(r); err != nil {
+		return Route{}, err
+	}
+	return r, nil
 }
 
 func (s *Service) routeByName(ctx context.Context, q db.Querier, name string) (Route, bool, error) {

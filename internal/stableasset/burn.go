@@ -91,6 +91,9 @@ func (s *Service) Burn(ctx context.Context, req BurnRequest) (BurnResult, error)
 	if err != nil {
 		return BurnResult{}, err
 	}
+	if err := s.onHost(a); err != nil {
+		return BurnResult{}, err
+	}
 	holder := s.custody.HolderAddress(req.AccountID)
 	if err := s.host.EnsureNativeBalance(ctx, a.Chain, holder, s.params.GasMinimum, s.params.GasTopUp); err != nil {
 		return BurnResult{}, err
@@ -125,6 +128,9 @@ func (s *Service) PrepareBurn(ctx context.Context, tx pgx.Tx, req BurnRequest) (
 	}
 	a, err := s.get(ctx, tx, req.StableAssetID, true)
 	if err != nil {
+		return BurnTicket{}, err
+	}
+	if err := s.onHost(a); err != nil {
 		return BurnTicket{}, err
 	}
 	holder := s.custody.HolderAddress(req.AccountID)
@@ -402,6 +408,9 @@ func (s *Service) lockBurn(ctx context.Context, tx pgx.Tx, rid BurnRequestID) (P
 	}
 	a, err := s.get(ctx, tx, peek.StableAssetID, true)
 	if err != nil {
+		return PlatformStableAsset{}, BurnRecord{}, err
+	}
+	if err := s.onHost(a); err != nil {
 		return PlatformStableAsset{}, BurnRecord{}, err
 	}
 	rec, err := getBurn(ctx, tx, rid, true)

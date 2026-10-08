@@ -6664,7 +6664,18 @@ components:
       required: [id, kind, mode, scope_type, scope_id, status, material, blocks_new_risk, opened_at]
       properties:
         id: { $ref: "#/components/schemas/UUID" }
-        kind: { type: string, enum: [EXECUTION, WALLET_BALANCE, FUNDING, LEDGER_INTERNAL, POSITION_LEDGER, SUBMISSION_UNKNOWN] }
+        kind:
+          type: string
+          description: Every kind a reconciliation record may have (reconciliation.AllKinds), the core kinds and the advanced capabilities' kinds alike
+          enum: [EXECUTION, WALLET_BALANCE, FUNDING, LEDGER_INTERNAL, POSITION_LEDGER, SUBMISSION_UNKNOWN,
+                 ECONOMIC_EFFECT, STABLE_RESERVE, BRIDGE, PREDICTION_ESCROW, CLEARING, DEVNET_CHAIN, BOOK_JOURNAL, TRANSFERS]
+          x-enum-varnames: [ReconciliationRecordKindEXECUTION, ReconciliationRecordKindWALLETBALANCE, ReconciliationRecordKindFUNDING,
+                            ReconciliationRecordKindLEDGERINTERNAL, ReconciliationRecordKindPOSITIONLEDGER,
+                            ReconciliationRecordKindSUBMISSIONUNKNOWN, ReconciliationRecordKindECONOMICEFFECT,
+                            ReconciliationRecordKindSTABLERESERVE, ReconciliationRecordKindBRIDGE,
+                            ReconciliationRecordKindPREDICTIONESCROW, ReconciliationRecordKindCLEARING,
+                            ReconciliationRecordKindDEVNETCHAIN, ReconciliationRecordKindBOOKJOURNAL,
+                            ReconciliationRecordKindTRANSFERS]
         mode: { type: string, enum: [EVENT_DRIVEN, PERIODIC, FULL] }
         scope_type: { type: string }
         scope_id: { type: string }
@@ -8608,13 +8619,30 @@ components:
         limit: { type: integer, minimum: 1, maximum: 500, description: The most settlements to settle in this run (default 500) }
     AdvancedEquitySettlementRun:
       type: object
-      required: [as_of, trade_date, batches, settled, value_domain]
+      required: [as_of, trade_date, batches, settled, failures, value_domain]
       properties:
         as_of: { $ref: "#/components/schemas/Timestamp" }
         trade_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
         batches: { type: integer, description: Transactions the run used, one account each }
         settled: { type: array, items: { $ref: "#/components/schemas/AdvancedEquitySettlement" } }
+        failures:
+          type: array
+          description: >-
+            Due settlements the run could not settle. Each was rolled back alone and recorded with a backoff; the
+            run settled every other one, and a later run retries it after retry_after.
+          items: { $ref: "#/components/schemas/AdvancedEquitySettlementFailure" }
         value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedEquitySettlementFailure:
+      type: object
+      required: [settlement_id, fill_id, account_id, attempts, retry_after, error_code, detail]
+      properties:
+        settlement_id: { $ref: "#/components/schemas/UUID" }
+        fill_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        attempts: { type: integer, description: Consecutive failed attempts }
+        retry_after: { $ref: "#/components/schemas/Timestamp" }
+        error_code: { type: string }
+        detail: { type: string }
     AdvancedEquityVenueRunRequest:
       type: object
       properties:
@@ -11208,15 +11236,34 @@ components:
         supply: { $ref: "#/components/schemas/StableSupplyReconciliation" }
     StableSettleReport:
       type: object
-      required: [value_domain, examined, issued, redeemed, queued, failed, waiting]
+      required: [value_domain, examined, issued, redeemed, queued, failed, waiting, failures]
       properties:
         value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
         examined: { type: integer }
         issued: { type: integer }
         redeemed: { type: integer }
         queued: { type: integer }
-        failed: { type: integer }
+        failed: { type: integer, description: Requests the pass settled as FAILED }
         waiting: { type: integer, description: "Requests whose transaction is not final yet" }
+        failures:
+          type: array
+          description: >-
+            Requests the pass could not act on at all. Each was left as it was and recorded with a backoff; the pass
+            handled every other request, and a later pass retries it after retry_after.
+          items: { $ref: "#/components/schemas/StableRequestFailure" }
+    StableRequestFailure:
+      type: object
+      required: [operation, request_id, attempts, retry_after, error_code, detail]
+      properties:
+        operation:
+          type: string
+          enum: [stableasset.settle_mint, stableasset.settle_burn, stableasset.pay_redemption]
+          x-enum-varnames: [StableUpkeepSettleMint, StableUpkeepSettleBurn, StableUpkeepPayRedemption]
+        request_id: { $ref: "#/components/schemas/UUID" }
+        attempts: { type: integer, description: Consecutive failed attempts of this step }
+        retry_after: { $ref: "#/components/schemas/Timestamp" }
+        error_code: { type: string }
+        detail: { type: string }
     StableReserveSpec:
       type: object
       required: [asset_id, kind, factor_bps, accepted_for_mint]

@@ -28,10 +28,10 @@ const (
 //
 // The transfers subsystem only reports, so a discrepancy -- every one of
 // which it calls a SEV1 -- is recorded here through internal/reconciliation's
-// Repository: a material LEDGER_INTERNAL record scoped to the transfer
-// register, opened once and refreshed while it stays unresolved. A clean pass
-// changes nothing and resolves nothing; resolving a record is a person's
-// decision.
+// Repository: a material record of the transfer register's own kind,
+// TRANSFERS, scoped to the register, opened once and refreshed while it stays
+// unresolved. A clean pass changes nothing and resolves nothing; resolving a
+// record is a person's decision.
 type TransfersReconcile struct {
 	db    *db.DB
 	svc   *transfers.Service
@@ -100,7 +100,7 @@ func (j *TransfersReconcile) record(ctx context.Context, tx pgx.Tx, rep transfer
 	}
 	observed := map[string]any{"checked_at": rep.CheckedAt, "assets": rep.Assets, "discrepancies": list}
 	difference := map[string]any{"discrepancies": len(rep.Discrepancies), "by_code": byCode}
-	prior, open, err := j.recon.FindUnresolvedByScopeForUpdate(ctx, tx, reconciliation.KindLedgerInternal, ScopeTransfers, ScopeTransfersID)
+	prior, open, err := j.recon.FindUnresolvedByScopeForUpdate(ctx, tx, reconciliation.KindTransfers, ScopeTransfers, ScopeTransfersID)
 	if err != nil {
 		return err
 	}
@@ -109,7 +109,7 @@ func (j *TransfersReconcile) record(ctx context.Context, tx pgx.Tx, rep transfer
 		return err
 	}
 	_, err = j.recon.Open(ctx, tx, reconciliation.OpenRequest{
-		Kind: reconciliation.KindLedgerInternal, Mode: reconciliation.ModePeriodic,
+		Kind: reconciliation.KindTransfers, Mode: reconciliation.ModePeriodic,
 		ScopeType: ScopeTransfers, ScopeID: ScopeTransfersID,
 		Expected: expected, Observed: observed, Difference: difference,
 		Status: reconciliation.StatusMismatch, Material: true, Actor: workerReconActor(),

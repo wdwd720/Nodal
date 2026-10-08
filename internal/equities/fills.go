@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/audit"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/econ"
@@ -360,11 +361,57 @@ type settlementRequest struct {
 	DueDate      string         `json:"due_date"`
 }
 
-// SettleDue posts EQUITY_SETTLEMENT for the unsettled settlements of one
+// SettlementFailure is a due settlement SettleDueBatch could not settle.
+type SettlementFailure struct {
+	SettlementID SettlementID
+	FillID       FillID
+	AccountID    accounts.AccountID
+	// Attempts counts its consecutive failures; it is not taken again before
+	// RetryAfter.
+	Attempts   int
+	RetryAfter time.Time
+	Err        error
+}
+
+// SettlementBatch is what one SettleDueBatch call did: the settlements of one
+// account, settled or failed.
+type SettlementBatch struct {
+	Settled  []Settlement
+	Failures []SettlementFailure
+}
+
+// Examined is how many settlements the batch took on.
+func (b SettlementBatch) Examined() int { return len(b.Settled) + len(b.Failures) }
+
+// The due settlements SettleDueBatch takes. A settlement whose last attempt
+// failed and whose backoff is still running (unless the clock has gone back
+// past that failure) is left out, and never-failed settlements come first, so
+// a settlement that cannot settle never stands in front of the others.
+// Settlements another worker holds are skipped (SKIP LOCKED).
+const (
+	// settleDueFirstSQL: the oldest due settlement, which picks the account.
+	settleDueFirstSQL = `SELECT ` + settlementColumns + ` FROM equity_settlements es
+		WHERE es.settled_at IS NULL AND es.due_date <= $1
+		  AND NOT EXISTS (SELECT 1 FROM upkeep_failures uf WHERE uf.operation = $3 AND uf.item_id = es.id
+		                    AND uf.cleared_at IS NULL AND uf.retry_after > $2 AND uf.last_failed_at <= $2)
+		ORDER BY EXISTS (SELECT 1 FROM upkeep_failures uf WHERE uf.operation = $3 AND uf.item_id = es.id AND uf.cleared_at IS NULL),
+		         es.due_date, es.id
+		LIMIT 1 FOR UPDATE OF es SKIP LOCKED`
+	// settleDueAccountSQL: the rest of that account's due settlements.
+	settleDueAccountSQL = `SELECT ` + settlementColumns + ` FROM equity_settlements es
+		WHERE es.settled_at IS NULL AND es.due_date <= $1 AND es.account_id = $4 AND es.id <> $5
+		  AND NOT EXISTS (SELECT 1 FROM upkeep_failures uf WHERE uf.operation = $3 AND uf.item_id = es.id
+		                    AND uf.cleared_at IS NULL AND uf.retry_after > $2 AND uf.last_failed_at <= $2)
+		ORDER BY EXISTS (SELECT 1 FROM upkeep_failures uf WHERE uf.operation = $3 AND uf.item_id = es.id AND uf.cleared_at IS NULL),
+		         es.due_date, es.id
+		LIMIT $6 FOR UPDATE OF es SKIP LOCKED`
+)
+
+// SettleDueBatch posts EQUITY_SETTLEMENT for the unsettled settlements of one
 // account that are due on or before today's New York trade date -- the
 // account of the oldest due settlement no other worker holds -- up to limit,
 // and completes each order's intent. A worker calls it, one transaction at a
-// time, until it returns nothing.
+// time, until it takes on nothing (Examined is zero).
 //
 // One account per transaction, with every instrument lock taken before
 // anything is posted, keeps the lock order of every other writer (instrument,
@@ -373,42 +420,50 @@ type settlementRequest struct {
 // settles exactly once: an econ effect under a deterministic key, rows taken
 // FOR UPDATE SKIP LOCKED, and a database guard that refuses any change to a
 // settled row.
-func (s *Service) SettleDue(ctx context.Context, tx pgx.Tx, limit int) ([]Settlement, error) {
+//
+// Each settlement is settled in its own savepoint of tx: one that cannot be
+// -- an effect already claimed but not applied, which only reconciliation
+// may resolve; a refusal the database makes, even one it would only make at
+// COMMIT -- is rolled back alone, recorded with a backoff and reported in
+// Failures, and the account's other settlements are settled. An error means
+// the batch as a whole could not proceed.
+func (s *Service) SettleDueBatch(ctx context.Context, tx pgx.Tx, limit int) (SettlementBatch, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
 	cal, err := s.Calendar(ctx, tx, CalendarXNYS)
 	if err != nil {
-		return nil, err
+		return SettlementBatch{}, err
 	}
 	now := s.clk.Now().UTC()
 	today := cal.TradeDate(now)
-	first, err := scanSettlement(tx.QueryRow(ctx, `SELECT `+settlementColumns+` FROM equity_settlements
-		WHERE settled_at IS NULL AND due_date <= $1 ORDER BY due_date, id LIMIT 1 FOR UPDATE SKIP LOCKED`, today.Time()))
+	checkDeferred, err := deferredChecksPass(ctx, tx)
+	if err != nil {
+		return SettlementBatch{}, err
+	}
+	first, err := scanSettlement(tx.QueryRow(ctx, settleDueFirstSQL, today.Time(), now, UpkeepSettleDue))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
+		return SettlementBatch{}, nil
 	}
 	if err != nil {
-		return nil, storeErr("select due settlements", err)
+		return SettlementBatch{}, storeErr("select due settlements", err)
 	}
 	due := []Settlement{first}
-	rows, err := tx.Query(ctx, `SELECT `+settlementColumns+` FROM equity_settlements
-		WHERE settled_at IS NULL AND due_date <= $1 AND account_id = $2 AND id <> $3
-		ORDER BY due_date, id LIMIT $4 FOR UPDATE SKIP LOCKED`, today.Time(), first.AccountID, first.ID, limit-1)
+	rows, err := tx.Query(ctx, settleDueAccountSQL, today.Time(), now, UpkeepSettleDue, first.AccountID, first.ID, limit-1)
 	if err != nil {
-		return nil, storeErr("select due settlements", err)
+		return SettlementBatch{}, storeErr("select due settlements", err)
 	}
 	for rows.Next() {
 		st, err := scanSettlement(rows)
 		if err != nil {
 			rows.Close()
-			return nil, storeErr("scan settlement", err)
+			return SettlementBatch{}, storeErr("scan settlement", err)
 		}
 		due = append(due, st)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		return nil, storeErr("select due settlements", err)
+		return SettlementBatch{}, storeErr("select due settlements", err)
 	}
 	var toLock []instruments.InstrumentID
 	seen := map[instruments.InstrumentID]bool{}
@@ -421,21 +476,31 @@ func (s *Service) SettleDue(ctx context.Context, tx pgx.Tx, limit int) ([]Settle
 	sort.Slice(toLock, func(i, j int) bool { return toLock[i].String() < toLock[j].String() })
 	for _, iid := range toLock {
 		if err := lockInstrument(ctx, tx, iid, false); err != nil {
-			return nil, err
+			return SettlementBatch{}, err
 		}
 	}
-	out := make([]Settlement, 0, len(due))
+	out := SettlementBatch{Settled: make([]Settlement, 0, len(due))}
 	for _, st := range due {
-		settled, err := s.settleOne(ctx, tx, st, now)
+		var settled Settlement
+		failed, err := upkeepItem(ctx, tx, UpkeepSettleDue, st.ID, now, checkDeferred, func(sp pgx.Tx) error {
+			var err error
+			settled, err = s.settleOne(ctx, sp, st, now)
+			return err
+		})
 		if err != nil {
-			return nil, err
+			return SettlementBatch{}, err
 		}
-		out = append(out, settled)
+		if failed != nil {
+			out.Failures = append(out.Failures, SettlementFailure{SettlementID: st.ID, FillID: st.FillID, AccountID: st.AccountID,
+				Attempts: failed.attempts, RetryAfter: failed.retryAfter, Err: failed.err})
+			continue
+		}
+		out.Settled = append(out.Settled, settled)
 	}
 	return out, nil
 }
 
-// settleOne settles one due settlement; SettleDue holds its instrument lock.
+// settleOne settles one due settlement; SettleDueBatch holds its instrument lock.
 func (s *Service) settleOne(ctx context.Context, tx pgx.Tx, st Settlement, now time.Time) (Settlement, error) {
 	o, err := getOrder(ctx, tx, st.OrderID, false)
 	if err != nil {

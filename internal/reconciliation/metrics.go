@@ -143,7 +143,7 @@ func (m *Metrics) mismatchOpened(ctx context.Context, rec Record) {
 	sev := SEV2
 	name := "reconciliation_mismatch"
 	switch rec.Kind {
-	case KindLedgerInternal, KindPositionLedger:
+	case KindLedgerInternal, KindPositionLedger, KindBookJournal, KindTransfers:
 		sev, name = SEV1, AlertLedgerIntegrity
 	case KindSubmissionUnknown:
 		sev, name = SEV1, AlertUnknownSubmission

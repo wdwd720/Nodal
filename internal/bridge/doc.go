@@ -104,4 +104,9 @@
 //     resume a route (only an operator does).
 //   - Keep package-level mutable state, read the wall clock, or use floating
 //     point.
+//   - Observe, settle, relay or reconcile a leg or route of another devnet
+//     network than its host's: that host would read the route's transactions
+//     as never seen. Or let a leg ObservePending cannot advance stop the
+//     others, or take it again before its backoff has passed
+//     (upkeep_failures, 00760).
 package bridge

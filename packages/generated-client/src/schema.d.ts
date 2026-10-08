@@ -14770,6 +14770,16 @@ export interface components {
             trade_date: components["schemas"]["AdvancedEquityDate"];
             value_domain: components["schemas"]["ValueDomainSimulated"];
         };
+        AdvancedEquitySettlementFailure: {
+            account_id: components["schemas"]["UUID"];
+            /** @description Consecutive failed attempts */
+            attempts: number;
+            detail: string;
+            error_code: string;
+            fill_id: components["schemas"]["UUID"];
+            retry_after: components["schemas"]["Timestamp"];
+            settlement_id: components["schemas"]["UUID"];
+        };
         /** @enum {string} */
         AdvancedEquitySettlementFilter: "PENDING" | "SETTLED" | "ALL";
         AdvancedEquitySettlementPage: components["schemas"]["Page"] & {
@@ -14780,6 +14790,8 @@ export interface components {
             as_of: components["schemas"]["Timestamp"];
             /** @description Transactions the run used */
             batches: number;
+            /** @description Due settlements the run could not settle. Each was rolled back alone and recorded with a backoff; the run settled every other one, and a later run retries it after retry_after. */
+            failures: components["schemas"]["AdvancedEquitySettlementFailure"][];
             settled: components["schemas"]["AdvancedEquitySettlement"][];
             trade_date: components["schemas"]["AdvancedEquityDate"];
             value_domain: components["schemas"]["ValueDomainSimulated"];
@@ -19118,8 +19130,11 @@ export interface components {
                 [key: string]: unknown;
             };
             id: components["schemas"]["UUID"];
-            /** @enum {string} */
-            kind: "EXECUTION" | "WALLET_BALANCE" | "FUNDING" | "LEDGER_INTERNAL" | "POSITION_LEDGER" | "SUBMISSION_UNKNOWN";
+            /**
+             * @description Every kind a reconciliation record may have (reconciliation.AllKinds), the core kinds and the advanced capabilities' kinds alike
+             * @enum {string}
+             */
+            kind: "EXECUTION" | "WALLET_BALANCE" | "FUNDING" | "LEDGER_INTERNAL" | "POSITION_LEDGER" | "SUBMISSION_UNKNOWN" | "ECONOMIC_EFFECT" | "STABLE_RESERVE" | "BRIDGE" | "PREDICTION_ESCROW" | "CLEARING" | "DEVNET_CHAIN" | "BOOK_JOURNAL" | "TRANSFERS";
             material: boolean;
             /** @enum {string} */
             mode: "EVENT_DRIVEN" | "PERIODIC" | "FULL";
@@ -19477,6 +19492,16 @@ export interface components {
          * @enum {string}
          */
         StableRedemptionStatus: "SUBMITTING" | "SUBMITTED" | "SUBMISSION_UNKNOWN" | "REDEMPTION_QUEUED" | "REDEEMED" | "FAILED";
+        StableRequestFailure: {
+            /** @description Consecutive failed attempts of this step */
+            attempts: number;
+            detail: string;
+            error_code: string;
+            /** @enum {string} */
+            operation: "stableasset.settle_mint" | "stableasset.settle_burn" | "stableasset.pay_redemption";
+            request_id: components["schemas"]["UUID"];
+            retry_after: components["schemas"]["Timestamp"];
+        };
         /**
          * @description SANDBOX: the platform produces the simulated chain's blocks and drives the request to a final state. DEVNET: the request is only observed, and finalizes as the chain's blocks arrive.
          * @enum {string}
@@ -19548,7 +19573,10 @@ export interface components {
         };
         StableSettleReport: {
             examined: number;
+            /** @description Requests the pass settled as FAILED */
             failed: number;
+            /** @description Requests the pass could not act on at all. Each was left as it was and recorded with a backoff; the pass handled every other request, and a later pass retries it after retry_after. */
+            failures: components["schemas"]["StableRequestFailure"][];
             issued: number;
             queued: number;
             redeemed: number;
