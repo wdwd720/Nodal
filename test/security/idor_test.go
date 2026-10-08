@@ -287,6 +287,8 @@ func TestIDOR_QueryParameterSmuggling(t *testing.T) {
 		}(),
 
 		// >>> advanced:marketplace account-scoped list routes
+		"/v1/advanced/strategies/listings", "/v1/advanced/strategies/installs",
+		"/v1/advanced/strategies/follows", "/v1/advanced/strategies/runs",
 
 		// >>> advanced:delegation account-scoped list routes
 

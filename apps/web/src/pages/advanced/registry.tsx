@@ -48,6 +48,7 @@ import { TransfersSection } from "./transfers/Transfers.tsx";
 import { PredictionMarketsSection } from "./predmarket/PredictionMarkets.tsx";
 
 // >>> advanced:marketplace import
+import { StrategiesSection } from "./marketplace/StrategiesSection.tsx";
 
 // >>> advanced:delegation import
 
@@ -144,6 +145,13 @@ export const ADVANCED_SECTIONS: readonly AdvancedSection[] = [
   },
 
   // >>> advanced:marketplace section
+  {
+    path: "strategies",
+    title: "Strategies",
+    description:
+      "Sandboxed strategies: the approved catalogue, publishing and forking, PAPER installs with their paper-follow history and risk decisions, sandbox runs, and the operators' review queue.",
+    element: <StrategiesSection />,
+  },
 
   // >>> advanced:delegation section
 

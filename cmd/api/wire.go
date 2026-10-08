@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -47,6 +50,7 @@ import (
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/legalrouter"
 	"github.com/nodal/controlplane/internal/margin"
+	"github.com/nodal/controlplane/internal/marketplace"
 	"github.com/nodal/controlplane/internal/nativeasset"
 	"github.com/nodal/controlplane/internal/nativemarket"
 	"github.com/nodal/controlplane/internal/notification"
@@ -60,6 +64,7 @@ import (
 	"github.com/nodal/controlplane/internal/reconciliation"
 	"github.com/nodal/controlplane/internal/risk"
 	"github.com/nodal/controlplane/internal/sandboxfund"
+	"github.com/nodal/controlplane/internal/sandboxrt"
 	"github.com/nodal/controlplane/internal/stream"
 	"github.com/nodal/controlplane/internal/transfers"
 	"github.com/nodal/controlplane/internal/valuation"
@@ -521,6 +526,82 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	}
 
 	// >>> advanced:marketplace services
+	//
+	// The strategy marketplace and the sandbox it runs strategies in. The
+	// services decide every rule themselves; this block hands them real
+	// collaborators: fresh econ stores, the authorizer over the gate checker
+	// and kill switches, the risk store and default Risk V2 policy, the
+	// deployment's legal router (conservative by default, as for transfers)
+	// and a wazero runner. Three collaborators have no production
+	// implementation in this build, so internal/httpapi carries the thinnest
+	// honest ones: risk sections read from the database, an executor that
+	// refuses every dispatch (no paper venue executes economic intents yet),
+	// and -- only where no Go toolchain is found -- a builder that refuses.
+	strategyRouter, err := legalRouterFor(cfg.Env, in.cfg.API.LegalPolicy)
+	if err != nil {
+		return nil, err
+	}
+	if strategyRouter == nil {
+		if strategyRouter, err = legalrouter.New(legalrouter.ConservativePolicy()); err != nil {
+			return nil, fmt.Errorf("marketplace legal router: %w", err)
+		}
+	}
+	strategyRunner, err := sandboxrt.NewRunner(ctx, sandboxrt.RunnerConfig{})
+	if err != nil {
+		return nil, fmt.Errorf("strategy sandbox runner: %w", err)
+	}
+	strategyAuth := econ.NewAuthorizer(gateChecker, killChecker)
+	strategySandbox := sandboxrt.NewService(clk, strategyAuth, strategyRunner, auditWriter)
+	// The builder is found, not configured: the go command on PATH, made
+	// absolute as sandboxrt.Builder requires. Its builds share one cache in
+	// this user's cache directory (content-addressed, so sharing cannot change
+	// an artifact) so only the first build on a machine is cold. Without a
+	// toolchain, validation answers UNSUPPORTED and records nothing.
+	var strategyBuilder marketplace.ArtifactBuilder = httpapi.UnavailableStrategyBuilder{
+		Reason: "no go command was found on PATH when this process started",
+	}
+	if goBin, lookErr := exec.LookPath("go"); lookErr == nil {
+		if goBin, lookErr = filepath.Abs(goBin); lookErr == nil {
+			strategyCache := ""
+			if base, cacheErr := os.UserCacheDir(); cacheErr == nil {
+				strategyCache = filepath.Join(base, "nodal", "strategy-gocache")
+				if mkErr := os.MkdirAll(strategyCache, 0o700); mkErr != nil {
+					strategyCache = ""
+				}
+			}
+			built, buildErr := sandboxrt.NewBuilder(sandboxrt.BuilderConfig{GoBinary: goBin, CacheDir: strategyCache, Clock: clk})
+			if buildErr != nil {
+				strategyBuilder = httpapi.UnavailableStrategyBuilder{Reason: "the go command found on PATH is unusable: " + buildErr.Error()}
+			} else {
+				strategyBuilder = built
+			}
+		}
+	}
+	if _, refuses := strategyBuilder.(httpapi.UnavailableStrategyBuilder); refuses {
+		log.Warn("no usable Go toolchain; strategy validation answers UNSUPPORTED")
+	}
+	strategySections, err := httpapi.NewMarketplaceRiskSections(httpapi.MarketplaceSectionsConfig{
+		Clock: clk, Accounts: accountRepo, Instruments: instrumentRepo, Identity: compliance.NewAccountVerification(clk),
+		Prices: priceStore, KillSwitches: killChecker,
+		// The same bound buying power V2 accepts a sandbox mark at; Risk V2
+		// then judges the reference price's freshness by its own policy.
+		MaxPriceAge: 5 * time.Minute,
+		// As for the native economy: the level Nodal establishes itself, and
+		// no jurisdiction determination (UNKNOWN), which simulation permits.
+		Verification: verificationResolver,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marketplace risk sections: %w", err)
+	}
+	strategyMarketplace, err := marketplace.NewService(marketplace.Config{
+		Clock: clk, Intents: econ.NewIntentStore(clk, outbox, auditWriter), Effects: econ.NewEffectStore(clk, outbox, auditWriter),
+		Auth: strategyAuth, Risk: risk.NewStore(), RiskPolicy: risk.DefaultAdvancedPolicy(), Router: strategyRouter,
+		Sandbox: strategySandbox, Builder: strategyBuilder, Sections: strategySections, Executor: httpapi.UnwiredPaperExecutor{},
+		Audit: auditWriter,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("strategy marketplace: %w", err)
+	}
 
 	// >>> advanced:delegation services
 
@@ -574,6 +655,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		PredictionOracle:  predmarketOracle,
 
 		// >>> advanced:marketplace deps
+		Marketplace: httpapi.MarketplaceDeps{Service: strategyMarketplace, Sandbox: strategySandbox},
 
 		// >>> advanced:delegation deps
 
