@@ -9,7 +9,7 @@ Severity: SEV1 · Owner: OPERATIONS (restore), FINANCE (reconciliation sign-off)
 - Postgres errors: `invalid page`, `could not read block`, `XX001` data corruption, `XX002` index corruption, failed Multi-AZ failover, replica divergence.
 - A bad deployment or operator error that destroyed or rewrote financial rows (logical corruption).
 - PART 158 rule: **if the financial database fails, do not accept new financial commands.** `/readyz` returns 503 when the database is unreachable.
-- BLOCKED_EXTERNAL: RDS/CloudWatch alarms (`infra/terraform` has `modules/rds` but empty environments; EB-012).
+- BLOCKED_EXTERNAL: RDS/CloudWatch alarms. They are written — `infra/terraform/modules/observability` declares `rds_cpu`, `rds_storage`, `rds_memory` and `rds_replica_lag`, and every environment wires that module — but no apply to AWS is recorded (B-12, EB-012's successor in `docs/build/BLOCKERS.md`). The `STAGING` deployment on Render and Neon exports no telemetry (`docs/operations/LAUNCH_TIER.md` §6).
 
 ## Blast radius
 
@@ -69,5 +69,5 @@ Follow `docs/operations/BACKUP_RESTORE.md` §3 exactly. It is designed but **une
 
 - Archive: restore decision record, `migrate verify` output, verifier outputs, reconciliation convergence report, promotion approval, credential rotation log; all hashed into the WORM archive.
 - Security event review: any `cp_migrate` session, any break-glass grant, any gate/kill transition in the window.
-- Update `docs/operations/DISASTER_RECOVERY.md` §1 with measured RTO/RPO (PART 205) and `docs/build/BLOCKERS.md` EB-012 status; update R-141-1 and R-205-1 in `docs/build/REQUIREMENTS_TRACEABILITY.md`.
+- Update `docs/operations/DISASTER_RECOVERY.md` §1 with measured RTO/RPO (PART 205) and `docs/build/BLOCKERS.md` B-12 status (B-12 succeeds EB-012; the EB- rows under "Earlier ids" are a frozen record and are not updated); update R-141-1 and R-205-1 in `docs/build/REQUIREMENTS_TRACEABILITY.md`.
 - Schedule the quarterly staging PITR drill if this was the first real restore.
