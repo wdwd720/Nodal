@@ -82,11 +82,13 @@ function it cites printed `--- PASS`. No command printed `--- SKIP` for any test
 held. The pass at `a05a432` held for 63 of the 66 claims then written, and the three that did not changed
 this document:
 
-- C3 cited `TestIntegration_V2ComposesEverySimulatedComponentAndIgnoresRealCapital`, which fails on a
-  fixture that predates migration 00748 (it still fails at `80f616b`). It is no longer cited, and C3 claims
-  only what the remaining tests show.
-- SEC2 cited the `internal/gates` database tests, which no longer compile (an import cycle, described in
-  SEC2). It now rests on the gates' pure tests and on the migration suite's gate-authority test.
+- C3 cited `TestIntegration_V2ComposesEverySimulatedComponentAndIgnoresRealCapital`, which failed on a
+  fixture that predated migration 00748 (a bridge journal no leg referenced, BR005). The fixture was repaired
+  after `80f616b` and a real leg in flight now covers the bridge component
+  (`TestIntegration_TheV2LoaderCountsALegInFlightOnlyAsItsHaircut`), so C3 cites both again.
+- SEC2 cited the `internal/gates` database tests, which had stopped compiling (an import cycle through
+  `internal/agent`). The cycle was removed after `80f616b` (`internal/agent/livegate`), and SEC2 cites them
+  again.
 - SB4's budget-concurrency test failed on lock timeouts under load and passed when re-run, and again at
   `80f616b` (SB4's caveat).
 
@@ -178,10 +180,10 @@ or test changed between them.
 
 - **Claim:** Buying Power V2 counts against the owner: what is owed rounds up and what is held rounds down, so a sub-cent never shows as buying power; a deficit left by a bankrupt margin account blocks new risk and withdrawals until it is repaid; margin is read through the margin engine's own evaluation, and spot and derivatives margin are summed at the strictest rate; more reservations or more debt never raise buying power, in-flight bridge value counts zero under the default policy, unsettled funds can trade but are never withdrawable, a blocked account has no buying power, and no withdrawable amount leaves equity below maintenance.
 - **Implementation:** `internal/capital/buyingpower/v2.go`, `internal/capital/buyingpower/v2_load.go`, `internal/capital/buyingpower/v2_combine.go`, `internal/margin/buyingpower.go`
-- **Tests:** `internal/capital/buyingpower/v2_integration_test.go`: `TestIntegration_V2CountsWhatIsOwedAgainstTheOwner`; `internal/capital/buyingpower/v2_test.go`: `TestProp_V2NoWithdrawalBreachesMaintenance`, `TestProp_V2ReservationsAndDebtNeverIncreaseBuyingPower`, `TestProp_V2InFlightBridgeNeverCountsAtDefaultPolicy`, `TestV2_UnsettledFundsTradeButNeverWithdraw`, `TestV2_BlockedAccountHasNoBuyingPower`; `internal/capital/buyingpower/v2_combine_test.go`: `TestCombinedMarginReader_SumsAndKeepsTheStrictestRate`; `internal/margin/integration_controls_test.go`: `TestIntegration_BuyingPowerV2SeesTheMarginEngine`
+- **Tests:** `internal/capital/buyingpower/v2_integration_test.go`: `TestIntegration_V2ComposesEverySimulatedComponentAndIgnoresRealCapital`, `TestIntegration_V2CountsWhatIsOwedAgainstTheOwner`; `internal/bridge/v2loader_integration_test.go`: `TestIntegration_TheV2LoaderCountsALegInFlightOnlyAsItsHaircut`; `internal/capital/buyingpower/v2_test.go`: `TestProp_V2NoWithdrawalBreachesMaintenance`, `TestProp_V2ReservationsAndDebtNeverIncreaseBuyingPower`, `TestProp_V2InFlightBridgeNeverCountsAtDefaultPolicy`, `TestV2_UnsettledFundsTradeButNeverWithdraw`, `TestV2_BlockedAccountHasNoBuyingPower`; `internal/capital/buyingpower/v2_combine_test.go`: `TestCombinedMarginReader_SumsAndKeepsTheStrictestRate`; `internal/margin/integration_controls_test.go`: `TestIntegration_BuyingPowerV2SeesTheMarginEngine`
 - **Mode:** Paper and Sandbox.
-- **Caveat:** `TestIntegration_V2ComposesEverySimulatedComponentAndIgnoresRealCapital`, the test that loads every component from the ledger and shows real capital in the same account left out, fails at `80f616b`: its fixture posts a bridge journal that names no bridge leg, which migration 00748 refuses (BR005). Until it is repaired this document does not claim that V2 leaves real capital out (L4 still holds: simulated value cannot reach a real account). Spot and derivatives margin are never offset against each other (D-054): conservative, not capital-efficient.
-- **Evidence:** `go run ./scripts/inttest -pkg '^\./internal/(capital/buyingpower|margin)$' -run '^(TestIntegration_V2CountsWhatIsOwedAgainstTheOwner|TestProp_V2NoWithdrawalBreachesMaintenance|TestProp_V2ReservationsAndDebtNeverIncreaseBuyingPower|TestProp_V2InFlightBridgeNeverCountsAtDefaultPolicy|TestV2_UnsettledFundsTradeButNeverWithdraw|TestV2_BlockedAccountHasNoBuyingPower|TestCombinedMarginReader_SumsAndKeepsTheStrictestRate|TestIntegration_BuyingPowerV2SeesTheMarginEngine)$'`
+- **Caveat:** The loader values only what it can mark: a holding without a fresh mark contributes nothing rather than a guess, so V2 can understate. Real capital in the same account is left out of every figure (the composition test seeds a real wallet beside the simulated components). Spot and derivatives margin are never offset against each other (D-054): conservative, not capital-efficient.
+- **Evidence:** `go run ./scripts/inttest -pkg '^\./internal/(capital/buyingpower|margin|bridge)$' -run '^(TestIntegration_V2ComposesEverySimulatedComponentAndIgnoresRealCapital|TestIntegration_TheV2LoaderCountsALegInFlightOnlyAsItsHaircut|TestIntegration_V2CountsWhatIsOwedAgainstTheOwner|TestProp_V2NoWithdrawalBreachesMaintenance|TestProp_V2ReservationsAndDebtNeverIncreaseBuyingPower|TestProp_V2InFlightBridgeNeverCountsAtDefaultPolicy|TestV2_UnsettledFundsTradeButNeverWithdraw|TestV2_BlockedAccountHasNoBuyingPower|TestCombinedMarginReader_SumsAndKeepsTheStrictestRate|TestIntegration_BuyingPowerV2SeesTheMarginEngine)$'`
 
 ### 3. Risk
 
@@ -640,10 +642,10 @@ or test changed between them.
 
 - **Claim:** A V1 capability gate is active only when deployment configuration enables it and its persisted row is ACTIVE, unrevoked, inside its validity window, carries legal, provider, risk and security evidence references, and was proposed, approved and activated by distinct principals, each failing condition with its own reason, so configuration alone never activates one; every live-money capability is high risk; and in the database a gate can only be born DISABLED and its state moves only through a SECURITY DEFINER function the application cannot own, the application role holding no UPDATE on any deciding column and no INSERT into gate history.
 - **Implementation:** `internal/gates/gate.go`, `internal/gates/checker.go`, `internal/gates/admin.go`, `migrations/00701_capability_gate_state_authority.sql`
-- **Tests:** `internal/gates/gates_test.go`: `TestEvaluate_ConfigAloneNeverActivates`, `TestEvaluate_EachConditionFailsWithDistinctReason`, `TestRules_SamePrincipalCannotApproveAndActivate`, `TestChecker_NilEnabledFailsClosed`, `TestCapabilities_And_HighRisk`; `test/integration/migrations/privileges_test.go`: `TestIntegration_CapabilityGateStateAuthority`
+- **Tests:** `internal/gates/gates_test.go`: `TestEvaluate_ConfigAloneNeverActivates`, `TestEvaluate_EachConditionFailsWithDistinctReason`, `TestRules_SamePrincipalCannotApproveAndActivate`, `TestChecker_NilEnabledFailsClosed`, `TestCapabilities_And_HighRisk`; `internal/gates/integration_test.go`: `TestIntegration_DatabaseRefusesForgedActivation`, `TestIntegration_Lifecycle_ThreePrincipals`, `TestIntegration_Bootstrap_Idempotent`; `internal/gates/evidence_integration_test.go`: `TestIntegration_DatabaseRefusesActivationWithoutEvidence`; `internal/gates/parity_integration_test.go`: `TestIntegration_GoAndSQLAgreeOnEveryCapabilitysRisk`; `test/integration/migrations/privileges_test.go`: `TestIntegration_CapabilityGateStateAuthority`
 - **Mode:** Core.
-- **Caveat:** The gates are built and every live one is DISABLED; none has ever been activated for real capital, and activation would also need provider contracts and legal reviews this project has not obtained (`docs/build/BLOCKERS.md`). "Distinct principals" in the tests are distinct identities, not distinct people. The gates package's own database suite (a forged activation refused, the three-principal lifecycle, bootstrap, activation without evidence, Go/SQL agreement on high risk) does not compile at `80f616b`: `internal/gates/agentreader_integration_test.go` imports `internal/agent`, which now imports `internal/delegation`, which imports `internal/gates`, an import cycle Go refuses in a test. Those tests are not cited until it is repaired.
-- **Evidence:** `go test -count=1 -run '^(TestEvaluate_ConfigAloneNeverActivates|TestEvaluate_EachConditionFailsWithDistinctReason|TestRules_SamePrincipalCannotApproveAndActivate|TestChecker_NilEnabledFailsClosed|TestCapabilities_And_HighRisk)$' ./internal/gates/ && go run ./scripts/inttest -pkg '^\./test/integration/migrations$' -run '^TestIntegration_CapabilityGateStateAuthority$'`
+- **Caveat:** The gates are built and every live one is DISABLED; none has ever been activated for real capital, and activation would also need provider contracts and legal reviews this project has not obtained (`docs/build/BLOCKERS.md`). "Distinct principals" in the tests are distinct identities, not distinct people.
+- **Evidence:** `go test -count=1 -run '^(TestEvaluate_ConfigAloneNeverActivates|TestEvaluate_EachConditionFailsWithDistinctReason|TestRules_SamePrincipalCannotApproveAndActivate|TestChecker_NilEnabledFailsClosed|TestCapabilities_And_HighRisk)$' ./internal/gates/ && go run ./scripts/inttest -pkg '^\./(internal/gates|test/integration/migrations)$' -run '^(TestIntegration_DatabaseRefusesForgedActivation|TestIntegration_Lifecycle_ThreePrincipals|TestIntegration_Bootstrap_Idempotent|TestIntegration_DatabaseRefusesActivationWithoutEvidence|TestIntegration_GoAndSQLAgreeOnEveryCapabilitysRisk|TestIntegration_CapabilityGateStateAuthority)$'`
 
 #### SEC3 · Production refuses fake providers, seed data and debug authentication
 
@@ -811,6 +813,7 @@ Each item below is a claim a reviewer should reject if they see it made about th
   untrusted proposal generators by design.
 - **Whole-suite results at one commit.** The integration suite of every package in one run, `-race` across
   every advanced package, a bounded fuzzing campaign and the whole Playwright suite against one live API have
-  not been recorded as single runs (`docs/build/ADVANCED_TEST_EVIDENCE.md`, "Not yet run as a whole"), and at
-  `80f616b` at least two integration packages fail as a whole (`internal/capital/buyingpower`, see C3;
-  `internal/gates`, see SEC2). Every claim above names the tests it rests on, and those were run.
+  not been recorded as single runs (`docs/build/ADVANCED_TEST_EVIDENCE.md`, "Not yet run as a whole"). At
+  `80f616b` two integration packages failed as a whole (`internal/capital/buyingpower` and `internal/gates`),
+  found by writing this document and repaired after it. Every claim above names the tests it rests on, and
+  those were run.
