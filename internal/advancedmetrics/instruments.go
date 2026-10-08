@@ -24,6 +24,9 @@ type Instruments struct {
 	// UnvaluedMatchTrades counts internal trades whose quote asset could not
 	// be valued, and are therefore missing from the match volume.
 	UnvaluedMatchTrades metric.Int64Counter
+	// UnvaluedRouteFills counts paper venue fills whose quote asset could not
+	// be valued, and are therefore missing from the external route volume.
+	UnvaluedRouteFills metric.Int64Counter
 }
 
 // NewInstruments creates the collector's instruments on meter.
@@ -45,13 +48,17 @@ func NewInstruments(meter metric.Meter) (*Instruments, error) {
 		UnvaluedHoldings: gauge("advanced_unvalued_holdings",
 			"Simulated assets with a holding that could not be valued and is missing from the capital gauges.", observability.UnitCount),
 	}
-	c, err := meter.Int64Counter("advanced_unvalued_match_trades",
-		metric.WithDescription("Internal book trades whose quote asset could not be valued and are missing from the match volume."),
-		metric.WithUnit(observability.UnitCount))
-	if err != nil {
-		errs = append(errs, fmt.Errorf("advancedmetrics: instrument advanced_unvalued_match_trades: %w", err))
+	counter := func(name, desc string) metric.Int64Counter {
+		c, err := meter.Int64Counter(name, metric.WithDescription(desc), metric.WithUnit(observability.UnitCount))
+		if err != nil {
+			errs = append(errs, fmt.Errorf("advancedmetrics: instrument %s: %w", name, err))
+		}
+		return c
 	}
-	in.UnvaluedMatchTrades = c
+	in.UnvaluedMatchTrades = counter("advanced_unvalued_match_trades",
+		"Internal book trades whose quote asset could not be valued and are missing from the match volume.")
+	in.UnvaluedRouteFills = counter("advanced_unvalued_route_fills",
+		"Paper venue fills whose quote asset could not be valued and are missing from the external route volume.")
 	return in, errors.Join(errs...)
 }
 
