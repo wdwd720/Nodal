@@ -247,6 +247,30 @@ func TestIDOR_QueryParameterSmuggling(t *testing.T) {
 	for _, path := range []string{
 		"/v1/intents", "/v1/orders", "/v1/funding/deposits",
 		"/v1/advanced/intents", "/v1/advanced/effects", "/v1/advanced/risk/decisions",
+
+		// >>> advanced:margin account-scoped list routes
+
+		// >>> advanced:derivatives account-scoped list routes
+
+		// >>> advanced:equities account-scoped list routes
+
+		// >>> advanced:orders account-scoped list routes
+
+		// >>> advanced:transfers account-scoped list routes
+
+		// >>> advanced:treasury account-scoped list routes
+
+		// >>> advanced:stable account-scoped list routes
+
+		// >>> advanced:bridge account-scoped list routes
+
+		// >>> advanced:predmarket account-scoped list routes
+
+		// >>> advanced:marketplace account-scoped list routes
+
+		// >>> advanced:delegation account-scoped list routes
+
+		// >>> advanced:operator account-scoped list routes
 	} {
 		t.Run(strings.TrimPrefix(path, "/v1/"), func(t *testing.T) {
 			okOwn := getAs(t, tn.a.Token, path+"?account_id="+own)
