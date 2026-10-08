@@ -232,9 +232,13 @@ func (a marginAdapter) Open(ctx context.Context, r MarginOpen) (margin.Account, 
 	var out margin.Account
 	err := a.command(ctx, nil, func(ctx context.Context, tx pgx.Tx) error {
 		// The numeraire is the deployment's one sandbox dollar. It is read,
-		// never created here: an account opens in a deployment that has
-		// provisioned it, and NOT_FOUND says so otherwise.
+		// never created here: a deployment that has not provisioned it has no
+		// simulated value at all, which is UNSUPPORTED, not "no such account"
+		// (as buying power V2 answers).
 		usd, err := econ.SandboxDollar(ctx, tx)
+		if errs.HasCode(err, errs.CodeNotFound) {
+			return errs.New(errs.CodeUnsupported, "the sandbox dollar is not provisioned in this deployment, so no margin account can be opened")
+		}
 		if err != nil {
 			return err
 		}
