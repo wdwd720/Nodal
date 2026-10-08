@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 
 	"github.com/nodal/controlplane/internal/advancedjobs"
 	"github.com/nodal/controlplane/internal/assets"
@@ -157,6 +158,10 @@ type Counted struct {
 	SandboxMemoryLimit  int64
 	InternalMatchVolume int64 // USD minor units
 	UnvaluedMatchTrades int64
+	IntentProposals     map[string]int64 // per actor type
+	DeniedIntents       map[string]int64 // per stage: the status an intent was rejected from
+	SigningRequests     map[string]int64 // per verdict of the delegated signing provider
+	WithdrawalProposals map[string]int64 // per evaluation outcome of a delegated withdrawal
 }
 
 // Run implements advancedjobs.Job: one collection. Each section is read in a
@@ -397,14 +402,21 @@ const (
 		WHERE d.verdict = 'REJECT' AND d.created_at > $1 AND d.created_at <= $2 GROUP BY r.code`
 	staleOracleSQL = `SELECT count(*) FROM advanced_risk_decisions
 		WHERE verdict = 'REJECT' AND created_at > $1 AND created_at <= $2 AND reason_codes && $3::text[]`
-	marginCallsSQL       = `SELECT count(*) FROM margin_calls WHERE created_at > $1 AND created_at <= $2`
-	liquidationStepsSQL  = `SELECT count(*) FROM margin_liquidation_steps WHERE created_at > $1 AND created_at <= $2`
-	sandboxRunsSQL       = `SELECT termination_reason, count(*) FROM sandbox_runs WHERE created_at > $1 AND created_at <= $2 GROUP BY termination_reason`
-	internalMatchSQL     = `SELECT quote_asset_id, sum(quote_notional)::text, count(*) FROM book_trades WHERE created_at > $1 AND created_at <= $2 GROUP BY quote_asset_id ORDER BY quote_asset_id`
-	databaseClockLagSQL  = `SELECT now() - make_interval(secs => $1)`
-	terminationOK        = "OK"
-	terminationTimeout   = "TIMEOUT"
-	terminationMemoryCap = "MEMORY_LIMIT"
+	marginCallsSQL      = `SELECT count(*) FROM margin_calls WHERE created_at > $1 AND created_at <= $2`
+	liquidationStepsSQL = `SELECT count(*) FROM margin_liquidation_steps WHERE created_at > $1 AND created_at <= $2`
+	sandboxRunsSQL      = `SELECT termination_reason, count(*) FROM sandbox_runs WHERE created_at > $1 AND created_at <= $2 GROUP BY termination_reason`
+	internalMatchSQL    = `SELECT quote_asset_id, sum(quote_notional)::text, count(*) FROM book_trades WHERE created_at > $1 AND created_at <= $2 GROUP BY quote_asset_id ORDER BY quote_asset_id`
+	// The intent rows are stamped by their service's clock (the system
+	// clock in a deployment), the rest by the database's: the lag also
+	// covers the skew between them.
+	intentProposalsSQL     = `SELECT actor_type, count(*) FROM economic_intents WHERE created_at > $1 AND created_at <= $2 GROUP BY actor_type`
+	deniedIntentsSQL       = `SELECT from_status, count(*) FROM economic_intent_transitions WHERE to_status = 'REJECTED' AND occurred_at > $1 AND occurred_at <= $2 GROUP BY from_status`
+	signingRequestsSQL     = `SELECT verdict, count(*) FROM delegated_signing_decisions WHERE created_at > $1 AND created_at <= $2 GROUP BY verdict`
+	withdrawalProposalsSQL = `SELECT evaluation_outcome, count(*) FROM delegated_withdrawals WHERE created_at > $1 AND created_at <= $2 GROUP BY evaluation_outcome`
+	databaseClockLagSQL    = `SELECT now() - make_interval(secs => $1)`
+	terminationOK          = "OK"
+	terminationTimeout     = "TIMEOUT"
+	terminationMemoryCap   = "MEMORY_LIMIT"
 )
 
 func (c *Collector) counters(ctx context.Context, tx pgx.Tx, snap *Snapshot) error {
@@ -425,9 +437,19 @@ func (c *Collector) counters(ctx context.Context, tx pgx.Tx, snap *Snapshot) err
 		// A window that has not moved counts nothing.
 		return nil
 	}
-	w := &Counted{From: *from, To: upper, RiskDenies: map[string]int64{}, SandboxKilled: map[string]int64{}}
-	if err := countBy(ctx, tx, w.RiskDenies, riskDeniesSQL, w.From, w.To); err != nil {
-		return err
+	w := &Counted{From: *from, To: upper, RiskDenies: map[string]int64{}, SandboxKilled: map[string]int64{},
+		IntentProposals: map[string]int64{}, DeniedIntents: map[string]int64{}, SigningRequests: map[string]int64{},
+		WithdrawalProposals: map[string]int64{}}
+	for _, x := range []struct {
+		dst map[string]int64
+		sql string
+	}{
+		{w.RiskDenies, riskDeniesSQL}, {w.IntentProposals, intentProposalsSQL}, {w.DeniedIntents, deniedIntentsSQL},
+		{w.SigningRequests, signingRequestsSQL}, {w.WithdrawalProposals, withdrawalProposalsSQL},
+	} {
+		if err := countBy(ctx, tx, x.dst, x.sql, w.From, w.To); err != nil {
+			return err
+		}
 	}
 	stale := []string{risk.ReasonOracleStale, risk.ReasonOracleUnavailable}
 	for _, x := range []struct {
@@ -581,6 +603,22 @@ func (c *Collector) record(ctx context.Context, s Snapshot) {
 		m.SandboxMemoryLimitHits.Add(ctx, w.SandboxMemoryLimit)
 		m.InternalMatchVolume.Add(ctx, w.InternalMatchVolume)
 		x.UnvaluedMatchTrades.Add(ctx, w.UnvaluedMatchTrades)
+		for _, c := range []struct {
+			counter interface {
+				Add(context.Context, int64, ...metric.AddOption)
+			}
+			key  string
+			byIt map[string]int64
+		}{
+			{m.IntentProposals, "actor_type", w.IntentProposals},
+			{m.DeniedIntents, "stage", w.DeniedIntents},
+			{m.SigningRequests, "outcome", w.SigningRequests},
+			{m.WithdrawalProposals, "outcome", w.WithdrawalProposals},
+		} {
+			for _, k := range sortedKeys(c.byIt) {
+				c.counter.Add(ctx, c.byIt[k], observability.WithSafeAttrs(attribute.String(c.key, k)))
+			}
+		}
 	}
 	c.mu.Lock()
 	if c.pending != nil {

@@ -523,6 +523,21 @@ func TestIntegration_CountersCountEachNewRowOncePerProcess(t *testing.T) {
 		ON c.id = s.case_id JOIN margin_accounts m ON m.id = c.margin_account_id WHERE m.account_id = $1`, borrower.account).Scan(&steps))
 	require.Positive(t, steps)
 	notional := f.trade()
+	// An intent proposed and refused at its first stage, stamped by a
+	// service on the system clock (the fixture's services stamp theirs at
+	// the fake clock's date, before every window this test counts).
+	live := clock.System()
+	liveIntents := econ.NewIntentStore(live, event.NewOutbox(live), audit.NewWriterWithBuildVersion("advancedmetrics-itest"))
+	f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+		in, _, err := liveIntents.Submit(ctx, tx, econ.Intent{AccountID: borrower.account, Kind: econ.KindTransferValue,
+			Mode: gates.ModePaper, Capability: gates.P2PTransfers, ActorType: security.ActorUser, ActorID: borrower.user.String(),
+			IdempotencyKey: "advancedmetrics-" + uuid.NewString()})
+		if err != nil {
+			return err
+		}
+		_, err = liveIntents.Transition(ctx, tx, in.ID, econ.StatusRejected, f.system, "advancedmetrics integration test", "ADVANCEDMETRICS_TEST")
+		return err
+	})
 
 	s1 := f.collect(c)
 	require.NotNil(t, s1.Counted)
@@ -537,6 +552,10 @@ func TestIntegration_CountersCountEachNewRowOncePerProcess(t *testing.T) {
 	assert.Equal(t, int64(1), w.SandboxMemoryLimit)
 	assert.Equal(t, notional, w.InternalMatchVolume, "the trade's quote notional at par")
 	assert.Zero(t, w.UnvaluedMatchTrades)
+	assert.Equal(t, map[string]int64{"USER": 1}, w.IntentProposals, "by actor type")
+	assert.Equal(t, map[string]int64{"RECEIVED": 1}, w.DeniedIntents, "by the stage it was refused at")
+	assert.Empty(t, w.SigningRequests, "no delegated signing in this window")
+	assert.Empty(t, w.WithdrawalProposals)
 
 	s2 := f.collect(c)
 	require.NotNil(t, s2.Counted)
@@ -550,6 +569,9 @@ func TestIntegration_CountersCountEachNewRowOncePerProcess(t *testing.T) {
 	assert.Equal(t, int64(1), f.counter("advanced_sandbox_killed_runs", "reason", "TIMEOUT"))
 	assert.Equal(t, notional, f.counter("advanced_internal_match_volume", "", ""))
 	assert.Equal(t, int64(1), f.counter("advanced_margin_calls", "", ""))
+	assert.Equal(t, int64(1), f.counter("advanced_intent_proposals", "actor_type", "USER"))
+	assert.Equal(t, int64(1), f.counter("advanced_denied_intents", "stage", "RECEIVED"))
+	assert.Empty(t, s2.Counted.IntentProposals, "counted once")
 
 	restarted := f.collector()
 	r0 := f.collect(restarted)

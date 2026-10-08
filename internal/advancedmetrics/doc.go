@@ -59,7 +59,38 @@
 // and advanced_sandbox_memory_limit (MEMORY_LIMIT), and
 // advanced_internal_match_volume -- the quote notional of internal book
 // trades, valued like the holdings; trades whose quote asset cannot be valued
-// are counted in advanced_unvalued_match_trades instead.
+// are counted in advanced_unvalued_match_trades instead --
+// advanced_intent_proposals per actor type (every economic intent recorded),
+// advanced_denied_intents per stage (each REJECTED transition, attributed to
+// the status the intent was refused from: RECEIVED is routing, ROUTED risk,
+// and so on), advanced_signing_requests per verdict of the delegated signing
+// provider, and advanced_withdrawal_proposals per evaluation outcome of a
+// delegated withdrawal (AUTO_APPROVE or HUMAN_REQUIRED). Intent rows carry
+// their service's timestamp rather than the database's; the lag covers the
+// skew between the two clocks.
+//
+// # Not recorded here, and why
+//
+//   - advanced_order_latency and advanced_cancel_latency: a latency is a
+//     property of a request, not of a row; the request path records it or
+//     nobody can.
+//   - advanced_fill_rate_*, advanced_rejection_rate_* and
+//     advanced_external_route_volume: derivable from book_orders and the paper
+//     fills, but no external route exists in this build and the rate pairs
+//     want the order path's own denominators; left to the execution path.
+//   - advanced_circuit_breaker_events: no subsystem records a circuit breaker
+//     trip as a row.
+//   - advanced_authority_violations: delegation marks no refusal as one. A
+//     capability refusal is a REJECTED agent intent with one of the package's
+//     DELEGATION_* codes, which mix authority (scope, limits, expiry) with
+//     timing (a lapsed quote, a cooling period), and a request refused before
+//     its intent exists leaves no row; which codes count is the delegation
+//     package's to define, as an exported set.
+//   - advanced_sandbox_network_violations: the WASM sandbox gives a strategy
+//     no network import at all, so there is nothing to violate and no code
+//     that records it.
+//   - advanced_provider_mismatches: no advanced reconciliation compares
+//     against an external provider; every kind is internal or a devnet chain.
 //
 // # Job health
 //
@@ -74,7 +105,8 @@
 //     have, or at a mark older than the API accepts.
 //   - Count a row twice in one process, or count history again on restart.
 //   - Put a high-cardinality attribute on an instrument: attributes are
-//     subsystem, kind, reason, stable_asset and job, all small closed sets.
+//     subsystem, kind, reason, stage, actor_type, outcome, stable_asset and
+//     job, all small closed sets (stable_asset is one per issued asset).
 //   - Use floating point: every value is an int64 (USD minor units, basis
 //     points, counts, seconds, milliseconds).
 package advancedmetrics
