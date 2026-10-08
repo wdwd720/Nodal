@@ -341,12 +341,12 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// The fee ledger (internal/feeledger) is built first and once: every fee
 	// and spread the services below charge -- the internal book's maker and
 	// taker fees, the paper venue's disclosed spread and fees, margin's
-	// liquidation fee -- is disclosed and booked through it in the charging
-	// transaction, and each of them refuses to start without it rather than
-	// charge a fee nobody can find. It also books performance fees (sandbox
-	// accounting, never charged live) and serves the fee routes, with its
-	// package defaults: a two-minute quote TTL and the SYSTEM fee-ledger
-	// service applying its effects.
+	// liquidation fee, an equity fill's spread and fees -- is disclosed and
+	// booked through it in the charging transaction, and each of them refuses
+	// to start without it rather than charge a fee nobody can find. It also
+	// books performance fees (sandbox accounting, never charged live) and
+	// serves the fee routes, with its package defaults: a two-minute quote
+	// TTL and the SYSTEM fee-ledger service applying its effects.
 	feeLedgerSvc, err := feeledger.NewService(feeledger.Config{
 		Clock: clk, Ledger: ledgerSvc, Capital: capitalSvc, Effects: econ.NewEffectStore(clk, outbox, auditWriter),
 		Authorizer: econ.NewAuthorizer(gateChecker, killChecker), Assets: assetRepo, Audit: auditWriter,
@@ -451,6 +451,10 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// platform fee, 5 bps more for a strategy-originated order, and a 50 bps
 	// slippage reserve that is held against adverse execution and never
 	// charged. No venue fee is passed through: the paper venue charges none.
+	// Every fill's spread and fees are disclosed and booked through the fee
+	// ledger (feeLedgerSvc) in the transaction that applies the fill, under
+	// that schedule's equities key, and the database refuses a fill whose
+	// charges it did not book (00764, FW001).
 	// A market order's protection price (and its reservation) is 1% beyond
 	// the venue's indicative price; the smallest order is worth one sandbox
 	// dollar. Settlement is the sandbox dollar; nothing here creates an asset.
@@ -488,6 +492,8 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 				Version: "equities-sandbox-v1", QuoteAsset: econ.SandboxDollarID(), QuoteDecimals: econ.SandboxDollarDecimals,
 				SpreadBPS: 10, PercentageFeeBPS: 10, StrategyFeeBPS: 5, SlippageReserveBPS: 50, Rounding: fees.DefaultRounding(),
 			}},
+			// Every fill's spread and fees are booked here.
+			FeeLedger:       feeLedgerSvc,
 			MarketCollarBPS: 100, MinOrderNotional: money.USDFromMinor(1_00),
 			Verification: httpapi.AdvancedVerificationLevels{Rule: compliance.NewAccountVerification(clk)},
 		})

@@ -119,6 +119,8 @@ type world struct {
 	oracle      *predmarket.SandboxOracle
 	equities    *equities.Service
 	transfers   *transfers.Service
+	// feeLedger books every fee the services above charge.
+	feeLedger *feeledger.Service
 
 	usd    assets.Asset
 	system econ.Actor
@@ -156,6 +158,7 @@ func newWorld(t *testing.T) *world {
 		Clock: clk, Ledger: w.ledger, Capital: w.capital, Effects: w.effects, Authorizer: w.authz, Assets: w.assets, Audit: aw,
 	})
 	require.NoError(t, err)
+	w.feeLedger = feeLedger
 
 	// The margin service exactly as cmd/api builds it.
 	w.margin, err = margin.NewService(margin.Config{
@@ -217,8 +220,9 @@ func newWorld(t *testing.T) *world {
 
 // newEquities builds the equities service the way the worker (and cmd/api)
 // does: the paper venue NewExecutionAdapter gives LOCAL, on the XNYS calendar
-// with the recorded closures, the sandbox schedule in the sandbox dollar, and
-// the advanced capabilities' one identity rule.
+// with the recorded closures, the sandbox schedule in the sandbox dollar, the
+// fee ledger every fill's charges are booked through, and the advanced
+// capabilities' one identity rule.
 func newEquities(clk clock.Clock, w *world, aw audit.Writer) (*equities.Service, error) {
 	holidays, err := equities.Holidays(w.ctx, testDB, equities.CalendarXNYS)
 	if err != nil {
@@ -246,6 +250,7 @@ func newEquitiesOver(clk clock.Clock, w *world, aw audit.Writer, venue equities.
 			Version: "equities-sandbox-v1", QuoteAsset: econ.SandboxDollarID(), QuoteDecimals: econ.SandboxDollarDecimals,
 			SpreadBPS: 10, PercentageFeeBPS: 10, StrategyFeeBPS: 5, SlippageReserveBPS: 50, Rounding: fees.DefaultRounding(),
 		}},
+		FeeLedger:       w.feeLedger,
 		MarketCollarBPS: 100, MinOrderNotional: money.USDFromMinor(1_00),
 		Verification: httpapi.AdvancedVerificationLevels{Rule: compliance.NewAccountVerification(clk)},
 	})

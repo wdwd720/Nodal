@@ -19,6 +19,7 @@ import (
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
+	"github.com/nodal/controlplane/internal/feeledger"
 	"github.com/nodal/controlplane/internal/fees"
 	"github.com/nodal/controlplane/internal/id"
 	"github.com/nodal/controlplane/internal/identity"
@@ -90,6 +91,12 @@ type Config struct {
 	// Schedules are the fee schedules, one per settlement asset. An equity
 	// whose settlement asset has no schedule cannot be listed or traded.
 	Schedules []fees.Schedule
+	// FeeLedger is where every fill's spread and fees are disclosed and
+	// booked (feebooking.go): a settlement asset's schedule is made the
+	// version in force under its equities key, and a fill that charges
+	// anything records its payer's disclosure there and registers its charges
+	// against the fill's own journal and effect.
+	FeeLedger *feeledger.Service
 	// MarketCollarBPS bounds a market order: the protection price is the
 	// venue's indicative price moved by this much against the customer, and
 	// the order's capital reservation is sized at it.
@@ -124,6 +131,7 @@ type Service struct {
 	audit        audit.Writer
 	adapter      EquitiesExecutionAdapter
 	schedules    map[assets.AssetID]fees.Schedule
+	feeLedger    *feeledger.Service
 	collar       money.BPS
 	minNotional  money.USD
 	verification VerificationReader
@@ -147,7 +155,7 @@ func NewService(cfg Config) (*Service, error) {
 		"clock": cfg.Clock == nil, "intents": cfg.Intents == nil, "effects": cfg.Effects == nil,
 		"authorizer": cfg.Authorizer == nil, "kill switches": cfg.KillSwitches == nil, "legal router": cfg.Router == nil,
 		"capital": cfg.Capital == nil, "ledger": cfg.Ledger == nil, "prices": cfg.Prices == nil, "audit": cfg.Audit == nil,
-		"adapter": cfg.Adapter == nil,
+		"adapter": cfg.Adapter == nil, "fee ledger": cfg.FeeLedger == nil,
 	} {
 		if nilish {
 			missing = append(missing, name)
@@ -192,7 +200,8 @@ func NewService(cfg Config) (*Service, error) {
 	return &Service{
 		clk: cfg.Clock, intents: cfg.Intents, effects: cfg.Effects, auth: cfg.Authorizer, kills: cfg.KillSwitches,
 		router: cfg.Router, riskStore: risk.NewStore(), riskPolicy: cfg.RiskPolicy, capital: cfg.Capital, ledger: cfg.Ledger,
-		prices: cfg.Prices, audit: cfg.Audit, adapter: cfg.Adapter, schedules: schedules, collar: cfg.MarketCollarBPS,
+		prices: cfg.Prices, audit: cfg.Audit, adapter: cfg.Adapter, schedules: schedules, feeLedger: cfg.FeeLedger,
+		collar:      cfg.MarketCollarBPS,
 		minNotional: cfg.MinOrderNotional, verification: v, authority: cfg.Authority, strategies: cfg.Strategies,
 		instruments: instruments.NewRepository(), assets: assets.NewRepository(), accounts: accounts.NewRepository(),
 		actor: econ.SystemActor("equities"),
