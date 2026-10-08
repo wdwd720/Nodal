@@ -60,6 +60,7 @@ var inScope = []string{
 	"docs/threat-model/ADVANCED_THREAT_MODEL.md",
 	"docs/build/ADVANCED_CAPABILITIES_MATRIX.md",
 	"docs/reviews/ADVANCED_SYSTEMS_REVIEW.md",
+	"docs/reviews/SECURITY_RED_TEAM.md",
 }
 
 var (
