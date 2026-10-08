@@ -540,7 +540,7 @@ func TestIntegration_SingleTransactionSubmitIsAtomic(t *testing.T) {
 	var rest StageOutcome
 	require.NoError(t, f.inTx(func(ctx context.Context, tx pgx.Tx) error {
 		var err error
-		rest, err = f.svc.Submit(ctx, tx, f.limit(m, accts[0], SideSell, "100.00", units(1)))
+		rest, err = f.svc.submitAtomic(ctx, tx, f.limit(m, accts[0], SideSell, "100.00", units(1)))
 		return err
 	}))
 	assert.Equal(t, StatusOpen, rest.Order.Status)
@@ -549,7 +549,7 @@ func TestIntegration_SingleTransactionSubmitIsAtomic(t *testing.T) {
 	r := f.limit(m, accts[1], SideBuy, "100.00", units(1))
 	errRollback := errors.New("roll back")
 	err := f.inTx(func(ctx context.Context, tx pgx.Tx) error {
-		out, err := f.svc.Submit(ctx, tx, r)
+		out, err := f.svc.submitAtomic(ctx, tx, r)
 		require.NoError(t, err)
 		require.Equal(t, StatusFilled, out.Order.Status)
 		return errRollback
@@ -561,7 +561,7 @@ func TestIntegration_SingleTransactionSubmitIsAtomic(t *testing.T) {
 	var filled StageOutcome
 	require.NoError(t, f.inTx(func(ctx context.Context, tx pgx.Tx) error {
 		var err error
-		filled, err = f.svc.Submit(ctx, tx, r)
+		filled, err = f.svc.submitAtomic(ctx, tx, r)
 		return err
 	}))
 	assert.Equal(t, StatusFilled, filled.Order.Status)

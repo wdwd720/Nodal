@@ -53,6 +53,8 @@ locals {
   # Per-binary IAM beyond secrets (SYSTEM.md section 2 credential scope).
   # relay-worker is deliberately empty: it reads outbox_events and publishes to
   # the bus, so it needs no bucket and no key beyond resolving its own secrets.
+  # advanced-worker is empty too: it works on the advanced capabilities' tables
+  # in Postgres through their services, and holds no bucket and no key.
   task_policies = {
     api                   = [local.evidence_rw, local.s3_kms]
     relay-worker          = []
@@ -62,6 +64,7 @@ locals {
     agent-worker          = [local.evidence_rw, local.s3_kms]
     workflow-worker       = [local.evidence_rw, local.s3_kms]
     audit-worker          = [local.audit_rw, local.evidence_ro, local.s3_kms, local.audit_sign]
+    advanced-worker       = []
     migrate               = []
   }
 
@@ -78,11 +81,17 @@ locals {
     agent-worker          = ["run"]
     workflow-worker       = ["run"]
     audit-worker          = ["run"]
+    advanced-worker       = ["run"]
     migrate               = ["up"]
   }
 
   service_env_overrides = {
     audit-worker = { CP_DATABASE_READONLY_URL = module.app_config.readonly_database_url_ref }
+    # The advanced worker decides every capability gate exactly as the API
+    # does, so it reads the same configured list (condition 1 of the policy
+    # authority). Without it a gate the API holds open would read closed in
+    # the worker, and a pending delegated swap would be expired as refused.
+    advanced-worker = { CP_API_ENABLED_CAPABILITIES = join(",", module.app_config.enabled_capabilities) }
   }
 
   otlp_endpoint = var.otel_sidecar_enabled ? "127.0.0.1:4317" : var.otlp_endpoint

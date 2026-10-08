@@ -66,26 +66,42 @@ are not running here; nothing in the advanced work depends on them.
   threat model entries 1-8, 10-12 and 15-17 (`fb7810c`), cited tests machine-checked by `test/docs`.
 - Restore drill at version 754: 220 tables, identical row counts, 0 drift.
 
+## Landed since (2026-10-08, later)
+
+- API + web: strategy marketplace (`e434367`), order books and equities (`6f3ba63`), stable asset and bridge
+  (`5547e53`, with the cross-chain holdings view), the operator console (`a8f439f`: transfer reversals under
+  dual control — review-1 F3 — the margin deficit and case-resolution surfaces, sandbox reference marks, the
+  ops overview, bridge manual-review actions).
+- Domain: treasury book and fee ledger (`122293d`, 00745/00746), delegated agent signing and withdrawals
+  (`060fcf2`, 00752/00753).
+- Review-2 hardening: prediction markets (`84b6403`, 00756: shares only as issued, two-operator voids, held
+  payouts, durable sandbox oracle; the order book cancels working orders at close, void and settlement),
+  derivatives (`cc5af7f`, 00755: rule-priced settlement with two-operator overrides, ordered marks, bound
+  fills, fresh closes, reserved collections, frozen terms).
+- The advanced worker (`568264b`: `cmd/advanced-worker`, every scheduled job and reconciler, the metrics
+  collector — review-1 F7); CloudWatch alarms and a runbook for the advanced books (`5b1aa69`).
+- `test/reachability` covers transfers, faucet, prediction markets, sandbox runtime, stable asset, derivatives,
+  bridge, margin, marketplace and equities; stages reached only through their package's own driver are
+  verified claims (`test/reachability/driver_test.go`).
+- Demo: 8 scenarios (0, A, B, C, D, G, H, I), 79 checks; threat model complete (17 entries, cited tests
+  machine-checked); restore drill at 758 (263 tables, 0 drift).
+
 ## In flight (isolated worktrees, merged by the integrator)
 
-Orders + equities API/UI; stable asset + bridge API/UI (with the cross-chain capital page); treasury +
-fee ledger (00745/00746); delegated agent signing and withdrawals (00752/00753); the advanced worker
-(`internal/advancedjobs`, `internal/advancedmetrics`, `cmd/advanced-worker`: scheduled jobs, reconcilers
-and the metrics collector — review-1 F7); review-2 hardening of derivatives (00755), prediction markets
-(00756) and the marketplace + sandbox runtime (00757); the operator console with transfers reversal under
-dual control (review-1 F3, 00758), the margin deficit and case-resolution surfaces and sandbox marks.
+Treasury/fees API + UI (with 00759: a house order exists only as a treasury action); delegated authority API +
+UI (agents stay off HTTP — they act in-process); marketplace + sandbox runtime review-2 hardening (00757, and
+the order book's paper venue as the marketplace's executor); upkeep robustness (00760: per-item isolation in
+batch upkeep, network filtering, reconciliation record convergence, dedicated reconciliation kinds).
 
 ## Next exact work
 
-1. Merge each in-flight lane as it reports (scratchpad INTEGRATOR_TODO procedure); after the worker merges,
-   add margin and marketplace to `test/reachability` and CloudWatch alarms/dashboard widgets for the
-   advanced metrics; after orders merges, wire prediction markets' `OutcomeBooks` over the order book.
-2. Launch the delegation API/UI and treasury/fees API lanes when their domains merge; a portfolio page
-   (balances by chain, positions across subsystems, pending capital) when the API lanes are in.
-3. Demo Scenarios E (strategy sandbox, after the marketplace hardening) and F (delegation).
-4. Threat model entries 9, 13 and 14; the three reviews (`docs/reviews/`); README; `docs/portfolio/
-   TECHNICAL_EVIDENCE.md`; `ADVANCED_TEST_EVIDENCE.md`; traceability; a recorded performance run on an
-   idle machine; the Playwright suite against a live API.
+1. Merge the four lanes; orders joins `test/reachability` once the paper venue has its caller.
+2. Agent runtime ↔ delegated authority (the agent emitter requests delegated swaps in-process); a portfolio
+   page; the fee ledger wired into the subsystems that charge fees.
+3. Demo Scenarios E (strategy sandbox) and F (delegation).
+4. A red-team review of the integrated system, its fixes, then the three reviews (`docs/reviews/`), README,
+   `docs/portfolio/TECHNICAL_EVIDENCE.md`, `ADVANCED_TEST_EVIDENCE.md` refreshed from one full run at one commit,
+   traceability, a recorded performance run on an idle machine, the Playwright suite against a live API.
 
 ## Verification commands that matter for this goal
 

@@ -246,8 +246,14 @@ variable "service_sizing" {
     agent-worker          = { cpu = 512, memory = 1024, desired_count = 1 }
     workflow-worker       = { cpu = 512, memory = 1024, desired_count = 1 }
     audit-worker          = { cpu = 256, memory = 512, desired_count = 1 }
+    advanced-worker       = { cpu = 256, memory = 512, desired_count = 1 }
     migrate               = { cpu = 256, memory = 512, desired_count = 0 }
   }
+  # advanced-worker runs one task: its scheduler never overlaps a job with
+  # itself inside a process, and a second replica would run every job twice at
+  # once -- safe, since every unit is keyed and locked, but wasted work, and a
+  # paper venue run racing itself.
+  #
   # A SUBSET of the nine, not a different set. The stack is deployed in stages:
   # the Credit purchase path is the API, the reconciliation worker and migrate,
   # and the other six are added as the domains they serve are turned on. What
@@ -256,9 +262,9 @@ variable "service_sizing" {
   validation {
     condition = length(setsubtract(toset(keys(var.service_sizing)), toset([
       "api", "relay-worker", "execution-worker", "reconciliation-worker", "market-ingest-worker",
-      "agent-worker", "workflow-worker", "audit-worker", "migrate",
+      "agent-worker", "workflow-worker", "audit-worker", "advanced-worker", "migrate",
     ]))) == 0
-    error_message = "service_sizing may name only the nine binaries of SYSTEM.md section 2."
+    error_message = "service_sizing may name only the binaries of cmd/: the nine of SYSTEM.md section 2 and the advanced-worker."
   }
   # migrate is not optional at any stage: without it the schema is never
   # applied, and every service that does start fails on its first query.
