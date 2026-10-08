@@ -44,6 +44,7 @@ import { TransfersSection } from "./transfers/Transfers.tsx";
 // >>> advanced:bridge import
 
 // >>> advanced:predmarket import
+import { PredictionMarketsSection } from "./predmarket/PredictionMarkets.tsx";
 
 // >>> advanced:marketplace import
 
@@ -126,6 +127,13 @@ export const ADVANCED_SECTIONS: readonly AdvancedSection[] = [
   // >>> advanced:bridge section
 
   // >>> advanced:predmarket section
+  {
+    path: "prediction-markets",
+    title: "Prediction markets",
+    description:
+      "Markets on the outcome of an event: complete sets against the sandbox dollar, resolved by a verified oracle report and settled from each market's own escrow.",
+    element: <PredictionMarketsSection />,
+  },
 
   // >>> advanced:marketplace section
 

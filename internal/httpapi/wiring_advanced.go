@@ -62,6 +62,14 @@ type AdvancedDeps struct {
 	// >>> advanced:bridge deps
 
 	// >>> advanced:predmarket deps
+	// PredictionMarkets runs prediction markets. Nil leaves their routes
+	// UNSUPPORTED.
+	PredictionMarkets *PredictionMarketService
+	// PredictionOracle is the sandbox oracle the service resolves from, the
+	// same instance its configuration holds. Nil (every deployment outside
+	// LOCAL, TEST and DEV) answers PROVIDER_UNAVAILABLE wherever an oracle is
+	// needed.
+	PredictionOracle *PredictionSandboxOracle
 
 	// >>> advanced:marketplace deps
 
@@ -103,6 +111,9 @@ func wireAdvanced(p *Ports, d WireDeps) {
 	// >>> advanced:bridge wire
 
 	// >>> advanced:predmarket wire
+	if d.Advanced.PredictionMarkets != nil {
+		p.PredictionMarkets = newPredmarketAdapter(d)
+	}
 
 	// >>> advanced:marketplace wire
 

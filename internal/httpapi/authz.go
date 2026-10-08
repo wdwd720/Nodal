@@ -241,6 +241,35 @@ var operationPolicies = map[string]operationPolicy{
 	// >>> advanced:bridge operations
 
 	// >>> advanced:predmarket operations
+	//
+	// Markets, their escrow books and the oracle a deployment resolves from
+	// are reference data, read like the instrument catalogue. An account's
+	// shares are tenant-scoped per request. Issuing and redeeming complete
+	// sets is the customer's sandbox:trade on their own account. Defining,
+	// opening and closing a market, running its escrow reconciliation and
+	// recording what the sandbox oracle saw are sandbox:operate; requesting
+	// resolution, resolving, disputing, ruling, voiding and settling decide
+	// how a market pays and are sandbox:resolve, held by different roles.
+	// Every operator action that changes a market needs a recent step-up; the
+	// reconciliation only compares the books and records what it found.
+	"GetAdvancedPredictionMarkets":                            {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedPredictionMarketsOracle":                      {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedPredictionMarketsMarketId":                    {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedPredictionMarketsMarketIdBooks":               {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedPredictionMarketsMarketIdPositions":           {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"PostAdvancedPredictionMarketsMarketIdIssuances":          {AnyOf: perms(security.PermSandboxTrade), Mutating: true},
+	"PostAdvancedPredictionMarketsMarketIdRedemptions":        {AnyOf: perms(security.PermSandboxTrade), Mutating: true},
+	"PostAdvancedPredictionMarkets":                           {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedPredictionMarketsMarketIdOpen":               {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedPredictionMarketsMarketIdClose":              {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedPredictionMarketsMarketIdOracleObservations": {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedPredictionMarketsMarketIdReconcile":          {AnyOf: perms(security.PermSandboxOperate), Mutating: true},
+	"PostAdvancedPredictionMarketsMarketIdRequestResolution":  {AnyOf: perms(security.PermSandboxResolve), StepUp: true, Mutating: true},
+	"PostAdvancedPredictionMarketsMarketIdResolve":            {AnyOf: perms(security.PermSandboxResolve), StepUp: true, Mutating: true},
+	"PostAdvancedPredictionMarketsMarketIdDispute":            {AnyOf: perms(security.PermSandboxResolve), StepUp: true, Mutating: true},
+	"PostAdvancedPredictionMarketsMarketIdUphold":             {AnyOf: perms(security.PermSandboxResolve), StepUp: true, Mutating: true},
+	"PostAdvancedPredictionMarketsMarketIdVoid":               {AnyOf: perms(security.PermSandboxResolve), StepUp: true, Mutating: true},
+	"PostAdvancedPredictionMarketsMarketIdSettle":             {AnyOf: perms(security.PermSandboxResolve), StepUp: true, Mutating: true},
 
 	// >>> advanced:marketplace operations
 

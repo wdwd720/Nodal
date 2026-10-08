@@ -188,6 +188,7 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		// >>> advanced:bridge path parameters
 
 		// >>> advanced:predmarket path parameters
+		// {marketId} is mapped above (the native markets declared it first).
 
 		// >>> advanced:marketplace path parameters
 
@@ -232,6 +233,8 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		// >>> advanced:bridge required query
 
 		// >>> advanced:predmarket required query
+		"/v1/advanced/prediction-markets":                      "status=OPEN",
+		"/v1/advanced/prediction-markets/{marketId}/positions": "account_id=" + testAccountID.String(),
 
 		// >>> advanced:marketplace required query
 

@@ -1618,6 +1618,280 @@ paths:
   # >>> advanced:bridge paths (insert this subsystem's paths directly below; keep the marker)
 
   # >>> advanced:predmarket paths (insert this subsystem's paths directly below; keep the marker)
+  # Prediction markets (internal/predmarket): complete sets of outcome shares against the sandbox dollar,
+  # resolved by a verified oracle report and settled from a segregated escrow. Trading shares on an order
+  # book belongs to the internal order book and is not served here.
+  /advanced/prediction-markets:
+    get:
+      tags: [advanced]
+      summary: Prediction markets in one lifecycle status, soonest close first
+      parameters:
+        - { in: query, name: status, required: true, schema: { $ref: "#/components/schemas/PredictionMarketStatus" } }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Markets in that status (the service does not page; the list is bounded by limit)
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionMarketList" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Define a prediction market in DRAFT, collateralised in the sandbox dollar (operator)
+      description: >-
+        Creating an existing symbol with an identical definition replays it (200); another definition under
+        the same symbol is INVALID_IDEMPOTENCY_REUSE. The creator can never resolve or void the market.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CreatePredictionMarketRequest" } } }
+      responses:
+        "201":
+          description: Market defined in DRAFT
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionMarket" } } }
+        "200":
+          description: The same definition already exists, or an idempotent replay
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionMarket" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/prediction-markets/oracle:
+    get:
+      tags: [advanced]
+      summary: The oracle this deployment resolves prediction markets from (sandbox oracle in LOCAL, TEST and DEV only)
+      responses:
+        "200":
+          description: The oracle's source name and Ed25519 public key, which a market registers at creation
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionOracle" } } }
+        "503": { $ref: "#/components/responses/Problem" }
+  /advanced/prediction-markets/{marketId}:
+    get:
+      tags: [advanced]
+      summary: One market with its outcomes, resolutions, disputes and settlement record
+      parameters: [{ $ref: "#/components/parameters/MarketId" }]
+      responses:
+        "200":
+          description: The market
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionMarketDetail" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/prediction-markets/{marketId}/books:
+    get:
+      tags: [advanced]
+      summary: The market's escrow books, one snapshot, and whether they satisfy the escrow identity
+      parameters: [{ $ref: "#/components/parameters/MarketId" }]
+      responses:
+        "200":
+          description: Escrow, collateral and every outcome's shares issued, outstanding and held by customers
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionEscrowBooks" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/prediction-markets/{marketId}/positions:
+    get:
+      tags: [advanced]
+      summary: An account's outcome shares in one market
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: Every outcome share the account holds in the market (none listed means none held)
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionPositionList" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/prediction-markets/{marketId}/issuances:
+    post:
+      tags: [advanced]
+      summary: Issue complete sets (collateral into the escrow, one share of every outcome per set)
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/PredictionSetRequest" } } }
+      responses:
+        "200":
+          description: The issuance as the economic kernel carried it out
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionSetResult" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/prediction-markets/{marketId}/redemptions:
+    post:
+      tags: [advanced]
+      summary: Redeem complete sets (one share of every outcome per set back into collateral)
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/PredictionSetRequest" } } }
+      responses:
+        "200":
+          description: The redemption as the economic kernel carried it out
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionSetResult" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/prediction-markets/{marketId}/open:
+    post:
+      tags: [advanced]
+      summary: Open a DRAFT market at or after its open time (operator)
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: The market after the step
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionMarket" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/prediction-markets/{marketId}/close:
+    post:
+      tags: [advanced]
+      summary: Close an OPEN market at or after its close time (operator)
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: The market after the step
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionMarket" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/prediction-markets/{marketId}/request-resolution:
+    post:
+      tags: [advanced]
+      summary: Move a CLOSED market to RESOLVING, awaiting an oracle report (operator)
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: The market after the step
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionMarket" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/prediction-markets/{marketId}/oracle-observations:
+    post:
+      tags: [advanced]
+      summary: Record what the sandbox oracle observed for a market (operator; sandbox oracle only)
+      description: >-
+        The sandbox oracle is the stand-in for the world a market asks about. An observation is what it will
+        sign when a resolution asks it for a report; a later observation replaces an earlier one. Observations
+        live in the API process's memory. Without a sandbox oracle this answers PROVIDER_UNAVAILABLE.
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/PredictionOracleObservationRequest" } } }
+      responses:
+        "200":
+          description: The signed report the oracle will now deliver for the market
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionOracleObservation" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /advanced/prediction-markets/{marketId}/resolve:
+    post:
+      tags: [advanced]
+      summary: Resolve from the configured oracle's report, verified against the market's oracle key (operator)
+      description: >-
+        RESOLVING: the report resolves the market. DISPUTED: a report closes the dispute (DISPUTE_OVERTURNED when
+        its outcome differs, DISPUTE_UPHELD when it does not). Replaying an accepted report changes nothing.
+        The market's creator, and for a dispute the operator who raised it, are refused. With no oracle
+        configured this answers PROVIDER_UNAVAILABLE.
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/PredictionResolveRequest" } } }
+      responses:
+        "200":
+          description: The market and the resolution now in force
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionResolutionResult" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /advanced/prediction-markets/{marketId}/dispute:
+    post:
+      tags: [advanced]
+      summary: Dispute a RESOLVED market's oracle resolution, blocking settlement (operator)
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/PredictionDisputeRequest" } } }
+      responses:
+        "200":
+          description: The dispute and the market, now DISPUTED
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionDisputeResult" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/prediction-markets/{marketId}/uphold:
+    post:
+      tags: [advanced]
+      summary: Close a dispute keeping the disputed outcome (operator; not the creator, not the disputer)
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/PredictionRulingRequest" } } }
+      responses:
+        "200":
+          description: The market and its DISPUTE_UPHELD resolution
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionResolutionResult" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/prediction-markets/{marketId}/void:
+    post:
+      tags: [advanced]
+      summary: Void a market that has not settled and refund every share (operator; not the creator)
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/PredictionVoidRequest" } } }
+      responses:
+        "200":
+          description: The refund record, with the residual it discloses
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionSettlementResult" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/prediction-markets/{marketId}/settle:
+    post:
+      tags: [advanced]
+      summary: Settle a RESOLVED market from its escrow once its dispute window has passed (operator)
+      description: >-
+        Every winning share pays exactly one collateral unit and every share is retired; the escrow is empty
+        afterwards. Settling a SETTLED market returns its record and pays nothing (replay true).
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: The settlement record and what this call paid
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionSettlementResult" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/prediction-markets/{marketId}/reconcile:
+    post:
+      tags: [advanced]
+      summary: Run the PREDICTION_ESCROW reconciliation for one market (operator; compares and records, moves nothing)
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: The reconciliation record, MATCHED or a material MISMATCH naming every violation
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionEscrowReconciliation" } } }
+        "404": { $ref: "#/components/responses/Problem" }
 
   # >>> advanced:marketplace paths (insert this subsystem's paths directly below; keep the marker)
 
@@ -3853,6 +4127,331 @@ components:
     # >>> advanced:bridge schemas (insert this subsystem's schemas directly below; keep the marker)
 
     # >>> advanced:predmarket schemas (insert this subsystem's schemas directly below; keep the marker)
+    PredictionMarketStatus:
+      type: string
+      description: >-
+        One of DRAFT, OPEN, CLOSED, RESOLVING, RESOLVED, DISPUTED, SETTLED, VOIDED. DRAFT → OPEN → CLOSED →
+        RESOLVING → RESOLVED → SETTLED; RESOLVED → DISPUTED → RESOLVED or VOIDED; any state but SETTLED and
+        VOIDED → VOIDED. Declared without an enum on purpose: its values are shared with other schemas' enums,
+        and a shared enum value renames the generated constants of every schema that holds it.
+    PredictionMarketMode:
+      type: string
+      enum: [PAPER, SANDBOX]
+    PredictionActor:
+      type: object
+      required: [actor_type, actor_id]
+      properties:
+        actor_type: { type: string }
+        actor_id: { type: string }
+    PredictionOutcome:
+      type: object
+      required: [index, symbol, share_asset_id, instrument_id]
+      properties:
+        index: { type: integer }
+        symbol: { type: string }
+        share_asset_id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID", description: The outcome's EVENT_OUTCOME instrument for the internal order book }
+    PredictionMarket:
+      type: object
+      required: [value_domain, id, symbol, question, mode, status, facility_id, instrument_id, collateral_asset_id, collateral_symbol,
+                 collateral_decimals, unit_quantity, share_decimals, outcomes, open_at, close_at, dispute_window_ms, oracle_source,
+                 oracle_public_key, definition_hash, created_by, created_at, updated_at]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        question: { type: string }
+        mode: { $ref: "#/components/schemas/PredictionMarketMode" }
+        status: { $ref: "#/components/schemas/PredictionMarketStatus" }
+        facility_id: { $ref: "#/components/schemas/UUID", description: The PREDICTION_MARKET facility whose books are the market's escrow }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        collateral_asset_id: { $ref: "#/components/schemas/UUID" }
+        collateral_symbol: { type: string }
+        collateral_decimals: { type: integer }
+        unit_quantity: { $ref: "#/components/schemas/Quantity", description: Collateral base units one complete set costs and one winning share pays }
+        share_decimals: { type: integer }
+        outcomes: { type: array, items: { $ref: "#/components/schemas/PredictionOutcome" } }
+        open_at: { $ref: "#/components/schemas/Timestamp" }
+        close_at: { $ref: "#/components/schemas/Timestamp" }
+        dispute_window_ms: { type: integer, format: int64 }
+        oracle_source: { type: string }
+        oracle_public_key: { type: string, description: hex Ed25519 public key the market accepts reports from }
+        definition_hash: { type: string, description: hex sha256 of the canonical definition }
+        current_resolution_id: { $ref: "#/components/schemas/UUID" }
+        created_by: { $ref: "#/components/schemas/PredictionActor" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+    PredictionMarketList:
+      type: object
+      required: [value_domain, status, items]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        status: { $ref: "#/components/schemas/PredictionMarketStatus" }
+        items: { type: array, items: { $ref: "#/components/schemas/PredictionMarket" } }
+    PredictionResolutionKind:
+      type: string
+      enum: [ORACLE, DISPUTE_UPHELD, DISPUTE_OVERTURNED]
+    PredictionResolution:
+      type: object
+      required: [id, market_id, kind, outcome_index, outcome_symbol, evidence_ref, evidence_sha256, accepted_by, reason, accepted_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        market_id: { $ref: "#/components/schemas/UUID" }
+        kind: { $ref: "#/components/schemas/PredictionResolutionKind" }
+        outcome_index: { type: integer }
+        outcome_symbol: { type: string }
+        supersedes_id: { $ref: "#/components/schemas/UUID" }
+        dispute_id: { $ref: "#/components/schemas/UUID" }
+        report_hash: { type: string, description: hex sha256 of the verified report's signed bytes and signature }
+        report_source: { type: string }
+        report_observed_at: { $ref: "#/components/schemas/Timestamp" }
+        evidence_ref: { type: string }
+        evidence_sha256: { type: string }
+        accepted_by: { $ref: "#/components/schemas/PredictionActor" }
+        reason: { type: string }
+        accepted_at: { $ref: "#/components/schemas/Timestamp" }
+    PredictionDispute:
+      type: object
+      required: [id, market_id, resolution_id, raised_by, reason, evidence_ref, evidence_sha256, raised_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        market_id: { $ref: "#/components/schemas/UUID" }
+        resolution_id: { $ref: "#/components/schemas/UUID" }
+        raised_by: { $ref: "#/components/schemas/PredictionActor" }
+        reason: { type: string }
+        evidence_ref: { type: string }
+        evidence_sha256: { type: string }
+        raised_at: { $ref: "#/components/schemas/Timestamp" }
+    PredictionSettlementKind:
+      type: string
+      description: PAYOUT (a resolved market paid its winners) or REFUND (a void refunded every share); no enum, see PredictionMarketStatus
+    PredictionRoundingPolicy:
+      type: string
+      enum: [EXACT, FLOOR_PER_HOLDER]
+    PredictionSettlement:
+      type: object
+      required: [id, market_id, kind, outcome_count, unit_quantity, rounding_policy, escrow_before, total_paid, residual, holder_count,
+                 evidence_ref, evidence_sha256, settled_by, settled_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        market_id: { $ref: "#/components/schemas/UUID" }
+        kind: { $ref: "#/components/schemas/PredictionSettlementKind" }
+        resolution_id: { $ref: "#/components/schemas/UUID" }
+        winning_outcome_index: { type: integer }
+        winning_outcome_symbol: { type: string }
+        outcome_count: { type: integer }
+        unit_quantity: { $ref: "#/components/schemas/Quantity" }
+        refund_rate_per_share: { $ref: "#/components/schemas/Quantity" }
+        rounding_policy: { $ref: "#/components/schemas/PredictionRoundingPolicy" }
+        escrow_before: { $ref: "#/components/schemas/Quantity" }
+        total_paid: { $ref: "#/components/schemas/Quantity" }
+        residual: { $ref: "#/components/schemas/Quantity", description: "What the escrow keeps; zero after a payout, disclosed after a refund" }
+        holder_count: { type: integer }
+        evidence_ref: { type: string }
+        evidence_sha256: { type: string }
+        settled_by: { $ref: "#/components/schemas/PredictionActor" }
+        settled_at: { $ref: "#/components/schemas/Timestamp" }
+    PredictionMarketDetail:
+      type: object
+      required: [value_domain, market, resolutions, disputes]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        market: { $ref: "#/components/schemas/PredictionMarket" }
+        resolutions: { type: array, items: { $ref: "#/components/schemas/PredictionResolution" }, description: Oldest first }
+        disputes: { type: array, items: { $ref: "#/components/schemas/PredictionDispute" }, description: Oldest first }
+        settlement: { $ref: "#/components/schemas/PredictionSettlement", description: Absent until the market settles or is voided }
+    PredictionBookOutcome:
+      type: object
+      required: [index, symbol, share_asset_id, shares_issued, shares_outstanding, held_by_customers]
+      properties:
+        index: { type: integer }
+        symbol: { type: string }
+        share_asset_id: { $ref: "#/components/schemas/UUID" }
+        shares_issued: { $ref: "#/components/schemas/Quantity" }
+        shares_outstanding: { $ref: "#/components/schemas/Quantity" }
+        held_by_customers: { $ref: "#/components/schemas/Quantity" }
+    PredictionEscrowBooks:
+      type: object
+      required: [value_domain, market_id, market_status, collateral_asset_id, collateral_symbol, collateral_decimals, share_decimals,
+                 escrow, collateral, residual, outcomes, reconciles, violations]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        market_id: { $ref: "#/components/schemas/UUID" }
+        market_status: { $ref: "#/components/schemas/PredictionMarketStatus" }
+        collateral_asset_id: { $ref: "#/components/schemas/UUID" }
+        collateral_symbol: { type: string }
+        collateral_decimals: { type: integer }
+        share_decimals: { type: integer }
+        escrow: { $ref: "#/components/schemas/Quantity" }
+        collateral: { $ref: "#/components/schemas/Quantity" }
+        residual: { $ref: "#/components/schemas/Quantity", description: The residual the market's settlement record discloses; zero without one }
+        outcomes: { type: array, items: { $ref: "#/components/schemas/PredictionBookOutcome" } }
+        reconciles: { type: boolean, description: True when the books satisfy escrow = collateral = outstanding(i) + residual and issued(i) = outstanding(i) = held(i) }
+        violations: { type: array, items: { type: string } }
+    PredictionPosition:
+      type: object
+      required: [outcome_index, outcome_symbol, share_asset_id, quantity, as_of]
+      properties:
+        outcome_index: { type: integer }
+        outcome_symbol: { type: string }
+        share_asset_id: { $ref: "#/components/schemas/UUID" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        as_of: { $ref: "#/components/schemas/Timestamp" }
+    PredictionPositionList:
+      type: object
+      required: [value_domain, market_id, account_id, share_decimals, items]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        market_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        share_decimals: { type: integer }
+        items: { type: array, items: { $ref: "#/components/schemas/PredictionPosition" } }
+    PredictionSetRequest:
+      type: object
+      required: [account_id, quantity]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        quantity: { $ref: "#/components/schemas/Quantity", description: "Complete sets in share base units, a positive multiple of the market's unit_quantity" }
+    PredictionSetAction:
+      type: string
+      enum: [ISSUE, REDEEM]
+    PredictionSetResult:
+      type: object
+      required: [value_domain, market_id, account_id, action, quantity, replay, intent]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        market_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        action: { $ref: "#/components/schemas/PredictionSetAction" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        replay: { type: boolean, description: True when the economic intent already existed; nothing new happened }
+        intent: { $ref: "#/components/schemas/EconomicIntent" }
+        effect: { $ref: "#/components/schemas/EconomicEffect" }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        risk_decision_hash: { type: string }
+    CreatePredictionMarketRequest:
+      type: object
+      required: [symbol, question, outcomes, mode, open_at, close_at, dispute_window_ms, oracle_source, oracle_public_key]
+      properties:
+        symbol: { type: string, description: "1..32 of A-Z 0-9 _ -, starting alphanumeric" }
+        question: { type: string }
+        outcomes: { type: array, items: { type: string }, description: "2..64 distinct symbols of 1..24 of A-Z 0-9 _ -" }
+        mode: { $ref: "#/components/schemas/PredictionMarketMode" }
+        open_at: { $ref: "#/components/schemas/Timestamp" }
+        close_at: { $ref: "#/components/schemas/Timestamp" }
+        dispute_window_ms: { type: integer, format: int64, description: Whole milliseconds within 0..30 days }
+        oracle_source: { type: string }
+        oracle_public_key: { type: string, description: hex Ed25519 public key (64 hex characters) }
+    PredictionOracle:
+      type: object
+      required: [kind, source, public_key]
+      properties:
+        kind: { type: string, enum: [SANDBOX] }
+        source: { type: string }
+        public_key: { type: string, description: hex Ed25519 public key }
+    PredictionOracleObservationRequest:
+      type: object
+      required: [outcome, observed_at, evidence]
+      properties:
+        outcome: { type: string }
+        observed_at: { $ref: "#/components/schemas/Timestamp" }
+        evidence: { type: string, description: The source document the oracle saw (1..16384 bytes); its sha256 is signed }
+    PredictionOracleReport:
+      type: object
+      required: [market_id, outcome, source, observed_at, evidence, signature]
+      properties:
+        market_id: { type: string }
+        outcome: { type: string }
+        source: { type: string }
+        observed_at: { type: string, description: RFC 3339 in UTC }
+        evidence: { type: string, description: standard base64 }
+        signature: { type: string, description: standard base64 Ed25519 signature }
+    PredictionOracleObservation:
+      type: object
+      required: [value_domain, report, report_hash]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        report: { $ref: "#/components/schemas/PredictionOracleReport" }
+        report_hash: { type: string }
+    PredictionResolveRequest:
+      type: object
+      properties:
+        reason: { type: string }
+    PredictionResolutionResult:
+      type: object
+      required: [value_domain, market, resolution, replay]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        market: { $ref: "#/components/schemas/PredictionMarket" }
+        resolution: { $ref: "#/components/schemas/PredictionResolution" }
+        replay: { type: boolean, description: True when the report had already been accepted; nothing changed }
+    PredictionDisputeRequest:
+      type: object
+      required: [reason, evidence]
+      properties:
+        reason: { type: string, description: 8..2000 characters }
+        evidence: { type: object, additionalProperties: true }
+    PredictionDisputeResult:
+      type: object
+      required: [value_domain, market, dispute]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        market: { $ref: "#/components/schemas/PredictionMarket" }
+        dispute: { $ref: "#/components/schemas/PredictionDispute" }
+    PredictionRulingRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, description: 8..2000 characters }
+        evidence: { type: object, additionalProperties: true }
+    PredictionVoidRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, description: 8..2000 characters }
+        evidence: { type: object, additionalProperties: true }
+    PredictionShareCount:
+      type: object
+      required: [outcome_symbol, quantity]
+      properties:
+        outcome_symbol: { type: string }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+    PredictionPayoutLine:
+      type: object
+      required: [account_id, amount, shares, intent_id]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        amount: { $ref: "#/components/schemas/Quantity" }
+        shares: { type: array, items: { $ref: "#/components/schemas/PredictionShareCount" } }
+        intent_id: { $ref: "#/components/schemas/UUID" }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+    PredictionSettlementResult:
+      type: object
+      required: [value_domain, market, settlement, lines, replay]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        market: { $ref: "#/components/schemas/PredictionMarket" }
+        settlement: { $ref: "#/components/schemas/PredictionSettlement" }
+        lines: { type: array, items: { $ref: "#/components/schemas/PredictionPayoutLine" }, description: "What this call paid, one line per holder; empty on a replay" }
+        replay: { type: boolean, description: True when the market had already settled (or been voided); nothing was paid }
+    PredictionEscrowReconciliation:
+      type: object
+      required: [value_domain, id, kind, mode, scope_type, scope_id, status, material, blocks_new_risk, expected, observed, difference, opened_at]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        id: { $ref: "#/components/schemas/UUID" }
+        kind: { type: string, description: PREDICTION_ESCROW }
+        mode: { type: string, description: "EVENT_DRIVEN, PERIODIC or FULL" }
+        scope_type: { type: string }
+        scope_id: { type: string }
+        status: { type: string, description: "OPEN, MATCHED, MISMATCH, INVESTIGATING, RESOLVED_AUTOMATIC, RESOLVED_MANUAL or ESCALATED" }
+        material: { type: boolean }
+        blocks_new_risk: { type: boolean }
+        expected: { type: object, additionalProperties: true }
+        observed: { type: object, additionalProperties: true }
+        difference: { type: object, additionalProperties: true }
+        opened_at: { $ref: "#/components/schemas/Timestamp" }
+        matched_at: { $ref: "#/components/schemas/Timestamp" }
 
     # >>> advanced:marketplace schemas (insert this subsystem's schemas directly below; keep the marker)
 
