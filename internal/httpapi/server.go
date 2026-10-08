@@ -96,6 +96,11 @@ type Ports struct {
 	TransferReversals TransferReversalsPort
 
 	// >>> advanced:treasury port
+	// Treasury serves the house book (internal/treasury) and Fees the fee
+	// ledger (internal/feeledger); every figure behind them is value domain
+	// SIMULATED. A nil port answers UNSUPPORTED.
+	Treasury TreasuryPort
+	Fees     FeesPort
 
 	// >>> advanced:stable port
 	// Stable serves the sandbox stable asset (internal/stableasset); every

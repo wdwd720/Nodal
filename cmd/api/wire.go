@@ -42,6 +42,7 @@ import (
 	"github.com/nodal/controlplane/internal/equities"
 	"github.com/nodal/controlplane/internal/event"
 	"github.com/nodal/controlplane/internal/execution"
+	"github.com/nodal/controlplane/internal/feeledger"
 	"github.com/nodal/controlplane/internal/fees"
 	"github.com/nodal/controlplane/internal/funding"
 	"github.com/nodal/controlplane/internal/gates"
@@ -75,6 +76,7 @@ import (
 	"github.com/nodal/controlplane/internal/stableasset"
 	"github.com/nodal/controlplane/internal/stream"
 	"github.com/nodal/controlplane/internal/transfers"
+	"github.com/nodal/controlplane/internal/treasury"
 	"github.com/nodal/controlplane/internal/valuation"
 	"github.com/nodal/controlplane/internal/withdrawal"
 )
@@ -569,6 +571,33 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	}
 
 	// >>> advanced:treasury services
+	//
+	// The house book (internal/treasury) and the fee ledger (internal/feeledger).
+	// The treasury decides every control itself (its signing policy, the
+	// PRINCIPAL_TRADING and INTERNAL_MATCHING gates and kill switches, its
+	// versioned limits, Risk Kernel V2, the order book's own house rules); this
+	// block hands it its collaborators. It places house orders on the internal
+	// book through the one order service above, and since 00759 nothing else
+	// can place a house order at all.
+	treasurySvc, err := treasury.NewService(treasury.Config{
+		Clock: clk, Ledger: ledgerSvc, Effects: econ.NewEffectStore(clk, outbox, auditWriter),
+		Authorizer: econ.NewAuthorizer(gateChecker, killChecker), Registry: econ.NewRegistry(), Orders: ordersSvc,
+		Prices: priceStore, Assets: assetRepo, Instruments: instrumentRepo, KillSwitches: killChecker, Audit: auditWriter,
+		RiskPolicy: risk.DefaultAdvancedPolicy(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("treasury service: %w", err)
+	}
+	// The fee ledger books disclosed fees and performance fees (sandbox
+	// accounting, never charged live) with its package defaults: a two-minute
+	// quote TTL and the SYSTEM fee-ledger service applying its effects.
+	feeLedgerSvc, err := feeledger.NewService(feeledger.Config{
+		Clock: clk, Ledger: ledgerSvc, Capital: capitalSvc, Effects: econ.NewEffectStore(clk, outbox, auditWriter),
+		Authorizer: econ.NewAuthorizer(gateChecker, killChecker), Assets: assetRepo, Audit: auditWriter,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("fee ledger: %w", err)
+	}
 
 	// >>> advanced:stable services
 	//
@@ -911,6 +940,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		},
 
 		// >>> advanced:treasury deps
+		Treasury: httpapi.TreasuryDeps{Service: treasurySvc, Fees: feeLedgerSvc},
 
 		// >>> advanced:stable deps
 		// Empty -- every route UNSUPPORTED -- unless a sandbox chain is
