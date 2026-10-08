@@ -75,6 +75,7 @@ var financialPackages = []string{
 	"internal/margin",
 	"internal/marketplace",
 	"internal/equities",
+	"internal/treasury",
 }
 
 // reachableFrom are the trees a deployment can actually run. A caller in

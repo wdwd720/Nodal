@@ -64,6 +64,9 @@ type AdvancedDeps struct {
 	Transfers TransfersDeps
 
 	// >>> advanced:treasury deps
+	// Treasury holds the house book and the fee ledger (see TreasuryDeps);
+	// each that is nil leaves only its own routes UNSUPPORTED.
+	Treasury TreasuryDeps
 
 	// >>> advanced:stable deps
 	// Stable serves /advanced/stable-assets (see StableDeps). Its zero value
@@ -130,6 +133,7 @@ func wireAdvanced(p *Ports, d WireDeps) {
 	wireTransfers(p, d)
 
 	// >>> advanced:treasury wire
+	wireTreasury(p, d)
 
 	// >>> advanced:stable wire
 	wireStable(p, d)

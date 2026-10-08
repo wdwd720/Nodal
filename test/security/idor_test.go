@@ -267,6 +267,8 @@ func TestIDOR_QueryParameterSmuggling(t *testing.T) {
 		"/v1/advanced/transfers", "/v1/advanced/transfers/faucet/allowance",
 
 		// >>> advanced:treasury account-scoped list routes
+		"/v1/advanced/treasury/house-trades", "/v1/advanced/fees/quotes", "/v1/advanced/fees/bookings",
+		"/v1/advanced/fees/periods",
 
 		// >>> advanced:stable account-scoped list routes
 		// Served where a sandbox chain is configured (CP_SANDBOX_DEVNET_NETWORK
