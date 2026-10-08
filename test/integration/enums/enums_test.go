@@ -51,6 +51,7 @@ import (
 	"github.com/nodal/controlplane/internal/margin"
 	"github.com/nodal/controlplane/internal/marketplace"
 	"github.com/nodal/controlplane/internal/notification"
+	"github.com/nodal/controlplane/internal/orders"
 	"github.com/nodal/controlplane/internal/prediction"
 	"github.com/nodal/controlplane/internal/predmarket"
 	"github.com/nodal/controlplane/internal/reconciliation"
@@ -224,6 +225,35 @@ func registry() []pair {
 		{table: "funding_accruals", constraint: "funding_accruals_direction_check", source: "derivatives.AllFundingDirections()", values: str(derivatives.AllFundingDirections())},
 		{table: "option_exercises", constraint: "option_exercises_kind_check", source: "derivatives.AllExerciseKinds()", values: str(derivatives.AllExerciseKinds())},
 
+		// Migration 00742 (the persistent internal order book).
+		{table: "book_states", constraint: "book_states_mode_check", source: "orders.AllBookModes()", values: str(orders.AllBookModes())},
+		{table: "book_states", constraint: "book_states_status_check", source: "orders.AllBookStatuses()", values: str(orders.AllBookStatuses())},
+		{table: "book_states", constraint: "book_states_instrument_kind_check", source: "orders.AllBookInstrumentKinds()", values: str(orders.AllBookInstrumentKinds())},
+		{table: "book_states", constraint: "book_states_terms_source_check", source: "orders.AllTermsSources()", values: str(orders.AllTermsSources())},
+		{table: "book_states", constraint: "book_states_created_by_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
+		{table: "book_state_transitions", constraint: "book_state_transitions_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
+		{table: "book_orders", constraint: "book_orders_owner_type_check", source: "orders.AllOwnerTypes()", values: str(orders.AllOwnerTypes())},
+		{table: "book_orders", constraint: "book_orders_side_check", source: "orders.AllSides()", values: str(orders.AllSides())},
+		{table: "book_orders", constraint: "book_orders_order_type_check", source: "orders.AllOrderTypes()", values: str(orders.AllOrderTypes())},
+		{table: "book_orders", constraint: "book_orders_time_in_force_check", source: "orders.AllTimesInForce()", values: str(orders.AllTimesInForce())},
+		{table: "book_orders", constraint: "book_orders_stp_mode_check", source: "orders.AllSTPModes()", values: str(orders.AllSTPModes())},
+		{table: "book_orders", constraint: "book_orders_liquidity_intent_check", source: "orders.AllLiquidityIntents()", values: str(orders.AllLiquidityIntents())},
+		{table: "book_orders", constraint: "book_orders_mode_check", source: "orders.AllBookModes()", values: str(orders.AllBookModes())},
+		{table: "book_orders", constraint: "book_orders_status_check", source: "orders.AllStatuses()", values: str(orders.AllStatuses())},
+		{table: "book_order_transitions", constraint: "book_order_transitions_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
+		{table: "book_commands", constraint: "book_commands_kind_check", source: "orders.AllCommandKinds()", values: str(orders.AllCommandKinds())},
+		{table: "book_commands", constraint: "book_commands_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
+		{table: "book_events", constraint: "book_events_event_type_check", source: "orders.AllEventTypes()", values: str(orders.AllEventTypes())},
+		{table: "book_trades", constraint: "book_trades_maker_owner_type_check", source: "orders.AllOwnerTypes()", values: str(orders.AllOwnerTypes())},
+		{table: "book_trades", constraint: "book_trades_taker_owner_type_check", source: "orders.AllOwnerTypes()", values: str(orders.AllOwnerTypes())},
+		{table: "book_trades", constraint: "book_trades_aggressor_side_check", source: "orders.AllSides()", values: str(orders.AllSides())},
+		{table: "book_crossing_rules", constraint: "book_crossing_rules_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
+		{table: "book_crossing_decisions", constraint: "book_crossing_decisions_command_kind_check", source: "orders.AllCrossingCommandKinds()", values: str(orders.AllCrossingCommandKinds())},
+		{table: "book_crossing_decisions", constraint: "book_crossing_decisions_taker_owner_type_check", source: "orders.AllOwnerTypes()", values: str(orders.AllOwnerTypes())},
+		{table: "book_house_reservations", constraint: "book_house_reservations_status_check", source: "orders.AllHouseReservationStatuses()", values: str(orders.AllHouseReservationStatuses())},
+		{table: "book_house_reservation_transitions", constraint: "book_house_reservation_transitions_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
+		{table: "paper_fills", constraint: "paper_fills_side_check", source: "orders.AllSides()", values: str(orders.AllSides())},
+
 		// Migrations 00750 and 00751 (strategy marketplace, sandboxed runs).
 		{table: "marketplace_evaluations", constraint: "marketplace_evaluations_actor_type_check", source: "marketplace.TransitionActorTypes()", values: str(marketplace.TransitionActorTypes())},
 		{table: "marketplace_follow_intents", constraint: "marketplace_follow_intents_outcome_check", source: "marketplace.AllFollowOutcomes()", values: str(marketplace.AllFollowOutcomes())},
@@ -323,6 +353,12 @@ var bespoke = []string{
 	// exactly when its status is terminal. internal/margin's
 	// TestIntegration_DatabaseRefusesInvalidMarginStates drives it.
 	"margin_liquidation_cases.margin_liquidation_cases_closed",
+	// Rules, not lists of values: a MARKET order is IOC or FOK, and an
+	// order's quantity is conserved across fills, cancels and its remainder.
+	// internal/orders' TestIntegration_TheDatabaseRefusesOverfillAndIllegalOrderStates
+	// drives both.
+	"book_orders.book_orders_market_tif",
+	"book_orders.book_orders_quantity_conserved",
 }
 
 var (

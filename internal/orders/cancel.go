@@ -334,10 +334,9 @@ func (s *Service) resizeReservation(ctx context.Context, tx pgx.Tx, c *bookConfi
 			return resized{}, err
 		}
 	}
-	// Serves economic intent intentID; ReserveRequest.IntentID names a V1
-	// trade intent, so it stays empty.
+	// The reservation names the economic intent it serves (00733).
 	next, err := s.capital.Reserve(ctx, sp, capital.ReserveRequest{
-		AccountID: o.OwnerID, AssetID: asset, Quantity: need,
+		AccountID: o.OwnerID, AssetID: asset, Quantity: need, EconomicIntentID: intentID.String(),
 		ActorType: s.actor.Type, ActorID: s.actor.ID, IdempotencyKey: "orders:reserve:" + o.ID.String() + ":replace:" + effectID.String(),
 		TTL: s.resTTL, Reason: "internal-book order " + o.ID.String() + " replaced (economic intent " + intentID.String() + ")",
 	})

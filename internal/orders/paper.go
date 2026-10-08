@@ -398,10 +398,9 @@ func (v *PaperVenue) ExecuteIntent(ctx context.Context, tx pgx.Tx, intent econ.I
 	if side == SideSell {
 		reserveAsset, reserveAmount = m.base.ID, quote.Input.BaseQty
 	}
-	// Serves economic intent stored.ID; ReserveRequest.IntentID names a V1
-	// trade intent, so it stays empty.
+	// The reservation names the economic intent it serves (00733).
 	reservation, err := v.capital.Reserve(ctx, tx, capital.ReserveRequest{
-		AccountID: stored.AccountID.String(), AssetID: reserveAsset, Quantity: reserveAmount,
+		AccountID: stored.AccountID.String(), AssetID: reserveAsset, Quantity: reserveAmount, EconomicIntentID: stored.ID.String(),
 		ActorType: v.actor.Type, ActorID: v.actor.ID, IdempotencyKey: "orders:paper:reserve:" + stored.ID.String(),
 		TTL: time.Minute, Reason: "paper fill (economic intent " + stored.ID.String() + ")",
 	})

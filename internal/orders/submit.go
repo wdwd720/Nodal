@@ -415,9 +415,6 @@ func (s *Service) stageStart(ctx context.Context, tx pgx.Tx, oid OrderID) (*book
 // runs the same stages one transaction each, which keeps the book lock only
 // for Execute.
 func (s *Service) Submit(ctx context.Context, tx pgx.Tx, r OrderRequest) (StageOutcome, error) {
-	if err := allowSeveralIntentSteps(ctx, tx); err != nil {
-		return StageOutcome{}, err
-	}
 	if _, _, err := s.lockBook(ctx, tx, r.InstrumentID); err != nil {
 		return StageOutcome{}, err
 	}
@@ -580,11 +577,9 @@ func (s *Service) Reserve(ctx context.Context, tx pgx.Tx, oid OrderID) (StageOut
 			amount = t.LotsToQuantity(limit)
 		}
 	}
-	// The reservation serves economic intent in.ID. ReserveRequest.IntentID
-	// names a V1 trade intent (asset_reservations.intent_id references
-	// trade_intents), so it stays empty here.
+	// The reservation names the economic intent it serves (00733).
 	res, err := s.capital.Reserve(ctx, tx, capital.ReserveRequest{
-		AccountID: o.OwnerID, AssetID: asset, Quantity: amount,
+		AccountID: o.OwnerID, AssetID: asset, Quantity: amount, EconomicIntentID: in.ID.String(),
 		ActorType: s.actor.Type, ActorID: s.actor.ID, IdempotencyKey: "orders:reserve:" + o.ID.String(),
 		TTL: s.resTTL, Reason: "internal-book order " + o.ID.String() + " (economic intent " + in.ID.String() + ")",
 	})

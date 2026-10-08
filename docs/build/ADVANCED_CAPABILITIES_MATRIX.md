@@ -12,7 +12,7 @@ an external provider's sandbox) · `BLOCKED_EXTERNAL` · `LIVE_CAPABLE_BUT_DISAB
 code (`gates.DecideMode` → `LIVE_NOT_IMPLEMENTED`) and unrepresentable in the database (D-049). The live
 column below says what activation would need, never that it is near.
 
-Last updated: 2026-10-08 — foundation, kernel amendments (00733), transfers + faucet (00744), margin (00740), derivatives (00741), prediction markets (00749), strategy marketplace (00750) and sandboxed runs (00751) merged; other subsystem lanes in progress.
+Last updated: 2026-10-08 — foundation, kernel amendments (00733), transfers + faucet (00744), margin (00740), derivatives (00741), prediction markets (00749), strategy marketplace (00750), sandboxed runs (00751) and the internal order book (00742) merged; other subsystem lanes in progress.
 
 ## Summary
 
@@ -28,7 +28,7 @@ Last updated: 2026-10-08 — foundation, kernel amendments (00733), transfers + 
 | 8 | Margin + leverage engine (§6) | VERIFIED_LOCAL (API in progress) | PAPER/SANDBOX | B-15 |
 | 9 | Derivatives: futures, perps, options (§7) | VERIFIED_LOCAL (API in progress) | PAPER/SANDBOX | B-15, B-17 |
 | 10 | Equities abstraction (§8) | IN_PROGRESS | PAPER/SANDBOX | B-15, B-17 |
-| 11 | Internal matching engine (§9) | IN_PROGRESS (pure engine VERIFIED_LOCAL; persistent book in progress) | internal simulation | B-15 |
+| 11 | Internal matching engine (§9) | VERIFIED_LOCAL (API in progress) | internal simulation | B-15 |
 | 12 | Customer-to-customer transfers (§10) | VERIFIED_LOCAL (API in progress) | SANDBOX | B-15 |
 | 13 | Principal / treasury book (§11) | IN_PROGRESS | PAPER/SANDBOX | B-15 |
 | 14 | Transparent spread + fee engine (§12) | IN_PROGRESS (pure engine VERIFIED_LOCAL; fee ledger pending) | PAPER/SANDBOX | B-15 |
@@ -109,3 +109,10 @@ Last updated: 2026-10-08 — foundation, kernel amendments (00733), transfers + 
 - **Tests:** sandbox escape suite (`TestSandbox_FilesystemEscapeAttemptFails`, `…NetworkAttemptFails`, `…ForkBombBlocked`, `…CPUInfiniteLoopKilled`, `…MemoryBombKilled`, `…OversizedOutputKilled`, `…EnvironmentSecretsAbsent`, `…StrategyCannotConstructALiveSigningCall`), `TestProp_NoStrategyOutputBecomesATransferOrWithdrawal`, `TestSandbox_SameArtifactSameInputIsByteIdentical`, `FuzzScan`, `TestIntegration_Prop_UntrustedOutputOnlyBecomesRiskCheckedIntents`, `TestIntegration_CreatorCannotApproveOwnListing`, `TestIntegration_InstallIsPaperOnly`, `TestIntegration_ConcurrentFollowsOfOneSnapshotDispatchOnce`.
 - **Measured:** cold start (compile) 1.16 s on a quiet machine, per-run p50 7.6 ms, p95 9.2 ms for a 4.9 MB strategy module (lane measurement; the performance report re-measures).
 - **Limitations:** under `-race` the Go-built module tests skip (each compile takes about two minutes); host-side concurrency is still raced with hand-assembled modules. Any violation in a run rejects every intent from that run.
+
+### 11. Internal matching engine and order book
+- **Implementation:** `internal/matching` (pure deterministic CLOB: price-time priority, LIMIT/MARKET, GTC/IOC/FOK, post-only, reduce-only, self-trade prevention, sequencer, snapshot, replay to an identical state hash) and `internal/orders` (the persistent book: a journal of every command and event in the database, snapshots that must agree with the journal, staged submission through intent → route → gate → Risk V2 → reservation → execution → posting, house orders with a crossing control that refuses house-versus-customer crossing by default, the paper venue for spot paper fills with tamper-evident disclosures, and an audit proof per trade).
+- **DB:** `00742_order_book.sql` (OB001–OB009; overfill, self-trade and crossing-without-a-rule refused by CHECKs; duplicate client order ids by a unique index).
+- **Tests:** `TestIntegration_DeterministicReplayYieldsByteEquivalentBookStateThroughTheDB`, `TestProp_NoCrossedRestingBookAfterEveryCommandThroughTheService`, `TestProp_QuantitiesAreConservedAndNoOrderOverfillsThroughTheService`, `TestIntegration_FIFOWithinAPriceLevel`, `TestIntegration_SelfTradePreventionNeverTradesAnOwnerWithItself`, `TestIntegration_CancelRaceHasExactlyOneOutcome`, `TestIntegration_ConcurrentSubmitsReplayToTheLiveStateHash`, `TestProp_CustomerWalletsChangeOnlyByFeesAcrossRandomTrading`, `TestIntegration_HouseCustomerCrossingIsRejectedByDefault`, `TestIntegration_ScenarioD_TwoSandboxUsersTradeWithAnAuditProof`, fuzzers for order conversion and command/event decoding.
+- **Measured (lane, shared machine):** matching engine about 729k commands/s; persistent staged pipeline 96 orders/s on one book (p95 582 ms), bounded by the book row lock held through commit and the ledger's deferred triggers.
+- **Limitations:** one book's throughput is capped by its row lock; StateHash is O(book size) per command; market orders need a protection price; house orders cannot be replaced.
