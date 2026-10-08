@@ -97,23 +97,37 @@ are not running here; nothing in the advanced work depends on them.
   (`73cd86e`, through `delegation.AgentAdmission`, which can only admit). `internal/orders` and
   `internal/delegation` are in `test/reachability`. Restore drill at 760: 269 tables, 0 drift.
 - Review 3, the red team of the integrated system at `a982e27`: one Medium and four Low findings, four
-  observations; no High.
+  observations; no High. All fixed: the fee ledger wired into the charging subsystems (`89a5b28`, 00761, FW001);
+  delegated authority hardening (`a05a432`, 00762); the other red-team fixes (`1f1645e`, 00763, supply-controlled
+  assets); `docs/reviews/SECURITY_RED_TEAM.md` (`6ad5297`); supply-controlled assets refused up front at fourteen
+  entry points (`da9f0c0`).
+- Evidence and demonstrations: Scenarios E and F (`ec6fc8e`; `make advanced-demo` now 10 scenarios, 116 checks);
+  `docs/portfolio/TECHNICAL_EVIDENCE.md` (`6381907`, 67 claims, every command run); the traceability matrix's 30
+  advanced rows (`80f616b`); the earlier EB-/SB- blocker ids restored (`03c89e1`); the Playwright suite against a live
+  API and real PostgreSQL (`7c493fa`: 238 passed, 2 skipped, 0 failed, twice on fresh databases); the restore drill
+  seeding and verifying the advanced books (`9db3f7c`: 145 rows in 12 areas); the capabilities matrix refreshed
+  (`46661f6`); September statements corrected (`4d66e1d`).
+- Defects found by that evidence work and fixed: the gates integration suite no longer compiled (a test-only import
+  cycle, `3bc2096`); buying power V2's composition test had failed since 00748 (`e575c4b`); the agent worker held
+  key material it never needed (`ba20d9c`: admission now holds no signer and the worker reads no seed).
+- A full run of every integration package (72) passed on 2026-10-08; it was not pinned to one commit, so the run of
+  record is still to be made.
 
 ## In flight (isolated worktrees, merged by the integrator)
 
-The fee ledger wired into the subsystems that charge fees (margin, orders, treasury); delegated authority
-hardening from the red team (00762: a swap's action label must match its direction of value, a disabled strategy
-version stops delegated actions, fair execute-pending runs, venues never backed by a treasury book); the other
-red-team fixes (00763: strategy builds bounded on disk, confirmation-needing routes never executed, supply-controlled
-assets only through issuance, the order book proof compares trades and postings); `docs/portfolio/TECHNICAL_EVIDENCE.md`.
+The gaps the live Playwright run found (an unvalued holding shown as $0.00, no route to define a derivative
+contract, no second seeded operator, CI without the sandbox chain); the provider layer of goal §27
+(`StableAssetProvider`, `DerivativesExecutionAdapter`, `SandboxRuntimeProvider`) and the sandbox budget charged
+outside the run's transaction; the observability metrics §29 still lacks; equity fees booked through the fee ledger
+(00764).
 
 ## Next exact work
 
-1. Merge the four lanes; write `docs/reviews/SECURITY_RED_TEAM.md` with every finding's fix and regression test.
-2. Demo Scenarios E (strategy sandbox) and F (delegated agent).
-3. `docs/reviews/PORTFOLIO_CLAIMS_REVIEW.md` (an independent reviewer), the README, `ADVANCED_TEST_EVIDENCE.md`
-   refreshed from one full run at one commit, traceability, a recorded performance run on an idle machine, the
-   Playwright suite against a live API.
+1. Merge the four lanes; format the tree with the pinned gofumpt CI enforces and clear staticcheck's findings.
+2. `docs/reviews/PORTFOLIO_CLAIMS_REVIEW.md` (an independent reviewer), then the README from its A and B claims.
+3. The run of record, from a worktree pinned to one commit: every integration package, the census, the demo, the
+   restore drill, the Playwright suite and `make perf-advanced` on an otherwise idle machine; then
+   `ADVANCED_TEST_EVIDENCE.md` from it.
 
 ## Verification commands that matter for this goal
 
