@@ -1120,6 +1120,482 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/advanced/transfers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Transfers an account sent or received, newest first
+         * @description A REJECTED attempt is the sender's record and is listed for the sender only; a received transfer is listed once it moved value (COMPLETED or REVERSED). A page can therefore hold fewer items than the limit while next_cursor is still set.
+         */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of transfers */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedTransferPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /**
+         * Send simulated value from one of your own accounts to another customer
+         * @description A refusal the service reaches after accepting the request is RECORDED: the answer is the refusal's stable code (fields carry transfer_id, rejection_code and every reason_codes entry) and the transfer stays readable as a REJECTED row. A refusal before that (validation, an unknown recipient, a capability that is not enabled, step-up) writes nothing. Name the recipient by handle where you can: the handle is resolved on the server and the account id behind it is never returned to the sender.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AdvancedTransferSendRequest"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay of the original answer */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedTransfer"];
+                    };
+                };
+                /** @description The transfer is COMPLETED (value domain SIMULATED) */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedTransfer"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+                503: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/transfers/{transferId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One transfer, to one of its parties; anyone else is told it does not exist */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    transferId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The transfer */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedTransfer"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/transfers/{transferId}/reverse": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reverse a COMPLETED transfer with a compensating journal (operator correction; requires step-up)
+         * @description History is never edited: the reversal is a new COMPENSATION journal naming the original. It is refused (CONFLICT, rejection_code TRANSFER_REVERSAL_FUNDS_UNAVAILABLE) when the recipient no longer holds the funds, and reversing a REVERSED transfer returns it unchanged. The service also requires ledger:post_correction of the operator.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    transferId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AdvancedTransferReverseRequest"];
+                };
+            };
+            responses: {
+                /** @description The transfer, REVERSED */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedTransfer"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/transfers/faucet/allowance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What the sandbox faucet would still grant an account in the current window */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Cap, used and remaining, in base units of the sandbox dollar */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedFaucetAllowance"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/transfers/faucet/grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request sandbox dollars from the sandbox faucet into one of your own accounts
+         * @description Grants the sandbox dollar (SBX-USD, simulated, no economic value), within the faucet policy's rolling per-account cap (RATE_LIMITED beyond it). The faucet runs in LOCAL, TEST and DEV; anywhere else it answers CAPABILITY_NOT_APPROVED unless the deployment enables it.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AdvancedFaucetGrantRequest"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay of the original answer */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedFaucetGrant"];
+                    };
+                };
+                /** @description Granted (value domain SIMULATED) */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedFaucetGrant"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+                429: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/transfers/handles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Register the handle other customers pay one of your accounts by
+         * @description An account has at most one handle and a handle names at most one account, for good: handles are never reassigned, so a payment to a handle can never reach a later holder. There is deliberately no route that resolves a handle to an account id.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AdvancedTransferHandleRequest"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay of the original answer */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedTransferHandle"];
+                    };
+                };
+                /** @description Handle registered */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedTransferHandle"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/transfers/recipient-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Allow, block or clear one recipient for transfers from one of your accounts
+         * @description Rules are append-only and the latest one for a recipient is in force. ALLOW puts the recipient on the sender's allowlist, BLOCK refuses every transfer to it, CLEAR withdraws either.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AdvancedTransferRecipientRuleRequest"];
+                };
+            };
+            responses: {
+                /** @description The rule is recorded and in force */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedTransferRecipientRule"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/transfers/reconciliation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reconcile the transfer register, its economic effects and the ledger (read-only)
+         * @description Proves from the database that no transfer is left PENDING, every settled transfer names the effect and journal it should, per party and asset TRANSFER_OUT and TRANSFER_IN equal the register, and the customer WALLET legs of every transfer journal cancel. Every discrepancy is a SEV1.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Reconcile this asset only */
+                    asset_id?: components["schemas"]["UUID"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The reconciliation report */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedTransferReconciliation"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/transfers/sender-mode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Let one of your accounts pay anyone (OPEN) or only allowlisted recipients (ALLOWLIST_ONLY) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AdvancedTransferSenderModeRequest"];
+                };
+            };
+            responses: {
+                /** @description The mode is recorded and in force */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedTransferSenderModeSetting"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/assets": {
         parameters: {
             query?: never;
@@ -3192,6 +3668,45 @@ export interface components {
             items: components["schemas"]["AdvancedCapability"][];
             value_domain: components["schemas"]["ValueDomainSimulated"];
         };
+        /** @description cap is the faucet policy's per-account limit for the rolling window, used is what the account was granted inside it, and remaining is cap - used (never below zero), all in base units of the sandbox dollar. */
+        AdvancedFaucetAllowance: {
+            account_id: components["schemas"]["UUID"];
+            asset_decimals: number;
+            asset_id: components["schemas"]["UUID"];
+            asset_symbol: string;
+            cap: components["schemas"]["Quantity"];
+            environment: string;
+            policy_hash: string;
+            policy_version: string;
+            remaining: components["schemas"]["Quantity"];
+            used: components["schemas"]["Quantity"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            /** Format: int64 */
+            window_ms: number;
+        };
+        AdvancedFaucetGrant: {
+            account_id: components["schemas"]["UUID"];
+            asset_decimals: number;
+            asset_id: components["schemas"]["UUID"];
+            asset_symbol: string;
+            effect_id: components["schemas"]["UUID"];
+            environment: string;
+            evidence_ref?: string;
+            evidence_sha256?: string;
+            granted_at: components["schemas"]["Timestamp"];
+            id: components["schemas"]["UUID"];
+            journal_transaction_id: components["schemas"]["UUID"];
+            policy_hash: string;
+            policy_version: string;
+            quantity: components["schemas"]["Quantity"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @description The value is exactly one of amount (a plain decimal in whole sandbox dollars, never rounded) or quantity (exact base units; the sandbox dollar has 6 decimals). */
+        AdvancedFaucetGrantRequest: {
+            account_id: components["schemas"]["UUID"];
+            amount?: string;
+            quantity?: components["schemas"]["Quantity"];
+        };
         AdvancedInstrument: {
             canonical_name: string;
             id: components["schemas"]["UUID"];
@@ -3234,6 +3749,131 @@ export interface components {
         AdvancedRiskDecisionList: {
             items: components["schemas"]["AdvancedRiskDecision"][];
         };
+        /** @description One customer-to-customer transfer of simulated value. What a reader sees depends on who they are: the sender sees their whole record but not the account id behind a handle they paid; a recipient sees a transfer once it moved value, without the sender's decision record or the reversal reason; an operator holding account:read_any sees everything. */
+        AdvancedTransfer: {
+            asset_decimals: number;
+            asset_id: components["schemas"]["UUID"];
+            asset_symbol: string;
+            created_at: components["schemas"]["Timestamp"];
+            decided_at?: components["schemas"]["Timestamp"];
+            effect_id?: components["schemas"]["UUID"];
+            evidence_ref?: string;
+            evidence_sha256?: string;
+            id: components["schemas"]["UUID"];
+            intent_id: components["schemas"]["UUID"];
+            journal_transaction_id?: components["schemas"]["UUID"];
+            /** @description Visible to the two parties only and never in a journal or an event or a notification */
+            memo?: string;
+            mode: components["schemas"]["AdvancedMode"];
+            notional_usd: components["schemas"]["USD"];
+            policy_hash: string;
+            policy_version: string;
+            quantity: components["schemas"]["Quantity"];
+            /** @description Every code that applied to a REJECTED transfer with the primary first */
+            reason_codes: string[];
+            recipient_account_id?: components["schemas"]["UUID"];
+            /** @description The handle the sender named the recipient by (absent when named by account id) */
+            recipient_handle?: string;
+            /** @description The primary stable code of a REJECTED transfer */
+            rejection_code?: string;
+            reversal_journal_transaction_id?: components["schemas"]["UUID"];
+            reversal_reason_code?: string;
+            reversed_at?: components["schemas"]["Timestamp"];
+            risk_decision_id?: components["schemas"]["UUID"];
+            sender_account_id: components["schemas"]["UUID"];
+            status: components["schemas"]["AdvancedTransferStatus"];
+            updated_at: components["schemas"]["Timestamp"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @description The clearing identity of one asset: TRANSFER_OUT = TRANSFER_IN = the register's COMPLETED quantity, and the customer WALLET change over every transfer journal and reversal is zero. */
+        AdvancedTransferAssetIdentity: {
+            asset_id: components["schemas"]["UUID"];
+            register_completed: components["schemas"]["Quantity"];
+            transfer_in: components["schemas"]["Quantity"];
+            transfer_out: components["schemas"]["Quantity"];
+            wallet_delta: components["schemas"]["Quantity"];
+        };
+        AdvancedTransferDiscrepancy: {
+            account_id?: components["schemas"]["UUID"];
+            asset_id?: components["schemas"]["UUID"];
+            code: string;
+            detail: string;
+            transfer_id?: components["schemas"]["UUID"];
+        };
+        AdvancedTransferHandle: {
+            account_id: components["schemas"]["UUID"];
+            created_at: components["schemas"]["Timestamp"];
+            handle: string;
+            id: components["schemas"]["UUID"];
+        };
+        AdvancedTransferHandleRequest: {
+            account_id: components["schemas"]["UUID"];
+            /** @description 3..32 characters of a-z, 0-9, '_', '.', '-' starting with a letter or digit; a leading '@' is dropped and the handle is lower-cased */
+            handle: string;
+        };
+        AdvancedTransferPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["AdvancedTransfer"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @description The rule as recorded; the recipient is named the way the request named it. */
+        AdvancedTransferRecipientRule: {
+            account_id: components["schemas"]["UUID"];
+            reason?: string;
+            recipient_account_id?: components["schemas"]["UUID"];
+            recipient_handle?: string;
+            rule: components["schemas"]["AdvancedTransferRecipientRuleKind"];
+        };
+        /** @enum {string} */
+        AdvancedTransferRecipientRuleKind: "ALLOW" | "BLOCK" | "CLEAR";
+        /** @description Name the recipient by exactly one of recipient_handle or recipient_account_id. */
+        AdvancedTransferRecipientRuleRequest: {
+            account_id: components["schemas"]["UUID"];
+            reason?: string;
+            recipient_account_id?: components["schemas"]["UUID"];
+            recipient_handle?: string;
+            rule: components["schemas"]["AdvancedTransferRecipientRuleKind"];
+        };
+        AdvancedTransferReconciliation: {
+            assets: components["schemas"]["AdvancedTransferAssetIdentity"][];
+            checked_at: components["schemas"]["Timestamp"];
+            discrepancies: components["schemas"]["AdvancedTransferDiscrepancy"][];
+            ok: boolean;
+            /** @description Transfers in scope whatever their status */
+            transfers: number;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        AdvancedTransferReverseRequest: {
+            reason: string;
+            /** @example FRAUD_CONFIRMED */
+            reason_code: string;
+        };
+        /** @enum {string} */
+        AdvancedTransferSenderMode: "OPEN" | "ALLOWLIST_ONLY";
+        AdvancedTransferSenderModeRequest: {
+            account_id: components["schemas"]["UUID"];
+            mode: components["schemas"]["AdvancedTransferSenderMode"];
+        };
+        AdvancedTransferSenderModeSetting: {
+            account_id: components["schemas"]["UUID"];
+            mode: components["schemas"]["AdvancedTransferSenderMode"];
+        };
+        /** @description Name the recipient by exactly one of recipient_handle or recipient_account_id, and the value by exactly one of amount (a plain decimal in whole units of the asset, never rounded: more fractional digits than the asset has is PRECISION_LOSS) or quantity (exact base units). asset_id defaults to the sandbox dollar. */
+        AdvancedTransferSendRequest: {
+            account_id: components["schemas"]["UUID"];
+            amount?: string;
+            asset_id?: components["schemas"]["UUID"];
+            /** @description Printable text without surrounding whitespace; the transfer policy may bound it lower */
+            memo?: string;
+            mode: components["schemas"]["AdvancedMode"];
+            quantity?: components["schemas"]["Quantity"];
+            recipient_account_id?: components["schemas"]["UUID"];
+            recipient_handle?: string;
+        };
+        /**
+         * @description PENDING exists only inside the transaction that decides a transfer; a committed transfer is COMPLETED, REJECTED or REVERSED.
+         * @enum {string}
+         */
+        AdvancedTransferStatus: "PENDING" | "COMPLETED" | "REJECTED" | "REVERSED";
         Asset: {
             chain: string;
             decimals: number;

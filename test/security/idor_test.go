@@ -257,6 +257,7 @@ func TestIDOR_QueryParameterSmuggling(t *testing.T) {
 		// >>> advanced:orders account-scoped list routes
 
 		// >>> advanced:transfers account-scoped list routes
+		"/v1/advanced/transfers", "/v1/advanced/transfers/faucet/allowance",
 
 		// >>> advanced:treasury account-scoped list routes
 

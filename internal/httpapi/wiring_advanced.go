@@ -47,6 +47,9 @@ type AdvancedDeps struct {
 	// >>> advanced:orders deps
 
 	// >>> advanced:transfers deps
+	// Transfers holds the transfer service and the sandbox faucet; each that is
+	// nil leaves only its own routes UNSUPPORTED.
+	Transfers TransfersDeps
 
 	// >>> advanced:treasury deps
 
@@ -84,6 +87,7 @@ func wireAdvanced(p *Ports, d WireDeps) {
 	// >>> advanced:orders wire
 
 	// >>> advanced:transfers wire
+	wireTransfers(p, d)
 
 	// >>> advanced:treasury wire
 
