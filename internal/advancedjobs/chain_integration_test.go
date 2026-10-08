@@ -143,40 +143,59 @@ func TestIntegration_AStableUnknownSubmissionResolvesThroughTheDevnetHost(t *tes
 }
 
 // TestIntegration_AnUnknownSubmissionOfAnotherNetworkIsNeverResolvedHere: the
-// unknown-submission job refuses to resolve anything while a request waiting
-// on an outcome belongs to another network -- reading it from this host
-// would find nothing and could fail a mint that stands final on its own
-// chain -- and that request's own network resolves it.
+// unknown-submission job of one network never observes or settles a request
+// of another -- reading it from this host would find nothing and could fail a
+// mint that stands final on its own chain -- and another network's backlog
+// never stops it resolving its own; the foreign request's own network
+// resolves it.
 func TestIntegration_AnUnknownSubmissionOfAnotherNetworkIsNeverResolvedHere(t *testing.T) {
 	w := newWorld(t)
 	here := w.chainFixture()
 	there := w.chainFixture()
-	a := there.registerStable(stableasset.RedemptionInstant)
+	foreignAsset := there.registerStable(stableasset.RedemptionInstant)
 	c := w.customer("stable-elsewhere")
 	w.fund(c.account, w.usd.ID, w.usdUnits(1_000))
-	require.NoError(t, there.chain.Host.TimeoutButLand(w.ctx, a.Chain))
-	res, err := there.mint(c, a, 50)
+	require.NoError(t, there.chain.Host.TimeoutButLand(w.ctx, foreignAsset.Chain))
+	foreign, err := there.mint(c, foreignAsset, 50)
 	require.Error(t, err)
-	there.produce(a.Chain)
+	there.produce(foreignAsset.Chain)
+
+	// A customer of its own: an unknown outcome blocks its account's new mints.
+	local := w.customer("stable-here")
+	w.fund(local.account, w.usd.ID, w.usdUnits(1_000))
+	ownAsset := here.registerStable(stableasset.RedemptionInstant)
+	require.NoError(t, here.chain.Host.TimeoutButLand(w.ctx, ownAsset.Chain))
+	own, err := here.mint(local, ownAsset, 20)
+	require.Error(t, err)
+	require.Equal(t, stableasset.MintSubmissionUnknown, own.Request.Status)
+	here.produce(ownAsset.Chain)
+	foreignTransitions := w.count(`SELECT count(*) FROM stable_mint_request_transitions WHERE request_id = $1`, foreign.Request.ID)
 
 	job, err := NewStableUnknown(testDB, here.stable, here.chain.Network, Settings{})
 	require.NoError(t, err)
-	_, err = job.Run(w.ctx)
-	require.Error(t, err)
-	assert.Equal(t, errs.CodeReconciliationRequired, errs.CodeOf(err))
-	got, gerr := there.stable.GetMint(w.ctx, testDB, res.Request.ID)
+	for i := 0; i < 2; i++ {
+		rep := run(t, w.ctx, job)
+		assert.True(t, rep.OK(), "%+v", rep.Failures)
+	}
+	got, gerr := there.stable.GetMint(w.ctx, testDB, foreign.Request.ID)
 	require.NoError(t, gerr)
 	assert.Equal(t, stableasset.MintSubmissionUnknown, got.Status, "untouched by a host that cannot see its chain")
+	assert.Equal(t, foreignTransitions, w.count(`SELECT count(*) FROM stable_mint_request_transitions WHERE request_id = $1`, foreign.Request.ID),
+		"never observed or settled here")
+	mine, gerr := here.stable.GetMint(w.ctx, testDB, own.Request.ID)
+	require.NoError(t, gerr)
+	assert.Equal(t, stableasset.MintIssued, mine.Status, "another network's backlog never stops this network's upkeep")
 
-	own, err := NewStableUnknown(testDB, there.stable, there.chain.Network, Settings{})
+	ownJob, err := NewStableUnknown(testDB, there.stable, there.chain.Network, Settings{})
 	require.NoError(t, err)
-	rep := run(t, w.ctx, own)
+	rep := run(t, w.ctx, ownJob)
 	assert.True(t, rep.OK(), "%+v", rep.Failures)
-	got, gerr = there.stable.GetMint(w.ctx, testDB, res.Request.ID)
+	got, gerr = there.stable.GetMint(w.ctx, testDB, foreign.Request.ID)
 	require.NoError(t, gerr)
 	assert.Equal(t, stableasset.MintIssued, got.Status, "its own network resolves it")
-	_, err = job.Run(w.ctx)
-	require.NoError(t, err, "with nothing foreign left the job runs again")
+
+	_, err = NewStableUnknown(testDB, here.stable, there.chain.Network, Settings{})
+	require.Error(t, err, "a job configured for another network than its service carries is a failed start")
 }
 
 // TestIntegration_AQueuedRedemptionIsPaidOnce: a burn of a QUEUED-mode stable

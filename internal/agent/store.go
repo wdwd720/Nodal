@@ -434,6 +434,21 @@ func (Store) UpdateRun(ctx context.Context, tx pgx.Tx, r Run) error {
 	return nil
 }
 
+// RecordEvidence writes a run's evidence alone, inside the caller's
+// transaction. The delegated path records a request on its run in the very
+// transaction that made it, so a request can never be made and its record
+// lost; status and linkage are untouched here.
+func (Store) RecordEvidence(ctx context.Context, tx pgx.Tx, runID RunID, evidence json.RawMessage) error {
+	tag, err := tx.Exec(ctx, `UPDATE agent_runs SET evidence = $2 WHERE id = $1`, runID, jsonOr(evidence, "[]"))
+	if err != nil {
+		return errs.Wrap(err, errs.CodeInternal, "agent: record run evidence")
+	}
+	if tag.RowsAffected() != 1 {
+		return errs.Newf(errs.CodeNotFound, "agent: run %s not found", runID).WithField("run_id", runID.String())
+	}
+	return nil
+}
+
 // CountSkipsSince counts runs of an agent skipped for reason since t. The
 // dispatcher uses it to record AGENT_PAUSED at most once per hour.
 func (Store) CountSkipsSince(ctx context.Context, q db.Querier, agentID AgentID, reason SkipReason, since time.Time) (int, error) {

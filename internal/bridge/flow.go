@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -156,6 +157,9 @@ func (s *Service) Bridge(ctx context.Context, req BridgeRequest) (LegResult, err
 	if err != nil {
 		return LegResult{}, err
 	}
+	if err := s.onHost(r); err != nil {
+		return LegResult{}, err
+	}
 	holder := s.holder.HolderAddress(req.AccountID)
 	if err := s.host.EnsureNativeBalance(ctx, r.SourceChain, holder, s.params.GasMinimum, s.params.GasTopUp); err != nil {
 		return LegResult{}, err
@@ -226,6 +230,9 @@ func (s *Service) PrepareLeg(ctx context.Context, tx pgx.Tx, req BridgeRequest, 
 	}
 	r, err := s.getRoute(ctx, tx, req.RouteID, true)
 	if err != nil {
+		return LegTicket{}, err
+	}
+	if err := s.onHost(r); err != nil {
 		return LegTicket{}, err
 	}
 	now := s.clk.Now().UTC()
@@ -902,6 +909,9 @@ func (s *Service) ResolveReview(ctx context.Context, tx pgx.Tx, lid LegID, actor
 	if err != nil {
 		return Leg{}, err
 	}
+	if err := s.onHost(r); err != nil {
+		return Leg{}, err
+	}
 	problem, err := s.checkLeg(ctx, tx, leg, r)
 	if err != nil {
 		return Leg{}, err
@@ -1022,6 +1032,9 @@ func (s *Service) drive(ctx context.Context, lid LegID, produce bool) (LegResult
 		}
 		r, err := s.GetRoute(ctx, s.db, leg.RouteID)
 		if err != nil {
+			return LegResult{Leg: leg}, err
+		}
+		if err := s.onHost(r); err != nil {
 			return LegResult{Leg: leg}, err
 		}
 		attemptsBefore, err := countAllAttempts(ctx, s.db, lid)
@@ -1216,6 +1229,9 @@ func (s *Service) prepareRefund(ctx context.Context, tx pgx.Tx, lid LegID, actor
 	if err != nil {
 		return nil, leg, err
 	}
+	if err := s.onHost(r); err != nil {
+		return nil, leg, err
+	}
 	var reconciledElsewhere bool
 	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM stable_assets WHERE asset_id = $1)`, r.SourceAssetID).Scan(&reconciledElsewhere); err != nil {
 		return nil, leg, dbErr("check source asset", err)
@@ -1333,23 +1349,93 @@ func (s *Service) SettleRefund(ctx context.Context, tx pgx.Tx, lid LegID, actor 
 	return out, s.finishIntent(ctx, tx, leg.IntentID, false, "refunded")
 }
 
-// ObservePending advances every open leg by observation only (DEVNET legs,
-// and any leg a process stopped driving): no blocks are produced, nothing is
-// resubmitted. It is also the reconciliation of unknown lock and release
-// submissions: their outcome is read from the chains by tx id.
-func (s *Service) ObservePending(ctx context.Context, limit int) (int, error) {
+// UpkeepObserveLeg names ObservePending in the upkeep failure ledger
+// (migration 00760); its items are legs.
+const UpkeepObserveLeg = "bridge.observe_leg"
+
+// LegFailure is a leg ObservePending could not advance.
+type LegFailure struct {
+	LegID LegID
+	// Status is the leg's status when the pass took it.
+	Status CrossChainCapitalState
+	// Attempts counts its consecutive failures; it is not taken again before
+	// RetryAfter.
+	Attempts   int
+	RetryAfter time.Time
+	Err        error
+}
+
+// ObserveReport is what one ObservePending pass did.
+type ObserveReport struct {
+	// Examined counts the legs the pass took; Moved, those whose status
+	// changed; Settled, those now terminal.
+	Examined, Moved, Settled int
+	// Failures are the legs it could not advance; every other leg was
+	// advanced as far as the chains allow: one leg's failure never stops the
+	// pass.
+	Failures []LegFailure
+}
+
+// observePendingWhere takes the open legs of the host's network -- a leg of
+// another network is never observed here -- leaving out one whose last
+// observation failed and whose backoff is still running (unless the clock
+// has gone back past that failure), never-failed legs first, then the
+// oldest. $1 limit, $2 network, $3 operation, $4 now.
+const observePendingWhere = `status IN ('BRIDGE_REQUESTED','SOURCE_FINALIZED','MESSAGE_IN_FLIGHT','DESTINATION_OBSERVED','DESTINATION_FINALIZED')
+	AND route_id IN (SELECT r.id FROM bridge_routes r WHERE r.network = $2)
+	AND NOT EXISTS (SELECT 1 FROM upkeep_failures uf WHERE uf.operation = $3 AND uf.item_id = bridge_legs.id
+	                  AND uf.cleared_at IS NULL AND uf.retry_after > $4 AND uf.last_failed_at <= $4)
+	ORDER BY EXISTS (SELECT 1 FROM upkeep_failures uf WHERE uf.operation = $3 AND uf.item_id = bridge_legs.id AND uf.cleared_at IS NULL),
+	         created_at, id LIMIT $1`
+
+// ObservePending advances the open legs of the host's network by observation
+// only (DEVNET legs, and any leg a process stopped driving): no blocks are
+// produced, nothing is resubmitted. It is also the reconciliation of unknown
+// lock and release submissions: their outcome is read from the chains by tx
+// id. A leg of another network is never taken: this host would read its lock
+// as NOT_FOUND and could settle it as expired while it is final on its own
+// chain.
+//
+// Each leg is driven on its own (Observe's drive, in its own transactions).
+// One that cannot be advanced is recorded in the upkeep failure ledger with a
+// backoff and reported in Failures, and the pass goes on; until its backoff
+// has passed it is not taken again, and never-failed legs are taken first, so
+// a leg that keeps failing never stands in front of the others. An error
+// means the pass as a whole could not proceed; what it did before that is
+// committed and in the report.
+func (s *Service) ObservePending(ctx context.Context, limit int) (ObserveReport, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
-	legs, err := listLegs(ctx, s.db, `status IN ('BRIDGE_REQUESTED','SOURCE_FINALIZED','MESSAGE_IN_FLIGHT','DESTINATION_OBSERVED','DESTINATION_FINALIZED')
-		ORDER BY created_at, id LIMIT $1`, limit)
+	now := s.clk.Now().UTC()
+	legs, err := listLegs(ctx, s.db, observePendingWhere, limit, s.Network(), UpkeepObserveLeg, now)
 	if err != nil {
-		return 0, err
+		return ObserveReport{}, err
 	}
+	var rep ObserveReport
 	for _, l := range legs {
-		if _, err := s.drive(ctx, l.ID, false); err != nil {
-			return 0, err
+		rep.Examined++
+		res, err := s.drive(ctx, l.ID, false)
+		if err == nil {
+			err = s.inTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+				return clearUpkeepFailure(ctx, tx, UpkeepObserveLeg, l.ID, s.clk.Now().UTC())
+			})
+		}
+		if err != nil {
+			f, ferr := s.recordUpkeepFailure(ctx, UpkeepObserveLeg, l.ID, err)
+			if ferr != nil {
+				return rep, ferr
+			}
+			rep.Failures = append(rep.Failures, LegFailure{LegID: l.ID, Status: l.Status, Attempts: f.attempts,
+				RetryAfter: f.retryAfter, Err: err})
+			continue
+		}
+		if res.Leg.Status != l.Status {
+			rep.Moved++
+		}
+		if res.Settled {
+			rep.Settled++
 		}
 	}
-	return len(legs), nil
+	return rep, nil
 }

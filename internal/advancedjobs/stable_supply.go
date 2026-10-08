@@ -15,8 +15,9 @@ import (
 // the configured network: the ledger's outstanding supply against the
 // customers' wallets, the devnet supply of the mint and the verified reserve.
 // A mismatch opens or refreshes a material record that blocks new risk and
-// trips the asset's breaker; a match is recorded (one MATCHED record per
-// matched pass, which is why the default interval is an hour).
+// trips the asset's breaker; a match converges on the asset's standing
+// MATCHED record -- the first matched pass records it and later ones write
+// nothing while it is the asset's newest record.
 type StableSupply struct {
 	db      *db.DB
 	svc     *stableasset.Service
@@ -26,7 +27,7 @@ type StableSupply struct {
 
 // NewStableSupply wires the job for the stable assets of one devnet network.
 func NewStableSupply(d *db.DB, svc *stableasset.Service, network string, s Settings) (*StableSupply, error) {
-	if err := requireNetwork(network); err != nil {
+	if err := requireStableNetwork(svc, network); err != nil {
 		return nil, err
 	}
 	return &StableSupply{db: d, svc: svc, network: network, spec: spec(NameStableSupply, s)}, nil

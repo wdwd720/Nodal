@@ -682,28 +682,34 @@ func equityFillID(s string) (equities.FillID, error) {
 // account's due settlements in one transaction.
 const equitySettlementBatches = 1_000
 
-// RunSettlements is the settlement worker's step: SettleDue, one account per
-// transaction, until nothing due is left or limit settlements are settled.
+// RunSettlements is the settlement worker's step: SettleDueBatch, one account
+// per transaction, until a batch takes on nothing or limit settlements are
+// examined. A settlement that cannot settle is backed off and reported in
+// Failures; it never ends the run early, so an account whose only due
+// settlement failed does not hide the accounts after it.
 func (a equitiesAdapter) RunSettlements(ctx context.Context, limit int) (EquitySettlementRun, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 500
 	}
 	run := EquitySettlementRun{At: a.clk.Now().UTC()}
 	var settled []equities.Settlement
-	for run.Batches < equitySettlementBatches && len(settled) < limit {
-		var batch []equities.Settlement
+	examined := 0
+	for run.Batches < equitySettlementBatches && examined < limit {
+		var batch equities.SettlementBatch
 		if err := equitiesWriteTx(ctx, a.db, func(ctx context.Context, tx pgx.Tx) error {
 			var serr error
-			batch, serr = a.svc.SettleDue(ctx, tx, limit-len(settled))
+			batch, serr = a.svc.SettleDueBatch(ctx, tx, limit-examined)
 			return serr
 		}); err != nil {
 			return EquitySettlementRun{}, err
 		}
-		if len(batch) == 0 {
+		if batch.Examined() == 0 {
 			break
 		}
 		run.Batches++
-		settled = append(settled, batch...)
+		examined += batch.Examined()
+		settled = append(settled, batch.Settled...)
+		run.Failures = append(run.Failures, batch.Failures...)
 	}
 	err := equitiesSnapshot(ctx, a.db, func(ctx context.Context, tx pgx.Tx) error {
 		cal, cerr := a.svc.Calendar(ctx, tx, equities.CalendarXNYS)

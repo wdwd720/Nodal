@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/jackc/pgx/v5"
@@ -790,18 +791,57 @@ func (s *Service) Complete(ctx context.Context, tx pgx.Tx, oid OrderID) (StageOu
 	return s.settled(c, o, in), nil
 }
 
+// CompletionFailure is a finished order whose intent CompleteTerminal could
+// not complete.
+type CompletionFailure struct {
+	// IntentID is the order's economic intent (a customer order's id is its
+	// intent's id).
+	IntentID econ.IntentID
+	// Attempts counts its consecutive failures; it is not taken again before
+	// RetryAfter.
+	Attempts   int
+	RetryAfter time.Time
+	Err        error
+}
+
+// CompletionBatch is what one CompleteTerminal call did.
+type CompletionBatch struct {
+	Completed []econ.IntentID
+	Failures  []CompletionFailure
+}
+
+// completeTerminalSQL takes EXECUTING intents whose orders are FILLED or
+// CANCELLED, leaving out one whose last completion failed and whose backoff
+// is still running (unless the clock has gone back past that failure);
+// never-failed intents come first, then the longest finished. Intents another
+// sweeper holds are skipped (SKIP LOCKED).
+const completeTerminalSQL = `SELECT i.id, o.status FROM book_orders o JOIN economic_intents i ON i.id = o.intent_id
+	WHERE i.status = 'EXECUTING' AND o.status IN ('FILLED','CANCELLED')
+	  AND NOT EXISTS (SELECT 1 FROM upkeep_failures uf WHERE uf.operation = $3 AND uf.item_id = i.id
+	                    AND uf.cleared_at IS NULL AND uf.retry_after > $2 AND uf.last_failed_at <= $2)
+	ORDER BY EXISTS (SELECT 1 FROM upkeep_failures uf WHERE uf.operation = $3 AND uf.item_id = i.id AND uf.cleared_at IS NULL),
+	         o.updated_at, o.id
+	LIMIT $1 FOR UPDATE OF i SKIP LOCKED`
+
 // CompleteTerminal completes up to limit EXECUTING intents whose orders are
 // already filled or cancelled: the sweep that finishes submissions a crash
-// interrupted between Execute and Complete. It returns how many it moved.
-func (s *Service) CompleteTerminal(ctx context.Context, tx pgx.Tx, limit int) (int, error) {
+// interrupted between Execute and Complete. Each intent is completed in its
+// own savepoint of tx: one that cannot be, including one the database would
+// only refuse at COMMIT, is rolled back alone, recorded with a backoff in the
+// upkeep failure ledger and reported in Failures, and the others are
+// completed. An error means the sweep as a whole could not proceed.
+func (s *Service) CompleteTerminal(ctx context.Context, tx pgx.Tx, limit int) (CompletionBatch, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 100
 	}
-	rows, err := tx.Query(ctx, `SELECT o.id, o.status FROM book_orders o JOIN economic_intents i ON i.id = o.intent_id
-		WHERE i.status = 'EXECUTING' AND o.status IN ('FILLED','CANCELLED')
-		ORDER BY o.updated_at, o.id LIMIT $1 FOR UPDATE OF i SKIP LOCKED`, limit)
+	checkDeferred, err := deferredChecksPass(ctx, tx)
 	if err != nil {
-		return 0, dbErr("find finished orders", err)
+		return CompletionBatch{}, err
+	}
+	now := s.clk.Now().UTC()
+	rows, err := tx.Query(ctx, completeTerminalSQL, limit, now, UpkeepCompleteTerminal)
+	if err != nil {
+		return CompletionBatch{}, dbErr("find finished orders", err)
 	}
 	type pair struct {
 		id     econ.IntentID
@@ -812,18 +852,29 @@ func (s *Service) CompleteTerminal(ctx context.Context, tx pgx.Tx, limit int) (i
 		var p pair
 		if err := rows.Scan(&p.id, &p.status); err != nil {
 			rows.Close()
-			return 0, dbErr("scan finished orders", err)
+			return CompletionBatch{}, dbErr("scan finished orders", err)
 		}
 		todo = append(todo, p)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		return 0, dbErr("find finished orders", err)
+		return CompletionBatch{}, dbErr("find finished orders", err)
 	}
+	out := CompletionBatch{Completed: make([]econ.IntentID, 0, len(todo))}
 	for _, p := range todo {
-		if _, err := s.intents.Transition(ctx, tx, p.id, econ.StatusCompleted, s.actor, "order "+string(p.status), ""); err != nil {
-			return 0, err
+		failed, err := upkeepItem(ctx, tx, UpkeepCompleteTerminal, p.id, now, checkDeferred, func(sp pgx.Tx) error {
+			_, err := s.intents.Transition(ctx, sp, p.id, econ.StatusCompleted, s.actor, "order "+string(p.status), "")
+			return err
+		})
+		if err != nil {
+			return CompletionBatch{}, err
 		}
+		if failed != nil {
+			out.Failures = append(out.Failures, CompletionFailure{IntentID: p.id, Attempts: failed.attempts,
+				RetryAfter: failed.retryAfter, Err: failed.err})
+			continue
+		}
+		out.Completed = append(out.Completed, p.id)
 	}
-	return len(todo), nil
+	return out, nil
 }

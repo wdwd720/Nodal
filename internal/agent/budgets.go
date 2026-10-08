@@ -106,11 +106,12 @@ func (s BudgetSnapshot) CheckModel(cost money.USD) error {
 	return checkOne(BudgetModel, s.Model, s.ModelUsed, cost)
 }
 
-// CheckIntent reports whether one more agent intent may be created in the
-// current hour.
+// CheckIntent reports whether one more agent proposal -- a trade intent or a
+// delegated request -- may be made in the current hour. The two share one
+// allowance: a delegated request is a proposal of the same class.
 func (s BudgetSnapshot) CheckIntent() error {
 	if s.IntentsPerHour > 0 && s.IntentsThisHour >= s.IntentsPerHour {
-		return errs.Newf(errs.CodeRateLimited, "agent: %d intents already created this hour (limit %d)",
+		return errs.Newf(errs.CodeRateLimited, "agent: %d intents and delegated requests already made this hour (limit %d)",
 			s.IntentsThisHour, s.IntentsPerHour).WithField("budget", BudgetOrderRate.String())
 	}
 	return nil
@@ -174,10 +175,13 @@ type BudgetReader interface {
 	Snapshot(ctx context.Context, q db.Querier, a Authority, runID RunID, now time.Time) (BudgetSnapshot, error)
 }
 
-// PGBudgetReader reads tool_invocations, model_calls and trade_intents. Only
-// successful and rate-limited calls consume the call counters; a call the
-// broker itself refused for budget reasons is recorded with budget_refused
-// and does not consume anything, so a refusal can never cascade.
+// PGBudgetReader reads tool_invocations, model_calls, trade_intents and the
+// delegated swaps and withdrawals an agent proposed. Only successful and
+// rate-limited calls consume the call counters; a call the broker itself
+// refused for budget reasons is recorded with budget_refused and does not
+// consume anything, so a refusal can never cascade. Likewise a delegated
+// request that was refused admitted no swap or withdrawal and consumes no
+// order-rate allowance.
 type PGBudgetReader struct{}
 
 var _ BudgetReader = PGBudgetReader{}
@@ -202,8 +206,12 @@ SELECT
   JOIN agent_runs r ON r.id = mc.agent_run_id
  WHERE r.agent_id = $1 AND mc.purpose = 'RUNTIME'`
 
+// selectIntentRateSQL counts every proposal of the agent in the window: its
+// trade intents and the delegated swaps and withdrawals it proposed.
 const selectIntentRateSQL = `
-SELECT count(*) FROM trade_intents WHERE agent_id = $1 AND requested_at >= $2`
+SELECT (SELECT count(*) FROM trade_intents WHERE agent_id = $1 AND requested_at >= $2)
+     + (SELECT count(*) FROM delegated_swaps WHERE agent_id = $1 AND requested_at >= $2)
+     + (SELECT count(*) FROM delegated_withdrawals WHERE agent_id = $1 AND proposed_at >= $2)`
 
 // Snapshot reads every counter in one round of queries against q. Pass the
 // broker's transaction so the counters and the invocation row that follows

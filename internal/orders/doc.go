@@ -82,4 +82,7 @@
 //     a crossing rule or place a house order.
 //   - Hold connections, configuration or mutable state at package level, read
 //     the wall clock implicitly, or use floating point.
+//   - Let a finished order whose intent cannot be completed stop
+//     CompleteTerminal from completing the others, or take it again before
+//     its backoff has passed (upkeep_failures, 00760).
 package orders

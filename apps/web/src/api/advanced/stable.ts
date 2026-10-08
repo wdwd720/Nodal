@@ -463,6 +463,18 @@ export const stableMonitorReportSpec: Spec = {
   lists: { alerts: { required: true, kind: oneOf(STABLE_ALERT_KINDS) } },
 };
 
+/** A request a pass could not act on at all: left as it was and retried after its backoff. */
+export const stableRequestFailureSpec: Spec = {
+  required: {
+    operation: oneOf(["stableasset.settle_mint", "stableasset.settle_burn", "stableasset.pay_redemption"]),
+    request_id: "uuid",
+    attempts: "integer",
+    retry_after: "timestamp",
+    error_code: "string",
+    detail: "string",
+  },
+};
+
 export const stableSettleReportSpec: Spec = {
   required: {
     value_domain: SIMULATED,
@@ -473,6 +485,7 @@ export const stableSettleReportSpec: Spec = {
     failed: "integer",
     waiting: "integer",
   },
+  arrays: { failures: { required: true, spec: stableRequestFailureSpec } },
 };
 
 /* --------------------------------------------------------------------------

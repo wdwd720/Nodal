@@ -946,8 +946,9 @@ export function SettlementRunForm(): ReactNode {
         renderResult={(result) => (
           <div className="callout" role="status">
             <p>
-              Trade date {result.trade_date}: {String(result.settled.length)} settled in {String(result.batches)} transactions (as of{" "}
-              <Recorded at={result.as_of} />
+              Trade date {result.trade_date}: {String(result.settled.length)} settled
+              {result.failures.length > 0 ? `, ${String(result.failures.length)} could not be settled,` : ""} in{" "}
+              {String(result.batches)} transactions (as of <Recorded at={result.as_of} />
               ).
             </p>
             {result.settled.length > 0 && (
@@ -969,6 +970,33 @@ export function SettlementRunForm(): ReactNode {
                   </tr>
                 ))}
               </ScrollTable>
+            )}
+            {result.failures.length > 0 && (
+              <>
+                <p className="field-note">
+                  Each settlement below was rolled back on its own and left due; the run settled every other one, and a later run
+                  retries it once its backoff has passed.
+                </p>
+                <ScrollTable caption="Not settled by this run" headers={["Settlement", "Account", "Attempts", "Retried after", "Reason"]}>
+                  {result.failures.map((f) => (
+                    <tr key={f.settlement_id}>
+                      <th scope="row">
+                        <code className="mono-small">{f.settlement_id}</code>
+                      </th>
+                      <td>
+                        <code className="mono-small">{f.account_id}</code>
+                      </td>
+                      <td>{String(f.attempts)}</td>
+                      <td>
+                        <Recorded at={f.retry_after} />
+                      </td>
+                      <td>
+                        <code>{f.error_code}</code> {f.detail}
+                      </td>
+                    </tr>
+                  ))}
+                </ScrollTable>
+              </>
             )}
           </div>
         )}

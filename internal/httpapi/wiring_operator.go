@@ -318,6 +318,7 @@ func operatorSandboxDollar(ctx context.Context, q db.Querier) (assets.Asset, err
 var opsAdvancedKinds = []reconciliation.Kind{
 	reconciliation.KindEconomicEffect, reconciliation.KindStableReserve, reconciliation.KindBridge,
 	reconciliation.KindPredictionEscrow, reconciliation.KindClearing, reconciliation.KindDevnetChain,
+	reconciliation.KindBookJournal, reconciliation.KindTransfers,
 }
 
 func opsUnresolvedStatuses() []string {

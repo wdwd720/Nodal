@@ -42,32 +42,40 @@ func NewPredictionClose(d *db.DB, svc *predmarket.Service, s Settings) *Predicti
 // Spec implements Job.
 func (j *PredictionClose) Spec() Spec { return j.spec }
 
-// Run drains CloseDue one market per transaction until nothing is due or the
-// batch is spent. CloseDue takes the earliest due market another closer does
-// not hold (SKIP LOCKED); a failure ends the drain, since the failing market
-// would be taken first again.
+// Run drains CloseDueBatch one market per transaction until nothing is due
+// or the batch is spent. CloseDueBatch takes the earliest due market another
+// closer does not hold (SKIP LOCKED) and isolates a market it cannot close --
+// rolled back alone, recorded with a backoff and left out until the backoff
+// has passed -- so the drain reports it as that market's failure and goes on.
+// Only a transaction that fails as a whole ends the drain.
 func (j *PredictionClose) Run(ctx context.Context) (Report, error) {
 	var rep Report
 	for rep.Examined < j.spec.Batch {
 		if err := ctx.Err(); err != nil {
 			return rep, err
 		}
-		var closed []predmarket.MarketID
+		var batch predmarket.CloseBatch
 		err := inUnit(ctx, j.db, func(ctx context.Context, tx pgx.Tx) error {
 			var err error
-			closed, err = j.svc.CloseDue(ctx, tx, workerActor(), 1)
+			batch, err = j.svc.CloseDueBatch(ctx, tx, workerActor(), 1)
 			return err
 		})
 		if err != nil {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return rep, ctxErr
+			}
 			rep.Examined++
 			rep.fail("next due market", err)
 			return rep, nil
 		}
-		if len(closed) == 0 {
+		if len(batch.Closed)+len(batch.Failures) == 0 {
 			return rep, nil
 		}
-		rep.Examined += len(closed)
-		rep.Changed += len(closed)
+		rep.Examined += len(batch.Closed) + len(batch.Failures)
+		rep.Changed += len(batch.Closed)
+		for _, f := range batch.Failures {
+			rep.fail("market "+f.MarketID.String(), f.Err)
+		}
 	}
 	return rep, nil
 }

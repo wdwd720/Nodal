@@ -39,13 +39,13 @@ func TestIntegration_ACrashAfterExecuteIsCompletedBySweep(t *testing.T) {
 	o := f.orderView(accepted.Order.ID)
 	require.Equal(t, StatusFilled, o.Status)
 	require.Equal(t, econ.StatusExecuting, f.intentStatus(o), "the crash left the intent executing")
-	var swept int
+	var swept CompletionBatch
 	require.NoError(t, f.inTx(func(ctx context.Context, tx pgx.Tx) error {
 		var err error
 		swept, err = f.svc.CompleteTerminal(ctx, tx, 100)
 		return err
 	}))
-	assert.GreaterOrEqual(t, swept, 1)
+	assert.Contains(t, swept.Completed, *o.IntentID)
 	assert.Equal(t, econ.StatusCompleted, f.intentStatus(o))
 	resumed, err := f.pipe.Resume(f.ctx, accepted.Order.ID)
 	require.NoError(t, err)

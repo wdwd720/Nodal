@@ -52,13 +52,20 @@ func (r SupplyReconciliation) Matched() bool { return r.SupplyMatches && r.Walle
 // ReconcileSupply runs the STABLE_RESERVE reconciliation of one stable asset
 // in the caller's transaction. A mismatch opens (or refreshes) a material
 // STABLE_RESERVE record that blocks new risk, writes an alert and trips the
-// circuit breaker. A periodic or full run that matches records the match.
+// circuit breaker. A full run that matches records the match; a periodic one
+// converges instead of accumulating -- while the asset's newest STABLE_RESERVE
+// record is MATCHED it stands for every later matched pass
+// (reconciliation.Repository.RecordMatch). An asset of another network is
+// refused: this host cannot see its chain.
 func (s *Service) ReconcileSupply(ctx context.Context, tx pgx.Tx, sid StableAssetID, mode reconciliation.Mode, actor econ.Actor) (SupplyReconciliation, error) {
 	if err := requireActor(actor); err != nil {
 		return SupplyReconciliation{}, err
 	}
 	a, err := s.get(ctx, tx, sid, true)
 	if err != nil {
+		return SupplyReconciliation{}, err
+	}
+	if err := s.onHost(a); err != nil {
 		return SupplyReconciliation{}, err
 	}
 	return s.reconcileLocked(ctx, tx, &a, mode, actor)
@@ -150,7 +157,7 @@ func (s *Service) reconcileLocked(ctx context.Context, tx pgx.Tx, a *PlatformSta
 		if _, open, err := s.recon.FindUnresolvedByScope(ctx, tx, reconciliation.KindStableReserve, ScopeStableAsset, a.ID.String()); err != nil || open {
 			return out, err
 		}
-		rec, err := s.recon.Open(ctx, tx, s.reconRequest(*a, out, mode, actor, reconciliation.StatusMatched))
+		rec, _, err := s.recon.RecordMatch(ctx, tx, s.reconRequest(*a, out, mode, actor, reconciliation.StatusMatched))
 		if err != nil {
 			return SupplyReconciliation{}, err
 		}

@@ -4,7 +4,7 @@
  * Everything under this route is value domain SIMULATED and runs in PAPER,
  * SANDBOX or DEVNET mode only. The area is drawn from the section registry:
  * a sub-navigation link and a nested route per entry, and `/advanced` itself
- * opens the overview.
+ * opens the section ADVANCED_DEFAULT_SECTION names (the portfolio).
  *
  * Account-scoped sections read the account the rest of the application reads
  * (the session's active account). An operator may additionally ask to read an

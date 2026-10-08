@@ -113,6 +113,9 @@ func (s *Service) Mint(ctx context.Context, req MintRequest) (MintResult, error)
 	if err != nil {
 		return MintResult{}, err
 	}
+	if err := s.onHost(a); err != nil {
+		return MintResult{}, err
+	}
 	if err := s.host.EnsureNativeBalance(ctx, a.Chain, s.issuer.PublicKey(), s.params.GasMinimum, s.params.GasTopUp); err != nil {
 		return MintResult{}, err
 	}
@@ -151,6 +154,9 @@ func (s *Service) PrepareMint(ctx context.Context, tx pgx.Tx, req MintRequest) (
 	}
 	a, err := s.get(ctx, tx, req.StableAssetID, true)
 	if err != nil {
+		return MintTicket{}, err
+	}
+	if err := s.onHost(a); err != nil {
 		return MintTicket{}, err
 	}
 	// The chain is read through this transaction: the tip is the blockhash
@@ -441,6 +447,9 @@ func (s *Service) lockMint(ctx context.Context, tx pgx.Tx, rid MintRequestID) (P
 	}
 	a, err := s.get(ctx, tx, peek.StableAssetID, true)
 	if err != nil {
+		return PlatformStableAsset{}, MintRecord{}, err
+	}
+	if err := s.onHost(a); err != nil {
 		return PlatformStableAsset{}, MintRecord{}, err
 	}
 	rec, err := getMint(ctx, tx, rid, true)

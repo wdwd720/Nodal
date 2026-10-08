@@ -77,6 +77,12 @@ var financialPackages = []string{
 	"internal/equities",
 	"internal/treasury",
 	"internal/orders",
+	// Delegated agent authority: the owner's side over HTTP (cmd/api), the
+	// agent's admissions in-process through the agent runtime
+	// (internal/agent's DelegatedEmitter over delegation.AgentAdmission,
+	// wired by cmd/agent-worker), and the signing stages through their
+	// drivers (driver_test.go).
+	"internal/delegation",
 	// Every fee the services above charge is disclosed and booked through it.
 	"internal/feeledger",
 }

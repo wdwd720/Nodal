@@ -320,13 +320,14 @@ func (s *Service) RequestSwap(ctx context.Context, tx pgx.Tx, req SwapRequest) (
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO delegated_swaps (id, capability_id, account_id, agent_id, request_nonce, intent_id,
 		usage_id, reservation_id, venue_id, mode, action_class, chain_id, wallet, pay_asset_id, receive_asset_id, amount_in,
-		amount_out, min_amount_out, notional_usd_minor, requested_at, quote_expires_at, requires_approval, plan, plan_hash, status)
+		amount_out, min_amount_out, notional_usd_minor, requested_at, quote_expires_at, requires_approval, plan, plan_hash, status,
+		network)
 		VALUES ($1,$2,$3,$4::uuid,$5::numeric,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::numeric,$17::numeric,$18::numeric,$19,
-		        $20,$21,$22,$23,$24,'ADMITTED')`,
+		        $20,$21,$22,$23,$24,'ADMITTED',$25)`,
 		sid, c.ID, req.AccountID, agent.ID, strconv.FormatUint(req.Nonce, 10), in.ID, usage, res.ID, venue.ID, c.Terms.Mode,
 		req.Action, venue.Chain, wallet.String(), pay.ID, recv.ID, amountIn.String(), quote.AmountOut.String(),
 		quote.MinAmountOut.String(), quote.NotionalUSD.Minor(), plan.RequestedAt, plan.QuoteExpiresAt,
-		c.Terms.RequiresHumanApproval, planDoc, planHash[:]); err != nil {
+		c.Terms.RequiresHumanApproval, planDoc, planHash[:], s.Network()); err != nil {
 		return SwapTicket{}, dbErr("record swap", err)
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO delegated_swap_transitions (id, swap_id, from_status, to_status, actor_type, actor_id, reason)
@@ -709,6 +710,9 @@ func (s *Service) SignSwap(ctx context.Context, tx pgx.Tx, sid SwapID) (SignOutc
 	if !sw.Status.Signable() {
 		return SignOutcome{Swap: sw}, nil
 	}
+	if err := s.requireNetwork(SubjectSwap, sw.ID.String(), sw.Network); err != nil {
+		return SignOutcome{}, err
+	}
 	now := dbTime(s.clk.Now())
 	refuse := func(code, detail string) (SignOutcome, error) {
 		out, err := s.rejectSwap(ctx, tx, sw, code, detail)
@@ -929,6 +933,9 @@ func (s *Service) SettleSwap(ctx context.Context, tx pgx.Tx, sid SwapID) (Settle
 	if sw.Status != SwapSigned && sw.Status != SwapSubmitted && sw.Status != SwapUnknown {
 		return SettleResult{Swap: sw}, nil
 	}
+	if err := s.requireNetwork(SubjectSwap, sw.ID.String(), sw.Network); err != nil {
+		return SettleResult{}, err
+	}
 	obs, err := observe(ctx, s.host, tx, sw.Chain, sw.TxID, sw.BlockhashHeight)
 	if err != nil {
 		return SettleResult{}, err
@@ -1023,6 +1030,9 @@ func (s *Service) ExecuteSwap(ctx context.Context, sid SwapID) (SwapResult, erro
 	sw, err := getSwap(ctx, s.db, sid, false)
 	if err != nil {
 		return SwapResult{}, err
+	}
+	if err := s.requireNetwork(SubjectSwap, sw.ID.String(), sw.Network); err != nil {
+		return SwapResult{Swap: sw}, err
 	}
 	if sw.Status.Signable() {
 		if err := s.host.EnsureNativeBalance(ctx, sw.Chain, sw.Wallet, s.params.GasMinimum, s.params.GasTopUp); err != nil {

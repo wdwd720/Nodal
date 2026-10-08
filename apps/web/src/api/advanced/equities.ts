@@ -332,9 +332,25 @@ export const equityActionResultSpec: Spec = {
   arrays: { applications: { required: true, spec: equityApplicationSpec } },
 };
 
+/** A due settlement a run could not settle: rolled back alone and retried after its backoff. */
+export const equitySettlementFailureSpec: Spec = {
+  required: {
+    settlement_id: "uuid",
+    fill_id: "uuid",
+    account_id: "uuid",
+    attempts: "integer",
+    retry_after: "timestamp",
+    error_code: "string",
+    detail: "string",
+  },
+};
+
 export const equitySettlementRunSpec: Spec = {
   required: { value_domain: SIMULATED, as_of: "timestamp", trade_date: DATE, batches: "integer" },
-  arrays: { settled: { required: true, spec: equitySettlementSpec } },
+  arrays: {
+    settled: { required: true, spec: equitySettlementSpec },
+    failures: { required: true, spec: equitySettlementFailureSpec },
+  },
 };
 
 export const equityVenueRunSpec: Spec = {

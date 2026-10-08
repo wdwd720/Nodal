@@ -271,15 +271,20 @@ func TestIntegration_ConcurrentSettlementSettlesOnce(t *testing.T) {
 			mine := 0
 			defer func() { counts <- mine }()
 			for {
-				var settled []Settlement
+				var batch SettlementBatch
 				if err := inTxRetrying(w.ctx, func(ctx context.Context, tx pgx.Tx) error {
 					var err error
-					settled, err = w.svc.SettleDue(ctx, tx, 500)
+					batch, err = w.svc.SettleDueBatch(ctx, tx, 500)
 					return err
 				}); err != nil {
 					errsCh <- err
 					return
 				}
+				if len(batch.Failures) > 0 {
+					errsCh <- fmt.Errorf("settlement %s failed: %w", batch.Failures[0].SettlementID, batch.Failures[0].Err)
+					return
+				}
+				settled := batch.Settled
 				if len(settled) == 0 {
 					return
 				}
@@ -341,16 +346,21 @@ func TestIntegration_SettlementWorkersAcrossAccountsNeverDeadlock(t *testing.T) 
 		go func() {
 			defer wg.Done()
 			for {
-				var settled []Settlement
+				var batch SettlementBatch
 				// No retries: a deadlock would surface here as an error.
 				if err := w.inTx(func(ctx context.Context, tx pgx.Tx) error {
 					var err error
-					settled, err = w.svc.SettleDue(ctx, tx, 500)
+					batch, err = w.svc.SettleDueBatch(ctx, tx, 500)
 					return err
 				}); err != nil {
 					errsCh <- err
 					return
 				}
+				if len(batch.Failures) > 0 {
+					errsCh <- fmt.Errorf("settlement %s failed: %w", batch.Failures[0].SettlementID, batch.Failures[0].Err)
+					return
+				}
+				settled := batch.Settled
 				if len(settled) == 0 {
 					return
 				}

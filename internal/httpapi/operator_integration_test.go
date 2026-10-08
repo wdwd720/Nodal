@@ -270,7 +270,8 @@ func TestIntegration_TheOperatorOverviewReadsTheDatabase(t *testing.T) {
 	for _, k := range o.Reconciliation {
 		kinds = append(kinds, k.Kind)
 	}
-	assert.Equal(t, []string{"ECONOMIC_EFFECT", "STABLE_RESERVE", "BRIDGE", "PREDICTION_ESCROW", "CLEARING", "DEVNET_CHAIN"}, kinds)
+	assert.Equal(t, []string{"ECONOMIC_EFFECT", "STABLE_RESERVE", "BRIDGE", "PREDICTION_ESCROW", "CLEARING", "DEVNET_CHAIN",
+		"BOOK_JOURNAL", "TRANSFERS"}, kinds)
 
 	byAsset := map[string]api.AdvancedOpsOracleAsset{}
 	for _, a := range o.Oracle {

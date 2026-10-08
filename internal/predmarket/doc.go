@@ -134,4 +134,7 @@
 //     held payouts it names, after settlement.
 //   - Retry an economic effect whose outcome is unknown, hold mutable state at
 //     package level, read the wall clock, or use floating point.
+//   - Let a due market that cannot be closed stop CloseDueBatch from closing
+//     the others, or take it again before its backoff has passed
+//     (upkeep_failures, 00760).
 package predmarket

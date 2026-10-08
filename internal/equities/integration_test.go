@@ -371,24 +371,25 @@ func (w *world) trade(acct accounts.AccountID, l Listing, s orderSpec) Order {
 }
 
 // settleDue runs the settlement worker until nothing is due: one account per
-// transaction, as SettleDue settles.
+// transaction, as SettleDueBatch settles. No settlement here may fail.
 func (w *world) settleDue() []Settlement {
 	w.t.Helper()
 	var out []Settlement
 	for {
-		var batch []Settlement
+		var batch SettlementBatch
 		require.NoError(w.t, w.inTx(func(ctx context.Context, tx pgx.Tx) error {
 			var err error
-			batch, err = w.svc.SettleDue(ctx, tx, 500)
+			batch, err = w.svc.SettleDueBatch(ctx, tx, 500)
 			return err
 		}))
-		if len(batch) == 0 {
+		require.Empty(w.t, batch.Failures, "a settlement failed")
+		if batch.Examined() == 0 {
 			return out
 		}
-		for _, s := range batch[1:] {
-			require.Equal(w.t, batch[0].AccountID, s.AccountID, "a batch settles one account")
+		for _, s := range batch.Settled[1:] {
+			require.Equal(w.t, batch.Settled[0].AccountID, s.AccountID, "a batch settles one account")
 		}
-		out = append(out, batch...)
+		out = append(out, batch.Settled...)
 	}
 }
 

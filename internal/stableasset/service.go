@@ -155,6 +155,21 @@ func New(d Deps) (*Service, error) {
 	}, nil
 }
 
+// Network is the devnet network this service's host carries: the one its
+// stable assets are minted, burned, observed and reconciled on.
+func (s *Service) Network() string { return s.host.Config().Network }
+
+// onHost refuses, without changing anything, a stable asset of another
+// network: this host would read its mints and burns as never seen, and could
+// fail one as expired while it stands final on its own chain.
+func (s *Service) onHost(a PlatformStableAsset) error {
+	if host := s.Network(); a.Network != host {
+		return errs.Newf(errs.CodeConflict, "stableasset: %s is on devnet network %s; this service carries %s", a.Name, a.Network, host).
+			WithField("stable_asset_id", a.ID.String()).WithField("asset_network", a.Network).WithField("host_network", host)
+	}
+	return nil
+}
+
 // txOptions is every transaction this package runs: READ COMMITTED (row
 // locks serialise what must be serialised) with a small deadlock budget.
 // Nothing outside the database happens inside a transaction function, so a

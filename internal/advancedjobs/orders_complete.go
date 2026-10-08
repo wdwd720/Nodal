@@ -29,30 +29,38 @@ func (j *OrdersCompleteTerminal) Spec() Spec { return j.spec }
 
 // Run drains CompleteTerminal one intent per transaction until nothing is
 // left or the batch is spent. CompleteTerminal skips intents another sweeper
-// holds (SKIP LOCKED); a failure ends the drain, since the failing intent
-// would be taken first again.
+// holds (SKIP LOCKED) and isolates an intent it cannot complete -- rolled
+// back alone, recorded with a backoff and left out until the backoff has
+// passed -- so the drain reports it as that intent's failure and goes on.
+// Only a transaction that fails as a whole ends the drain.
 func (j *OrdersCompleteTerminal) Run(ctx context.Context) (Report, error) {
 	var rep Report
 	for rep.Examined < j.spec.Batch {
 		if err := ctx.Err(); err != nil {
 			return rep, err
 		}
-		var n int
+		var batch orders.CompletionBatch
 		err := inUnit(ctx, j.db, func(ctx context.Context, tx pgx.Tx) error {
 			var err error
-			n, err = j.svc.CompleteTerminal(ctx, tx, 1)
+			batch, err = j.svc.CompleteTerminal(ctx, tx, 1)
 			return err
 		})
 		if err != nil {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return rep, ctxErr
+			}
 			rep.Examined++
 			rep.fail("next finished order", err)
 			return rep, nil
 		}
-		if n == 0 {
+		if len(batch.Completed)+len(batch.Failures) == 0 {
 			return rep, nil
 		}
-		rep.Examined += n
-		rep.Changed += n
+		rep.Examined += len(batch.Completed) + len(batch.Failures)
+		rep.Changed += len(batch.Completed)
+		for _, f := range batch.Failures {
+			rep.fail("intent "+f.IntentID.String(), f.Err)
+		}
 	}
 	return rep, nil
 }

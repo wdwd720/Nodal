@@ -613,6 +613,16 @@ var operationPolicies = map[string]operationPolicy{
 	"PostAdvancedOpsMarks":   {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
 	"GetAdvancedOpsChains":   {AnyOf: perms(security.PermSandboxOperate)},
 
+	// >>> advanced:portfolio operations
+	//
+	// One account's portfolio: a read, tenant-scoped per request like every
+	// other account read (the owner, or an operator holding account:read_any).
+	// It composes other routes' reads, each scoped by the same rule; every one
+	// of them must be held to exactly this policy, which
+	// TestPortfolio_ComposesOnlyReadsUnderItsOwnPolicy checks, so the
+	// portfolio cannot become a way around any of them.
+	"GetAdvancedPortfolio": {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+
 	// --- trading ----------------------------------------------------------
 	"PostQuotesPreview":         {AnyOf: perms(security.PermTradeRead)},
 	"PostIntents":               {AnyOf: perms(security.PermTradeCreate), Mutating: true},

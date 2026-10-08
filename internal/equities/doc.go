@@ -38,8 +38,10 @@
 //     transaction; it writes nothing. Only a PENDING submission is placed.
 //     ApplyOrderReport: OPEN, FILLED (trade posted, settlement scheduled),
 //     REJECTED, CANCELLED or EXPIRED; the intent becomes EXECUTING (or ends).
-//     SettleDue: EQUITY_SETTLEMENT on the settlement date, one account per
-//     transaction; the intent COMPLETED.
+//     SettleDueBatch: EQUITY_SETTLEMENT on the settlement date,
+//     one account per transaction, each settlement in its own savepoint; the
+//     intent COMPLETED. A settlement that cannot settle is rolled back alone,
+//     backed off (upkeep_failures, 00760) and reported.
 //
 //   - Risk: Risk Kernel V2 with every section it requires. An agent's order
 //     needs the authority section and a strategy-originated order the
@@ -111,4 +113,6 @@
 //     submission whose outcome is UNKNOWN: it is resolved by polling.
 //   - Use floating point, read the wall clock, or hold mutable state at
 //     package level.
+//   - Let a settlement that cannot settle stop the settlement of any other,
+//     or take it again before its backoff has passed.
 package equities
