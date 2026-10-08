@@ -37,6 +37,7 @@ import (
 	"github.com/nodal/controlplane/internal/killswitch"
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/legalrouter"
+	"github.com/nodal/controlplane/internal/margin"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/notification"
 	"github.com/nodal/controlplane/internal/risk"
@@ -81,6 +82,9 @@ type World struct {
 
 	Transfers *transfers.Service
 	Faucet    *sandboxfund.Faucet
+	Margin    *margin.Service
+	// Identity is the production identity reader (compliance profiles).
+	Identity compliance.AccountVerification
 
 	// USD is the sandbox dollar every scenario settles in.
 	USD assets.Asset
@@ -168,6 +172,19 @@ func wire(d *db.DB, o Options) (*World, error) {
 	if err != nil {
 		return nil, fmt.Errorf("sandboxworld: faucet: %w", err)
 	}
+	w.Identity = compliance.NewAccountVerification(clk)
+	w.Margin, err = margin.NewService(margin.Config{
+		Policy: margin.DefaultPolicy(), RiskPolicy: risk.DefaultAdvancedPolicy(),
+		LendingPoolName: "Sandbox lending pool", InsuranceFundName: "Sandbox insurance fund",
+		ServiceActorID: o.Component, MaxQueueScan: 1_000,
+	}, margin.Dependencies{
+		Clock: clk, Ledger: led, Effects: w.Effects, Intents: w.Intents, Authorizer: w.Authorizer,
+		Registry: w.Registry, Risk: w.Risk, Capital: w.Capital, Prices: w.Prices, Router: router,
+		Identity: w.Identity, KillSwitch: kills, Venue: margin.PaperVenue{}, Audit: aw,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("sandboxworld: margin: %w", err)
+	}
 	return w, nil
 }
 
@@ -225,6 +242,19 @@ func (w *World) Operator(role security.Role) security.Principal {
 		SubjectID: "synthetic-operator-" + string(role), ActorType: security.ActorOperator,
 		Roles: []security.Role{role}, AuthTime: w.Clock.Now(), AMR: []string{"pwd", "mfa"},
 	}
+}
+
+// Mark records a sandbox price observation for asset, quoted in the sandbox
+// dollar, at the world's current time. price is an exact decimal string.
+func (w *World) Mark(ctx context.Context, asset assets.AssetID, price, source string) (valuation.RecordedPrice, error) {
+	p, err := money.PriceFromDecimalString(price, w.USD.ID.String(), source, w.Clock.Now())
+	if err != nil {
+		return valuation.RecordedPrice{}, err
+	}
+	return w.Prices.RecordPrice(ctx, w.DB, valuation.PriceObservation{
+		AssetID: asset, QuoteAssetID: w.USD.ID, Mantissa: p.Mantissa, Scale: p.Scale,
+		Source: source, ObservedAt: w.Clock.Now(),
+	})
 }
 
 // SimAsset registers a SIMULATED asset on the sandbox chain. A USD-pegged one
