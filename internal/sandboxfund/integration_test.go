@@ -28,6 +28,7 @@ import (
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/event"
+	"github.com/nodal/controlplane/internal/killswitch"
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/security"
@@ -68,8 +69,19 @@ type fixture struct {
 	clk     *clock.Fake
 	ledger  *ledger.Service
 	effects *econ.EffectStore
+	kills   *switchableKills
 	faucet  *Faucet
 	dollar  assets.Asset
+}
+
+// switchableKills is a kill-switch reader whose global switch a test flips.
+type switchableKills struct{ global bool }
+
+func (k *switchableKills) Snapshot(context.Context, db.Querier) (killswitch.Snapshot, error) {
+	if !k.global {
+		return killswitch.Snapshot{}, nil
+	}
+	return killswitch.Snapshot{Switches: []killswitch.Switch{{Kind: killswitch.GlobalNewRiskKill, ScopeID: killswitch.GlobalScope, Active: true}}}, nil
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -79,7 +91,8 @@ func newFixture(t *testing.T) *fixture {
 	}
 	clk := clock.NewFake(time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC))
 	f := &fixture{t: t, ctx: context.Background(), clk: clk, ledger: ledger.NewService(clk, "itest"),
-		effects: econ.NewEffectStore(clk, event.NewOutbox(clk), audit.NewWriterWithBuildVersion("itest"))}
+		effects: econ.NewEffectStore(clk, event.NewOutbox(clk), audit.NewWriterWithBuildVersion("itest")),
+		kills:   &switchableKills{}}
 	f.faucet = f.build(config.EnvTest, false, DefaultPolicy())
 	require.NoError(t, f.inTx(func(ctx context.Context, tx pgx.Tx) error {
 		var err error
@@ -91,7 +104,8 @@ func newFixture(t *testing.T) *fixture {
 
 func (f *fixture) build(env config.Environment, enabled bool, p Policy) *Faucet {
 	f.t.Helper()
-	fc, err := New(Deps{Clock: f.clk, Ledger: f.ledger, Effects: f.effects, Environment: env, Enabled: enabled, Policy: p})
+	fc, err := New(Deps{Clock: f.clk, Ledger: f.ledger, Effects: f.effects, Environment: env, Enabled: enabled, Policy: p,
+		KillSwitches: f.kills})
 	require.NoError(f.t, err)
 	return fc
 }
@@ -336,7 +350,7 @@ func TestIntegration_TheFaucetIsGatedOnTheEnvironment(t *testing.T) {
 
 // TestIntegration_OnlyTheOwnerAServiceOrTheSystemMayFund: an agent, an
 // operator and another customer are refused; so is a frozen account.
-func TestIntegration_OnlyTheOwnerAServiceOrTheSystemMayFund(t *testing.T) {
+func TestIntegration_OnlyTheOwnerAPermittedServiceOrTheSystemMayFund(t *testing.T) {
 	f := newFixture(t)
 	c, stranger := f.customer(), f.customer()
 	for name, p := range map[string]security.Principal{
@@ -348,6 +362,9 @@ func TestIntegration_OnlyTheOwnerAServiceOrTheSystemMayFund(t *testing.T) {
 		requireCode(t, err, errs.CodeForbidden)
 	}
 	_, err := f.fund(f.faucet, security.Principal{SubjectID: "svc", ActorType: security.ActorService}, c.account, f.dollar.ID, 1, "svc")
+	requireCode(t, err, errs.CodeForbidden) // a service needs sandbox:fund
+	_, err = f.fund(f.faucet, security.Principal{SubjectID: "svc", ActorType: security.ActorService,
+		Roles: []security.Role{security.RoleCustomer}}, c.account, f.dollar.ID, 1, "svc-permitted")
 	require.NoError(t, err)
 
 	require.NoError(t, f.inTx(func(ctx context.Context, tx pgx.Tx) error {
@@ -445,4 +462,31 @@ func TestIntegration_EveryFaucetEnumMatchesItsCheck(t *testing.T) {
 	sort.Strings(actors)
 	assert.Equal(t, envs, values("sandbox_fundings_environment_check"))
 	assert.Equal(t, actors, values("sandbox_fundings_actor_type_check"))
+}
+
+// TestIntegration_TheGlobalKillSwitchStopsTheFaucet: minting play money is new
+// value, and the global new-risk kill switch stops it.
+func TestIntegration_TheGlobalKillSwitchStopsTheFaucet(t *testing.T) {
+	f := newFixture(t)
+	c := f.customer()
+	f.kills.global = true
+	_, err := f.fund(f.faucet, c.p, c.account, f.dollar.ID, 1, "killed")
+	requireCode(t, err, errs.CodeKillSwitchActive)
+	f.kills.global = false
+	_, err = f.fund(f.faucet, c.p, c.account, f.dollar.ID, 1, "released")
+	require.NoError(t, err)
+}
+
+// TestIntegration_AServiceFundsOnlyWithSandboxFund: a service principal no
+// longer funds any account it names; it needs the sandbox:fund permission.
+func TestIntegration_AServiceFundsOnlyWithSandboxFund(t *testing.T) {
+	f := newFixture(t)
+	c := f.customer()
+	bare := security.Principal{SubjectID: "svc-" + uuid.NewString(), ActorType: security.ActorService, AuthTime: f.clk.Now()}
+	_, err := f.fund(f.faucet, bare, c.account, f.dollar.ID, 1, "svc-bare")
+	requireCode(t, err, errs.CodeForbidden)
+	granted := bare
+	granted.Roles = []security.Role{security.RoleCustomer}
+	_, err = f.fund(f.faucet, granted, c.account, f.dollar.ID, 1, "svc-granted")
+	require.NoError(t, err)
 }

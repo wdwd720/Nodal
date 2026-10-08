@@ -39,6 +39,7 @@ import (
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/db/migrate"
+	"github.com/nodal/controlplane/internal/derivatives"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/execution"
 	"github.com/nodal/controlplane/internal/funding"
@@ -48,12 +49,14 @@ import (
 	"github.com/nodal/controlplane/internal/killswitch"
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/margin"
+	"github.com/nodal/controlplane/internal/marketplace"
 	"github.com/nodal/controlplane/internal/notification"
 	"github.com/nodal/controlplane/internal/prediction"
 	"github.com/nodal/controlplane/internal/predmarket"
 	"github.com/nodal/controlplane/internal/reconciliation"
 	"github.com/nodal/controlplane/internal/risk"
 	"github.com/nodal/controlplane/internal/sandboxfund"
+	"github.com/nodal/controlplane/internal/sandboxrt"
 	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/transfers"
 )
@@ -209,6 +212,42 @@ func registry() []pair {
 		{table: "prediction_resolutions", constraint: "prediction_resolutions_kind_check", source: "predmarket.AllResolutionKinds()", values: str(predmarket.AllResolutionKinds())},
 		{table: "prediction_settlements", constraint: "prediction_settlements_kind_check", source: "predmarket.AllSettlementKinds()", values: str(predmarket.AllSettlementKinds())},
 		{table: "prediction_settlements", constraint: "prediction_settlements_rounding_policy_check", source: "predmarket.AllRoundingPolicies()", values: str(predmarket.AllRoundingPolicies())},
+
+		// Migration 00741 (futures, perpetuals and options).
+		{table: "derivative_positions", constraint: "derivative_positions_status_check", source: "derivatives.AllPositionStatuses()", values: str(derivatives.AllPositionStatuses())},
+		{table: "derivative_position_transitions", constraint: "derivative_position_transitions_from_status_check", source: "derivatives.AllPositionStatuses()", values: str(derivatives.AllPositionStatuses())},
+		{table: "derivative_position_transitions", constraint: "derivative_position_transitions_to_status_check", source: "derivatives.AllPositionStatuses()", values: str(derivatives.AllPositionStatuses())},
+		{table: "derivative_fills", constraint: "derivative_fills_source_check", source: "derivatives.AllFillSources()", values: str(derivatives.AllFillSources())},
+		{table: "derivative_fills", constraint: "derivative_fills_side_check", source: "derivatives.AllFillSides()", values: str(derivatives.AllFillSides())},
+		{table: "derivative_cash_flows", constraint: "derivative_cash_flows_kind_check", source: "derivatives.AllCashFlowKinds()", values: str(derivatives.AllCashFlowKinds())},
+		{table: "derivative_settlements", constraint: "derivative_settlements_kind_check", source: "derivatives.AllSettlementKinds()", values: str(derivatives.AllSettlementKinds())},
+		{table: "funding_accruals", constraint: "funding_accruals_direction_check", source: "derivatives.AllFundingDirections()", values: str(derivatives.AllFundingDirections())},
+		{table: "option_exercises", constraint: "option_exercises_kind_check", source: "derivatives.AllExerciseKinds()", values: str(derivatives.AllExerciseKinds())},
+
+		// Migrations 00750 and 00751 (strategy marketplace, sandboxed runs).
+		{table: "marketplace_evaluations", constraint: "marketplace_evaluations_actor_type_check", source: "marketplace.TransitionActorTypes()", values: str(marketplace.TransitionActorTypes())},
+		{table: "marketplace_follow_intents", constraint: "marketplace_follow_intents_outcome_check", source: "marketplace.AllFollowOutcomes()", values: str(marketplace.AllFollowOutcomes())},
+		{table: "marketplace_follow_runs", constraint: "marketplace_follow_runs_actor_type_check", source: "marketplace.TransitionActorTypes()", values: str(marketplace.TransitionActorTypes())},
+		{table: "marketplace_follow_runs", constraint: "marketplace_follow_runs_trigger_check", source: "marketplace.AllFollowTriggers()", values: str(marketplace.AllFollowTriggers())},
+		{table: "marketplace_install_transitions", constraint: "marketplace_install_transitions_actor_type_check", source: "marketplace.TransitionActorTypes()", values: str(marketplace.TransitionActorTypes())},
+		{table: "marketplace_installs", constraint: "marketplace_installs_installed_by_actor_type_check", source: "marketplace.CreatorActorTypes()", values: str(marketplace.CreatorActorTypes())},
+		{table: "marketplace_installs", constraint: "marketplace_installs_status_check", source: "marketplace.AllInstallStatuses()", values: str(marketplace.AllInstallStatuses())},
+		{table: "marketplace_listing_versions", constraint: "marketplace_listing_versions_created_by_actor_type_check", source: "marketplace.CreatorActorTypes()", values: str(marketplace.CreatorActorTypes())},
+		{table: "marketplace_listing_versions", constraint: "marketplace_listing_versions_moderation_state_check", source: "marketplace.AllModerationStates()", values: str(marketplace.AllModerationStates())},
+		{table: "marketplace_listing_versions", constraint: "marketplace_listing_versions_risk_class_check", source: "marketplace.AllRiskClasses()", values: str(marketplace.AllRiskClasses())},
+		{table: "marketplace_listing_versions", constraint: "marketplace_listing_versions_status_check", source: "marketplace.AllStatuses()", values: str(marketplace.AllStatuses())},
+		{table: "marketplace_listings", constraint: "marketplace_listings_creator_actor_type_check", source: "marketplace.CreatorActorTypes()", values: str(marketplace.CreatorActorTypes())},
+		{table: "marketplace_moderation_transitions", constraint: "marketplace_moderation_transitions_actor_type_check", source: "marketplace.TransitionActorTypes()", values: str(marketplace.TransitionActorTypes())},
+		{table: "marketplace_reviews", constraint: "marketplace_reviews_decision_check", source: "marketplace.AllReviewDecisions()", values: str(marketplace.AllReviewDecisions())},
+		{table: "marketplace_version_transitions", constraint: "marketplace_version_transitions_actor_type_check", source: "marketplace.TransitionActorTypes()", values: str(marketplace.TransitionActorTypes())},
+		{table: "marketplace_version_validations", constraint: "marketplace_version_validations_failure_reason_check", source: "marketplace.AllValidationFailureReasons()", values: str(marketplace.AllValidationFailureReasons())},
+		{table: "marketplace_version_validations", constraint: "marketplace_version_validations_outcome_check", source: "marketplace.AllValidationOutcomes()", values: str(marketplace.AllValidationOutcomes())},
+		{table: "marketplace_version_validations", constraint: "marketplace_version_validations_validated_by_actor_type_check", source: "marketplace.TransitionActorTypes()", values: str(marketplace.TransitionActorTypes())},
+		{table: "sandbox_run_violations", constraint: "sandbox_run_violations_code_check", source: "sandboxrt.AllViolationCodes()", values: str(sandboxrt.AllViolationCodes())},
+		{table: "sandbox_runs", constraint: "sandbox_runs_actor_type_check", source: "sandboxrt.RecordingActorTypes()", values: str(sandboxrt.RecordingActorTypes())},
+		{table: "sandbox_runs", constraint: "sandbox_runs_termination_reason_check", source: "sandboxrt.AllTerminations()", values: str(sandboxrt.AllTerminations())},
+		{table: "strategy_artifact_sources", constraint: "strategy_artifact_sources_created_by_actor_type_check", source: "sandboxrt.RecordingActorTypes()", values: str(sandboxrt.RecordingActorTypes())},
+		{table: "strategy_artifacts", constraint: "strategy_artifacts_created_by_actor_type_check", source: "sandboxrt.RecordingActorTypes()", values: str(sandboxrt.RecordingActorTypes())},
 	}
 	for _, table := range []string{
 		"agent_runs", "agents", "calibration_snapshots", "cost_accounting", "counterfactuals",

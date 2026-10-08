@@ -368,3 +368,10 @@ Two defects in `scripts/seed`, both of which hid behind a misleading error.
 - **Problem:** V1 reserved EVENT_OUTCOME as "representable but never activatable"; a new PREDICTION_CONTRACT type would duplicate the concept.
 - **Chosen:** reuse EVENT_OUTCOME, and make every non-SPOT_PAIR instrument settle only in a SIMULATED asset (IN001). The V1 promise stays true for real value.
 - **Evidence:** `internal/instruments` `TestIntegration_CanonicalInstrumentsAreVersionedAndSimulatedOnly`.
+
+## D-054 — Margin and derivative books are margined separately; buying power sums them
+
+- **Problem:** the margin engine can take derivative exposures in for cross-margining (`margin.Dependencies.Derivatives`), and the derivatives book reports its own margin to buying power V2. Doing both would count every derivative requirement twice.
+- **Chosen:** the margin book margins spot leverage only (its derivative exposure source is not wired); the derivatives book margins its positions against its clearing house; buying power V2 reads both through `buyingpower.CombinedMarginReader`, which sums what each owes and must hold and keeps the strictest initial-margin rate. No offset between the two books is ever credited, so the combination is conservative: it can show less buying power than true cross-margining would, never more.
+- **Consequence:** margin liquidation cannot close a derivative position (such cases go to MANUAL_REVIEW, as the margin package states). Cross-book netting would need a single evaluator over both books and is not built.
+- **Evidence:** `TestCombinedMarginReader_SumsAndKeepsTheStrictestRate`, `TestIntegration_BuyingPowerV2SeesTheMarginEngine`.

@@ -143,7 +143,7 @@ func (l *V2Loader) Load(ctx context.Context, q db.Querier, ownerType, ownerID st
 		FROM ledger_accounts la JOIN ledger_balances lb ON lb.ledger_account_id = la.id
 		WHERE la.owner_type = $1 AND la.owner_id = $2 AND la.value_domain = 'SIMULATED'
 		  AND la.code IN ('WALLET','HOUSE_INVENTORY','MARGIN_COLLATERAL','DERIVATIVES_MARGIN',
-		                  'UNSETTLED_RECEIVABLE','BRIDGE_IN_FLIGHT','MARGIN_LOAN')
+		                  'UNSETTLED_RECEIVABLE','BRIDGE_IN_FLIGHT','MARGIN_LOAN','DEFICIT')
 		  AND lb.balance <> 0
 		ORDER BY la.code, la.asset_id`, ownerType, ownerID)
 	if err != nil {
@@ -183,11 +183,18 @@ func (l *V2Loader) Load(ctx context.Context, q db.Querier, ownerType, ownerID st
 		if err != nil {
 			return V2Input{}, fmt.Errorf("buyingpower v2: asset %s: %w", b.asset, err)
 		}
-		marked, priced, err := l.mark(ctx, q, a, quote, b.qty, now)
+		liability := b.code == "MARGIN_LOAN" || b.code == "DEFICIT"
+		// What the owner holds rounds down and what it owes rounds up, so a
+		// rounding never shows more buying power than the books support.
+		rounding := money.RoundDown
+		if liability {
+			rounding = money.RoundUp
+		}
+		marked, priced, err := l.mark(ctx, q, a, quote, b.qty, now, rounding)
 		if err != nil {
 			return V2Input{}, err
 		}
-		if b.code == "MARGIN_LOAN" {
+		if liability {
 			if !priced {
 				// A liability we cannot value makes equity unknowable: fail
 				// closed rather than understate debt.
@@ -197,6 +204,14 @@ func (l *V2Loader) Load(ctx context.Context, q db.Querier, ownerType, ownerID st
 			}
 			if borrow, err = borrow.Add(marked); err != nil {
 				return V2Input{}, errs.Wrap(err, errs.CodeOverflow, "buyingpower v2: borrow overflow")
+			}
+			if b.code == "DEFICIT" && b.qty.IsPositive() {
+				// A deficit is what a bankrupt margin account still owes the
+				// insurance fund after liquidation. It is a liability, and
+				// until it is repaid the owner takes no new risk and
+				// withdraws nothing.
+				in.Blocked = true
+				in.BlockReasons = append(in.BlockReasons, "DEFICIT_OUTSTANDING:"+a.Symbol)
 			}
 			continue
 		}
@@ -278,12 +293,13 @@ func (l *V2Loader) Compute(ctx context.Context, q db.Querier, ownerType, ownerID
 	return EvaluateV2(in)
 }
 
-// mark values qty of a in USD minor units, rounding down. The quote asset is
-// valued at face; anything else needs a fresh price. priced is false when no
-// fresh mark exists.
-func (l *V2Loader) mark(ctx context.Context, q db.Querier, a, quote assets.Asset, qty money.Quantity, now time.Time) (money.USD, bool, error) {
+// mark values qty of a in USD minor units, rounding in the given mode (down
+// for what is held, up for what is owed). The quote asset is valued at face;
+// anything else needs a fresh price. priced is false when no fresh mark
+// exists.
+func (l *V2Loader) mark(ctx context.Context, q db.Querier, a, quote assets.Asset, qty money.Quantity, now time.Time, mode money.RoundingMode) (money.USD, bool, error) {
 	if a.ID == quote.ID {
-		u, err := money.QuoteQuantityToUSD(qty, quote.Decimals, money.RoundDown)
+		u, err := money.QuoteQuantityToUSD(qty, quote.Decimals, mode)
 		if err != nil {
 			return money.USD{}, false, errs.Wrap(err, errs.CodeOverflow, "buyingpower v2: face value")
 		}
@@ -296,11 +312,11 @@ func (l *V2Loader) mark(ctx context.Context, q db.Querier, a, quote assets.Asset
 		}
 		return money.USD{}, false, err
 	}
-	notional, err := money.Notional(qty, a.Decimals, p, quote.Decimals, money.RoundDown)
+	notional, err := money.Notional(qty, a.Decimals, p, quote.Decimals, mode)
 	if err != nil {
 		return money.USD{}, false, errs.Wrap(err, errs.CodeOverflow, "buyingpower v2: notional")
 	}
-	u, err := money.QuoteQuantityToUSD(notional, quote.Decimals, money.RoundDown)
+	u, err := money.QuoteQuantityToUSD(notional, quote.Decimals, mode)
 	if err != nil {
 		return money.USD{}, false, errs.Wrap(err, errs.CodeOverflow, "buyingpower v2: notional to usd")
 	}
@@ -346,7 +362,7 @@ func (l *V2Loader) valued(ctx context.Context, q db.Querier, quote assets.Asset,
 		if a.ValueDomain != "SIMULATED" {
 			continue
 		}
-		m, _, err := l.mark(ctx, q, a, quote, r.qty, now)
+		m, _, err := l.mark(ctx, q, a, quote, r.qty, now, money.RoundUp) // held back: rounds against the owner
 		if err != nil {
 			return money.USD{}, err
 		}

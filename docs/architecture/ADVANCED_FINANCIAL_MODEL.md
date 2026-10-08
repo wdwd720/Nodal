@@ -35,6 +35,7 @@ schema version. Enabling any of it is a code change, a migration and a gate cere
 | Ledger V2 chart | `internal/ledger` (`advanced.go`) | 00731 | — |
 | Canonical instrument model | `internal/instruments` | 00732 | — |
 | Kernel amendments: multi-step transition binding, reservation ↔ economic intent, transfer notifications | `internal/econ`, `internal/capital`, `internal/notification` | 00733 | — |
+| Economic intent status machine in SQL (EI001) | `internal/econ` | 00734 | — |
 | Matching engine (pure) | `internal/matching` | — | — |
 | Fixed-point options analytics (pure) | `internal/quant` | — | — |
 | Spread / fee / performance-fee engines (pure) | `internal/fees` | — | — |

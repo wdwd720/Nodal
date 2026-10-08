@@ -86,9 +86,6 @@ type ExerciseRequest struct {
 // the intent in ROUTED to proceed with, or an outcome to return as is: a
 // replay of an earlier attempt or a refusal.
 func (s *Service) begin(ctx context.Context, tx pgx.Tx, r IntentRequest, kind econ.IntentKind, spec Spec, qty *money.Quantity, terms map[string]string) (econ.Intent, *Outcome, error) {
-	if err := checkTransitionsPerStatement(ctx, tx); err != nil {
-		return econ.Intent{}, nil, err
-	}
 	if err := s.serializeClearing(ctx, tx); err != nil {
 		return econ.Intent{}, nil, err
 	}
@@ -239,7 +236,8 @@ func (s *Service) OpenPosition(ctx context.Context, tx pgx.Tx, r OpenRequest) (O
 	if reserve.IsPositive() {
 		res, err := s.capital.Reserve(ctx, tx, capital.ReserveRequest{
 			AccountID: r.AccountID.String(), AssetID: spec.SettlementAssetID, Quantity: reserve,
-			ActorType: s.actor.Type, ActorID: s.actor.ID, IdempotencyKey: "derivatives:reserve:" + in.ID.String(),
+			EconomicIntentID: in.ID.String(),
+			ActorType:        s.actor.Type, ActorID: s.actor.ID, IdempotencyKey: "derivatives:reserve:" + in.ID.String(),
 			TTL: s.reservationTTL, Reason: "derivative initial margin and premium",
 		})
 		if errs.CodeOf(err) == errs.CodeInsufficientBuyingPower {

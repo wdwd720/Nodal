@@ -31,15 +31,18 @@ import (
 	"github.com/nodal/controlplane/internal/compliance"
 	"github.com/nodal/controlplane/internal/config"
 	"github.com/nodal/controlplane/internal/db"
+	"github.com/nodal/controlplane/internal/derivatives"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/event"
 	"github.com/nodal/controlplane/internal/gates"
+	"github.com/nodal/controlplane/internal/instruments"
 	"github.com/nodal/controlplane/internal/killswitch"
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/legalrouter"
 	"github.com/nodal/controlplane/internal/margin"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/notification"
+	"github.com/nodal/controlplane/internal/reconciliation"
 	"github.com/nodal/controlplane/internal/risk"
 	"github.com/nodal/controlplane/internal/sandboxfund"
 	"github.com/nodal/controlplane/internal/security"
@@ -80,9 +83,11 @@ type World struct {
 	Prices     *valuation.PriceStore
 	Capital    *capital.Service
 
-	Transfers *transfers.Service
-	Faucet    *sandboxfund.Faucet
-	Margin    *margin.Service
+	Transfers   *transfers.Service
+	Faucet      *sandboxfund.Faucet
+	Margin      *margin.Service
+	Derivatives *derivatives.Service
+	Instruments *instruments.Repository
 	// Identity is the production identity reader (compliance profiles).
 	Identity compliance.AccountVerification
 
@@ -168,6 +173,7 @@ func wire(d *db.DB, o Options) (*World, error) {
 	}
 	w.Faucet, err = sandboxfund.New(sandboxfund.Deps{
 		Clock: clk, Ledger: led, Effects: w.Effects, Environment: env, Policy: sandboxfund.DefaultPolicy(),
+		KillSwitches: kills,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("sandboxworld: faucet: %w", err)
@@ -184,6 +190,17 @@ func wire(d *db.DB, o Options) (*World, error) {
 	})
 	if err != nil {
 		return nil, fmt.Errorf("sandboxworld: margin: %w", err)
+	}
+	w.Instruments = instruments.NewRepository()
+	w.Derivatives, err = derivatives.NewService(derivatives.Config{
+		Clock: clk, Intents: w.Intents, Effects: w.Effects, Authorizer: w.Authorizer, Registry: w.Registry,
+		Ledger: led, Capital: w.Capital, RiskStore: w.Risk, RiskPolicy: risk.DefaultAdvancedPolicy(),
+		Policy: derivatives.DefaultPolicy(), Prices: w.Prices, Instruments: w.Instruments, Router: router,
+		KillSwitches: kills, Reconciliation: reconciliation.NewRepository(clk, out, aw),
+		USDAssetID: econ.SandboxDollarID(), ClearingHouseName: "Sandbox clearing house",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("sandboxworld: derivatives: %w", err)
 	}
 	return w, nil
 }
