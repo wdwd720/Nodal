@@ -49,9 +49,12 @@ func q6(n int64) money.Quantity { return money.QuantityFromInt64(n) }
 
 // TestIntegration_V2ComposesEverySimulatedComponentAndIgnoresRealCapital
 // drives buying power V2 over real ledger balances: a sandbox dollar wallet,
-// BTC posted as margin collateral at a recorded mark, a margin loan from a
-// lending-pool facility, and a bridge leg in flight -- plus a REAL-capital
-// wallet on the same account that V2 must never value.
+// BTC posted as margin collateral at a recorded mark and a margin loan from a
+// lending-pool facility -- plus a REAL-capital wallet on the same account that
+// V2 must never value. A bridge leg in flight is covered where a real one can
+// be made: a bridge journal exists only for a leg of a route (BR005), so
+// internal/bridge's TestIntegration_TheV2LoaderCountsALegInFlightOnlyAsItsHaircut
+// runs this loader over a leg the bridge itself put in flight.
 func TestIntegration_V2ComposesEverySimulatedComponentAndIgnoresRealCapital(t *testing.T) {
 	d := openTestDB(t)
 	ctx := context.Background()
@@ -60,7 +63,6 @@ func TestIntegration_V2ComposesEverySimulatedComponentAndIgnoresRealCapital(t *t
 	acct := seedAccount(t, d)
 	usd := simAssetV2(t, d, "SBXUSD", 6, assets.RiskSettlement)
 	btc := simAssetV2(t, d, "SBXBTC", 8, assets.RiskMajor)
-	usdSol := simAssetV2(t, d, "SBXUSDS", 6, assets.RiskSettlement)
 	real := seedAssetRow(t, d, "USDC", 6, true, assets.RiskSettlement)
 	seedWalletBalance(t, d, acct, real.ID, q6(9_999_000_000)) // real capital: must not appear
 
@@ -82,14 +84,11 @@ func TestIntegration_V2ComposesEverySimulatedComponentAndIgnoresRealCapital(t *t
 	})
 	// Borrow $500 from a lending pool.
 	reg := econ.NewRegistry()
-	var pool, bridgeF econ.Facility
+	var pool econ.Facility
 	require.NoError(t, d.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
-		by := econ.Actor{Type: security.ActorSystem, ID: "itest"}
 		var err error
-		if pool, err = reg.EnsureFacility(ctx, tx, ledger.FacilityLendingPool, "bp2 pool "+uuid.NewString(), by); err != nil {
-			return err
-		}
-		bridgeF, err = reg.EnsureFacility(ctx, tx, ledger.FacilityBridge, "bp2 bridge "+uuid.NewString(), by)
+		pool, err = reg.EnsureFacility(ctx, tx, ledger.FacilityLendingPool, "bp2 pool "+uuid.NewString(),
+			econ.Actor{Type: security.ActorSystem, ID: "itest"})
 		return err
 	}))
 	postV2(t, d, svc, ledger.KindFacilityFunding, []ledger.Entry{
@@ -102,40 +101,23 @@ func TestIntegration_V2ComposesEverySimulatedComponentAndIgnoresRealCapital(t *t
 		{Account: pool.Account(ledger.CodeLoanReceivable, usd.ID), Side: ledger.Debit, Quantity: q6(500_000_000)},
 		{Account: pool.Account(ledger.CodePoolCash, usd.ID), Side: ledger.Credit, Quantity: q6(500_000_000)},
 	})
-	// $300 on a simulated chain, sent over a bridge and not yet final.
-	postV2(t, d, svc, ledger.KindSandboxFunding, []ledger.Entry{
-		{Account: cust(ledger.CodeWallet, usdSol.ID), Side: ledger.Debit, Quantity: q6(300_000_000)},
-		{Account: cust(ledger.CodeCapital, usdSol.ID), Side: ledger.Credit, Quantity: q6(300_000_000)},
-	})
-	postV2(t, d, svc, ledger.KindBridgeSourceFinalized, []ledger.Entry{
-		{Account: cust(ledger.CodeBridgeInFlight, usdSol.ID), Side: ledger.Debit, Quantity: q6(300_000_000)},
-		{Account: cust(ledger.CodeWallet, usdSol.ID), Side: ledger.Credit, Quantity: q6(300_000_000)},
-		{Account: bridgeF.Account(ledger.CodeBridgeLocked, usdSol.ID), Side: ledger.Debit, Quantity: q6(300_000_000)},
-		{Account: bridgeF.Account(ledger.CodeBridgeLockFunding, usdSol.ID), Side: ledger.Credit, Quantity: q6(300_000_000)},
-	})
-	// Marks: BTC $60,000.00; the second-chain dollar at par.
+	// Mark: BTC $60,000.00.
 	prices := valuation.NewPriceStore(clk)
-	for _, p := range []struct {
-		a        assets.AssetID
-		mantissa int64
-		scale    int32
-	}{{btc.ID, 6_000_000, 2}, {usdSol.ID, 1, 0}} {
-		_, err := prices.RecordPrice(ctx, d.Pool(), valuation.PriceObservation{AssetID: p.a, QuoteAssetID: usd.ID,
-			Mantissa: money.QuantityFromInt64(p.mantissa), Scale: p.scale, Source: "bp2-itest", ObservedAt: clk.Now().Add(-time.Second)})
-		require.NoError(t, err)
-	}
+	_, err := prices.RecordPrice(ctx, d.Pool(), valuation.PriceObservation{AssetID: btc.ID, QuoteAssetID: usd.ID,
+		Mantissa: money.QuantityFromInt64(6_000_000), Scale: 2, Source: "bp2-itest", ObservedAt: clk.Now().Add(-time.Second)})
+	require.NoError(t, err)
 
 	loader, err := buyingpower.NewV2Loader(buyingpower.V2LoaderConfig{Clock: clk, Prices: prices, QuoteAssetID: usd.ID, MaxPriceAge: time.Minute})
 	require.NoError(t, err)
 	bp, err := loader.Compute(ctx, d.Pool(), "CUSTOMER", acct.String())
 	require.NoError(t, err)
 
-	// Marked: cash 2,500 + BTC collateral 6,000 + in flight 300 = 8,800; debt 500.
-	assert.Equal(t, money.USDFromMinor(8_300_00), bp.GrossEquity, "real capital must not appear: %+v", bp)
-	// Eligible: 2,500 + 6,000 × 80% + 0 (in flight) = 7,300.
+	// Marked: cash 2,500 + BTC collateral 6,000 = 8,500; debt 500.
+	assert.Equal(t, money.USDFromMinor(8_000_00), bp.GrossEquity, "real capital must not appear: %+v", bp)
+	// Eligible: 2,500 + 6,000 × 80% = 7,300.
 	assert.Equal(t, money.USDFromMinor(7_300_00), bp.EligibleCollateral)
-	assert.Equal(t, money.USDFromMinor(1_500_00), bp.Haircuts, "1,200 BTC haircut + 300 in flight")
-	assert.Equal(t, money.USDFromMinor(300_00), bp.PendingBridgeHaircut)
+	assert.Equal(t, money.USDFromMinor(1_200_00), bp.Haircuts, "the BTC haircut")
+	assert.True(t, bp.PendingBridgeHaircut.IsZero(), "nothing is in flight")
 	assert.Equal(t, money.USDFromMinor(500_00), bp.BorrowLiabilities)
 	assert.Equal(t, money.USDFromMinor(2_500_00), bp.TradeBuyingPower, "spendable sandbox cash")
 	assert.Equal(t, money.USDFromMinor(2_500_00), bp.Withdrawable)
@@ -144,7 +126,7 @@ func TestIntegration_V2ComposesEverySimulatedComponentAndIgnoresRealCapital(t *t
 	clk.Advance(10 * time.Minute)
 	bp, err = loader.Compute(ctx, d.Pool(), "CUSTOMER", acct.String())
 	require.NoError(t, err)
-	assert.Equal(t, money.USDFromMinor(2_500_00), bp.EligibleCollateral, "stale BTC and unpriced bridge leg contribute nothing")
+	assert.Equal(t, money.USDFromMinor(2_500_00), bp.EligibleCollateral, "stale BTC contributes nothing")
 }
 
 // TestIntegration_V2CountsWhatIsOwedAgainstTheOwner: liabilities round up
