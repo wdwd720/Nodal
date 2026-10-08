@@ -101,7 +101,8 @@ type World struct {
 	OrderPipeline *orders.Pipeline
 	// Predictions runs prediction markets; Oracle is the deterministic
 	// sandbox oracle (a signing key derived from the component name) whose
-	// reports alone can resolve them.
+	// reports alone can resolve them. Its observations are recorded through
+	// Predictions.RecordObservation and stored in the database.
 	Predictions *predmarket.Service
 	Oracle      *predmarket.SandboxOracle
 
@@ -257,7 +258,7 @@ func wire(d *db.DB, o Options) (*World, error) {
 		Clock: clk, Intents: w.Intents, Effects: w.Effects, Authorizer: w.Authorizer, Registry: w.Registry,
 		KillSwitches: kills, Ledger: led, Capital: w.Capital, Risk: w.Risk, RiskPolicy: risk.DefaultAdvancedPolicy(),
 		Router: router, Instruments: w.Instruments, Assets: w.Assets,
-		Reconciliation: reconciliation.NewRepository(clk, out, aw), Audit: aw, Oracle: w.Oracle,
+		Reconciliation: reconciliation.NewRepository(clk, out, aw), Audit: aw, SandboxOracle: w.Oracle,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("sandboxworld: prediction markets: %w", err)

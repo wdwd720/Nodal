@@ -34,6 +34,9 @@
 //   - Grant anything but a SIMULATED asset. Fund refuses it, the ledger
 //     refuses a non-simulated account in a SANDBOX_FUNDING journal (SM001),
 //     and the grant table refuses it again (SF001).
+//   - Grant a prediction-market outcome share: a share exists only as its
+//     market issues it. Fund refuses it by name (RefusalPredictionShare), and
+//     the ledger refuses any SANDBOX_FUNDING journal on a share (PM008).
 //   - Grant beyond the policy cap, or grant twice for one idempotency key.
 //   - Accept an agent or an operator as the requester, or let a customer
 //     fund an account they do not own.

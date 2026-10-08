@@ -153,12 +153,21 @@ func TestIntegration_TheDatabaseBindsTheMarketLifecycle(t *testing.T) {
 		VALUES ($1,$2,'PAYOUT',$3,0,2,1000000,'EXACT',1000000,999999,0,1,'x',$4,'OPERATOR',$5,now())`,
 		uuid.New(), r.ID, *resolved.CurrentResolutionID, make([]byte, 32), f.third.ID)
 	assert.Equal(t, "prediction_settlements_conserves", db.ConstraintName(err), "%v", err)
-	// A refund record must name floor(unit / N).
-	err = exec(`INSERT INTO prediction_settlements (id, market_id, kind, outcome_count, unit_quantity, refund_rate_per_share,
+	// A refund record must name floor(unit / N) -- even behind a void that two
+	// operators approved (without one, PM007 refuses it first).
+	refund := `INSERT INTO prediction_settlements (id, market_id, kind, outcome_count, unit_quantity, refund_rate_per_share,
 		rounding_policy, escrow_before, total_paid, residual, holder_count, evidence_ref, evidence_sha256,
 		settled_by_actor_type, settled_by_actor_id, settled_at)
-		VALUES ($1,$2,'REFUND',2,1000000,500001,'FLOOR_PER_HOLDER',1000000,1000000,0,1,'x',$3,'OPERATOR',$4,now())`,
-		uuid.New(), r.ID, make([]byte, 32), f.third.ID)
+		VALUES ($1,$2,'REFUND',2,1000000,500001,'FLOOR_PER_HOLDER',1000000,1000000,0,1,'x',$3,'OPERATOR',$4,now())`
+	err = exec(refund, uuid.New(), r.ID, make([]byte, 32), f.third.ID)
+	assert.Equal(t, "PM007", db.SQLState(err), "a refund needs an approved void: %v", err)
+	err = f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+		if err := rawApprovedVoid(ctx, tx, f.get(r), f.third, f.approver); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, refund, uuid.New(), r.ID, make([]byte, 32), f.approver.ID)
+		return err
+	})
 	assert.Equal(t, "prediction_settlements_refund_rate", db.ConstraintName(err), "%v", err)
 
 	// The resolution pointer moves only on a transition into RESOLVED.
@@ -239,9 +248,15 @@ func TestIntegration_SQLAndGoAgreeOnMarketTransitions(t *testing.T) {
 func TestIntegration_EveryEnumCheckMatchesItsGoList(t *testing.T) {
 	requireEnv(t)
 	str := func(vs ...string) []string { sort.Strings(vs); return vs }
-	var statuses, modes, actors, kinds, settlements, policies []string
+	var statuses, modes, actors, kinds, settlements, policies, voidable, claimers []string
 	for _, s := range AllMarketStatuses() {
 		statuses = append(statuses, string(s))
+	}
+	for _, s := range VoidableStatuses() {
+		voidable = append(voidable, string(s))
+	}
+	for _, a := range ClaimActorTypes() {
+		claimers = append(claimers, string(a))
 	}
 	for _, m := range SupportedModes() {
 		modes = append(modes, string(m))
@@ -265,6 +280,10 @@ func TestIntegration_EveryEnumCheckMatchesItsGoList(t *testing.T) {
 		"prediction_resolutions.prediction_resolutions_kind_check":                     str(kinds...),
 		"prediction_settlements.prediction_settlements_kind_check":                     str(settlements...),
 		"prediction_settlements.prediction_settlements_rounding_policy_check":          str(policies...),
+		// Migration 00756.
+		"prediction_void_proposals.prediction_void_proposals_market_status_check":                 str(voidable...),
+		"prediction_held_payouts.prediction_held_payouts_kind_check":                              str(settlements...),
+		"prediction_held_payout_claims.prediction_held_payout_claims_claimed_by_actor_type_check": str(claimers...),
 	}
 	rows, err := testDB.Query(context.Background(), `SELECT conrelid::regclass::text || '.' || conname, pg_get_constraintdef(oid)
 		FROM pg_constraint WHERE contype = 'c' AND conrelid::regclass::text LIKE 'prediction\_%'
@@ -298,7 +317,8 @@ func TestIntegration_EveryEnumCheckMatchesItsGoList(t *testing.T) {
 
 func isPredmarketTable(qualified string) bool {
 	for _, t := range []string{"prediction_markets.", "prediction_market_transitions.", "prediction_outcomes_registry.",
-		"prediction_resolutions.", "prediction_disputes.", "prediction_settlements."} {
+		"prediction_resolutions.", "prediction_disputes.", "prediction_settlements.", "prediction_oracle_observations.",
+		"prediction_void_proposals.", "prediction_void_approvals.", "prediction_held_payouts.", "prediction_held_payout_claims."} {
 		if len(qualified) > len(t) && qualified[:len(t)] == t {
 			return true
 		}
