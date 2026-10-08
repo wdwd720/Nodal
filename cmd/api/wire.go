@@ -34,8 +34,10 @@ import (
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/derivatives"
 	"github.com/nodal/controlplane/internal/econ"
+	"github.com/nodal/controlplane/internal/equities"
 	"github.com/nodal/controlplane/internal/event"
 	"github.com/nodal/controlplane/internal/execution"
+	"github.com/nodal/controlplane/internal/fees"
 	"github.com/nodal/controlplane/internal/funding"
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/httpapi"
@@ -47,10 +49,12 @@ import (
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/legalrouter"
 	"github.com/nodal/controlplane/internal/margin"
+	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/nativeasset"
 	"github.com/nodal/controlplane/internal/nativemarket"
 	"github.com/nodal/controlplane/internal/notification"
 	"github.com/nodal/controlplane/internal/observability"
+	"github.com/nodal/controlplane/internal/orders"
 	"github.com/nodal/controlplane/internal/payout"
 	"github.com/nodal/controlplane/internal/positions"
 	"github.com/nodal/controlplane/internal/predmarket"
@@ -390,8 +394,100 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	}
 
 	// >>> advanced:equities services
+	//
+	// Paper and sandbox equities (internal/equities). The broker boundary is
+	// chosen from the environment and the execution provider's mode:
+	// equities.NewExecutionAdapter refuses provider mode live unconditionally
+	// and fake or sandbox outside LOCAL, TEST and DEV, so in STAGING and PROD
+	// there is no adapter, no service, and the equities routes answer
+	// UNSUPPORTED. Where it runs it is the deterministic paper venue, never a
+	// test double: its calendar is XNYS with the closures recorded when the
+	// process started (the service itself reads the recorded closures on
+	// every order, so a closure added later still stops orders on its day).
+	// Identity is the advanced capabilities' one rule (D-055).
+	//
+	// Charges: one schedule, in the sandbox dollar, every component of it
+	// itemized on each fill's stored disclosure -- a 10 bps spread, a 10 bps
+	// platform fee, 5 bps more for a strategy-originated order, and a 50 bps
+	// slippage reserve that is held against adverse execution and never
+	// charged. No venue fee is passed through: the paper venue charges none.
+	// A market order's protection price (and its reservation) is 1% beyond
+	// the venue's indicative price; the smallest order is worth one sandbox
+	// dollar. Settlement is the sandbox dollar; nothing here creates an asset.
+	var equitiesSvc *equities.Service
+	equitiesHolidays, err := equities.Holidays(ctx, database, equities.CalendarXNYS)
+	if err != nil {
+		return nil, fmt.Errorf("equities holidays: %w", err)
+	}
+	equitiesCalendar, err := equities.NewCalendar(equities.CalendarXNYS, equitiesHolidays)
+	if err != nil {
+		return nil, fmt.Errorf("equities calendar: %w", err)
+	}
+	equitiesVenue, venueErr := equities.NewExecutionAdapter(cfg.Env, cfg.Providers.Execution.Mode, equities.PaperConfig{
+		Name: "nodal-paper-equities", Calendar: equitiesCalendar, SlippageBPS: 10,
+	})
+	if venueErr != nil {
+		log.Warn("no equities execution adapter in this deployment; the equities endpoints are disabled",
+			"environment", string(cfg.Env), "error", venueErr.Error())
+	} else {
+		equitiesRouter, rerr := legalRouterFor(cfg.Env, in.cfg.API.LegalPolicy)
+		if rerr != nil {
+			return nil, rerr
+		}
+		if equitiesRouter == nil {
+			if equitiesRouter, rerr = legalrouter.New(legalrouter.ConservativePolicy()); rerr != nil {
+				return nil, fmt.Errorf("equities legal router: %w", rerr)
+			}
+		}
+		equitiesSvc, err = equities.NewService(equities.Config{
+			Clock: clk, Intents: econ.NewIntentStore(clk, outbox, auditWriter), Effects: econ.NewEffectStore(clk, outbox, auditWriter),
+			Authorizer: econ.NewAuthorizer(gateChecker, killChecker), KillSwitches: killChecker, Router: equitiesRouter,
+			RiskPolicy: risk.DefaultAdvancedPolicy(), Capital: capitalSvc, Ledger: ledgerSvc, Prices: priceStore,
+			Audit: auditWriter, Adapter: equitiesVenue,
+			Schedules: []fees.Schedule{{
+				Version: "equities-sandbox-v1", QuoteAsset: econ.SandboxDollarID(), QuoteDecimals: econ.SandboxDollarDecimals,
+				SpreadBPS: 10, PercentageFeeBPS: 10, StrategyFeeBPS: 5, SlippageReserveBPS: 50, Rounding: fees.DefaultRounding(),
+			}},
+			MarketCollarBPS: 100, MinOrderNotional: money.USDFromMinor(1_00),
+			Verification: httpapi.AdvancedVerificationLevels{Rule: compliance.NewAccountVerification(clk)},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("equities service: %w", err)
+		}
+	}
 
 	// >>> advanced:orders services
+	//
+	// The internal order book (internal/orders) and the pipeline that runs a
+	// customer order one stage per transaction. An operator opens each book;
+	// nothing here opens one. Identity is the advanced capabilities' one rule
+	// (D-055), and the legal router the determination the rest of the API
+	// applies. No exchange calendar is wired to the book, so only "24x7"
+	// instruments are in session (the package's fail-closed default).
+	ordersRouter, err := legalRouterFor(cfg.Env, in.cfg.API.LegalPolicy)
+	if err != nil {
+		return nil, err
+	}
+	if ordersRouter == nil {
+		if ordersRouter, err = legalrouter.New(legalrouter.ConservativePolicy()); err != nil {
+			return nil, fmt.Errorf("orders legal router: %w", err)
+		}
+	}
+	ordersSvc, err := orders.NewService(orders.Config{
+		Clock: clk, Ledger: ledgerSvc, Capital: capitalSvc,
+		Intents: econ.NewIntentStore(clk, outbox, auditWriter), Effects: econ.NewEffectStore(clk, outbox, auditWriter),
+		Authorizer: econ.NewAuthorizer(gateChecker, killChecker), Registry: econ.NewRegistry(), Risk: risk.NewStore(),
+		RiskPolicy: risk.DefaultAdvancedPolicy(), Router: ordersRouter, Instruments: instrumentRepo, Assets: assetRepo,
+		Prices: priceStore, KillSwitches: killChecker,
+		Verification: httpapi.AdvancedVerificationLevels{Rule: compliance.NewAccountVerification(clk)},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("orders service: %w", err)
+	}
+	ordersPipeline, err := orders.NewPipeline(ordersSvc, database)
+	if err != nil {
+		return nil, fmt.Errorf("orders pipeline: %w", err)
+	}
 
 	// >>> advanced:transfers services
 	//
@@ -555,8 +651,13 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		},
 
 		// >>> advanced:equities deps
+		// Nil where no execution adapter exists (STAGING, PROD): the routes
+		// then answer UNSUPPORTED. Listings show the freshest mark from the
+		// price store the service prices orders with.
+		Equities: httpapi.EquitiesDeps{Service: equitiesSvc, Prices: priceStore},
 
 		// >>> advanced:orders deps
+		Orders: httpapi.OrdersDeps{Service: ordersSvc, Pipeline: ordersPipeline},
 
 		// >>> advanced:transfers deps
 		Transfers: httpapi.TransfersDeps{

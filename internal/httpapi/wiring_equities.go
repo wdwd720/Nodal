@@ -781,10 +781,11 @@ func (a equitiesAdapter) RunVenue(ctx context.Context, limit int) (EquityVenueRu
 
 // equityActionsPageSQL pages corporate actions, newest effective date first,
 // optionally of one instrument.
-const equityActionsPageSQL = `SELECT id::text, effective_date::timestamp AT TIME ZONE 'UTC', id FROM equity_corporate_actions
-	WHERE ($1::uuid IS NULL OR instrument_id = $1::uuid)
-	  AND ($2::timestamptz IS NULL OR (effective_date::timestamp AT TIME ZONE 'UTC', id) < ($2::timestamptz, $3::uuid))
-	ORDER BY effective_date DESC, id DESC LIMIT $4`
+const equityActionsPageSQL = `SELECT a.id::text AS ref, a.effective_date::timestamp AT TIME ZONE 'UTC' AS at, a.id AS key
+	FROM equity_corporate_actions a
+	WHERE ($1::uuid IS NULL OR a.instrument_id = $1::uuid)
+	  AND ($2::timestamptz IS NULL OR (a.effective_date::timestamp AT TIME ZONE 'UTC', a.id) < ($2::timestamptz, $3::uuid))
+	ORDER BY a.effective_date DESC, a.id DESC LIMIT $4`
 
 func (a equitiesAdapter) CorporateActions(ctx context.Context, instrumentID *instruments.InstrumentID, cursor string, limit int) ([]equities.CorporateAction, string, error) {
 	limit = clampLimit(limit)
