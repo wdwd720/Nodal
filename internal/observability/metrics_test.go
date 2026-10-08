@@ -3,6 +3,7 @@ package observability
 import (
 	"context"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -216,4 +217,37 @@ func TestSafeAttrs(t *testing.T) {
 		keys = append(keys, string(kv.Key))
 	}
 	assert.Equal(t, []string{"reason"}, keys)
+}
+
+func TestAdvancedMetrics_InstrumentNames(t *testing.T) {
+	t.Parallel()
+	meter, reader := newTestMeter(t)
+	am, err := NewAdvancedMetrics(meter)
+	require.NoError(t, err)
+	ctx := context.Background()
+	for _, g := range []metric.Int64Gauge{am.GrossAssets, am.CustomerLiabilities, am.HouseAssets, am.ReserveCoverage,
+		am.MarginExposure, am.Leverage, am.LiquidationBuffer, am.UnmatchedEconomicEffects, am.ProviderMismatches,
+		am.ChainMismatches, am.ReserveMismatches} {
+		g.Record(ctx, 1)
+	}
+	for _, c := range []metric.Int64Counter{am.InternalMatchVolume, am.ExternalRouteVolume, am.RiskDenies, am.StaleOracleEvents,
+		am.MarginCalls, am.LiquidationEvents, am.CircuitBreakerEvents, am.IntentProposals, am.DeniedIntents, am.SigningRequests,
+		am.WithdrawalProposals, am.AuthorityViolations, am.SandboxRuns, am.SandboxKilledRuns, am.SandboxCPULimitHits,
+		am.SandboxMemoryLimitHits, am.SandboxNetworkViolations} {
+		c.Add(ctx, 1)
+	}
+	am.OrderLatency.Record(ctx, 3)
+	am.CancelLatency.Record(ctx, 2)
+	am.FillRate.Observe(ctx, true)
+	am.RejectionRate.Observe(ctx, true)
+
+	got := collect(t, reader)
+	names := sortedKeys(got)
+	require.Len(t, names, 34, "every §29 signal is one instrument: %v", names)
+	for _, n := range names {
+		assert.True(t, strings.HasPrefix(n, "advanced_"), "%s must be namespaced so simulated figures never mix with real ones", n)
+		assert.NotEmpty(t, got[n].Description, n)
+	}
+	assert.Equal(t, UnitBasisPoints, got["advanced_reserve_coverage"].Unit)
+	assert.Equal(t, UnitUSDMinor, got["advanced_customer_liabilities"].Unit)
 }
