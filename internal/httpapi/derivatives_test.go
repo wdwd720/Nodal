@@ -55,6 +55,7 @@ var (
 	testDerivRun      = "0193b2e0-0000-7000-8000-0000000000eb"
 	testDerivHouse    = "0193b2e0-0000-7000-8000-0000000000ec"
 	testDerivRecord   = "0193b2e0-0000-7000-8000-0000000000ed"
+	testDerivOverride = fixedID[derivatives.SettlementOverrideID]("0193b2e0-0000-7000-8000-0000000000ee")
 	testDerivIntent   = econ.NewIntentID()
 )
 
@@ -79,6 +80,8 @@ type fakeDerivatives struct {
 	lastMark     DerivativeMarkCommand
 	lastRun      DerivativeRunCommand
 	lastSettle   DerivativeSettleCommand
+	lastProposal DerivativeOverrideProposalCommand
+	lastDecision DerivativeOverrideDecisionCommand
 	lastFund     DerivativeClearingFundCommand
 	lastAsset    assets.AssetID
 
@@ -97,6 +100,7 @@ type fakeDerivatives struct {
 	mark       derivatives.Mark
 	run        DerivativeRunView
 	settlement DerivativeSettlementView
+	override   derivatives.SettlementOverride
 	fund       DerivativeClearingFundView
 	report     DerivativeClearingReportView
 }
@@ -244,6 +248,34 @@ func (f *fakeDerivatives) SettleExpiry(_ context.Context, c DerivativeSettleComm
 	f.lastSettle = c
 	f.mu.Unlock()
 	return f.settlement, f.err
+}
+
+func (f *fakeDerivatives) ProposeSettlementOverride(_ context.Context, c DerivativeOverrideProposalCommand) (derivatives.SettlementOverride, error) {
+	f.called("ProposeSettlementOverride")
+	f.mu.Lock()
+	f.lastProposal = c
+	f.mu.Unlock()
+	return f.override, f.err
+}
+
+func (f *fakeDerivatives) ApproveSettlementOverride(_ context.Context, c DerivativeOverrideDecisionCommand) (DerivativeOverrideApprovalView, error) {
+	f.called("ApproveSettlementOverride")
+	f.mu.Lock()
+	f.lastDecision = c
+	f.mu.Unlock()
+	o := f.override
+	o.Status = derivatives.OverrideApproved
+	return DerivativeOverrideApprovalView{Override: o, Settlement: f.settlement}, f.err
+}
+
+func (f *fakeDerivatives) RejectSettlementOverride(_ context.Context, c DerivativeOverrideDecisionCommand) (derivatives.SettlementOverride, error) {
+	f.called("RejectSettlementOverride")
+	f.mu.Lock()
+	f.lastDecision = c
+	f.mu.Unlock()
+	o := f.override
+	o.Status = derivatives.OverrideRejected
+	return o, f.err
 }
 
 func (f *fakeDerivatives) FundClearingHouse(_ context.Context, c DerivativeClearingFundCommand) (DerivativeClearingFundView, error) {
@@ -400,6 +432,12 @@ func newFakeDerivatives() *fakeDerivatives {
 				Exercises: []derivatives.ExerciseID{testDerivExercise}, Journals: []ledger.TransactionID{jid},
 			},
 		},
+		override: derivatives.SettlementOverride{
+			ID: testDerivOverride, InstrumentID: testDerivInstr, PriceMantissa: qty("6700000"), PriceScale: 2,
+			ReferenceMarkID: testDerivMark, ReferenceMantissa: qty("6600000"), MaxDeviationBPS: 1_000, Reason: "stalled feed",
+			EvidenceRef: "s3://sandbox-evidence/bulletin.pdf", EvidenceSHA256: make([]byte, 32),
+			ProposedBy: econ.Actor{Type: security.ActorOperator, ID: "op-alice"}, ProposedAt: testNow, Status: derivatives.OverrideProposed,
+		},
 		fund: DerivativeClearingFundView{Asset: sbx, Quantity: qty("10000000000000"), Journals: []ledger.TransactionID{jid}},
 		report: DerivativeClearingReportView{
 			Asset: sbx,
@@ -451,6 +489,12 @@ func openBody() map[string]any {
 	}
 }
 
+// overrideProposalBody is a valid settlement override proposal at price.
+func overrideProposalBody(price string) map[string]any {
+	return map[string]any{"method": "PROPOSE_OVERRIDE", "price": price, "reason": "the feed stalled before expiry",
+		"evidence_ref": "s3://sandbox-evidence/bulletin.pdf", "evidence_sha256": strings.Repeat("ab", 32)}
+}
+
 // derivativeMutation is one command route with a valid body and a variation
 // of it, and the port method it reaches.
 type derivativeMutation struct {
@@ -481,7 +525,15 @@ func derivativeMutations() []derivativeMutation {
 		{name: "funding", path: instr + "/funding-runs", body: map[string]any{"interval_start": "2026-09-06T00:00:00Z"},
 			method: "RunFunding", operator: true, status: http.StatusOK, changed: map[string]any{"interval_start": "2026-09-05T16:00:00Z"}},
 		{name: "settlement", path: instr + "/settlement", body: map[string]any{}, method: "SettleExpiry", operator: true,
-			status: http.StatusOK, changed: map[string]any{"price": "66000", "price_source": "operator"}},
+			status: http.StatusOK, changed: map[string]any{"price": "66000", "price_source": "mark:x"}},
+		{name: "settlement proposal", path: instr + "/settlement", body: overrideProposalBody("67000"), method: "ProposeSettlementOverride",
+			operator: true, status: http.StatusOK, changed: overrideProposalBody("67050")},
+		{name: "settlement approval", path: instr + "/settlement", method: "ApproveSettlementOverride", operator: true, status: http.StatusOK,
+			body:    map[string]any{"method": "APPROVE_OVERRIDE", "override_id": testDerivOverride.String(), "reason": "checked"},
+			changed: map[string]any{"method": "APPROVE_OVERRIDE", "override_id": testDerivOverride.String(), "reason": "checked", "price": "67000"}},
+		{name: "settlement rejection", path: instr + "/settlement", method: "RejectSettlementOverride", operator: true, status: http.StatusOK,
+			body:    map[string]any{"method": "REJECT_OVERRIDE", "override_id": testDerivOverride.String(), "reason": "superseded"},
+			changed: map[string]any{"method": "REJECT_OVERRIDE", "override_id": testDerivOverride.String(), "reason": "wrong"}},
 		{name: "clearing funding", path: derivBase + "/clearing-house/funding", body: map[string]any{"quantity": "10000000000000"},
 			method: "FundClearingHouse", operator: true, status: http.StatusOK, changed: map[string]any{"quantity": "1"}},
 		{name: "reconciliation", path: derivBase + "/clearing-house/reconciliations", body: map[string]any{},
@@ -941,7 +993,8 @@ func TestDerivatives_AServiceReplayIsNotACreation(t *testing.T) {
 // clearing house) -- not to record a mark or reconcile.
 func TestDerivatives_OperatorActionsNeedOperateAndStepUpWhereValueMoves(t *testing.T) {
 	t.Parallel()
-	stepUp := map[string]bool{"variation margin": true, "funding": true, "settlement": true, "clearing funding": true}
+	stepUp := map[string]bool{"variation margin": true, "funding": true, "settlement": true, "settlement proposal": true,
+		"settlement approval": true, "settlement rejection": true, "clearing funding": true}
 	for _, m := range derivativeMutations() {
 		if !m.operator {
 			continue
@@ -1083,8 +1136,12 @@ func TestDerivatives_FlowsAccrualsSettlementAndTheClearingHouseAreExact(t *testi
 	res = h.do(http.MethodPost, derivBase+"/contracts/"+testDerivInstr.String()+"/settlement", map[string]any{}, "Idempotency-Key", "settle-shape-001")
 	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
 	assert.Nil(t, fd.lastSettle.Price, "without a price the service derives it")
-	var st api.DerivativeSettlementResult
-	res.json(&st)
+	var cmd api.DerivativeSettlementCommandResult
+	res.json(&cmd)
+	assert.Equal(t, api.DerivativeSettleByRule, cmd.Method)
+	assert.Nil(t, cmd.Override)
+	require.NotNil(t, cmd.Settlement)
+	st := *cmd.Settlement
 	assert.Equal(t, api.DerivativeSettlementOption, st.Kind)
 	require.NotNil(t, st.IntrinsicPerContract)
 	assert.Equal(t, "1000000", *st.IntrinsicPerContract)
@@ -1173,4 +1230,129 @@ func TestDerivatives_TheDeploymentLegalPoliciesRouteEveryDerivativeIntent(t *tes
 			assert.Equal(t, legalrouter.ProductSimulation, route.Product, "%s under %s", kind, pol.Version)
 		}
 	}
+}
+
+// A settlement command takes exactly its method's fields: a field of another
+// method, a missing required one, malformed evidence or an unknown method is
+// a validation error and reaches no service.
+func TestDerivatives_ASettlementCommandTakesOnlyItsMethodsFields(t *testing.T) {
+	t.Parallel()
+	h, fd := newDerivativesHarness(t)
+	op := operatorPrincipal()
+	h.as(&op)
+	path := derivBase + "/contracts/" + testDerivInstr.String() + "/settlement"
+	hex64 := strings.Repeat("ab", 32)
+	id := testDerivOverride.String()
+	for i, body := range []map[string]any{
+		{"method": "SOMETHING_ELSE"},
+		{"reason": "a rule settlement states no reason"},
+		{"evidence_ref": "s3://x"},
+		{"override_id": id},
+		{"method": "PROPOSE_OVERRIDE", "price": "67000", "reason": "stalled"},
+		{"method": "PROPOSE_OVERRIDE", "price": "67000", "reason": "stalled", "evidence_ref": "s3://x", "evidence_sha256": "abcd"},
+		{"method": "PROPOSE_OVERRIDE", "price": "67000", "evidence_ref": "s3://x", "evidence_sha256": hex64},
+		{"method": "PROPOSE_OVERRIDE", "reason": "stalled", "evidence_ref": "s3://x", "evidence_sha256": hex64},
+		{"method": "PROPOSE_OVERRIDE", "price": "67000", "reason": "stalled", "evidence_ref": "s3://x", "evidence_sha256": hex64,
+			"price_source": "mark:x"},
+		{"method": "APPROVE_OVERRIDE", "reason": "agreed"},
+		{"method": "APPROVE_OVERRIDE", "override_id": id},
+		{"method": "APPROVE_OVERRIDE", "override_id": id, "reason": "agreed", "evidence_ref": "s3://x"},
+		{"method": "REJECT_OVERRIDE", "override_id": id, "reason": "wrong", "price": "67000"},
+		{"method": "PROPOSE_OVERRIDE", "price": "6.7e4", "reason": "stalled", "evidence_ref": "s3://x", "evidence_sha256": hex64},
+	} {
+		res := h.do(http.MethodPost, path, body, "Idempotency-Key", "settle-fields-"+string(rune('a'+i)))
+		require.Equal(t, http.StatusBadRequest, res.Code, "%v body=%s", body, res.Body.String())
+	}
+	for _, m := range []string{"SettleExpiry", "ProposeSettlementOverride", "ApproveSettlementOverride", "RejectSettlementOverride"} {
+		assert.Zero(t, fd.count(m), m)
+	}
+}
+
+// The override commands carry the operator's words exactly -- the price as
+// written, the reason, the evidence and its digest, the proposal decided --
+// and answer with the proposal (and, for an approval, the settlement it made).
+func TestDerivatives_OverrideCommandsCarryTheOperatorsWordsExactly(t *testing.T) {
+	t.Parallel()
+	h, fd := newDerivativesHarness(t)
+	op := operatorPrincipal()
+	h.as(&op)
+	path := derivBase + "/contracts/" + testDerivInstr.String() + "/settlement"
+
+	res := h.do(http.MethodPost, path, overrideProposalBody("67000.50"), "Idempotency-Key", "override-propose-1")
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	p := fd.lastProposal
+	assert.Equal(t, testDerivInstr, p.InstrumentID)
+	assert.Equal(t, "6700050", p.Price.Mantissa.String())
+	assert.Equal(t, int32(2), p.Price.Scale)
+	assert.Equal(t, "the feed stalled before expiry", p.Reason)
+	assert.Equal(t, "s3://sandbox-evidence/bulletin.pdf", p.EvidenceRef)
+	require.Len(t, p.EvidenceSHA256, 32)
+	assert.Equal(t, byte(0xab), p.EvidenceSHA256[0])
+	var proposed api.DerivativeSettlementCommandResult
+	res.json(&proposed)
+	assert.Equal(t, api.DerivativeSettleProposeOverride, proposed.Method)
+	assert.Equal(t, api.SIMULATED, proposed.ValueDomain)
+	assert.Nil(t, proposed.Settlement, "a proposal settles nothing")
+	require.NotNil(t, proposed.Override)
+	assert.Equal(t, api.DerivativeOverrideProposed, proposed.Override.Status)
+	assert.Equal(t, "6700000", proposed.Override.PriceMantissa)
+	assert.Equal(t, "6600000", proposed.Override.ReferenceMantissa)
+	assert.Equal(t, int64(152), proposed.Override.DeviationBps)
+	assert.Equal(t, strings.Repeat("00", 32), proposed.Override.EvidenceSha256)
+	assert.Equal(t, "op-alice", proposed.Override.ProposedBy.ActorId)
+
+	res = h.do(http.MethodPost, path, map[string]any{"method": "APPROVE_OVERRIDE", "override_id": testDerivOverride.String(),
+		"reason": "checked against the bulletin", "price": "67000"}, "Idempotency-Key", "override-approve-1")
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	assert.Equal(t, testDerivOverride, fd.lastDecision.OverrideID)
+	assert.Equal(t, "checked against the bulletin", fd.lastDecision.Reason)
+	require.NotNil(t, fd.lastDecision.Price)
+	assert.Equal(t, "67000", fd.lastDecision.Price.Mantissa.String())
+	var approved api.DerivativeSettlementCommandResult
+	res.json(&approved)
+	require.NotNil(t, approved.Settlement)
+	require.NotNil(t, approved.Override)
+	assert.Equal(t, api.DerivativeOverrideApproved, approved.Override.Status)
+
+	res = h.do(http.MethodPost, path, map[string]any{"method": "REJECT_OVERRIDE", "override_id": testDerivOverride.String(),
+		"reason": "superseded"}, "Idempotency-Key", "override-reject-01")
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	assert.Nil(t, fd.lastDecision.Price)
+	var rejected api.DerivativeSettlementCommandResult
+	res.json(&rejected)
+	assert.Nil(t, rejected.Settlement)
+	require.NotNil(t, rejected.Override)
+	assert.Equal(t, api.DerivativeOverrideRejected, rejected.Override.Status)
+}
+
+// A dated contract read on its own says what the settlement rule says about
+// it now, and lists the override proposals.
+func TestDerivatives_ADatedContractCarriesItsSettlementPreviewAndProposals(t *testing.T) {
+	t.Parallel()
+	h, fd := newDerivativesHarness(t)
+	ref := fd.mark
+	fd.contract.Preview = &derivatives.SettlementPreview{
+		InstrumentID: testDerivInstr, Kind: derivatives.SettleFuture, Expiry: testNow.Add(-time.Hour), Expired: true, PriceScale: 2,
+		HasReference: true, ReferenceMark: ref, ReferencePrice: qty("6600000"), PriceSource: "mark:" + ref.ID.String(),
+		OverrideMinPrice: qty("5940000"), OverrideMaxPrice: qty("7260000"), MaxDeviationBPS: 1_000,
+		RuleStatement: derivatives.SettlementRuleStatement,
+	}
+	fd.contract.Overrides = []derivatives.SettlementOverride{fd.override}
+	res := h.do(http.MethodGet, derivBase+"/contracts/"+testDerivInstr.String(), nil)
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	var c api.DerivativeContract
+	res.json(&c)
+	require.NotNil(t, c.SettlementPreview)
+	pv := c.SettlementPreview
+	assert.True(t, pv.Expired)
+	assert.False(t, pv.Settleable, "a stale reference does not settle by the rule")
+	require.NotNil(t, pv.ReferencePriceMantissa)
+	assert.Equal(t, "6600000", *pv.ReferencePriceMantissa)
+	assert.Equal(t, "5940000", *pv.OverrideMinPriceMantissa)
+	assert.Equal(t, "7260000", *pv.OverrideMaxPriceMantissa)
+	assert.Equal(t, int64(1_000), pv.MaxDeviationBps)
+	assert.Contains(t, pv.RuleStatement, "EXPIRY_MARK v1")
+	require.NotNil(t, c.SettlementOverrides)
+	require.Len(t, *c.SettlementOverrides, 1)
+	assert.Equal(t, api.DerivativeOverrideProposed, (*c.SettlementOverrides)[0].Status)
 }
