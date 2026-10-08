@@ -244,6 +244,9 @@ func registry() []pair {
 		{table: "performance_fee_period_transitions", constraint: "performance_fee_period_transitions_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
 		{table: "performance_fee_flows", constraint: "performance_fee_flows_recorded_by_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
 		{table: "performance_fee_lines", constraint: "performance_fee_lines_kind_check", source: "feeledger.AllLineKinds()", values: str(feeledger.AllLineKinds())},
+		// 00755 derivatives hardening: the settlement price rule, two-operator overrides.
+		{table: "derivative_settlements", constraint: "derivative_settlements_price_rule_check", source: "derivatives.AllSettlementPriceRules()", values: str(derivatives.AllSettlementPriceRules())},
+		{table: "derivative_settlement_override_decisions", constraint: "derivative_settlement_override_decisions_decision_check", source: "derivatives.AllOverrideDecisions()", values: str(derivatives.AllOverrideDecisions())},
 		// 00756 prediction-market hardening: two-operator voids, held payouts.
 		{table: "prediction_void_proposals", constraint: "prediction_void_proposals_market_status_check", source: "predmarket.VoidableStatuses()", values: str(predmarket.VoidableStatuses())},
 		{table: "prediction_held_payouts", constraint: "prediction_held_payouts_kind_check", source: "predmarket.AllSettlementKinds()", values: str(predmarket.AllSettlementKinds())},

@@ -67,8 +67,7 @@ func (s *Service) AccountRisk(ctx context.Context, q db.Querier, account account
 	v := s.newValuer(q, now)
 	var gross, initial, maintenance, upnl, adj usdSum
 	for _, l := range book {
-		age := now.Sub(l.mark.ObservedAt)
-		if age < 0 || age > l.spec.OracleMaxAge {
+		if !markFresh(l.spec, l.mark, now) || !markPriceable(l.spec, l.mark) {
 			return RiskContribution{}, errs.New(errs.CodeStaleMarketData, "derivatives: a position's mark is stale; its risk is unknown").
 				WithField("position_id", l.pos.ID.String()).WithField("mark_observed_at", l.mark.ObservedAt)
 		}

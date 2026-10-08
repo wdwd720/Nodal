@@ -5,6 +5,7 @@ import (
 
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/assets"
+	"github.com/nodal/controlplane/internal/capital"
 	"github.com/nodal/controlplane/internal/id"
 	"github.com/nodal/controlplane/internal/instruments"
 	"github.com/nodal/controlplane/internal/ledger"
@@ -22,6 +23,7 @@ type (
 	accrualKind    struct{}
 	exerciseKind   struct{}
 	assignmentKind struct{}
+	overrideKind   struct{}
 )
 
 // Typed identifiers.
@@ -36,10 +38,20 @@ type (
 	AccrualID     = id.ID[accrualKind]
 	ExerciseID    = id.ID[exerciseKind]
 	AssignmentID  = id.ID[assignmentKind]
+	// SettlementOverrideID identifies a proposed operator override of a final
+	// settlement price.
+	SettlementOverrideID = id.ID[overrideKind]
 )
 
 // ParsePositionID parses the canonical form.
 func ParsePositionID(s string) (PositionID, error) { return id.Parse[positionKind](s) }
+
+// ParseSettlementOverrideID parses the canonical form.
+func ParseSettlementOverrideID(s string) (SettlementOverrideID, error) {
+	return id.Parse[overrideKind](s)
+}
+
+func newSettlementOverrideID() SettlementOverrideID { return id.New[overrideKind]() }
 
 func newPositionID() PositionID       { return id.New[positionKind]() }
 func newFillID() FillID               { return id.New[fillKind]() }
@@ -312,7 +324,69 @@ type CashFlow struct {
 	Amount               money.Quantity
 	Shortfall            money.Quantity
 	JournalTransactionID *ledger.TransactionID
-	ReferenceType        string
-	ReferenceID          string
-	OccurredAt           time.Time
+	// ReservationID is the capital reservation the flow consumed to take
+	// value from the customer's WALLET: what it took from the wallet was
+	// available -- not reserved or held for anything else -- when it was
+	// taken (the database checks it, DV011). Nil when the flow took nothing
+	// from the wallet.
+	ReservationID *capital.ReservationID
+	ReferenceType string
+	ReferenceID   string
+	OccurredAt    time.Time
+}
+
+// SettlementPriceRule says what decided a final settlement price.
+type SettlementPriceRule string
+
+// Settlement price rules.
+const (
+	// RuleExpiryMark is the settlement rule (SettlementRuleStatement): the
+	// latest mark observed and recorded at or before expiry, fresh at
+	// expiry.
+	RuleExpiryMark SettlementPriceRule = "EXPIRY_MARK"
+	// RuleOperatorOverride is a price one operator proposed, within the
+	// policy's bound of the rule's reference price, and a second operator
+	// approved.
+	RuleOperatorOverride SettlementPriceRule = "OPERATOR_OVERRIDE"
+)
+
+// AllSettlementPriceRules returns exactly the list of
+// derivative_settlements_price_rule_check.
+func AllSettlementPriceRules() []SettlementPriceRule {
+	return []SettlementPriceRule{RuleExpiryMark, RuleOperatorOverride}
+}
+
+// SettlementRuleStatement is the settlement rule, word for word as it is
+// recorded in every settlement's evidence.
+const SettlementRuleStatement = "EXPIRY_MARK v1: of the instrument's marks observed at or before expiry and recorded " +
+	"at or before expiry (an option's: those carrying an index), take the one observed last (ties: recorded last, then " +
+	"the greatest id). It must be fresh at expiry: observed no more than the instrument's oracle max age before it. " +
+	"A future settles at that mark; an option at that mark's index expressed at the option's price scale and aligned " +
+	"to its tick grid, half-even. Without such a mark, or with a stale one, nothing settles by the rule: the contract " +
+	"waits for an operator override proposed by one operator, within the policy's bound of the price the rule derives " +
+	"from that mark whether fresh or not, and approved by a second."
+
+// OverrideStatus is the state of a settlement override proposal.
+type OverrideStatus string
+
+// Override statuses.
+const (
+	OverrideProposed OverrideStatus = "PROPOSED"
+	OverrideApproved OverrideStatus = "APPROVED"
+	OverrideRejected OverrideStatus = "REJECTED"
+)
+
+// OverrideDecision is a second operator's decision on a proposal.
+type OverrideDecision string
+
+// Override decisions.
+const (
+	DecisionApproved OverrideDecision = "APPROVED"
+	DecisionRejected OverrideDecision = "REJECTED"
+)
+
+// AllOverrideDecisions returns exactly the list of
+// derivative_settlement_override_decisions_decision_check.
+func AllOverrideDecisions() []OverrideDecision {
+	return []OverrideDecision{DecisionApproved, DecisionRejected}
 }

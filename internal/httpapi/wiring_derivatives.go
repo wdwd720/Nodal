@@ -3,9 +3,7 @@ package httpapi
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -58,11 +56,12 @@ func wireDerivatives(p *Ports, d WireDeps) {
 	p.Derivatives = derivativesAdapter{svc: dd.Service, deps: dd, db: d.DB, clk: clk, instruments: repo, assets: assets.NewRepository()}
 }
 
-// derivativesAdapter carries the service's answers and reads its tables. It
-// is the API's own projection where the package exports no listing (the
-// position, flow, accrual and mark registers): strictly SELECTs, deciding
-// nothing financial -- every figure is a stored one or one the service
-// computed (AccountRisk, Analytics). Writes go only through the service.
+// derivativesAdapter carries the service's answers. Its registers -- marks,
+// positions, cash flows, funding accruals, settlements and settlement
+// overrides -- are read through the package's own read functions, never this
+// adapter's SQL, and every figure is a stored one or one the service computed
+// (AccountRisk, Analytics, SettlementPreview). Writes go only through the
+// service.
 type derivativesAdapter struct {
 	svc         *derivatives.Service
 	deps        DerivativesDeps
@@ -149,7 +148,20 @@ func (a derivativesAdapter) Contract(ctx context.Context, iid instruments.Instru
 		if err != nil {
 			return err
 		}
-		out, err = a.contractView(ctx, tx, a.lookup(tx), ins, ver)
+		if out, err = a.contractView(ctx, tx, a.lookup(tx), ins, ver); err != nil {
+			return err
+		}
+		if ins.Type != instruments.TypeFuture && ins.Type != instruments.TypeOption {
+			return nil
+		}
+		// A dated contract read on its own carries what the settlement rule
+		// says about it now, and its override proposals.
+		preview, err := a.svc.SettlementPreview(ctx, tx, iid)
+		if err != nil {
+			return err
+		}
+		out.Preview = &preview
+		out.Overrides, err = derivatives.SettlementOverrides(ctx, tx, iid)
 		return err
 	})
 	return out, err
@@ -192,31 +204,9 @@ func (a derivativesAdapter) contract(ctx context.Context, q db.Querier, iid inst
 	return ins, ver, nil
 }
 
-const derivativeMarkColumns = `id, instrument_id, mark_mantissa, mark_scale, index_mantissa::text, index_scale,
-	coalesce(index_source, ''), source, observed_at, recorded_at`
-
-func scanDerivativeMark(row pgx.Row) (derivatives.Mark, error) {
-	var m derivatives.Mark
-	var idx *string
-	var idxScale *int32
-	if err := row.Scan(&m.ID, &m.InstrumentID, &m.MarkMantissa, &m.MarkScale, &idx, &idxScale, &m.IndexSource,
-		&m.Source, &m.ObservedAt, &m.RecordedAt); err != nil {
-		return derivatives.Mark{}, err
-	}
-	if idx != nil && idxScale != nil {
-		q, err := money.ScanQuantity(*idx)
-		if err != nil {
-			return derivatives.Mark{}, err
-		}
-		m.HasIndex, m.IndexMantissa, m.IndexScale = true, q, *idxScale
-	}
-	m.ObservedAt, m.RecordedAt = m.ObservedAt.UTC(), m.RecordedAt.UTC()
-	return m, nil
-}
-
 func (a derivativesAdapter) Marks(ctx context.Context, iid instruments.InstrumentID, cursor string, limit int) ([]derivatives.Mark, string, error) {
 	limit = clampLimit(limit)
-	c, hasCursor, err := decodeDerivativeCursor(cursor)
+	after, err := derivativeKeyset(cursor)
 	if err != nil {
 		return nil, "", err
 	}
@@ -227,25 +217,7 @@ func (a derivativesAdapter) Marks(ctx context.Context, iid instruments.Instrumen
 		if _, _, err := a.contract(ctx, tx, iid); err != nil {
 			return err
 		}
-		var args sqlArgs
-		sql := `SELECT ` + derivativeMarkColumns + ` FROM derivative_marks WHERE instrument_id = ` + args.add(iid)
-		if hasCursor {
-			sql += ` AND (observed_at, id) < (` + args.add(c.At) + `, ` + args.add(c.ID) + `)`
-		}
-		sql += fmt.Sprintf(` ORDER BY observed_at DESC, id DESC LIMIT %d`, limit+1)
-		rows, err := tx.Query(ctx, sql, args.list...)
-		if err != nil {
-			return derivativeReadErr("marks", err)
-		}
-		defer rows.Close()
-		for rows.Next() {
-			m, err := scanDerivativeMark(rows)
-			if err != nil {
-				return derivativeReadErr("scan mark", err)
-			}
-			out = append(out, m)
-		}
-		if err := rows.Err(); err != nil {
+		if out, err = derivatives.ListMarks(ctx, tx, iid, after, limit+1); err != nil {
 			return derivativeReadErr("marks", err)
 		}
 		if len(out) > limit {
@@ -281,56 +253,17 @@ func (a derivativesAdapter) Analytics(ctx context.Context, r derivatives.Analyti
 
 // --- positions ----------------------------------------------------------------
 
-const derivativePositionColumns = `id, account_id, instrument_id, settlement_asset_id, status, quantity, cost_value, settled_value,
-	realized_pnl, funding_pnl, margin_posted, shortfall, version, opened_at, closed_at`
-
-func scanDerivativePosition(row pgx.Row) (derivatives.Position, error) {
-	var p derivatives.Position
-	if err := row.Scan(&p.ID, &p.AccountID, &p.InstrumentID, &p.SettlementAssetID, &p.Status, &p.Quantity, &p.CostValue,
-		&p.SettledValue, &p.RealizedPnL, &p.FundingPnL, &p.MarginPosted, &p.Shortfall, &p.Version, &p.OpenedAt, &p.ClosedAt); err != nil {
-		return derivatives.Position{}, err
-	}
-	p.OpenedAt = p.OpenedAt.UTC()
-	if p.ClosedAt != nil {
-		t := p.ClosedAt.UTC()
-		p.ClosedAt = &t
-	}
-	return p, nil
-}
-
 func (a derivativesAdapter) Positions(ctx context.Context, account accounts.AccountID, status derivatives.PositionStatus, cursor string, limit int) (DerivativePositionPageView, error) {
 	limit = clampLimit(limit)
-	c, hasCursor, err := decodeDerivativeCursor(cursor)
+	after, err := derivativeKeyset(cursor)
 	if err != nil {
 		return DerivativePositionPageView{}, err
 	}
 	var out DerivativePositionPageView
 	err = a.read(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		out = DerivativePositionPageView{}
-		var args sqlArgs
-		sql := `SELECT ` + derivativePositionColumns + ` FROM derivative_positions WHERE account_id = ` + args.add(account)
-		if status != "" {
-			sql += ` AND status = ` + args.add(string(status))
-		}
-		if hasCursor {
-			sql += ` AND (opened_at, id) < (` + args.add(c.At) + `, ` + args.add(c.ID) + `)`
-		}
-		sql += fmt.Sprintf(` ORDER BY opened_at DESC, id DESC LIMIT %d`, limit+1)
-		rows, err := tx.Query(ctx, sql, args.list...)
+		page, err := derivatives.ListPositions(ctx, tx, derivatives.PositionQuery{AccountID: account, Status: status, After: after, Limit: limit + 1})
 		if err != nil {
-			return derivativeReadErr("positions", err)
-		}
-		var page []derivatives.Position
-		for rows.Next() {
-			p, err := scanDerivativePosition(rows)
-			if err != nil {
-				rows.Close()
-				return derivativeReadErr("scan position", err)
-			}
-			page = append(page, p)
-		}
-		rows.Close()
-		if err := rows.Err(); err != nil {
 			return derivativeReadErr("positions", err)
 		}
 		if len(page) > limit {
@@ -457,7 +390,7 @@ func (a derivativesAdapter) PositionAccount(ctx context.Context, pid derivatives
 
 func (a derivativesAdapter) Flows(ctx context.Context, account accounts.AccountID, filter DerivativeFlowFilter, cursor string, limit int) ([]DerivativeFlowView, string, error) {
 	limit = clampLimit(limit)
-	c, hasCursor, err := decodeDerivativeCursor(cursor)
+	after, err := derivativeKeyset(cursor)
 	if err != nil {
 		return nil, "", err
 	}
@@ -465,36 +398,9 @@ func (a derivativesAdapter) Flows(ctx context.Context, account accounts.AccountI
 	var next string
 	err = a.read(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		out, next = nil, ""
-		var args sqlArgs
-		sql := `SELECT id, position_id, account_id, instrument_id, settlement_asset_id, kind, amount, shortfall, journal_transaction_id,
-			reference_type, reference_id, occurred_at FROM derivative_cash_flows WHERE account_id = ` + args.add(account)
-		if filter.PositionID != nil {
-			sql += ` AND position_id = ` + args.add(*filter.PositionID)
-		}
-		if filter.Kind != "" {
-			sql += ` AND kind = ` + args.add(string(filter.Kind))
-		}
-		if hasCursor {
-			sql += ` AND (occurred_at, id) < (` + args.add(c.At) + `, ` + args.add(c.ID) + `)`
-		}
-		sql += fmt.Sprintf(` ORDER BY occurred_at DESC, id DESC LIMIT %d`, limit+1)
-		rows, err := tx.Query(ctx, sql, args.list...)
+		flows, err := derivatives.ListCashFlows(ctx, tx, derivatives.CashFlowQuery{AccountID: account, PositionID: filter.PositionID,
+			Kind: filter.Kind, After: after, Limit: limit + 1})
 		if err != nil {
-			return derivativeReadErr("flows", err)
-		}
-		var flows []derivatives.CashFlow
-		for rows.Next() {
-			var f derivatives.CashFlow
-			if err := rows.Scan(&f.ID, &f.PositionID, &f.AccountID, &f.InstrumentID, &f.SettlementAssetID, &f.Kind, &f.Amount,
-				&f.Shortfall, &f.JournalTransactionID, &f.ReferenceType, &f.ReferenceID, &f.OccurredAt); err != nil {
-				rows.Close()
-				return derivativeReadErr("scan flow", err)
-			}
-			f.OccurredAt = f.OccurredAt.UTC()
-			flows = append(flows, f)
-		}
-		rows.Close()
-		if err := rows.Err(); err != nil {
 			return derivativeReadErr("flows", err)
 		}
 		if len(flows) > limit {
@@ -521,7 +427,7 @@ func (a derivativesAdapter) Flows(ctx context.Context, account accounts.AccountI
 
 func (a derivativesAdapter) FundingAccruals(ctx context.Context, account accounts.AccountID, position *derivatives.PositionID, cursor string, limit int) ([]DerivativeAccrualView, string, error) {
 	limit = clampLimit(limit)
-	c, hasCursor, err := decodeDerivativeCursor(cursor)
+	after, err := derivativeKeyset(cursor)
 	if err != nil {
 		return nil, "", err
 	}
@@ -529,41 +435,20 @@ func (a derivativesAdapter) FundingAccruals(ctx context.Context, account account
 	var next string
 	err = a.read(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		out, next = nil, ""
-		var args sqlArgs
-		sql := `SELECT fa.id, fa.funding_rate_id, fa.position_id, p.instrument_id, p.settlement_asset_id, fa.interval_start,
-			fr.interval_end, fa.quantity, fa.direction, fa.amount, fr.rate_e8, fr.premium_index_e8, fr.clamped,
-			fr.per_contract_amount, fr.mark_mantissa, dm.mark_scale, fa.cash_flow_id
-			FROM funding_accruals fa
-			JOIN funding_rates fr ON fr.id = fa.funding_rate_id
-			JOIN derivative_marks dm ON dm.id = fr.mark_id
-			JOIN derivative_positions p ON p.id = fa.position_id
-			WHERE p.account_id = ` + args.add(account)
-		if position != nil {
-			sql += ` AND fa.position_id = ` + args.add(*position)
-		}
-		if hasCursor {
-			sql += ` AND (fa.interval_start, fa.id) < (` + args.add(c.At) + `, ` + args.add(c.ID) + `)`
-		}
-		sql += fmt.Sprintf(` ORDER BY fa.interval_start DESC, fa.id DESC LIMIT %d`, limit+1)
-		rows, err := tx.Query(ctx, sql, args.list...)
+		accruals, err := derivatives.ListFundingAccruals(ctx, tx, derivatives.AccrualQuery{AccountID: account, PositionID: position,
+			After: after, Limit: limit + 1})
 		if err != nil {
 			return derivativeReadErr("funding accruals", err)
 		}
-		var page []DerivativeAccrualView
-		for rows.Next() {
-			var v DerivativeAccrualView
-			if err := rows.Scan(&v.ID, &v.FundingRateID, &v.PositionID, &v.InstrumentID, &v.Settlement.ID, &v.IntervalStart,
-				&v.IntervalEnd, &v.Quantity, &v.Direction, &v.Amount, &v.RateE8, &v.PremiumIndexE8, &v.Clamped,
-				&v.PerContract, &v.MarkMantissa, &v.PriceScale, &v.FlowID); err != nil {
-				rows.Close()
-				return derivativeReadErr("scan funding accrual", err)
-			}
-			v.IntervalStart, v.IntervalEnd = v.IntervalStart.UTC(), v.IntervalEnd.UTC()
-			page = append(page, v)
-		}
-		rows.Close()
-		if err := rows.Err(); err != nil {
-			return derivativeReadErr("funding accruals", err)
+		page := make([]DerivativeAccrualView, 0, len(accruals))
+		for _, fa := range accruals {
+			page = append(page, DerivativeAccrualView{
+				ID: fa.ID, FundingRateID: fa.FundingRateID, PositionID: fa.PositionID, InstrumentID: fa.InstrumentID,
+				IntervalStart: fa.IntervalStart, IntervalEnd: fa.IntervalEnd, Quantity: fa.Quantity, Direction: fa.Direction,
+				Amount: fa.Amount, RateE8: fa.RateE8, PremiumIndexE8: fa.PremiumIndexE8, Clamped: fa.Clamped,
+				PerContract: fa.PerContract, MarkMantissa: fa.MarkMantissa, PriceScale: fa.MarkScale, FlowID: fa.CashFlowID,
+				Settlement: DerivativeAssetView{ID: fa.SettlementAssetID},
+			})
 		}
 		if len(page) > limit {
 			page = page[:limit]
@@ -849,6 +734,120 @@ func (a derivativesAdapter) SettleExpiry(ctx context.Context, c DerivativeSettle
 	return out, err
 }
 
+// derivativesOperator is the calling principal as the service names the
+// proposer or the decider of a settlement override. The service refuses any
+// actor but an OPERATOR, and an approval by the proposer.
+func derivativesOperator(ctx context.Context) (econ.Actor, error) {
+	p, err := derivativesCaller(ctx)
+	if err != nil {
+		return econ.Actor{}, err
+	}
+	return econ.Actor{Type: p.ActorType, ID: p.SubjectID}, nil
+}
+
+// derivativeContractPrice expresses a price at the contract's price scale
+// exactly, or refuses it.
+func derivativeContractPrice(field string, p DerivativePriceInput, scale int32) (money.Quantity, error) {
+	out, err := derivatives.Rescale(p.Mantissa, p.Scale, scale, money.RoundExact)
+	if err != nil {
+		return money.Quantity{}, validationError(field, "price is not exact at the contract's price scale").WithField("price_scale", scale)
+	}
+	return out, nil
+}
+
+// overrideOfContract reads a proposal and refuses one of another contract as
+// not found: a command names the contract it acts on.
+func overrideOfContract(ctx context.Context, q db.Querier, iid instruments.InstrumentID, oid derivatives.SettlementOverrideID) error {
+	o, err := derivatives.GetSettlementOverride(ctx, q, oid)
+	if err == nil && o.InstrumentID != iid {
+		err = errs.New(errs.CodeNotFound, "no settlement override of this contract has this id")
+	}
+	return err
+}
+
+func (a derivativesAdapter) ProposeSettlementOverride(ctx context.Context, c DerivativeOverrideProposalCommand) (derivatives.SettlementOverride, error) {
+	actor, err := derivativesOperator(ctx)
+	if err != nil {
+		return derivatives.SettlementOverride{}, err
+	}
+	var out derivatives.SettlementOverride
+	err = a.write(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		_, ver, err := a.contract(ctx, tx, c.InstrumentID)
+		if err != nil {
+			return err
+		}
+		price, err := derivativeContractPrice("price", c.Price, ver.Terms.PriceScale)
+		if err != nil {
+			return err
+		}
+		out, err = a.svc.ProposeSettlementOverride(ctx, tx, derivatives.ProposeOverrideRequest{
+			InstrumentID: c.InstrumentID, Price: price, Reason: c.Reason, EvidenceRef: c.EvidenceRef,
+			EvidenceSHA256: c.EvidenceSHA256, Actor: actor, CorrelationID: c.CorrelationID,
+		})
+		return err
+	})
+	return out, err
+}
+
+func (a derivativesAdapter) ApproveSettlementOverride(ctx context.Context, c DerivativeOverrideDecisionCommand) (DerivativeOverrideApprovalView, error) {
+	actor, err := derivativesOperator(ctx)
+	if err != nil {
+		return DerivativeOverrideApprovalView{}, err
+	}
+	var out DerivativeOverrideApprovalView
+	err = a.write(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		_, ver, err := a.contract(ctx, tx, c.InstrumentID)
+		if err != nil {
+			return err
+		}
+		if err := overrideOfContract(ctx, tx, c.InstrumentID, c.OverrideID); err != nil {
+			return err
+		}
+		req := derivatives.OverrideDecisionRequest{OverrideID: c.OverrideID, Reason: c.Reason, Actor: actor, CorrelationID: c.CorrelationID}
+		if c.Price != nil {
+			p, err := derivativeContractPrice("price", *c.Price, ver.Terms.PriceScale)
+			if err != nil {
+				return err
+			}
+			req.Price = &p
+		}
+		o, res, err := a.svc.ApproveSettlementOverride(ctx, tx, req)
+		if err != nil {
+			return err
+		}
+		asset, err := a.lookup(tx).asset(ctx, ver.Terms.SettlementAssetID)
+		if err != nil {
+			return err
+		}
+		out = DerivativeOverrideApprovalView{Override: o, Settlement: DerivativeSettlementView{
+			InstrumentID: c.InstrumentID, Result: res, PriceScale: ver.Terms.PriceScale, Settlement: asset,
+		}}
+		return nil
+	})
+	return out, err
+}
+
+func (a derivativesAdapter) RejectSettlementOverride(ctx context.Context, c DerivativeOverrideDecisionCommand) (derivatives.SettlementOverride, error) {
+	actor, err := derivativesOperator(ctx)
+	if err != nil {
+		return derivatives.SettlementOverride{}, err
+	}
+	var out derivatives.SettlementOverride
+	err = a.write(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		if _, _, err := a.contract(ctx, tx, c.InstrumentID); err != nil {
+			return err
+		}
+		if err := overrideOfContract(ctx, tx, c.InstrumentID, c.OverrideID); err != nil {
+			return err
+		}
+		out, err = a.svc.RejectSettlementOverride(ctx, tx, derivatives.OverrideDecisionRequest{
+			OverrideID: c.OverrideID, Reason: c.Reason, Actor: actor, CorrelationID: c.CorrelationID,
+		})
+		return err
+	})
+	return out, err
+}
+
 func (a derivativesAdapter) FundClearingHouse(ctx context.Context, c DerivativeClearingFundCommand) (DerivativeClearingFundView, error) {
 	p, err := derivativesCaller(ctx)
 	if err != nil {
@@ -987,26 +986,24 @@ func (l *derivativeLookup) position(ctx context.Context, p derivatives.Position)
 
 // derivativeSettlementOf is a contract's final settlement, nil before it.
 func derivativeSettlementOf(ctx context.Context, q db.Querier, iid instruments.InstrumentID) (*DerivativeSettlementRecord, error) {
-	var r DerivativeSettlementRecord
-	err := q.QueryRow(ctx, `SELECT id, kind, settlement_mantissa, price_scale, price_source, positions, settled_at
-		FROM derivative_settlements WHERE instrument_id = $1`, iid).
-		Scan(&r.ID, &r.Kind, &r.PriceMantissa, &r.PriceScale, &r.PriceSource, &r.Positions, &r.SettledAt)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
-	}
+	r, ok, err := derivatives.GetSettlement(ctx, q, iid)
 	if err != nil {
 		return nil, derivativeReadErr("settlement", err)
 	}
-	r.SettledAt = r.SettledAt.UTC()
+	if !ok {
+		return nil, nil
+	}
 	return &r, nil
 }
 
-// sqlArgs numbers the placeholders of a statement built clause by clause.
-type sqlArgs struct{ list []any }
-
-func (s *sqlArgs) add(v any) string {
-	s.list = append(s.list, v)
-	return "$" + strconv.Itoa(len(s.list))
+// derivativeKeyset turns a page cursor into the package's keyset (nil for the
+// first page).
+func derivativeKeyset(raw string) (*derivatives.Keyset, error) {
+	c, ok, err := decodeDerivativeCursor(raw)
+	if err != nil || !ok {
+		return nil, err
+	}
+	return &derivatives.Keyset{At: c.At, ID: c.ID}, nil
 }
 
 // decodeDerivativeCursor reads a keyset cursor and refuses one whose position

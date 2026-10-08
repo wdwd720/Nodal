@@ -171,6 +171,18 @@ func (w *derivativesWorld) verifiedCustomer() (accounts.UserID, accounts.Account
 // tick of one contract is 5,000 base units of the sandbox dollar.
 func (w *derivativesWorld) listPerpetual() instruments.InstrumentID {
 	w.t.Helper()
+	return w.listContract(instruments.TypePerpetual, nil)
+}
+
+// listFuture lists a dated future on the same terms as listPerpetual,
+// expiring at expiry.
+func (w *derivativesWorld) listFuture(expiry time.Time) instruments.InstrumentID {
+	w.t.Helper()
+	return w.listContract(instruments.TypeFuture, &expiry)
+}
+
+func (w *derivativesWorld) listContract(kind instruments.InstrumentType, expiry *time.Time) instruments.InstrumentID {
+	w.t.Helper()
 	ctx := w.t.Context()
 	sym := "DVBTC" + strings.ToUpper(strings.ReplaceAll(uuid.NewString(), "-", "")[:6])
 	btc, err := assets.NewRepository().Create(ctx, w.d, assets.Asset{
@@ -191,12 +203,15 @@ func (w *derivativesWorld) listPerpetual() instruments.InstrumentID {
 		}
 		under := spot.ID
 		terms := instruments.Terms{
-			Kind: instruments.TypePerpetual, Symbol: sym + "-PERP", VenueCode: "NODAL-SANDBOX", SettlementAssetID: usd,
+			Kind: kind, Symbol: sym + "-" + string(kind), VenueCode: "NODAL-SANDBOX", SettlementAssetID: usd,
 			UnderlyingInstrumentID: &under, ContractMultiplier: money.QuantityFromInt64(1_000_000), PriceScale: 2,
 			TickSize: money.QuantityFromInt64(50), LotSize: money.QuantityFromInt64(1), MinQuantity: money.QuantityFromInt64(1),
 			SettlementStyle: instruments.SettleCash, TradingCalendar: derivatives.Calendar24x7, OracleMaxAgeMS: 60_000,
-			OracleSources: []string{"itest-operator"}, MarginModel: instruments.MarginLinear, FundingIntervalMS: 8 * 3600 * 1000,
+			OracleSources: []string{"itest-operator"}, MarginModel: instruments.MarginLinear, Expiry: expiry,
 			CorporateActionBehavior: instruments.CorporateActionsNone, Transferability: instruments.NonTransferable,
+		}
+		if kind == instruments.TypePerpetual {
+			terms.FundingIntervalMS = 8 * 3600 * 1000
 		}
 		ins, _, err := repo.CreateAdvanced(ctx, tx, instruments.AdvancedSpec{
 			Terms: terms, CanonicalName: terms.Symbol, RiskClass: assets.RiskSpeculative, Status: assets.StatusActive,
@@ -244,7 +259,12 @@ func (w *derivativesWorld) get(p security.Principal, path string) *response {
 
 func (w *derivativesWorld) mark(markDecimal, indexDecimal string) api.DerivativeMark {
 	w.t.Helper()
-	res := w.post(w.operator, derivBase+"/contracts/"+w.perp.String()+"/marks", map[string]any{
+	return w.markOn(w.perp, markDecimal, indexDecimal)
+}
+
+func (w *derivativesWorld) markOn(ins instruments.InstrumentID, markDecimal, indexDecimal string) api.DerivativeMark {
+	w.t.Helper()
+	res := w.post(w.operator, derivBase+"/contracts/"+ins.String()+"/marks", map[string]any{
 		"mark": markDecimal, "index": indexDecimal, "source": "itest-operator", "observed_at": w.clk.Now().Format(time.RFC3339Nano),
 	})
 	require.Equal(w.t, http.StatusOK, res.Code, "body=%s", res.Body.String())
@@ -285,8 +305,9 @@ func (w *derivativesWorld) accruals(p security.Principal, acct accounts.AccountI
 // lists it and marks it, two customers open opposite positions, the mark
 // moves and the operator settles variation margin and funding, both
 // customers read their positions and flows to the base unit, a stale mark
-// refuses a risk-increasing open (recorded, and findable) but not a close,
-// and a stranger reads nothing of theirs.
+// refuses a risk-increasing open and prices no close (each refusal recorded,
+// and findable) until the operator marks the contract again, and a stranger
+// reads nothing of theirs.
 //
 // The arithmetic every figure below follows (tick value 5,000 base units;
 // 10 contracts; disclosed paper slippage 10 bps against the customer):
@@ -302,7 +323,7 @@ func (w *derivativesWorld) accruals(p security.Principal, acct accounts.AccountI
 //	  premium = round(2/2997 x 10^8) = 66,733 (not clamped);
 //	  per contract = floor(660,000,000 x 66,733 / 10^8) = 440,437;
 //	  A (long) pays 4,404,370; B (short) receives 4,404,370.
-//	close A at the stale 66,000.00 mark, selling at 65,934.00 = 131,868 ticks:
+//	close A at a fresh 66,000.00 mark, selling at 65,934.00 = 131,868 ticks:
 //	  realized 6,593,400,000 - 6,506,500,000 = 86,900,000; A pays
 //	  6,593,400,000 - 6,600,000,000 = -6,600,000 against its settled value.
 func TestIntegration_DerivativesThroughHTTP(t *testing.T) {
@@ -517,7 +538,8 @@ func TestIntegration_DerivativesThroughHTTP(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, res.Code, "body=%s", res.Body.String())
 	assert.Equal(t, errs.CodeForbidden, res.problem().Code)
 
-	// --- 16:05 the mark is stale: new risk is refused and recorded; closing is not refused.
+	// --- 16:05 the mark is stale: new risk is refused and recorded, and so is a
+	// close, which has no fresh price to be filled at.
 	w.clk.Set(derivativesStart.Add(8*time.Hour + 5*time.Minute))
 	more := map[string]any{"account_id": w.a.String(), "instrument_id": w.perp.String(), "side": "LONG", "quantity": "1", "mode": "PAPER"}
 	res = w.post(w.custA, derivBase+"/positions", more)
@@ -544,10 +566,26 @@ func TestIntegration_DerivativesThroughHTTP(t *testing.T) {
 	assert.Nil(t, pageA.Items[0].Valuation, "no figure stands in for the one the service could not compute")
 
 	res = w.post(w.custA, derivBase+"/positions/"+positionA.String()+"/close", map[string]any{"mode": "PAPER"})
-	require.Equal(t, http.StatusOK, res.Code, "closing is never refused for a stale mark; body=%s", res.Body.String())
+	require.Equal(t, http.StatusUnprocessableEntity, res.Code, "a stale mark prices no close; body=%s", res.Body.String())
+	staleClose := res.problem()
+	assert.Equal(t, errs.CodeStaleMarketData, staleClose.Code)
+	assert.Contains(t, staleClose.Fields["reasons"], "MARK_STALE")
+	closeIntent, _ := staleClose.Fields["intent_id"].(string)
+	require.NotEmpty(t, closeIntent, "the refusal names the intent it recorded")
+	res = w.get(w.custA, "/v1/advanced/intents/"+closeIntent)
+	require.Equal(t, http.StatusOK, res.Code, "the refused close can be found; body=%s", res.Body.String())
+	res.json(&rejected)
+	assert.Equal(t, "REJECTED", rejected.Status)
+	require.NotNil(t, rejected.RejectionCode)
+	assert.Equal(t, "STALE_MARKET_DATA", *rejected.RejectionCode)
+
+	// The operator marks it again, and the close is priced at the fresh mark.
+	w.mark("66000.00", "65934.00")
+	res = w.post(w.custA, derivBase+"/positions/"+positionA.String()+"/close", map[string]any{"mode": "PAPER"})
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
 	var closed api.DerivativeTradeResult
 	res.json(&closed)
-	assert.Equal(t, "6593400", closed.Fill.PriceMantissa, "the last mark, 10 bps against the seller")
+	assert.Equal(t, "6593400", closed.Fill.PriceMantissa, "the fresh mark, 10 bps against the seller")
 	assert.Equal(t, "86900000", closed.Fill.RealizedPnl)
 	assert.Equal(t, "-6600000", closed.Fill.AmountSettled)
 	assert.Equal(t, api.DerivativePositionClosed, closed.Position.Status)
@@ -576,4 +614,106 @@ func TestIntegration_DerivativesThroughHTTP(t *testing.T) {
 	assert.Equal(t, "19600000", rep.Result)
 	assert.Equal(t, "0", rep.Difference)
 	assert.False(t, rep.InternallyMatched, "B's short is still open against the clearing house")
+}
+
+// TestIntegration_ADerivativeSettlesByTheRuleOrByATwoOperatorOverrideThroughHTTP:
+// a dated future whose feed stalled five minutes before expiry cannot settle
+// by the rule; the contract says so and what an override may propose; one
+// operator proposes a price with evidence, cannot approve it itself, and a
+// second operator's approval settles the contract at exactly that price --
+// all over the real adapter, service and database.
+func TestIntegration_ADerivativeSettlesByTheRuleOrByATwoOperatorOverrideThroughHTTP(t *testing.T) {
+	w := newDerivativesWorld(t)
+	expiry := derivativesStart.Add(2 * time.Hour)
+	fut := w.listFuture(expiry)
+	w.markOn(fut, "65000.00", "65000.00")
+	for acct, side := range map[accounts.AccountID]string{w.a: "LONG", w.b: "SHORT"} {
+		owner := w.custA
+		if acct == w.b {
+			owner = w.custB
+		}
+		res := w.post(owner, derivBase+"/positions", map[string]any{
+			"account_id": acct.String(), "instrument_id": fut.String(), "side": side, "quantity": "2", "mode": "PAPER"})
+		require.Equal(t, http.StatusCreated, res.Code, "body=%s", res.Body.String())
+	}
+	w.clk.Set(expiry.Add(-5 * time.Minute))
+	ref := w.markOn(fut, "66000.00", "66000.00")
+	w.clk.Set(expiry.Add(time.Hour))
+	settle := derivBase + "/contracts/" + fut.String() + "/settlement"
+
+	res := w.post(w.operator, settle, map[string]any{})
+	require.Equal(t, http.StatusUnprocessableEntity, res.Code, "no fresh mark at expiry; body=%s", res.Body.String())
+	assert.Equal(t, errs.CodeStaleMarketData, res.problem().Code)
+
+	res = w.get(w.operator, derivBase+"/contracts/"+fut.String())
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	var c api.DerivativeContract
+	res.json(&c)
+	require.NotNil(t, c.SettlementPreview)
+	assert.True(t, c.SettlementPreview.Expired)
+	assert.False(t, c.SettlementPreview.Settleable)
+	require.NotNil(t, c.SettlementPreview.ReferenceMark)
+	assert.Equal(t, ref.Id, c.SettlementPreview.ReferenceMark.Id)
+	assert.Equal(t, "6600000", *c.SettlementPreview.ReferencePriceMantissa)
+	assert.Equal(t, "5940000", *c.SettlementPreview.OverrideMinPriceMantissa)
+	assert.Equal(t, "7260000", *c.SettlementPreview.OverrideMaxPriceMantissa)
+	require.NotNil(t, c.SettlementOverrides)
+	assert.Empty(t, *c.SettlementOverrides)
+
+	evidence := strings.Repeat("5e", 32)
+	res = w.post(w.operator, settle, map[string]any{"method": "PROPOSE_OVERRIDE", "price": "67000.00",
+		"reason": "the feed stalled five minutes before expiry", "evidence_ref": "s3://sandbox-evidence/bulletin.pdf",
+		"evidence_sha256": evidence})
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	var proposed api.DerivativeSettlementCommandResult
+	res.json(&proposed)
+	require.NotNil(t, proposed.Override)
+	assert.Nil(t, proposed.Settlement)
+	assert.Equal(t, api.DerivativeOverrideProposed, proposed.Override.Status)
+	assert.Equal(t, evidence, proposed.Override.EvidenceSha256)
+	assert.Equal(t, w.operator.SubjectID, proposed.Override.ProposedBy.ActorId)
+	overrideID := proposed.Override.Id.String()
+
+	res = w.post(w.operator, settle, map[string]any{"method": "APPROVE_OVERRIDE", "override_id": overrideID, "reason": "agreed"})
+	require.Equal(t, http.StatusForbidden, res.Code, "the proposer cannot approve it; body=%s", res.Body.String())
+
+	second := w.operator
+	second.SubjectID = uuid.NewString()
+	res = w.post(second, settle, map[string]any{"method": "APPROVE_OVERRIDE", "override_id": overrideID,
+		"reason": "checked against the bulletin", "price": "67000"})
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	var approved api.DerivativeSettlementCommandResult
+	res.json(&approved)
+	require.NotNil(t, approved.Settlement)
+	require.NotNil(t, approved.Override)
+	assert.Equal(t, api.DerivativeOverrideApproved, approved.Override.Status)
+	assert.Equal(t, "6700000", approved.Settlement.PriceMantissa)
+	require.NotNil(t, approved.Settlement.PriceRule)
+	assert.Equal(t, api.DerivativePriceRuleOperatorOverride, *approved.Settlement.PriceRule)
+	require.NotNil(t, approved.Settlement.OverrideId)
+	assert.Equal(t, overrideID, approved.Settlement.OverrideId.String())
+	assert.Equal(t, 2, approved.Settlement.Positions)
+
+	res = w.get(w.custA, derivBase+"/contracts/"+fut.String())
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	res.json(&c)
+	assert.True(t, c.Settled)
+	require.NotNil(t, c.Settlement)
+	require.NotNil(t, c.Settlement.PriceRule)
+	assert.Equal(t, api.DerivativePriceRuleOperatorOverride, *c.Settlement.PriceRule)
+	require.Len(t, *c.SettlementOverrides, 1)
+	got := (*c.SettlementOverrides)[0]
+	assert.Equal(t, api.DerivativeOverrideApproved, got.Status)
+	require.NotNil(t, got.Decision)
+	assert.Equal(t, second.SubjectID, got.Decision.DecidedBy.ActorId)
+	require.NotNil(t, got.SettlementId)
+
+	// The rule's settlement is now a replay of the one that happened.
+	res = w.post(w.operator, settle, map[string]any{})
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	var replay api.DerivativeSettlementCommandResult
+	res.json(&replay)
+	require.NotNil(t, replay.Settlement)
+	assert.True(t, replay.Settlement.Replay)
+	assert.Equal(t, "6700000", replay.Settlement.PriceMantissa)
 }

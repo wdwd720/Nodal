@@ -1476,7 +1476,12 @@ paths:
         (and everything that needs an index then refuses). An index given here
         is recorded under the mark's source. The same observation (contract,
         source, observed_at) again returns the stored mark; a different mark or
-        index for it is CONFLICT. Without observed_at the mark is observed now.
+        index for it is CONFLICT. Without observed_at the mark is observed now. A
+        new observation is recorded only in order and on time: never in the
+        future, never older than the policy's max_mark_lag_ms behind now
+        (VALIDATION_FAILED), and never older than the contract's latest recorded
+        observation (CONFLICT). Runs and the final settlement read only marks
+        recorded by their own cutoff.
       parameters:
         - { in: path, name: instrumentId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -1578,13 +1583,22 @@ paths:
   /advanced/derivatives/contracts/{instrumentId}/settlement:
     post:
       tags: [advanced]
-      summary: Settle an expired future or option once and for all (operator; requires step-up)
+      summary: Settle an expired future or option, by the settlement rule or a dual-controlled override (operator; requires step-up)
       description: >-
-        Without price the service settles a future at the last fresh mark at or
-        before expiry and an option at that mark's index (in-the-money longs are
-        exercised automatically and assigned FIFO to writers). A given price
-        must be exact on the contract's tick grid and names its source. Once per
-        contract; a repeat returns the first settlement and says replay.
+        method RULE (the default) settles at the price the settlement rule
+        derives from the recorded marks -- the latest mark observed and recorded
+        at or before expiry, fresh at expiry; a future at that mark, an option at
+        its index aligned to the tick grid half-even -- and refuses with
+        STALE_MARKET_DATA when there is none. price and price_source only
+        confirm what the contract's settlement_preview states: any other refuses
+        the request (CONFLICT) and nothing settles. When the rule cannot settle,
+        one operator may PROPOSE_OVERRIDE a price on the tick grid within the
+        policy's settlement_override_max_bps of the rule's reference price, with
+        a reason and evidence; a second, different operator's APPROVE_OVERRIDE
+        settles the contract at exactly that price in the same transaction;
+        REJECT_OVERRIDE closes a proposal. In-the-money option longs are
+        exercised automatically and assigned FIFO to writers. Once per contract;
+        a repeat returns the first settlement and says replay.
       parameters:
         - { in: path, name: instrumentId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -1593,8 +1607,8 @@ paths:
         content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeSettleRequest" } } }
       responses:
         "200":
-          description: The settlement (value domain SIMULATED)
-          content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeSettlementResult" } } }
+          description: The settlement and/or the override proposal the command produced (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeSettlementCommandResult" } } }
         "400": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
@@ -1666,13 +1680,18 @@ paths:
   /advanced/derivatives/positions/{positionId}/close:
     post:
       tags: [advanced]
-      summary: Reduce or close one of your own open positions (paper fill; never refused for a stale mark)
+      summary: Reduce or close one of your own open positions (paper fill at a fresh mark)
       description: >-
         Without quantity the whole position is closed. Closing never increases
-        risk: a stale mark does not prevent it (it is priced at the last mark
-        there is) and no margin is reserved. A refusal the service reaches is
-        recorded and answered as for opening. Only the account's owner closes;
-        anyone else is told the position does not exist.
+        risk and no margin is reserved; the risk kernel never refuses it for a
+        stale oracle. It is priced at the mark plus the disclosed slippage, so
+        it needs a mark fresh within the contract's oracle max age: with a stale
+        or missing mark it is refused with STALE_MARKET_DATA (reason MARK_STALE
+        or MARK_MISSING), and that refusal is recorded like every other and
+        answered as for opening. A loss is collected from the margin the close
+        frees, then from funds that are neither reserved nor held, then from the
+        margin the position keeps. Only the account's owner closes; anyone else
+        is told the position does not exist.
       parameters:
         - { in: path, name: positionId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -6056,7 +6075,7 @@ components:
       type: object
       required: [version, hash, linear, funding_buffer_intervals, max_funding_rate_e8, funding_rate_scale, option_shocks_bps,
                  option_min_margin_bps, option_maintenance_ratio_bps, expiry_gap_window_ms, expiry_gap_shock_bps,
-                 paper_slippage_bps, variation_margin_interval_ms]
+                 paper_slippage_bps, variation_margin_interval_ms, max_mark_lag_ms, settlement_override_max_bps]
       properties:
         version: { type: string }
         hash: { type: string, description: hex sha256 of the policy's canonical JSON }
@@ -6077,6 +6096,8 @@ components:
         expiry_gap_shock_bps: { type: integer, format: int64 }
         paper_slippage_bps: { type: integer, format: int64, description: A paper buy fills this far above the mark and a sell this far below, then onto the tick grid against the customer }
         variation_margin_interval_ms: { type: integer, format: int64 }
+        max_mark_lag_ms: { type: integer, format: int64, description: A mark is recorded within this long of its observation or not at all }
+        settlement_override_max_bps: { type: integer, format: int64, description: "An operator override of a settlement price lies within this many basis points of the settlement rule's reference price" }
     DerivativeMark:
       type: object
       required: [value_domain, id, instrument_id, mark_mantissa, price_scale, has_index, source, observed_at, recorded_at]
@@ -6118,6 +6139,9 @@ components:
         price_mantissa: { $ref: "#/components/schemas/Quantity", description: "A future's final price, or the underlying's price an option settled at" }
         price_scale: { type: integer }
         price_source: { type: string }
+        price_rule: { $ref: "#/components/schemas/DerivativeSettlementPriceRule" }
+        mark_id: { $ref: "#/components/schemas/UUID", description: "The mark the rule settled at, or the reference mark an override was bounded by" }
+        override_id: { $ref: "#/components/schemas/UUID", description: The approved override the contract settled at }
         positions: { type: integer }
         settled_at: { $ref: "#/components/schemas/Timestamp" }
     DerivativeContract:
@@ -6138,6 +6162,13 @@ components:
         latest_mark: { $ref: "#/components/schemas/DerivativeMark" }
         settled: { type: boolean, description: True once the contract has been finally settled; settlement is then present }
         settlement: { $ref: "#/components/schemas/DerivativeSettlement" }
+        settlement_preview: { $ref: "#/components/schemas/DerivativeSettlementPreview" }
+        settlement_overrides:
+          type: array
+          description: >-
+            Present for a dated contract read on its own (not in a listing), with settlement_preview: the override
+            proposals for its final settlement, newest first
+          items: { $ref: "#/components/schemas/DerivativeSettlementOverride" }
     DerivativeContractList:
       type: object
       required: [value_domain, items]
@@ -6398,15 +6429,112 @@ components:
         per_contract_amount: { $ref: "#/components/schemas/Quantity" }
         settlement_asset: { $ref: "#/components/schemas/DerivativeAsset" }
         journal_transaction_ids: { type: array, items: { $ref: "#/components/schemas/UUID" } }
+    DerivativeSettlementMethod:
+      type: string
+      enum: [RULE, PROPOSE_OVERRIDE, APPROVE_OVERRIDE, REJECT_OVERRIDE]
+      x-enum-varnames: [DerivativeSettleByRule, DerivativeSettleProposeOverride, DerivativeSettleApproveOverride,
+                        DerivativeSettleRejectOverride]
+    DerivativeSettlementPriceRule:
+      type: string
+      description: What decided a settlement price; absent only for a settlement recorded before settlements were bound to a rule
+      enum: [EXPIRY_MARK, OPERATOR_OVERRIDE]
+      x-enum-varnames: [DerivativePriceRuleExpiryMark, DerivativePriceRuleOperatorOverride]
+    DerivativeOverrideStatus:
+      type: string
+      enum: [PROPOSED, APPROVED, REJECTED]
+      x-enum-varnames: [DerivativeOverrideProposed, DerivativeOverrideApproved, DerivativeOverrideRejected]
+    DerivativeOverrideDecisionKind:
+      type: string
+      enum: [APPROVED, REJECTED]
+      x-enum-varnames: [DerivativeOverrideDecisionApproved, DerivativeOverrideDecisionRejected]
+    DerivativeActor:
+      type: object
+      required: [actor_type, actor_id]
+      properties:
+        actor_type: { type: string }
+        actor_id: { type: string }
+    DerivativeSettlementOverrideDecision:
+      type: object
+      required: [decision, reason, decided_by, decided_at]
+      properties:
+        decision: { $ref: "#/components/schemas/DerivativeOverrideDecisionKind" }
+        reason: { type: string }
+        decided_by: { $ref: "#/components/schemas/DerivativeActor" }
+        decided_at: { $ref: "#/components/schemas/Timestamp" }
+    DerivativeSettlementOverride:
+      type: object
+      description: >-
+        One operator's proposal to settle an expired contract at a price within the policy's bound of the settlement
+        rule's reference price, and the second operator's decision on it.
+      required: [value_domain, id, instrument_id, status, price_mantissa, price_scale, reference_mark_id, reference_mantissa,
+                 max_deviation_bps, deviation_bps, reason, evidence_ref, evidence_sha256, proposed_by, proposed_at]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        status: { $ref: "#/components/schemas/DerivativeOverrideStatus" }
+        price_mantissa: { $ref: "#/components/schemas/Quantity", description: "The proposed settlement price (an option's: the underlying's)" }
+        price_scale: { type: integer }
+        reference_mark_id: { $ref: "#/components/schemas/UUID" }
+        reference_mantissa: { $ref: "#/components/schemas/Quantity", description: The price the settlement rule derives from the reference mark }
+        max_deviation_bps: { type: integer, format: int64 }
+        deviation_bps: { type: integer, format: int64, description: "|price - reference| / reference in basis points, rounded up" }
+        reason: { type: string }
+        evidence_ref: { type: string }
+        evidence_sha256: { type: string, description: hex sha256 of the evidence }
+        proposed_by: { $ref: "#/components/schemas/DerivativeActor" }
+        proposed_at: { $ref: "#/components/schemas/Timestamp" }
+        decision: { $ref: "#/components/schemas/DerivativeSettlementOverrideDecision" }
+        settlement_id: { $ref: "#/components/schemas/UUID", description: The settlement an approved override settled }
+    DerivativeSettlementPreview:
+      type: object
+      description: >-
+        What the settlement rule says about a dated contract now. Before expiry there is no reference. After it,
+        reference_mark is the latest mark observed and recorded at or before expiry and reference_price_mantissa the
+        price the rule derives from it; settleable says whether that mark is fresh at expiry, so that method RULE
+        settles at that price; an override may propose a price on the tick grid between override_min_price_mantissa
+        and override_max_price_mantissa.
+      required: [expiry, expired, settled, price_scale, has_reference, settleable, max_deviation_bps, rule_statement]
+      properties:
+        expiry: { $ref: "#/components/schemas/Timestamp" }
+        expired: { type: boolean }
+        settled: { type: boolean }
+        price_scale: { type: integer }
+        has_reference: { type: boolean }
+        reference_mark: { $ref: "#/components/schemas/DerivativeMark" }
+        reference_price_mantissa: { $ref: "#/components/schemas/Quantity" }
+        price_source: { type: string, description: The source a RULE settlement would name; confirm it with price_source }
+        settleable: { type: boolean }
+        override_min_price_mantissa: { $ref: "#/components/schemas/Quantity" }
+        override_max_price_mantissa: { $ref: "#/components/schemas/Quantity" }
+        max_deviation_bps: { type: integer, format: int64 }
+        rule_statement: { type: string, description: The settlement rule word for word, as every settlement's evidence records it }
     DerivativeSettleRequest:
       type: object
       properties:
-        price: { $ref: "#/components/schemas/DerivativeDecimal" }
-        price_source: { type: string, description: Required with price }
+        method: { $ref: "#/components/schemas/DerivativeSettlementMethod" }
+        price:
+          $ref: "#/components/schemas/DerivativeDecimal"
+          description: >-
+            RULE and APPROVE_OVERRIDE -- the price the operator confirms (any other refuses the request);
+            PROPOSE_OVERRIDE -- the proposed price, required
+        price_source: { type: string, description: RULE only -- the price source the operator confirms }
+        override_id: { $ref: "#/components/schemas/UUID", description: APPROVE_OVERRIDE and REJECT_OVERRIDE -- the proposal }
+        reason: { type: string, minLength: 1, maxLength: 1000, description: Required for every override method }
+        evidence_ref: { type: string, minLength: 1, maxLength: 500, description: PROPOSE_OVERRIDE -- the document the proposal rests on }
+        evidence_sha256: { type: string, pattern: '^[0-9a-f]{64}$', description: "PROPOSE_OVERRIDE -- the document's hex sha256" }
+    DerivativeSettlementCommandResult:
+      type: object
+      required: [value_domain, method]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        method: { $ref: "#/components/schemas/DerivativeSettlementMethod" }
+        settlement: { $ref: "#/components/schemas/DerivativeSettlementResult" }
+        override: { $ref: "#/components/schemas/DerivativeSettlementOverride" }
     DerivativeSettlementResult:
       type: object
-      required: [value_domain, settlement_id, instrument_id, kind, replay, price_mantissa, price_scale, positions, exercise_ids,
-                 settlement_asset, journal_transaction_ids]
+      required: [value_domain, settlement_id, instrument_id, kind, replay, price_mantissa, price_scale, price_source, positions,
+                 exercise_ids, settlement_asset, journal_transaction_ids]
       properties:
         value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
         settlement_id: { $ref: "#/components/schemas/UUID" }
@@ -6415,6 +6543,10 @@ components:
         replay: { type: boolean }
         price_mantissa: { $ref: "#/components/schemas/Quantity" }
         price_scale: { type: integer }
+        price_rule: { $ref: "#/components/schemas/DerivativeSettlementPriceRule" }
+        price_source: { type: string }
+        mark_id: { $ref: "#/components/schemas/UUID" }
+        override_id: { $ref: "#/components/schemas/UUID" }
         positions: { type: integer }
         paid: { $ref: "#/components/schemas/Quantity", description: "Absent on a replay" }
         received: { $ref: "#/components/schemas/Quantity", description: "Absent on a replay" }

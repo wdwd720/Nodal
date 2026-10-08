@@ -2429,7 +2429,7 @@ export interface paths {
         put?: never;
         /**
          * Record a sandbox mark for a contract (operator)
-         * @description The mark must be exact at the contract's price scale and lie on its tick grid; it is never rounded. Without index the service derives the index from the underlying's fresh spot price, or records the mark without one (and everything that needs an index then refuses). An index given here is recorded under the mark's source. The same observation (contract, source, observed_at) again returns the stored mark; a different mark or index for it is CONFLICT. Without observed_at the mark is observed now.
+         * @description The mark must be exact at the contract's price scale and lie on its tick grid; it is never rounded. Without index the service derives the index from the underlying's fresh spot price, or records the mark without one (and everything that needs an index then refuses). An index given here is recorded under the mark's source. The same observation (contract, source, observed_at) again returns the stored mark; a different mark or index for it is CONFLICT. Without observed_at the mark is observed now. A new observation is recorded only in order and on time: never in the future, never older than the policy's max_mark_lag_ms behind now (VALIDATION_FAILED), and never older than the contract's latest recorded observation (CONFLICT). Runs and the final settlement read only marks recorded by their own cutoff.
          */
         post: {
             parameters: {
@@ -2481,8 +2481,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Settle an expired future or option once and for all (operator; requires step-up)
-         * @description Without price the service settles a future at the last fresh mark at or before expiry and an option at that mark's index (in-the-money longs are exercised automatically and assigned FIFO to writers). A given price must be exact on the contract's tick grid and names its source. Once per contract; a repeat returns the first settlement and says replay.
+         * Settle an expired future or option, by the settlement rule or a dual-controlled override (operator; requires step-up)
+         * @description method RULE (the default) settles at the price the settlement rule derives from the recorded marks -- the latest mark observed and recorded at or before expiry, fresh at expiry; a future at that mark, an option at its index aligned to the tick grid half-even -- and refuses with STALE_MARKET_DATA when there is none. price and price_source only confirm what the contract's settlement_preview states: any other refuses the request (CONFLICT) and nothing settles. When the rule cannot settle, one operator may PROPOSE_OVERRIDE a price on the tick grid within the policy's settlement_override_max_bps of the rule's reference price, with a reason and evidence; a second, different operator's APPROVE_OVERRIDE settles the contract at exactly that price in the same transaction; REJECT_OVERRIDE closes a proposal. In-the-money option longs are exercised automatically and assigned FIFO to writers. Once per contract; a repeat returns the first settlement and says replay.
          */
         post: {
             parameters: {
@@ -2502,13 +2502,13 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description The settlement (value domain SIMULATED) */
+                /** @description The settlement and/or the override proposal the command produced (value domain SIMULATED) */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["DerivativeSettlementResult"];
+                        "application/json": components["schemas"]["DerivativeSettlementCommandResult"];
                     };
                 };
                 400: components["responses"]["Problem"];
@@ -2847,8 +2847,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Reduce or close one of your own open positions (paper fill; never refused for a stale mark)
-         * @description Without quantity the whole position is closed. Closing never increases risk: a stale mark does not prevent it (it is priced at the last mark there is) and no margin is reserved. A refusal the service reaches is recorded and answered as for opening. Only the account's owner closes; anyone else is told the position does not exist.
+         * Reduce or close one of your own open positions (paper fill at a fresh mark)
+         * @description Without quantity the whole position is closed. Closing never increases risk and no margin is reserved; the risk kernel never refuses it for a stale oracle. It is priced at the mark plus the disclosed slippage, so it needs a mark fresh within the contract's oracle max age: with a stale or missing mark it is refused with STALE_MARKET_DATA (reason MARK_STALE or MARK_MISSING), and that refusal is recorded like every other and answered as for opening. A loss is collected from the margin the close frees, then from funds that are neither reserved nor held, then from the margin the position keeps. Only the account's owner closes; anyone else is told the position does not exist.
          */
         post: {
             parameters: {
@@ -11863,6 +11863,10 @@ export interface components {
         DepositPage: components["schemas"]["Page"] & {
             items: components["schemas"]["Deposit"][];
         };
+        DerivativeActor: {
+            actor_id: string;
+            actor_type: string;
+        };
         DerivativeAnalyticsInputs: {
             /** Format: int64 */
             dividend_yield_bps: number;
@@ -11959,6 +11963,9 @@ export interface components {
             settled: boolean;
             settlement?: components["schemas"]["DerivativeSettlement"];
             settlement_asset: components["schemas"]["DerivativeAsset"];
+            /** @description Present for a dated contract read on its own (not in a listing), with settlement_preview: the override proposals for its final settlement, newest first */
+            settlement_overrides?: components["schemas"]["DerivativeSettlementOverride"][];
+            settlement_preview?: components["schemas"]["DerivativeSettlementPreview"];
             status: string;
             terms: components["schemas"]["InstrumentTerms"];
             /** @description hex sha256 of the canonical terms in force */
@@ -12135,6 +12142,10 @@ export interface components {
             vega_per_vol_point: components["schemas"]["DerivativeModelDecimal"];
             vol: components["schemas"]["DerivativeModelDecimal"];
         };
+        /** @enum {string} */
+        DerivativeOverrideDecisionKind: "APPROVED" | "REJECTED";
+        /** @enum {string} */
+        DerivativeOverrideStatus: "PROPOSED" | "APPROVED" | "REJECTED";
         DerivativePolicy: {
             /** Format: int64 */
             expiry_gap_shock_bps: number;
@@ -12156,6 +12167,11 @@ export interface components {
              * @description Funding is clamped to plus or minus this many 10^-8 per interval
              */
             max_funding_rate_e8: number;
+            /**
+             * Format: int64
+             * @description A mark is recorded within this long of its observation or not at all
+             */
+            max_mark_lag_ms: number;
             /** Format: int64 */
             option_maintenance_ratio_bps: number;
             /** Format: int64 */
@@ -12167,6 +12183,11 @@ export interface components {
              * @description A paper buy fills this far above the mark and a sell this far below
              */
             paper_slippage_bps: number;
+            /**
+             * Format: int64
+             * @description An operator override of a settlement price lies within this many basis points of the settlement rule's reference price
+             */
+            settlement_override_max_bps: number;
             /** Format: int64 */
             variation_margin_interval_ms: number;
             version: string;
@@ -12269,15 +12290,87 @@ export interface components {
         DerivativeSettlement: {
             id: components["schemas"]["UUID"];
             kind: components["schemas"]["DerivativeSettlementKind"];
+            /** @description The mark the rule settled at, or the reference mark an override was bounded by */
+            mark_id?: components["schemas"]["UUID"];
+            /** @description The approved override the contract settled at */
+            override_id?: components["schemas"]["UUID"];
             positions: number;
             /** @description A future's final price, or the underlying's price an option settled at */
             price_mantissa: components["schemas"]["Quantity"];
+            price_rule?: components["schemas"]["DerivativeSettlementPriceRule"];
             price_scale: number;
             price_source: string;
             settled_at: components["schemas"]["Timestamp"];
         };
+        DerivativeSettlementCommandResult: {
+            method: components["schemas"]["DerivativeSettlementMethod"];
+            override?: components["schemas"]["DerivativeSettlementOverride"];
+            settlement?: components["schemas"]["DerivativeSettlementResult"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
         /** @enum {string} */
         DerivativeSettlementKind: "FUTURE" | "OPTION";
+        /** @enum {string} */
+        DerivativeSettlementMethod: "RULE" | "PROPOSE_OVERRIDE" | "APPROVE_OVERRIDE" | "REJECT_OVERRIDE";
+        /** @description One operator's proposal to settle an expired contract at a price within the policy's bound of the settlement rule's reference price, and the second operator's decision on it. */
+        DerivativeSettlementOverride: {
+            decision?: components["schemas"]["DerivativeSettlementOverrideDecision"];
+            /**
+             * Format: int64
+             * @description |price - reference| / reference in basis points, rounded up
+             */
+            deviation_bps: number;
+            evidence_ref: string;
+            /** @description hex sha256 of the evidence */
+            evidence_sha256: string;
+            id: components["schemas"]["UUID"];
+            instrument_id: components["schemas"]["UUID"];
+            /** Format: int64 */
+            max_deviation_bps: number;
+            /** @description The proposed settlement price (an option's: the underlying's) */
+            price_mantissa: components["schemas"]["Quantity"];
+            price_scale: number;
+            proposed_at: components["schemas"]["Timestamp"];
+            proposed_by: components["schemas"]["DerivativeActor"];
+            reason: string;
+            /** @description The price the settlement rule derives from the reference mark */
+            reference_mantissa: components["schemas"]["Quantity"];
+            reference_mark_id: components["schemas"]["UUID"];
+            /** @description The settlement an approved override settled */
+            settlement_id?: components["schemas"]["UUID"];
+            status: components["schemas"]["DerivativeOverrideStatus"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        DerivativeSettlementOverrideDecision: {
+            decided_at: components["schemas"]["Timestamp"];
+            decided_by: components["schemas"]["DerivativeActor"];
+            decision: components["schemas"]["DerivativeOverrideDecisionKind"];
+            reason: string;
+        };
+        /** @description What the settlement rule says about a dated contract now. Before expiry there is no reference. After it, reference_mark is the latest mark observed and recorded at or before expiry and reference_price_mantissa the price the rule derives from it; settleable says whether that mark is fresh at expiry, so that method RULE settles at that price; an override may propose a price on the tick grid between override_min_price_mantissa and override_max_price_mantissa. */
+        DerivativeSettlementPreview: {
+            expired: boolean;
+            expiry: components["schemas"]["Timestamp"];
+            has_reference: boolean;
+            /** Format: int64 */
+            max_deviation_bps: number;
+            override_max_price_mantissa?: components["schemas"]["Quantity"];
+            override_min_price_mantissa?: components["schemas"]["Quantity"];
+            price_scale: number;
+            /** @description The source a RULE settlement would name; confirm it with price_source */
+            price_source?: string;
+            reference_mark?: components["schemas"]["DerivativeMark"];
+            reference_price_mantissa?: components["schemas"]["Quantity"];
+            /** @description The settlement rule word for word */
+            rule_statement: string;
+            settleable: boolean;
+            settled: boolean;
+        };
+        /**
+         * @description What decided a settlement price; absent only for a settlement recorded before settlements were bound to a rule
+         * @enum {string}
+         */
+        DerivativeSettlementPriceRule: "EXPIRY_MARK" | "OPERATOR_OVERRIDE";
         DerivativeSettlementResult: {
             exercise_ids: components["schemas"]["UUID"][];
             instrument_id: components["schemas"]["UUID"];
@@ -12285,11 +12378,15 @@ export interface components {
             intrinsic_per_contract?: components["schemas"]["Quantity"];
             journal_transaction_ids: components["schemas"]["UUID"][];
             kind: components["schemas"]["DerivativeSettlementKind"];
+            mark_id?: components["schemas"]["UUID"];
+            override_id?: components["schemas"]["UUID"];
             /** @description Absent on a replay */
             paid?: components["schemas"]["Quantity"];
             positions: number;
             price_mantissa: components["schemas"]["Quantity"];
+            price_rule?: components["schemas"]["DerivativeSettlementPriceRule"];
             price_scale: number;
+            price_source: string;
             /** @description Absent on a replay */
             received?: components["schemas"]["Quantity"];
             replay: boolean;
@@ -12300,9 +12397,19 @@ export interface components {
             value_domain: components["schemas"]["ValueDomainSimulated"];
         };
         DerivativeSettleRequest: {
+            /** @description PROPOSE_OVERRIDE -- the document the proposal rests on */
+            evidence_ref?: string;
+            /** @description PROPOSE_OVERRIDE -- the document's hex sha256 */
+            evidence_sha256?: string;
+            method?: components["schemas"]["DerivativeSettlementMethod"];
+            /** @description APPROVE_OVERRIDE and REJECT_OVERRIDE -- the proposal */
+            override_id?: components["schemas"]["UUID"];
+            /** @description RULE and APPROVE_OVERRIDE -- the price the operator confirms (any other refuses the request); PROPOSE_OVERRIDE -- the proposed price, required */
             price?: components["schemas"]["DerivativeDecimal"];
-            /** @description Required with price */
+            /** @description RULE only -- the price source the operator confirms */
             price_source?: string;
+            /** @description Required for every override method */
+            reason?: string;
         };
         /** @enum {string} */
         DerivativeSide: "LONG" | "SHORT";

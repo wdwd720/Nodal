@@ -735,6 +735,10 @@ func mapInstrumentErr(op string, err error) error {
 		return errs.Wrap(err, errs.CodeForbidden, "advanced instruments settle only in SIMULATED value in this build")
 	case "IN002":
 		return errs.Wrap(err, errs.CodeConflict, "instrument terms versions are append-only and must be consecutive")
+	case "DV007":
+		// Raised by the derivatives subsystem's binding (00755): a contract's
+		// terms are frozen while it has open positions.
+		return errs.Wrap(err, errs.CodeConflict, "the instrument's terms cannot change while it has open positions")
 	}
 	return fmt.Errorf("instruments: %s: %w", op, err)
 }

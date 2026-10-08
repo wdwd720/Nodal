@@ -156,13 +156,19 @@ packages named; `go run ./scripts/inttest -pkg '^\./internal/<pkg>$'` runs a pac
 - **Controls:** a mark is an append-only observation identified by asset, quote, source and observation time;
   every consumer bounds its age and fails closed on a stale, missing or future mark (zero collateral value,
   refused new risk, liquidation waits); derivative marks must lie on the instrument's tick grid and a
-  mark/index divergence beyond policy refuses new risk; expiry settlement uses only a fresh mark at or before
-  expiry.
+  mark/index divergence beyond policy refuses new risk; a derivative mark cannot be backdated — it is refused
+  in the future, older than the policy's maximum lag, or older than the latest mark, and the database keeps
+  marks in order (DV005) — and variation margin, funding and expiry read only marks recorded by their cutoff;
+  a close is priced only at a fresh mark; an expiry settles at the price its documented rule derives from
+  the marks (EXPIRY_MARK), never at a caller's price, and an override needs two operators and stays within a
+  bound of the rule's reference price, all re-derived in SQL (DV008-DV010).
 - **Residual risk:** one source per mark in the sandbox — no median of independent feeds — and one operator can
   record a mark. A live activation needs multi-source aggregation and dual control on manual marks.
-- **Tests:** `TestIntegration_StaleOraclePreventsARiskIncreasingOrderButNotClosing`,
+- **Tests:** `TestIntegration_StaleOraclePreventsARiskIncreasingOrderButNotAPricedClose`,
   `TestIntegration_MarkIndexDivergenceRefusesNewRisk`, `TestSpec_PricesOffTheTickGridAreRefused`,
-  `TestIntegration_SettlementPriceMustBeOnTheTickGrid` (`internal/derivatives`);
+  `TestIntegration_AMarkIsRecordedOnlyInOrderAndOnTime`, `TestIntegration_ASettlementReadsOnlyMarksRecordedByExpiry`,
+  `TestIntegration_ASettlementIsPricedByTheRuleNeverByTheCaller`, `TestIntegration_AStaleExpiryWaitsForAnOverrideTwoOperatorsAgreeOn`,
+  `TestIntegration_ACloseAtAStaleMarkIsRefusedAndRecorded` (`internal/derivatives`);
   `TestHaircut_StaleMissingFutureOrStuckIsWorthless`, `TestEvaluate_StaleMarkIsZeroCollateralAndCallsMargin`
   (`internal/margin`); `TestIntegration_AMarkValuedAssetFailsClosedWithoutAFreshMark` (`internal/transfers`).
 
@@ -434,7 +440,8 @@ packages named; `go run ./scripts/inttest -pkg '^\./internal/<pkg>$'` runs a pac
   attestation and multiple attesters.
 - **Tests:** `TestVerifyReport_RefusesEveryTampering`, `TestIntegration_OracleReplayIsIdempotentAndAConflictingReportIsRefused`,
   `TestIntegration_AnUnverifiableOracleReportIsRefused`, `FuzzDecodeOracleReport`, `TestIntegration_ADisputedMarketCannotSettle`
-  (`internal/predmarket`); `TestIntegration_SettlementPriceMustBeOnTheTickGrid` (`internal/derivatives`).
+  (`internal/predmarket`); `TestIntegration_ASettlementIsPricedByTheRuleNeverByTheCaller`,
+  `TestIntegration_FundingIgnoresMarksRecordedAfterTheInterval` (`internal/derivatives`).
 
 ## 17. Prediction resolution corruption
 
