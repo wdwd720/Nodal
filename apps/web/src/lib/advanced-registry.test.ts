@@ -1,5 +1,5 @@
 /**
- * The advanced area's section registry is shared by twelve subsystem lanes,
+ * The advanced area's section registry is shared by thirteen subsystem lanes,
  * each of which inserts one import and one entry below its own markers. These
  * checks keep that arrangement from decaying: every marker present exactly
  * once, in order, in the right place, and every registered path unique and
@@ -14,6 +14,8 @@ import { test } from "node:test";
 import { SRC_ROOT } from "./scan.ts";
 
 const SUBSYSTEMS = [
+  // First: the portfolio is the section the area opens on.
+  "portfolio",
   "margin",
   "derivatives",
   "equities",
