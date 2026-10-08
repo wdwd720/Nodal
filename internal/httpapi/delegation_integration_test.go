@@ -794,3 +794,89 @@ func TestIntegration_DelegationHumanApprovedWithdrawalSettlesOnce(t *testing.T) 
 	})
 	dgRequireRefusal(t, err, errs.CodeForbidden, "")
 }
+
+// One account's withdrawals still in their cooling period cannot be signed,
+// so they never take a place in the operator's execution run (review 3, F3):
+// another account's swap, admitted after fifty of them, is carried out within
+// its quote by the first run, and the cooling withdrawals are left exactly as
+// they were -- approved, unsigned, nothing decided about them.
+func TestIntegration_DelegationCoolingWithdrawalsCannotHoldAnotherAccountsSwapBack(t *testing.T) {
+	w := newDgWorld(t)
+	busy := w.customer(10_000_000) // $10
+	w.setPolicy(busy, func(b map[string]any) {
+		b["auto_approve_enabled"], b["auto_approve_max_usd"], b["auto_approve_max_risk_score"] = true, "1.00", 80
+		b["per_withdrawal_limit_usd"], b["daily_limit_usd"], b["velocity_max_count"] = "1.00", "100.00", 100
+		b["cooling_period_seconds"] = 7 * 24 * 3600 // the most a policy allows
+	})
+	dest := w.addDestination(busy, devnet.NewKeypairFromSeed(sha256.Sum256([]byte("httpapi-dg-cooling/"+w.tag))).PublicKey(), "cold wallet")
+	capBusy := w.grant(busy, func(b map[string]any) {
+		b["destination_allowlist"] = []string{w.venue.Address.String(), dest.Address}
+	})
+	cooling := map[string]bool{}
+	for i := 1; i <= 50; i++ {
+		ticket, err := w.proposeWithdrawal(busy, capBusy.Id, dest.Id, uint64(i), 10_000) // $0.01 each
+		require.NoError(t, err, "proposal %d", i)
+		require.Equal(t, delegation.WithdrawalApproved, ticket.Withdrawal.Status, "auto-approved, cooling for seven days")
+		cooling[ticket.Withdrawal.ID.String()] = true
+	}
+	other := w.customer(1_000_000_000)
+	ticket, err := w.requestSwap(other, w.grant(other, nil).Id, 1, 100_000_000)
+	require.NoError(t, err)
+	require.Equal(t, delegation.SwapAdmitted, ticket.Swap.Status)
+
+	op := dgOperator()
+	other.h.as(&op)
+	res := other.h.do(http.MethodPost, "/v1/advanced/delegation/ops/execute-pending", map[string]any{"limit": 50},
+		"Idempotency-Key", dgKey("dg-fair-run"))
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	var run api.DelegationExecutionRun
+	res.json(&run)
+	var ran *api.DelegationExecutionItem
+	for i := range run.Items {
+		assert.False(t, cooling[run.Items[i].Id.String()], "a withdrawal still cooling never takes a place in a run")
+		if run.Items[i].Id.String() == ticket.Swap.ID.String() {
+			ran = &run.Items[i]
+		}
+	}
+	require.NotNil(t, ran, "the other account's swap was carried out by the first run")
+	assert.Equal(t, "ADMITTED", ran.StatusBefore)
+	assert.Equal(t, "SETTLED", ran.Status)
+	assert.Nil(t, ran.Error)
+
+	var approved, decided int
+	require.NoError(t, w.d.QueryRow(w.ctx, `SELECT count(*) FILTER (WHERE status = 'APPROVED'),
+		(SELECT count(*) FROM delegated_signing_decisions d WHERE d.account_id = $1)
+		FROM delegated_withdrawals WHERE account_id = $1`, busy.account).Scan(&approved, &decided))
+	assert.Equal(t, 50, approved, "the cooling withdrawals wait, unchanged")
+	assert.Zero(t, decided, "nothing about them was decided or signed")
+}
+
+// An operator cannot back a delegation venue with a treasury book: the
+// venue's swaps would move the treasury's inventory with none of its actions,
+// limits or crossing disclosures. The registration is refused and nothing is
+// registered.
+func TestIntegration_DelegationVenueOnATreasuryBookIsRefused(t *testing.T) {
+	w := newDgWorld(t)
+	var house econ.HouseAccountID
+	require.NoError(t, w.d.InTx(w.ctx, db.TxOptions{Isolation: pgx.ReadCommitted}, func(ctx context.Context, tx pgx.Tx) error {
+		h, err := econ.NewRegistry().CreateHouseAccount(ctx, tx, "dg-treasury-"+w.tag, econ.HouseTreasuryConversion,
+			econ.Actor{Type: security.ActorOperator, ID: "httpapi-delegation-itest"})
+		if err != nil {
+			return err
+		}
+		house = h.ID
+		_, err = tx.Exec(ctx, `INSERT INTO treasury_books (house_account_id, class, valuation_asset_id, registered_by_actor_type,
+			registered_by_actor_id, registered_at) VALUES ($1, 'TREASURY', $2, 'OPERATOR', 'httpapi-delegation-itest', now())`, house, w.usd.ID)
+		return err
+	}))
+	c := w.customer(0)
+	op := dgOperator()
+	c.h.as(&op)
+	res := c.h.do(http.MethodPost, "/v1/advanced/delegation/ops/venues", map[string]any{"name": w.venue.Name, "spread_bps": 50,
+		"house_account_id": house.String()}, "Idempotency-Key", dgKey("dg-venue"))
+	require.Equal(t, http.StatusConflict, res.Code, "body=%s", res.Body.String())
+	assert.Contains(t, res.Body.String(), "treasury book")
+	var n int
+	require.NoError(t, w.d.QueryRow(w.ctx, `SELECT count(*) FROM delegation_venues WHERE house_account_id = $1`, house).Scan(&n))
+	assert.Zero(t, n)
+}

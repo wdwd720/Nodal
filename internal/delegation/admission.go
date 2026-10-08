@@ -150,7 +150,12 @@ func NewAgentAdmission(c AdmissionConfig) (*AgentAdmission, error) {
 
 // RequestSwap admits the calling agent's delegated swap: Service.RequestSwap,
 // in the caller's transaction, under the AGENT principal in ctx. Nothing is
-// signed; a refusal is recorded and returned in the ticket.
+// signed; a refusal is recorded and returned in the ticket. The request's
+// Action must be what the swap does (SwapAction): REDUCE_EXPOSURE only for
+// paying a token for a USD-pegged stable unit, ACQUIRE_EXPOSURE for anything
+// else. A label that is not is refused, recorded (ReasonActionMismatch), and
+// the capability, the account's status and Risk V2 are only ever measured
+// against what the swap does.
 func (a *AgentAdmission) RequestSwap(ctx context.Context, tx pgx.Tx, req SwapRequest) (SwapTicket, error) {
 	return a.svc.RequestSwap(ctx, tx, req)
 }

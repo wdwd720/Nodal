@@ -674,6 +674,26 @@ func TestIntegration_TheCapabilityBoundsTheAgentsRequests(t *testing.T) {
 		assert.Zero(t, df.count(`SELECT count(*) FROM asset_reservations WHERE account_id = $1`, df.account),
 			"nothing is reserved for a refused request")
 	})
+	t.Run("a purchase labelled as a reduction", func(t *testing.T) {
+		df := newDelegatedFixture(t)
+		c := df.grant(func(r *delegation.GrantRequest) {
+			r.ActionClasses = []delegation.ActionClass{delegation.ActionReduceExposure}
+		})
+		_, res, err := df.runWith(func(EvalInput) []Decision {
+			d := df.swapDecision(c.ID.String(), 1_000_000) // pays the stable unit for the token: a purchase
+			d.DelegatedSwap.Action = string(delegation.ActionReduceExposure)
+			return []Decision{d}
+		})
+		require.Error(t, err)
+		assert.Equal(t, RunFailed, res.Run.Status)
+		require.Len(t, res.Delegated, 1)
+		assert.Equal(t, string(errs.CodeForbidden), res.Delegated[0].Refusal, "%+v", res.Delegated[0])
+		assert.Equal(t, delegation.ReasonActionMismatch, res.Delegated[0].Reason, "the label is not what the swap does")
+		assert.Zero(t, df.count(`SELECT count(*) FROM delegated_swaps WHERE capability_id = $1`, c.ID))
+		assert.Zero(t, df.count(`SELECT count(*) FROM delegated_capability_usage WHERE capability_id = $1`, c.ID))
+		assert.Equal(t, 1, df.count(`SELECT count(*) FROM economic_intents WHERE delegation_id = $1 AND status = 'REJECTED'
+			AND rejection_code = $2`, c.ID, delegation.ReasonActionMismatch), "delegation recorded the refusal")
+	})
 	t.Run("a withdrawal outside the capability's allow-list", func(t *testing.T) {
 		df := newDelegatedFixture(t)
 		df.withdrawalPolicy()
