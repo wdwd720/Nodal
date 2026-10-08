@@ -727,7 +727,7 @@ or test changed between them.
 - **Implementation:** `internal/advancedmetrics/collector.go`, `internal/advancedmetrics/instruments.go`, `docs/runbooks/advanced-sandbox-reconciliation.md`
 - **Tests:** `internal/advancedmetrics/collector_integration_test.go`: `TestIntegration_GaugesEqualTheRowDerivedTruth`, `TestIntegration_CountersCountEachNewRowOncePerProcess`; `internal/advancedmetrics/instruments_test.go`: `TestInstruments_AreNamespacedAndDescribed`; `test/docs/runbooks_test.go`: `TestDocs_EveryRunbookRouteIsServed`, `TestDocs_NothingMarkedPendingAlreadyExists`
 - **Mode:** Local/test.
-- **Caveat:** Metrics, alarms and 20 runbooks are written; no alarm has fired in a deployment and no runbook has been used in an incident. Some execution-path instruments are unrecorded (capabilities matrix, row 24).
+- **Caveat:** Metrics, alarms and 20 runbooks are written; no alarm has fired in a deployment and no runbook has been used in an incident. One declared instrument, provider mismatches, is recorded by nothing, since no advanced reconciliation compares against an external provider (capabilities matrix, row 24).
 - **Evidence:** `go run ./scripts/inttest -pkg '^\./internal/advancedmetrics$' -run '^(TestIntegration_GaugesEqualTheRowDerivedTruth|TestIntegration_CountersCountEachNewRowOncePerProcess|TestInstruments_AreNamespacedAndDescribed)$' && go test -count=1 -run '^(TestDocs_EveryRunbookRouteIsServed|TestDocs_NothingMarkedPendingAlreadyExists)$' ./test/docs/`
 
 #### OP5 · Guards for reachable money paths, live citations and hidden characters
