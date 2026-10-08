@@ -63,6 +63,10 @@ var financialPackages = []string{
 	"internal/credit",
 	"internal/payout",
 	"internal/risk",
+	// The advanced capabilities, as each gains a deployment caller (its
+	// HTTP adapter in cmd/api).
+	"internal/transfers",
+	"internal/sandboxfund",
 }
 
 // reachableFrom are the trees a deployment can actually run. A caller in
@@ -114,6 +118,9 @@ var reachedThroughInterface = map[string]string{
 	"internal/credit.DisputeFunding": "credit.PurchaseService.apply, on charge.dispute.created arriving through Dispatch",
 	"internal/credit.MintFrom":       "credit.PurchaseService.apply, on the CAPTURED edge",
 	"internal/credit.SetFinality":    "credit.Service.SettleFunding and DisputeFunding, both reached as above",
+
+	"internal/transfers.TransferReceived": "transfers.Notifier, called by transfers.Service.Send on completion; NotificationNotifier is wired in cmd/api/wire.go",
+	"internal/transfers.TransferReversed": "transfers.Notifier, called by transfers.Service.Reverse; NotificationNotifier is wired in cmd/api/wire.go",
 }
 
 var (
