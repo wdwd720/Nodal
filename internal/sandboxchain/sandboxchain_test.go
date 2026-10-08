@@ -55,13 +55,20 @@ func TestDerive_TheSameSeedGivesTheSameKeysInEveryBinary(t *testing.T) {
 func TestDerive_EveryPurposeHasItsOwnKey(t *testing.T) {
 	seed := mustSeed(t, seedHex)
 	seen := map[[32]byte]string{}
-	for _, p := range []string{PurposeCustody, PurposeIssuer, PurposeSnapshots, PurposeAttester} {
+	for _, p := range []string{PurposeCustody, PurposeIssuer, PurposeSnapshots, PurposeAttester, PurposeDelegatedSigner,
+		PurposeDelegationVenue + "sandbox-dex", PurposeDelegationVenue + "other-venue"} {
 		k := seed.Derive(p)
 		other, dup := seen[k]
 		require.False(t, dup, "%s and %s derive the same key", p, other)
 		seen[k] = p
 		assert.NotEqual(t, [32]byte(seed), k, "a derived key is never the seed itself")
 	}
+}
+
+func TestVenueSeed_IsThePrefixedPurpose(t *testing.T) {
+	seed := mustSeed(t, seedHex)
+	assert.Equal(t, seed.Derive(PurposeDelegationVenue+"sandbox-dex"), seed.VenueSeed("sandbox-dex"))
+	assert.NotEqual(t, seed.VenueSeed("sandbox-dex"), seed.VenueSeed("sandbox-dex-2"))
 }
 
 func TestDerive_ADifferentSeedGivesDifferentKeys(t *testing.T) {

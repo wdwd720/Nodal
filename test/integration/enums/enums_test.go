@@ -40,11 +40,13 @@ import (
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/db/migrate"
+	"github.com/nodal/controlplane/internal/delegation"
 	"github.com/nodal/controlplane/internal/derivatives"
 	"github.com/nodal/controlplane/internal/devnethost"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/equities"
 	"github.com/nodal/controlplane/internal/execution"
+	"github.com/nodal/controlplane/internal/feeledger"
 	"github.com/nodal/controlplane/internal/funding"
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/instruments"
@@ -64,6 +66,7 @@ import (
 	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/stableasset"
 	"github.com/nodal/controlplane/internal/transfers"
+	"github.com/nodal/controlplane/internal/treasury"
 )
 
 var (
@@ -213,6 +216,66 @@ func registry() []pair {
 		// operator proposes and a second approves.
 		{table: "margin_case_resolutions", constraint: "margin_case_resolutions_outcome_check", source: "margin.AllResolutionOutcomes()", values: str(margin.AllResolutionOutcomes())},
 		{table: "margin_case_resolution_decisions", constraint: "margin_case_resolution_decisions_decision_check", source: "margin.AllResolutionDecisions()", values: str(margin.AllResolutionDecisions())},
+		// 00745 treasury and 00746 fee ledger.
+		{table: "treasury_books", constraint: "treasury_books_class_check", source: "treasury.AllClasses()", values: str(treasury.AllClasses())},
+		{table: "treasury_risk_decisions", constraint: "treasury_risk_decisions_intent_kind_check", source: "treasury.AllEvaluatedIntentKinds()", values: str(treasury.AllEvaluatedIntentKinds())},
+		{table: "treasury_risk_decisions", constraint: "treasury_risk_decisions_stage_check", source: "risk.AllStages()", values: str(risk.AllStages())},
+		{table: "treasury_risk_decisions", constraint: "treasury_risk_decisions_verdict_check", source: "risk.AllVerdicts()", values: str(risk.AllVerdicts())},
+		{table: "treasury_paper_fills", constraint: "treasury_paper_fills_activity_check", source: "treasury.AllActivities()", values: str(treasury.AllActivities())},
+		{table: "treasury_paper_fills", constraint: "treasury_paper_fills_side_check", source: "orders.AllSides()", values: str(orders.AllSides())},
+		{table: "treasury_position_events", constraint: "treasury_position_events_kind_check", source: "treasury.AllPositionEventKinds()", values: str(treasury.AllPositionEventKinds())},
+		{table: "treasury_position_events", constraint: "treasury_position_events_direction_check", source: "treasury.AllDirections()", values: str(treasury.AllDirections())},
+		{table: "treasury_actions", constraint: "treasury_actions_kind_check", source: "treasury.AllActionKinds()", values: str(treasury.AllActionKinds())},
+		{table: "treasury_actions", constraint: "treasury_actions_activity_check", source: "treasury.AllActivities()", values: str(treasury.AllActivities())},
+		{table: "treasury_actions", constraint: "treasury_actions_outcome_check", source: "treasury.AllOutcomes()", values: str(treasury.AllOutcomes())},
+		{table: "treasury_actions", constraint: "treasury_actions_actor_type_check", source: "treasury.AuthorizedActorTypes()", values: str(treasury.AuthorizedActorTypes())},
+		{table: "fee_schedules", constraint: "fee_schedules_created_by_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
+		{table: "fee_quote_disclosures", constraint: "fee_quote_disclosures_subsystem_check", source: "econ.AllSubsystems()", values: str(econ.AllSubsystems())},
+		{table: "fee_quote_disclosures", constraint: "fee_quote_disclosures_side_check", source: "feeledger.AllSides()", values: str(feeledger.AllSides())},
+		{table: "fee_bookings", constraint: "fee_bookings_mode_check", source: "feeledger.SupportedModes()", values: str(feeledger.SupportedModes())},
+		{table: "fee_bookings", constraint: "fee_bookings_booking_mode_check", source: "feeledger.AllBookingModes()", values: str(feeledger.AllBookingModes())},
+		{table: "fee_bookings", constraint: "fee_bookings_journal_kind_check", source: "feeledger.AllBookingKinds()", values: str(feeledger.AllBookingKinds())},
+		{table: "fee_bookings", constraint: "fee_bookings_status_check", source: "feeledger.AllBookingStatuses()", values: str(feeledger.AllBookingStatuses())},
+		{table: "fee_bookings", constraint: "fee_bookings_reversed_by_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
+		{table: "fee_booking_transitions", constraint: "fee_booking_transitions_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
+		{table: "performance_fee_periods", constraint: "performance_fee_periods_mode_check", source: "feeledger.SupportedModes()", values: str(feeledger.SupportedModes())},
+		{table: "performance_fee_periods", constraint: "performance_fee_periods_status_check", source: "feeledger.AllPeriodStatuses()", values: str(feeledger.AllPeriodStatuses())},
+		{table: "performance_fee_periods", constraint: "performance_fee_periods_opened_by_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
+		{table: "performance_fee_period_transitions", constraint: "performance_fee_period_transitions_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
+		{table: "performance_fee_flows", constraint: "performance_fee_flows_recorded_by_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
+		{table: "performance_fee_lines", constraint: "performance_fee_lines_kind_check", source: "feeledger.AllLineKinds()", values: str(feeledger.AllLineKinds())},
+		// 00752 delegated signing and 00753 delegated withdrawals. The array
+		// CHECKs (<@ ARRAY[...]) on delegated_capabilities are paired by the
+		// package's own TestIntegration_EveryDelegationEnumMatchesItsCheck.
+		{table: "delegated_capabilities", constraint: "delegated_capabilities_environment_check", source: "delegation.Environments()", values: str(delegation.Environments())},
+		{table: "delegated_capabilities", constraint: "delegated_capabilities_mode_check", source: "delegation.SupportedModes()", values: str(delegation.SupportedModes())},
+		{table: "delegated_capabilities", constraint: "delegated_capabilities_status_check", source: "delegation.AllCapabilityStatuses()", values: str(delegation.AllCapabilityStatuses())},
+		{table: "delegated_capabilities", constraint: "delegated_capabilities_revoked_by_actor_type_check", source: "delegation.RevokerActorTypes()", values: str(delegation.RevokerActorTypes())},
+		{table: "delegated_signer_keys", constraint: "delegated_signer_keys_chain_id_check", source: "delegation.Chains()", values: str(delegation.Chains())},
+		{table: "delegation_venues", constraint: "delegation_venues_chain_id_check", source: "delegation.Chains()", values: str(delegation.Chains())},
+		{table: "delegation_venues", constraint: "delegation_venues_created_by_actor_type_check", source: "delegation.VenueCreatorActorTypes()", values: str(delegation.VenueCreatorActorTypes())},
+		{table: "delegated_capability_usage", constraint: "delegated_capability_usage_subject_kind_check", source: "delegation.AllSubjectKinds()", values: str(delegation.AllSubjectKinds())},
+		{table: "delegated_capability_usage", constraint: "delegated_capability_usage_action_class_check", source: "delegation.AllActionClasses()", values: str(delegation.AllActionClasses())},
+		{table: "delegated_swaps", constraint: "delegated_swaps_mode_check", source: "delegation.SupportedModes()", values: str(delegation.SupportedModes())},
+		{table: "delegated_swaps", constraint: "delegated_swaps_action_class_check", source: "delegation.SwapActionClasses()", values: str(delegation.SwapActionClasses())},
+		{table: "delegated_swaps", constraint: "delegated_swaps_chain_id_check", source: "delegation.Chains()", values: str(delegation.Chains())},
+		{table: "delegated_swaps", constraint: "delegated_swaps_status_check", source: "delegation.AllSwapStatuses()", values: str(delegation.AllSwapStatuses())},
+		{table: "delegated_swaps", constraint: "delegated_swaps_signed_has_tx", source: "delegation.SwapStatusesBeforeSigning()", values: str(delegation.SwapStatusesBeforeSigning())},
+		{table: "delegated_swaps", constraint: "delegated_swaps_failure_code", source: "delegation.SwapStatusesWithFailureCode()", values: str(delegation.SwapStatusesWithFailureCode())},
+		{table: "delegated_swap_approvals", constraint: "delegated_swap_approvals_decision_check", source: "delegation.AllDecisions()", values: str(delegation.AllDecisions())},
+		{table: "delegated_signing_decisions", constraint: "delegated_signing_decisions_verdict_check", source: "delegation.AllVerdicts()", values: str(delegation.AllVerdicts())},
+		{table: "delegated_withdrawal_destinations", constraint: "delegated_withdrawal_destinations_chain_id_check", source: "delegation.Chains()", values: str(delegation.Chains())},
+		{table: "delegated_withdrawal_destinations", constraint: "delegated_withdrawal_destinations_status_check", source: "delegation.AllDestinationStatuses()", values: str(delegation.AllDestinationStatuses())},
+		{table: "delegated_withdrawal_destinations", constraint: "delegated_withdrawal_destinations_removed_by_actor_type_check", source: "delegation.RevokerActorTypes()", values: str(delegation.RevokerActorTypes())},
+		{table: "delegated_withdrawals", constraint: "delegated_withdrawals_environment_check", source: "delegation.Environments()", values: str(delegation.Environments())},
+		{table: "delegated_withdrawals", constraint: "delegated_withdrawals_mode_check", source: "delegation.SupportedModes()", values: str(delegation.SupportedModes())},
+		{table: "delegated_withdrawals", constraint: "delegated_withdrawals_chain_id_check", source: "delegation.Chains()", values: str(delegation.Chains())},
+		{table: "delegated_withdrawals", constraint: "delegated_withdrawals_evaluation_outcome_check", source: "delegation.StoredEvaluationOutcomes()", values: str(delegation.StoredEvaluationOutcomes())},
+		{table: "delegated_withdrawals", constraint: "delegated_withdrawals_status_check", source: "delegation.AllWithdrawalStatuses()", values: str(delegation.AllWithdrawalStatuses())},
+		{table: "delegated_withdrawals", constraint: "delegated_withdrawals_signed_has_tx", source: "delegation.WithdrawalStatusesBeforeSigning()", values: str(delegation.WithdrawalStatusesBeforeSigning())},
+		{table: "delegated_withdrawals", constraint: "delegated_withdrawals_failure_code", source: "delegation.WithdrawalStatusesWithFailureCode()", values: str(delegation.WithdrawalStatusesWithFailureCode())},
+		{table: "delegated_withdrawal_approvals", constraint: "delegated_withdrawal_approvals_decision_check", source: "delegation.AllDecisions()", values: str(delegation.AllDecisions())},
+		{table: "delegated_withdrawal_approvals", constraint: "delegated_withdrawal_approvals_approver_actor_type_check", source: "delegation.WithdrawalApproverActorTypes()", values: str(delegation.WithdrawalApproverActorTypes())},
 
 		// Migration 00749 (prediction markets).
 		{table: "prediction_markets", constraint: "prediction_markets_status_check", source: "predmarket.AllMarketStatuses()", values: str(predmarket.AllMarketStatuses())},
@@ -390,6 +453,10 @@ func TestTheThreeModeListsAgreeWithEachOther(t *testing.T) {
 // shape is not a flat list of values.
 var bespoke = []string{
 	"agents.agents_check3",
+	// A rule: AUTO_APPROVE only in a test environment. Its Go statement is
+	// delegation.TestEnvironments() plus OutcomeAutoApprove, compared by
+	// internal/delegation's TestIntegration_EveryDelegationEnumMatchesItsCheck.
+	"delegated_withdrawals.delegated_withdrawals_auto_only_in_test",
 	// Not a list of values but a rule: the house book and every facility hold
 	// SIMULATED value only. internal/econ's
 	// TestIntegration_HouseAndFacilityBooksCannotHoldRealValue drives it.
