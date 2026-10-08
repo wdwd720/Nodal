@@ -700,3 +700,35 @@ func TestIntegration_BuyingPowerV2SeesTheMarginEngine(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, ok, "only customers have margin accounts")
 }
+
+// TestIntegration_TheAggregateIsTheSumOfTheEngine: the operator aggregate is
+// the engine's own evaluation of each open account, summed, and an account
+// whose marks went stale is counted unvalued instead of being valued at a
+// guess.
+func TestIntegration_TheAggregateIsTheSumOfTheEngine(t *testing.T) {
+	f := newFixture(t)
+	f.seed(usd(1_000_000), usd(100_000))
+	acct, _ := f.fixedAccountOnBooks()
+
+	agg, err := f.svc.Aggregate(f.ctx, testDB, 0)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, agg.Accounts, 1)
+	require.Zero(t, agg.Unvalued)
+	state, err := f.svc.State(f.ctx, testDB, acct)
+	require.NoError(t, err)
+	e, err := Evaluate(f.svc.Policy(), state)
+	require.NoError(t, err)
+	want, err := money.QuoteQuantityToUSD(e.GrossExposure, e.NumeraireDecimals, money.RoundCeil)
+	require.NoError(t, err)
+	if agg.Accounts == 1 {
+		assert.Equal(t, want, agg.GrossExposure)
+	}
+	lev, ok := agg.LeverageBPS()
+	require.True(t, ok)
+	assert.Positive(t, int64(lev))
+
+	f.clk.Advance(time.Hour) // every mark is now stale
+	stale, err := f.svc.Aggregate(f.ctx, testDB, 0)
+	require.NoError(t, err)
+	assert.Equal(t, stale.Accounts, stale.Unvalued, "a stale book is not valued at a guess")
+}
