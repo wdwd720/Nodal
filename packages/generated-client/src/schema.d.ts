@@ -7310,6 +7310,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/advanced/portfolio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * An account's simulated portfolio — balances, positions, buying power V2 and risk — in one read
+         * @description Account-scoped like every advanced read: the account's owner, or an operator holding account:read_any; anyone else is FORBIDDEN, whether or not the account exists. An account that does not exist is NOT_FOUND to an operator. The balances (ledger balances by code, capital reservations by purpose, withdrawal holds, each asset's mark in the sandbox dollar) and the risk records (unresolved reconciliation records and economic effects whose outcome is UNKNOWN) are read from one database snapshot. Every other section is a subsystem's own read: buying power V2 and the Risk Kernel V2 decisions as /advanced/buying-power and /advanced/risk/decisions answer them, the margin account as /advanced/margin/account, OPEN derivative positions as /advanced/derivatives/positions, the account's shares in each prediction market as its positions route, the equity listings it holds and its PENDING settlements as the equities routes, its WORKING orders as /advanced/books/orders, the authority it delegated to its agents and what of theirs awaits its decision as the agent authority routes, and its performance-fee periods as /advanced/fees/periods. The house book is the platform's own, never an account's position, and is not part of any portfolio. Each such section states whether the subsystem runs in this deployment (NOT_CONFIGURED when it does not) and, when its read refused, the refusal's stable code (UNAVAILABLE); the sections are not one snapshot, so under concurrent activity two of them can describe adjacent instants. Lists are bounded and say when they were cut.
+         */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The portfolio (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedPortfolio"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/advanced/prediction-markets": {
         parameters: {
             query?: never;
@@ -14725,6 +14770,16 @@ export interface components {
             trade_date: components["schemas"]["AdvancedEquityDate"];
             value_domain: components["schemas"]["ValueDomainSimulated"];
         };
+        AdvancedEquitySettlementFailure: {
+            account_id: components["schemas"]["UUID"];
+            /** @description Consecutive failed attempts */
+            attempts: number;
+            detail: string;
+            error_code: string;
+            fill_id: components["schemas"]["UUID"];
+            retry_after: components["schemas"]["Timestamp"];
+            settlement_id: components["schemas"]["UUID"];
+        };
         /** @enum {string} */
         AdvancedEquitySettlementFilter: "PENDING" | "SETTLED" | "ALL";
         AdvancedEquitySettlementPage: components["schemas"]["Page"] & {
@@ -14735,6 +14790,8 @@ export interface components {
             as_of: components["schemas"]["Timestamp"];
             /** @description Transactions the run used */
             batches: number;
+            /** @description Due settlements the run could not settle. Each was rolled back alone and recorded with a backoff; the run settled every other one, and a later run retries it after retry_after. */
+            failures: components["schemas"]["AdvancedEquitySettlementFailure"][];
             settled: components["schemas"]["AdvancedEquitySettlement"][];
             trade_date: components["schemas"]["AdvancedEquityDate"];
             value_domain: components["schemas"]["ValueDomainSimulated"];
@@ -14964,6 +15021,231 @@ export interface components {
             /** @description ACTIVE, PAUSED (by an operator or the peg breaker) or RETIRED */
             status: string;
         };
+        AdvancedPortfolio: {
+            account_id: components["schemas"]["UUID"];
+            /** @description When the balances and the risk records were read */
+            as_of: components["schemas"]["Timestamp"];
+            /** @description Every SIMULATED asset the account holds, by symbol, then chain */
+            balances: components["schemas"]["AdvancedPortfolioBalance"][];
+            buying_power: components["schemas"]["AdvancedPortfolioBuyingPower"];
+            delegation: components["schemas"]["AdvancedPortfolioDelegation"];
+            /**
+             * Format: int64
+             * @description How old a mark may be and still value an asset: the bound buying power V2 uses
+             */
+            max_mark_age_ms: number;
+            performance_fees: components["schemas"]["AdvancedPortfolioPerformanceFees"];
+            positions: components["schemas"]["AdvancedPortfolioPositions"];
+            /** @description The sandbox dollar every value is stated in */
+            quote_asset_id: components["schemas"]["UUID"];
+            quote_decimals: number;
+            /** @description Whether this deployment has provisioned the sandbox dollar; until it has, nothing can be valued */
+            quote_provisioned: boolean;
+            quote_symbol: string;
+            risk: components["schemas"]["AdvancedPortfolioRisk"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @description One SIMULATED asset the account holds, on its chain, in base units of the asset (decimals). wallet is the WALLET ledger balance; reserved is what capital reservations hold back of it, broken down by purpose in reservations (which sum to it); withdrawal_holds is what holds keep from being reserved or withdrawn; available is wallet less both, floored at zero (the capital service's own figure). held_elsewhere is posted as collateral, waiting for settlement or in flight between chains, and owed is borrowed (only non-zero balances are listed in either). total is wallet plus held_elsewhere. */
+        AdvancedPortfolioBalance: {
+            asset_id: components["schemas"]["UUID"];
+            available: components["schemas"]["Quantity"];
+            /** @description nodal-sandbox, or a simulated public chain (sbx-<name>): the same unit on two chains is two assets */
+            chain: string;
+            decimals: number;
+            held_elsewhere: components["schemas"]["AdvancedPortfolioLedgerBalance"][];
+            name: string;
+            owed: components["schemas"]["AdvancedPortfolioLedgerBalance"][];
+            reservations: components["schemas"]["AdvancedPortfolioReservation"][];
+            reserved: components["schemas"]["Quantity"];
+            symbol: string;
+            total: components["schemas"]["Quantity"];
+            valuation: components["schemas"]["AdvancedPortfolioValuation"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            wallet: components["schemas"]["Quantity"];
+            withdrawal_holds: components["schemas"]["Quantity"];
+        };
+        AdvancedPortfolioBuyingPower: {
+            /** @description PRESENT: exactly what /advanced/buying-power answers */
+            buying_power?: components["schemas"]["BuyingPowerV2"];
+            problem?: components["schemas"]["AdvancedPortfolioProblem"];
+            state: components["schemas"]["AdvancedPortfolioSectionState"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @description The authority this account delegated to its own agents and what of theirs waits for the owner. Each page is exactly what its agent authority route answers. */
+        AdvancedPortfolioDelegation: {
+            /** @description PRESENT: the account's delegated capabilities, newest first, with their scope, limits, use and expiry (at most 50) */
+            capabilities?: components["schemas"]["DelegationCapabilityPage"];
+            problem?: components["schemas"]["AdvancedPortfolioProblem"];
+            state: components["schemas"]["AdvancedPortfolioSectionState"];
+            /** @description PRESENT: signing requests waiting for the owner's decision (status AWAITING_APPROVAL; at most 50) */
+            swaps_awaiting_approval?: components["schemas"]["DelegationSwapPage"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            /** @description PRESENT: withdrawals the account's agents proposed that wait for the owner's decision (status AWAITING_APPROVAL; at most 50) */
+            withdrawals_awaiting_approval?: components["schemas"]["DelegationWithdrawalPage"];
+        };
+        AdvancedPortfolioDerivatives: {
+            /** @description PRESENT: the OPEN positions with the book's valuation, exactly as /advanced/derivatives/positions?status=OPEN answers them (at most 50; next_cursor says whether there are more) */
+            positions?: components["schemas"]["DerivativePositionPage"];
+            problem?: components["schemas"]["AdvancedPortfolioProblem"];
+            state: components["schemas"]["AdvancedPortfolioSectionState"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        AdvancedPortfolioEquities: {
+            /** @description PRESENT: each listing, among the ones /advanced/equities/listings returns at most (200), whose share asset the account holds settled or unsettled */
+            holdings: components["schemas"]["AdvancedPortfolioEquityHolding"][];
+            /** @description The listings read returned its maximum, so a holding of a listing beyond it appears among the balances only */
+            listings_truncated: boolean;
+            /** @description PRESENT: the PENDING settlements, exactly as /advanced/equities/settlements?state=PENDING answers them (at most 50) */
+            pending_settlements?: components["schemas"]["AdvancedEquitySettlementPage"];
+            problem?: components["schemas"]["AdvancedPortfolioProblem"];
+            state: components["schemas"]["AdvancedPortfolioSectionState"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        AdvancedPortfolioEquityHolding: {
+            /** @description As /advanced/equities/listings answers it */
+            listing: components["schemas"]["AdvancedEquityListing"];
+            /** @description The WALLET balance of the listing's share asset (from the balances read) */
+            settled: components["schemas"]["Quantity"];
+            /** @description Shares bought and not yet delivered: the share asset's UNSETTLED_RECEIVABLE */
+            unsettled: components["schemas"]["Quantity"];
+        };
+        AdvancedPortfolioLedgerBalance: {
+            code: components["schemas"]["AdvancedPortfolioLedgerCode"];
+            /** @description The ledger balance, in base units of the asset */
+            quantity: components["schemas"]["Quantity"];
+        };
+        /**
+         * @description The ledger code a balance is held under. MARGIN_COLLATERAL and DERIVATIVES_MARGIN are posted as collateral; UNSETTLED_RECEIVABLE is what an equity trade delivers on its settlement date; BRIDGE_IN_FLIGHT left its simulated chain and has not been released on the other; MARGIN_LOAN and DEFICIT are owed.
+         * @enum {string}
+         */
+        AdvancedPortfolioLedgerCode: "MARGIN_COLLATERAL" | "DERIVATIVES_MARGIN" | "UNSETTLED_RECEIVABLE" | "BRIDGE_IN_FLIGHT" | "MARGIN_LOAN" | "DEFICIT";
+        AdvancedPortfolioMargin: {
+            /** @description PRESENT: exactly what /advanced/margin/account answers. NONE: the account has no margin account */
+            account?: components["schemas"]["MarginAccountDetail"];
+            problem?: components["schemas"]["AdvancedPortfolioProblem"];
+            state: components["schemas"]["AdvancedPortfolioSectionState"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        AdvancedPortfolioMark: {
+            /**
+             * Format: int64
+             * @description Milliseconds from observed_at to the time of the read
+             */
+            age_ms: number;
+            mantissa: components["schemas"]["Quantity"];
+            observed_at: components["schemas"]["Timestamp"];
+            /** @description Sandbox dollars per whole unit of the asset: mantissa × 10^-scale, written out exactly */
+            price: string;
+            scale: number;
+            source: string;
+        };
+        AdvancedPortfolioOrderBooks: {
+            /** @description PRESENT: the WORKING orders on the internal books, exactly as /advanced/books/orders answers them (at most 50) */
+            orders?: components["schemas"]["AdvancedBookOrderPage"];
+            problem?: components["schemas"]["AdvancedPortfolioProblem"];
+            state: components["schemas"]["AdvancedPortfolioSectionState"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        AdvancedPortfolioPerformanceFees: {
+            /** @description PRESENT: the account's performance-fee periods, newest first, exactly as /advanced/fees/periods answers them (at most 50); an OPEN period's accrued fee is not charged until it crystallizes */
+            periods?: components["schemas"]["FeePeriodPage"];
+            problem?: components["schemas"]["AdvancedPortfolioProblem"];
+            state: components["schemas"]["AdvancedPortfolioSectionState"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        AdvancedPortfolioPositions: {
+            derivatives: components["schemas"]["AdvancedPortfolioDerivatives"];
+            equities: components["schemas"]["AdvancedPortfolioEquities"];
+            margin: components["schemas"]["AdvancedPortfolioMargin"];
+            order_books: components["schemas"]["AdvancedPortfolioOrderBooks"];
+            prediction_markets: components["schemas"]["AdvancedPortfolioPredictionMarkets"];
+        };
+        AdvancedPortfolioPredictionHolding: {
+            market: components["schemas"]["PredictionMarket"];
+            /** @description As /advanced/prediction-markets/{marketId}/positions answers it, held payout included */
+            positions: components["schemas"]["PredictionPositionList"];
+        };
+        AdvancedPortfolioPredictionMarkets: {
+            /** @description PRESENT: every market in which the account holds outcome shares or is owed a held payout it has not claimed, in market id order; at most 50 */
+            markets: components["schemas"]["AdvancedPortfolioPredictionHolding"][];
+            problem?: components["schemas"]["AdvancedPortfolioProblem"];
+            state: components["schemas"]["AdvancedPortfolioSectionState"];
+            /** @description There are more such markets than are listed */
+            truncated: boolean;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        AdvancedPortfolioProblem: {
+            /** @description The stable error code (internal/errs) */
+            code: string;
+            detail: string;
+        };
+        AdvancedPortfolioReconciliationRecord: {
+            asset_id?: components["schemas"]["UUID"];
+            blocks_new_risk: boolean;
+            id: components["schemas"]["UUID"];
+            kind: string;
+            material: boolean;
+            opened_at: components["schemas"]["Timestamp"];
+            /** @description What the record reconciles (an economic effect, a wallet balance, ...) */
+            scope_type: string;
+            /** @description OPEN, MISMATCH, INVESTIGATING or ESCALATED */
+            status: string;
+        };
+        /** @description The ACTIVE capital reservations of one asset that serve one purpose under one capability */
+        AdvancedPortfolioReservation: {
+            /** @description The capability of the economic intent they serve; absent for a trade intent, or for a reservation that names no intent */
+            capability?: string;
+            purpose: components["schemas"]["AdvancedPortfolioReservationPurpose"];
+            /** @description What they still hold back (reserved less consumed), in base units of the asset */
+            quantity: components["schemas"]["Quantity"];
+            /** @description How many ACTIVE reservations */
+            reservations: number;
+        };
+        /**
+         * @description What a capital reservation is for, read from the capability of the economic intent it serves: INTERNAL_MATCHING, EQUITIES, DERIVATIVES and SPREAD_ENGINE (and a reservation for a trade intent) are OPEN_ORDERS; P2P_TRANSFERS is PENDING_TRANSFERS; CROSS_CHAIN_BUYING_POWER is BRIDGE_LOCKS; STRATEGY_MARKETPLACE and USER_CODE_SANDBOX are STRATEGY; AGENT_WITHDRAWALS is WITHDRAWALS; every other capability, and a reservation that names no intent, is OTHER.
+         * @enum {string}
+         */
+        AdvancedPortfolioReservationPurpose: "OPEN_ORDERS" | "PENDING_TRANSFERS" | "BRIDGE_LOCKS" | "STRATEGY" | "WITHDRAWALS" | "OTHER";
+        AdvancedPortfolioRisk: {
+            /** @description The account's status (ACTIVE, FROZEN, ...) */
+            account_status: string;
+            /** @description Reconciliation's own answer: an unresolved record on the account blocks new risk until it is resolved */
+            blocks_new_risk: boolean;
+            decisions: components["schemas"]["AdvancedPortfolioRiskDecisions"];
+            /** @description Unresolved reconciliation records on the account, oldest first; at most 50 */
+            reconciliation: components["schemas"]["AdvancedPortfolioReconciliationRecord"][];
+            reconciliation_truncated: boolean;
+            /** @description Economic effects on the account whose outcome is UNKNOWN: never retried, each waits for reconciliation; oldest first, at most 50 */
+            unknown_effects: components["schemas"]["EconomicEffect"][];
+            unknown_effects_truncated: boolean;
+        };
+        AdvancedPortfolioRiskDecisions: {
+            /** @description PRESENT: the newest 20, exactly as /advanced/risk/decisions answers them */
+            items: components["schemas"]["AdvancedRiskDecision"][];
+            problem?: components["schemas"]["AdvancedPortfolioProblem"];
+            state: components["schemas"]["AdvancedPortfolioSectionState"];
+        };
+        /**
+         * @description PRESENT: the subsystem's read answered and its answer is attached. NONE: the account has nothing there to read (the margin section only: the account has no margin account). NOT_CONFIGURED: this deployment does not run the subsystem. UNAVAILABLE: the subsystem's read refused; problem carries the stable code and detail its own route answers with.
+         * @enum {string}
+         */
+        AdvancedPortfolioSectionState: "PRESENT" | "NONE" | "NOT_CONFIGURED" | "UNAVAILABLE";
+        AdvancedPortfolioValuation: {
+            /** @description Present when MARKED */
+            mark?: components["schemas"]["AdvancedPortfolioMark"];
+            /** @description What is owed in the asset at the same mark, rounded up as buying power V2 values a liability; present when something is owed and the asset is valued */
+            owed_value?: components["schemas"]["Quantity"];
+            /** @description Why the asset is UNVALUED */
+            problem?: components["schemas"]["AdvancedPortfolioProblem"];
+            status: components["schemas"]["AdvancedPortfolioValuationStatus"];
+            /** @description total at the mark (or at par) in base units of the sandbox dollar (quote_decimals), rounded down as buying power V2 values a holding; absent when UNVALUED */
+            value?: components["schemas"]["Quantity"];
+        };
+        /**
+         * @description PAR: the sandbox dollar itself, valued at face. MARKED: valued at the latest mark of the asset in the sandbox dollar no older than max_mark_age_ms. UNVALUED: there is no such mark, or no sandbox dollar to value in; problem says which, and no value is given.
+         * @enum {string}
+         */
+        AdvancedPortfolioValuationStatus: "PAR" | "MARKED" | "UNVALUED";
         AdvancedReferenceMark: {
             /**
              * Format: int64
@@ -18848,8 +19130,11 @@ export interface components {
                 [key: string]: unknown;
             };
             id: components["schemas"]["UUID"];
-            /** @enum {string} */
-            kind: "EXECUTION" | "WALLET_BALANCE" | "FUNDING" | "LEDGER_INTERNAL" | "POSITION_LEDGER" | "SUBMISSION_UNKNOWN";
+            /**
+             * @description Every kind a reconciliation record may have (reconciliation.AllKinds), the core kinds and the advanced capabilities' kinds alike
+             * @enum {string}
+             */
+            kind: "EXECUTION" | "WALLET_BALANCE" | "FUNDING" | "LEDGER_INTERNAL" | "POSITION_LEDGER" | "SUBMISSION_UNKNOWN" | "ECONOMIC_EFFECT" | "STABLE_RESERVE" | "BRIDGE" | "PREDICTION_ESCROW" | "CLEARING" | "DEVNET_CHAIN" | "BOOK_JOURNAL" | "TRANSFERS";
             material: boolean;
             /** @enum {string} */
             mode: "EVENT_DRIVEN" | "PERIODIC" | "FULL";
@@ -19207,6 +19492,16 @@ export interface components {
          * @enum {string}
          */
         StableRedemptionStatus: "SUBMITTING" | "SUBMITTED" | "SUBMISSION_UNKNOWN" | "REDEMPTION_QUEUED" | "REDEEMED" | "FAILED";
+        StableRequestFailure: {
+            /** @description Consecutive failed attempts of this step */
+            attempts: number;
+            detail: string;
+            error_code: string;
+            /** @enum {string} */
+            operation: "stableasset.settle_mint" | "stableasset.settle_burn" | "stableasset.pay_redemption";
+            request_id: components["schemas"]["UUID"];
+            retry_after: components["schemas"]["Timestamp"];
+        };
         /**
          * @description SANDBOX: the platform produces the simulated chain's blocks and drives the request to a final state. DEVNET: the request is only observed, and finalizes as the chain's blocks arrive.
          * @enum {string}
@@ -19278,7 +19573,10 @@ export interface components {
         };
         StableSettleReport: {
             examined: number;
+            /** @description Requests the pass settled as FAILED */
             failed: number;
+            /** @description Requests the pass could not act on at all. Each was left as it was and recorded with a backoff; the pass handled every other request, and a later pass retries it after retry_after. */
+            failures: components["schemas"]["StableRequestFailure"][];
             issued: number;
             queued: number;
             redeemed: number;

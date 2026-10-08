@@ -164,6 +164,21 @@ var systemActor = econ.SystemActor("bridge")
 // breakerActor pauses a route whose books disagree with the chains.
 var breakerActor = econ.SystemActor("bridge-circuit-breaker")
 
+// Network is the devnet network this service's host carries: the one whose
+// routes it bridges, observes and reconciles.
+func (s *Service) Network() string { return s.host.Config().Network }
+
+// onHost refuses, without changing anything, a route of another network: this
+// host would read that route's locks and releases as never seen, and could
+// fail a lock as expired while it stands final on its own chain.
+func (s *Service) onHost(r Route) error {
+	if host := s.Network(); r.Network != host {
+		return errs.Newf(errs.CodeConflict, "bridge: route %s is on devnet network %s; this service carries %s", r.Name, r.Network, host).
+			WithField("route_id", r.ID.String()).WithField("route_network", r.Network).WithField("host_network", host)
+	}
+	return nil
+}
+
 func requireActor(a econ.Actor) error {
 	if !a.Type.Valid() || strings.TrimSpace(a.ID) == "" {
 		return errs.New(errs.CodeValidationFailed, "bridge: an actor type and id are required")

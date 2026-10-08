@@ -151,8 +151,14 @@ test.describe("the advanced (sandbox) area", () => {
     });
   }
 
-  test("/advanced opens on the overview", async ({ page }) => {
+  test("/advanced opens on the portfolio, and the overview is one link away", async ({ page }) => {
     await page.goto("/advanced");
+    await expect(page).toHaveURL(/\/advanced\/portfolio$/);
+    await expect(page.getByRole("heading", { level: 1, name: "Portfolio", exact: true })).toBeVisible();
+    await page
+      .getByRole("navigation", { name: "Advanced area", exact: true })
+      .getByRole("link", { name: "Overview", exact: true })
+      .click();
     await expect(page).toHaveURL(/\/advanced\/overview$/);
     await expect(page.getByRole("heading", { level: 1, name: "Overview", exact: true })).toBeVisible();
   });
@@ -164,7 +170,8 @@ test.describe("the advanced (sandbox) area", () => {
       .getByRole("navigation", { name: "Sections", exact: true })
       .getByRole("link", { name: "Advanced (sandbox)", exact: true })
       .click();
-    await expect(page.getByRole("heading", { level: 1, name: "Overview", exact: true })).toBeVisible();
+    // The area opens on the account's portfolio (ADVANCED_DEFAULT_SECTION).
+    await expect(page.getByRole("heading", { level: 1, name: "Portfolio", exact: true })).toBeVisible();
 
     const area = page.getByRole("navigation", { name: "Advanced area", exact: true });
     for (const { heading } of CORE_PAGES) {

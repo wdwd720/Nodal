@@ -14,8 +14,9 @@ import (
 // (predmarket.Service.ReconcileEscrow) for every market that holds escrow:
 // escrow = collateral = shares outstanding + disclosed residual, and shares
 // issued = outstanding = held by customers. A mismatch opens or refreshes a
-// material MISMATCH record; a match is recorded as MATCHED (the subsystem
-// opens one per matched pass, which is why the default interval is an hour).
+// material MISMATCH record; a match converges on the market's standing
+// MATCHED record -- the first matched pass records it and later ones write
+// nothing while it is the market's newest record.
 type PredictionEscrow struct {
 	db    *db.DB
 	svc   *predmarket.Service

@@ -32,11 +32,10 @@ const ScopeOrderBook = "order_book"
 // A journal that does not replay -- a replay hash or event that differs, a
 // command that no longer decodes or applies, an order the replay does not
 // hold -- opens a material reconciliation record (or refreshes the one still
-// unresolved for the book) through internal/reconciliation's Repository.
-// There is no reconciliation kind for an order book yet, so the record is
-// LEDGER_INTERNAL -- internal books that disagree with themselves -- scoped
-// to the book (ScopeOrderBook). A failure to read the book is not a finding
-// and is reported as a failed unit instead.
+// unresolved for the book) through internal/reconciliation's Repository, of
+// the order book's own kind, BOOK_JOURNAL, scoped to the book
+// (ScopeOrderBook). A failure to read the book is not a finding and is
+// reported as a failed unit instead.
 type OrdersBookProof struct {
 	db    *db.DB
 	svc   *orders.Service
@@ -161,7 +160,7 @@ func (j *OrdersBookProof) record(ctx context.Context, tx pgx.Tx, u bookUnit, fin
 	}
 	observed := map[string]string{"verified": "false", "code": code, "finding": reason}
 	difference := map[string]string{"journal": "does not replay to the recorded book"}
-	prior, open, err := j.recon.FindUnresolvedByScopeForUpdate(ctx, tx, reconciliation.KindLedgerInternal, ScopeOrderBook, u.id)
+	prior, open, err := j.recon.FindUnresolvedByScopeForUpdate(ctx, tx, reconciliation.KindBookJournal, ScopeOrderBook, u.id)
 	if err != nil {
 		return err
 	}
@@ -170,7 +169,7 @@ func (j *OrdersBookProof) record(ctx context.Context, tx pgx.Tx, u bookUnit, fin
 		return err
 	}
 	_, err = j.recon.Open(ctx, tx, reconciliation.OpenRequest{
-		Kind: reconciliation.KindLedgerInternal, Mode: reconciliation.ModePeriodic, ScopeType: ScopeOrderBook, ScopeID: u.id,
+		Kind: reconciliation.KindBookJournal, Mode: reconciliation.ModePeriodic, ScopeType: ScopeOrderBook, ScopeID: u.id,
 		Expected: expected, Observed: observed, Difference: difference,
 		Status: reconciliation.StatusMismatch, Material: true, Actor: workerReconActor(),
 		Reason: "the order book's journal does not replay to the recorded book",

@@ -231,6 +231,48 @@ func (r *Repository) Open(ctx context.Context, tx pgx.Tx, req OpenRequest) (Reco
 	})
 }
 
+// RecordMatch records a comparison that matched, converging instead of
+// accumulating when the comparison is a scheduled one:
+//
+//	PERIODIC, and the newest record of the kind and scope is MATCHED
+//	    → that record already says what this pass found: it is returned
+//	      unchanged and nothing is written (opened is false)
+//	PERIODIC, and there is no record yet, or the newest one is a mismatch
+//	that has been resolved since
+//	    → a MATCHED record is opened: the first clean pass after it
+//	FULL or EVENT_DRIVEN
+//	    → a MATCHED record is opened every time: an operator's or an event's
+//	      check is evidence of that check and is always kept
+//
+// A matched record is never rewritten: its documents are what was observed
+// when it matched. An unresolved record of the scope is the caller's to
+// handle (it stands until a person resolves it); RecordMatch does not look
+// for one. The newest record is read FOR UPDATE, and the caller holds
+// whatever lock serializes its comparisons of the scope.
+func (r *Repository) RecordMatch(ctx context.Context, tx pgx.Tx, req OpenRequest) (rec Record, opened bool, err error) {
+	if req.Status != StatusMatched {
+		return Record{}, false, errs.New(errs.CodeValidationFailed, "reconciliation: RecordMatch records a MATCHED comparison").
+			WithField("status", string(req.Status))
+	}
+	if err := req.validate(); err != nil {
+		return Record{}, false, err
+	}
+	if req.Mode == ModePeriodic {
+		latest, found, err := r.FindLatestByScopeForUpdate(ctx, tx, req.Kind, req.ScopeType, req.ScopeID)
+		if err != nil {
+			return Record{}, false, err
+		}
+		if found && latest.Status == StatusMatched {
+			return latest, false, nil
+		}
+	}
+	rec, err = r.Open(ctx, tx, req)
+	if err != nil {
+		return Record{}, false, err
+	}
+	return rec, true, nil
+}
+
 func nullableID[T interface{ String() string }](zero bool, v T) any {
 	if zero {
 		return nil

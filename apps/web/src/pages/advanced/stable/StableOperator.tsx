@@ -58,6 +58,7 @@ import {
   type StableRedemptionMode,
 } from "../../../lib/stable.ts";
 import { formatInstant } from "../../../lib/time.ts";
+import { ScrollTable } from "../shared.tsx";
 import { CommandFlow, PriceLine, StableNav, simulatedAssets, type Prepared } from "./parts.tsx";
 
 /** The sandbox dollar's symbol, which the registry's default reserve choice prefers. */
@@ -414,19 +415,52 @@ function limitOf(raw: string): { readonly ok: true; readonly limit: number | und
   return parsed.ok ? { ok: true, limit: parsed.value } : { ok: false, error: parsed.error };
 }
 
+const UPKEEP_STEP: Readonly<Record<StableSettleReport["failures"][number]["operation"], string>> = {
+  "stableasset.settle_mint": "Settle an issuance",
+  "stableasset.settle_burn": "Settle a redemption",
+  "stableasset.pay_redemption": "Pay out a redemption",
+};
+
 function SettleReportView(props: { readonly report: StableSettleReport }): ReactNode {
   const { report } = props;
   return (
-    <FieldGrid columns={3}>
-      <Field label="Examined">{String(report.examined)}</Field>
-      <Field label="Issued">{String(report.issued)}</Field>
-      <Field label="Redeemed">{String(report.redeemed)}</Field>
-      <Field label="Queued for payout">{String(report.queued)}</Field>
-      <Field label="Failed">{String(report.failed)}</Field>
-      <Field label="Still waiting" note="Their transaction is not final yet.">
-        {String(report.waiting)}
-      </Field>
-    </FieldGrid>
+    <>
+      <FieldGrid columns={3}>
+        <Field label="Examined">{String(report.examined)}</Field>
+        <Field label="Issued">{String(report.issued)}</Field>
+        <Field label="Redeemed">{String(report.redeemed)}</Field>
+        <Field label="Queued for payout">{String(report.queued)}</Field>
+        <Field label="Failed" note="Requests this pass settled as FAILED.">
+          {String(report.failed)}
+        </Field>
+        <Field label="Still waiting" note="Their transaction is not final yet.">
+          {String(report.waiting)}
+        </Field>
+      </FieldGrid>
+      {report.failures.length > 0 && (
+        <>
+          <p className="field-note">
+            The pass could not act on the requests below. Each was left as it was; every other request was handled, and a later pass
+            retries each one once its backoff has passed.
+          </p>
+          <ScrollTable caption="Requests this pass could not act on" headers={["Request", "Step", "Attempts", "Retried after", "Reason"]}>
+            {report.failures.map((f) => (
+              <tr key={`${f.operation}:${f.request_id}`}>
+                <th scope="row">
+                  <Identifier value={f.request_id} />
+                </th>
+                <td>{UPKEEP_STEP[f.operation]}</td>
+                <td>{String(f.attempts)}</td>
+                <td>{formatInstant(f.retry_after)}</td>
+                <td>
+                  <code>{f.error_code}</code> {f.detail}
+                </td>
+              </tr>
+            ))}
+          </ScrollTable>
+        </>
+      )}
+    </>
   );
 }
 

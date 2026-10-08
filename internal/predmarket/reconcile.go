@@ -31,12 +31,15 @@ type ReconcileRequest struct {
 //	                           shares issued(i) = shares outstanding(i) = held by customers(i)
 //	observed:                  the facility's balances and the customer holdings, one snapshot
 //
-// A market whose books agree gets a MATCHED record. One that does not gets a
-// material MISMATCH naming every violation and the escrow's difference from
-// what its shares imply; while it stays unresolved, re-running the comparison
-// refreshes that record instead of opening another. Issuance, redemption,
-// settlement and voids all re-check the same identity themselves and refuse
-// while it is broken.
+// A market whose books agree gets a MATCHED record; a PERIODIC pass converges
+// instead of accumulating -- while the newest record of the market is MATCHED
+// it stands for every later matched pass and nothing new is written
+// (reconciliation.Repository.RecordMatch) -- and an operator's FULL check is
+// always recorded. One that does not agree gets a material MISMATCH naming
+// every violation and the escrow's difference from what its shares imply;
+// while it stays unresolved, re-running the comparison refreshes that record
+// instead of opening another. Issuance, redemption, settlement and voids all
+// re-check the same identity themselves and refuse while it is broken.
 func (s *Service) ReconcileEscrow(ctx context.Context, tx pgx.Tx, req ReconcileRequest) (reconciliation.Record, error) {
 	m, err := s.Get(ctx, tx, req.MarketID)
 	if err != nil {
@@ -104,11 +107,17 @@ func (s *Service) ReconcileEscrow(ctx context.Context, tx pgx.Tx, req ReconcileR
 	if found {
 		return s.recon.UpdateObservation(ctx, tx, prior.ID, expected, observed, difference, len(violations) > 0, false)
 	}
-	rec, err := s.recon.Open(ctx, tx, reconciliation.OpenRequest{
+	record := reconciliation.OpenRequest{
 		Kind: reconciliation.KindPredictionEscrow, Mode: mode, ScopeType: ScopePredictionMarket, ScopeID: m.ID.String(),
 		AssetID: m.CollateralAssetID, Expected: expected, Observed: observed, Difference: difference,
 		Status: status, Material: len(violations) > 0, Actor: actor, Reason: reason,
-	})
+	}
+	var rec reconciliation.Record
+	if status == reconciliation.StatusMatched {
+		rec, _, err = s.recon.RecordMatch(ctx, tx, record)
+	} else {
+		rec, err = s.recon.Open(ctx, tx, record)
+	}
 	if err != nil {
 		return reconciliation.Record{}, err
 	}

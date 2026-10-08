@@ -308,6 +308,12 @@ func TestIDOR_QueryParameterSmuggling(t *testing.T) {
 		"/v1/advanced/delegation/swaps", "/v1/advanced/delegation/withdrawals",
 
 		// >>> advanced:operator account-scoped list routes
+
+		// >>> advanced:portfolio account-scoped list routes
+		// A subsystem that is not configured, or a sandbox dollar that is not
+		// provisioned, is a state inside the portfolio's answer, not a refusal
+		// of it, so an own account answers 200 here.
+		"/v1/advanced/portfolio",
 	} {
 		t.Run(strings.TrimPrefix(path, "/v1/"), func(t *testing.T) {
 			okOwn := getAs(t, tn.a.Token, path+"?account_id="+own)

@@ -462,13 +462,13 @@ func (s *Service) ProposeWithdrawal(ctx context.Context, tx pgx.Tx, req Proposal
 	if _, err := tx.Exec(ctx, `INSERT INTO delegated_withdrawals (id, capability_id, account_id, agent_id, proposal_nonce, intent_id,
 		usage_id, reservation_id, policy_id, destination_id, environment, mode, chain_id, wallet, destination_address, asset_id,
 		amount, notional_usd_minor, proposed_at, withdrawal_day, approval_expires_at, executable_at, evaluation_outcome,
-		risk_score, evaluation, plan, plan_hash, status)
+		risk_score, evaluation, plan, plan_hash, status, network)
 		VALUES ($1,$2,$3,$4::uuid,$5::numeric,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::numeric,$18,$19,$20::date,$21,$22,$23,
-		        $24,$25,$26,$27,'PROPOSED')`,
+		        $24,$25,$26,$27,'PROPOSED',$28)`,
 		wid, c.ID, req.AccountID, agent.ID, strconv.FormatUint(req.Nonce, 10), in.ID, usage, res.ID, policy.ID, dest.ID, s.env,
 		c.Terms.Mode, dest.Chain, wallet.String(), dest.Address.String(), asset.ID, amount.String(), notional.Minor(), now,
 		now.Format(time.DateOnly), plan.ApprovalExpiresAt, plan.ExecutableAt, ev.Outcome, ev.RiskScore, evDoc, planDoc,
-		planHash[:]); err != nil {
+		planHash[:], s.Network()); err != nil {
 		return WithdrawalTicket{}, dbErr("record withdrawal", err)
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO delegated_withdrawal_transitions (id, withdrawal_id, from_status, to_status, actor_type,
@@ -930,6 +930,9 @@ func (s *Service) SignWithdrawal(ctx context.Context, tx pgx.Tx, wid WithdrawalI
 	if w.Status != WithdrawalApproved {
 		return SignOutcome{Withdrawal: w}, nil
 	}
+	if err := s.requireNetwork(SubjectWithdrawal, w.ID.String(), w.Network); err != nil {
+		return SignOutcome{}, err
+	}
 	now := dbTime(s.clk.Now())
 	refuse := func(code, detail string) (SignOutcome, error) {
 		out, err := s.rejectWithdrawal(ctx, tx, w, code, detail)
@@ -1107,6 +1110,9 @@ func (s *Service) SettleWithdrawal(ctx context.Context, tx pgx.Tx, wid Withdrawa
 	if w.Status != WithdrawalSigned && w.Status != WithdrawalSubmitted && w.Status != WithdrawalUnknown {
 		return SettleResult{Withdrawal: w}, nil
 	}
+	if err := s.requireNetwork(SubjectWithdrawal, w.ID.String(), w.Network); err != nil {
+		return SettleResult{}, err
+	}
 	obs, err := observe(ctx, s.host, tx, w.Chain, w.TxID, w.BlockhashHeight)
 	if err != nil {
 		return SettleResult{}, err
@@ -1194,6 +1200,9 @@ func (s *Service) ExecuteWithdrawal(ctx context.Context, wid WithdrawalID) (With
 	w, err := getWithdrawal(ctx, s.db, wid, false)
 	if err != nil {
 		return WithdrawalResult{}, err
+	}
+	if err := s.requireNetwork(SubjectWithdrawal, w.ID.String(), w.Network); err != nil {
+		return WithdrawalResult{Withdrawal: w}, err
 	}
 	if w.Status == WithdrawalApproved {
 		if err := s.host.EnsureNativeBalance(ctx, w.Chain, w.Wallet, s.params.GasMinimum, s.params.GasTopUp); err != nil {

@@ -53,6 +53,9 @@ func (s *Service) RunMonitor(ctx context.Context, tx pgx.Tx, sid StableAssetID, 
 	if err != nil {
 		return MonitorReport{}, err
 	}
+	if err := s.onHost(a); err != nil {
+		return MonitorReport{}, err
+	}
 	now := s.clk.Now().UTC()
 	report := MonitorReport{StableAssetID: a.ID, ObservedAt: now, Alerts: []AlertKind{}}
 	wasActive := a.Status == StatusActive

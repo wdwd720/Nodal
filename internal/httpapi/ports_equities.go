@@ -135,6 +135,10 @@ type EquitySettlementRun struct {
 	TradeDate equities.Date
 	Batches   int
 	Settled   []EquitySettlementView
+	// Failures are the due settlements the run could not settle: each was
+	// rolled back alone, recorded with a backoff, and stood in front of none
+	// of the others.
+	Failures []equities.SettlementFailure
 }
 
 // Venue run actions.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -42,6 +43,8 @@ type Reserver interface {
 	LockForOrder(ctx context.Context, tx pgx.Tx, id ReservationID, orderID string) error
 	// ExpireDue moves up to limit ACTIVE, unlocked reservations whose
 	// expires_at ≤ now to EXPIRED with release semantics and returns them.
+	// A reservation that cannot be expired is skipped and backed off
+	// (ExpireDueBatch reports it); it never stops the others.
 	ExpireDue(ctx context.Context, tx pgx.Tx, now time.Time, limit int) ([]ReservationID, error)
 }
 
@@ -424,43 +427,121 @@ func (s *Service) LockForOrder(ctx context.Context, tx pgx.Tx, rid ReservationID
 	return nil
 }
 
-// ExpireDue implements Reserver. Rows are taken FOR UPDATE SKIP LOCKED in a
-// global (account, asset) order so concurrent expirers neither block each
-// other nor deadlock; a reservation locked by an order is never touched.
+// ExpiryFailure is a due reservation ExpireDueBatch could not expire.
+type ExpiryFailure struct {
+	ReservationID ReservationID
+	// Attempts counts its consecutive failures; it is not taken again
+	// before RetryAfter.
+	Attempts   int
+	RetryAfter time.Time
+	Err        error
+}
+
+// ExpiryBatch is what one ExpireDueBatch call did.
+type ExpiryBatch struct {
+	Expired  []ReservationID
+	Failures []ExpiryFailure
+}
+
+// expireDueSQL takes the due reservations: ACTIVE, past expires_at and not
+// locked to an order, leaving out one whose last expiry failed and whose
+// backoff is still running (unless the clock has gone back past that
+// failure). Never-failed reservations come first, so a run of failures can
+// never fill a batch while others wait. Rows another expirer holds are
+// skipped (SKIP LOCKED).
+const expireDueSQL = `SELECT ` + reservationColumns + ` FROM asset_reservations r
+	WHERE r.status = 'ACTIVE' AND r.expires_at <= $1 AND r.locked_by_order_id IS NULL
+	  AND NOT EXISTS (SELECT 1 FROM upkeep_failures uf WHERE uf.operation = $3 AND uf.item_id = r.id
+	                    AND uf.cleared_at IS NULL AND uf.retry_after > $1 AND uf.last_failed_at <= $1)
+	ORDER BY EXISTS (SELECT 1 FROM upkeep_failures uf WHERE uf.operation = $3 AND uf.item_id = r.id AND uf.cleared_at IS NULL),
+	         r.account_id, r.asset_id, r.expires_at, r.id
+	LIMIT $2 FOR UPDATE OF r SKIP LOCKED`
+
+// ExpireDue implements Reserver: ExpireDueBatch, returning the reservations
+// it expired. One it could not expire is recorded in the upkeep failure
+// ledger and backed off -- ExpireDueBatch reports it -- and never stops the
+// rest.
 func (s *Service) ExpireDue(ctx context.Context, tx pgx.Tx, now time.Time, limit int) ([]ReservationID, error) {
+	batch, err := s.ExpireDueBatch(ctx, tx, now, limit)
+	if err != nil {
+		return nil, err
+	}
+	return batch.Expired, nil
+}
+
+// ExpireDueBatch moves up to limit due reservations -- ACTIVE, unlocked,
+// expires_at ≤ now -- to EXPIRED with release semantics, each in its own
+// savepoint of tx (upkeepItem): one that cannot be expired, including one
+// whose change the database would only refuse at COMMIT, is rolled back
+// alone, recorded with a backoff and reported in Failures, and the others are
+// expired. A reservation locked by an order is never touched.
+//
+// The batch is taken in a priority order (never-failed reservations first)
+// and then expired in the global (account, asset, expires_at, id) order, so
+// concurrent expirers neither block each other (SKIP LOCKED) nor deadlock on
+// the totals rows. An error means the batch as a whole could not proceed: the
+// due reservations could not be read, the context ended, or the database
+// asked for the transaction to be retried.
+func (s *Service) ExpireDueBatch(ctx context.Context, tx pgx.Tx, now time.Time, limit int) (ExpiryBatch, error) {
 	if limit <= 0 {
 		limit = DefaultExpireBatch
 	}
 	if limit > MaxExpireBatch {
 		limit = MaxExpireBatch
 	}
-	rows, err := tx.Query(ctx, `SELECT `+reservationColumns+` FROM asset_reservations
-		WHERE status = 'ACTIVE' AND expires_at <= $1 AND locked_by_order_id IS NULL
-		ORDER BY account_id, asset_id, expires_at, id LIMIT $2 FOR UPDATE SKIP LOCKED`, now, limit)
+	checkDeferred, err := deferredChecksPass(ctx, tx)
 	if err != nil {
-		return nil, dbErr("select due reservations", err)
+		return ExpiryBatch{}, err
+	}
+	rows, err := tx.Query(ctx, expireDueSQL, now, limit, UpkeepExpireDue)
+	if err != nil {
+		return ExpiryBatch{}, dbErr("select due reservations", err)
 	}
 	var due []Reservation
 	for rows.Next() {
 		r, err := scanReservation(rows)
 		if err != nil {
 			rows.Close()
-			return nil, dbErr("scan due reservation", err)
+			return ExpiryBatch{}, dbErr("scan due reservation", err)
 		}
 		due = append(due, r)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		return nil, dbErr("iterate due reservations", err)
+		return ExpiryBatch{}, dbErr("iterate due reservations", err)
 	}
-	ids := make([]ReservationID, 0, len(due))
+	sort.Slice(due, func(i, j int) bool { return expiryLockOrder(due[i], due[j]) })
+	out := ExpiryBatch{Expired: make([]ReservationID, 0, len(due))}
 	for _, r := range due {
-		if _, err := s.finish(ctx, tx, r, ReservationExpired, "expired", now); err != nil {
-			return nil, err
+		failed, err := upkeepItem(ctx, tx, UpkeepExpireDue, r.ID, now, checkDeferred, func(sp pgx.Tx) error {
+			_, err := s.finish(ctx, sp, r, ReservationExpired, "expired", now)
+			return err
+		})
+		if err != nil {
+			return ExpiryBatch{}, err
 		}
-		ids = append(ids, r.ID)
+		if failed != nil {
+			out.Failures = append(out.Failures, ExpiryFailure{ReservationID: r.ID, Attempts: failed.attempts,
+				RetryAfter: failed.retryAfter, Err: failed.err})
+			continue
+		}
+		out.Expired = append(out.Expired, r.ID)
 	}
-	return ids, nil
+	return out, nil
+}
+
+// expiryLockOrder is the global order expiry takes the totals rows in.
+func expiryLockOrder(a, b Reservation) bool {
+	if c := strings.Compare(a.AccountID.String(), b.AccountID.String()); c != 0 {
+		return c < 0
+	}
+	if c := strings.Compare(a.AssetID.String(), b.AssetID.String()); c != 0 {
+		return c < 0
+	}
+	if !a.ExpiresAt.Equal(b.ExpiresAt) {
+		return a.ExpiresAt.Before(b.ExpiresAt)
+	}
+	return a.ID.String() < b.ID.String()
 }
 
 // Get returns a reservation by id.

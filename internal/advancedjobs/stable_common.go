@@ -46,3 +46,19 @@ func requireNetwork(network string) error {
 	}
 	return nil
 }
+
+// requireStableNetwork refuses to wire a job whose stable-asset service
+// carries another network than the one configured: the service works on its
+// own host's network, so the job would not do what its configuration says.
+func requireStableNetwork(svc *stableasset.Service, network string) error {
+	if err := requireNetwork(network); err != nil {
+		return err
+	}
+	if svc == nil {
+		return errs.New(errs.CodeInternal, "advancedjobs: a stable-asset job needs the stable-asset service")
+	}
+	if got := svc.Network(); got != network {
+		return errs.Newf(errs.CodeInternal, "advancedjobs: the stable-asset service carries devnet network %s, not the configured %s", got, network)
+	}
+	return nil
+}

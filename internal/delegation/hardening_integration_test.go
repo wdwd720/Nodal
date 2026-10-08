@@ -224,10 +224,11 @@ func TestIntegration_TheDatabaseBindsASwapsActionToItsDirection(t *testing.T) {
 		return rawTx(f.ctx, owner, func(tx pgx.Tx) error {
 			_, err := tx.Exec(f.ctx, `INSERT INTO delegated_swaps (id, capability_id, account_id, agent_id, request_nonce, intent_id,
 				usage_id, reservation_id, venue_id, mode, action_class, chain_id, wallet, pay_asset_id, receive_asset_id, amount_in,
-				amount_out, min_amount_out, notional_usd_minor, requested_at, quote_expires_at, requires_approval, plan, plan_hash, status)
+				amount_out, min_amount_out, notional_usd_minor, requested_at, quote_expires_at, requires_approval, plan, plan_hash, status,
+				network)
 				SELECT $1, capability_id, account_id, agent_id, request_nonce + 1000, intent_id, usage_id, reservation_id, venue_id, mode,
 				       $2, chain_id, wallet, pay_asset_id, receive_asset_id, amount_in, amount_out, min_amount_out, notional_usd_minor,
-				       requested_at, quote_expires_at, requires_approval, plan, $3, 'ADMITTED'
+				       requested_at, quote_expires_at, requires_approval, plan, $3, 'ADMITTED', network
 				  FROM delegated_swaps WHERE id = $4`, uuid.New(), action, forged[:], src.ID)
 			return err
 		})

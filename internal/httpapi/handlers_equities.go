@@ -433,10 +433,18 @@ func (s *Server) PostAdvancedEquitiesSettlementRuns(ctx context.Context, request
 			}
 			out := api.AdvancedEquitySettlementRun{
 				AsOf: run.At, TradeDate: run.TradeDate.String(), Batches: run.Batches,
-				Settled: make([]api.AdvancedEquitySettlement, 0, len(run.Settled)), ValueDomain: api.SIMULATED,
+				Settled:  make([]api.AdvancedEquitySettlement, 0, len(run.Settled)),
+				Failures: make([]api.AdvancedEquitySettlementFailure, 0, len(run.Failures)), ValueDomain: api.SIMULATED,
 			}
 			for _, v := range run.Settled {
 				out.Settled = append(out.Settled, toAPIEquitySettlement(v))
+			}
+			for _, f := range run.Failures {
+				code, detail := itemFailure(f.Err)
+				out.Failures = append(out.Failures, api.AdvancedEquitySettlementFailure{
+					SettlementId: toUUID(f.SettlementID), FillId: toUUID(f.FillID), AccountId: toUUID(f.AccountID),
+					Attempts: f.Attempts, RetryAfter: f.RetryAfter.UTC(), ErrorCode: code, Detail: detail,
+				})
 			}
 			return out, commandMeta{Status: http.StatusOK, ResourceType: "equity_settlement_run"}, nil
 		})
@@ -875,7 +883,7 @@ func toAPIEquityPlacement(p EquityPlacement) api.AdvancedEquityPlacement {
 			Detail: "placed at the simulated venue " + p.Report.Broker + "; its answer is recorded on the order",
 		}
 	}
-	code, detail := equityFailure(p.Err)
+	code, detail := itemFailure(p.Err)
 	return api.AdvancedEquityPlacement{
 		Status: api.EquityPlacementNotPlaced, ErrorCode: &code,
 		Detail: "no answer of the venue was recorded (" + detail + "); the order stays ACCEPTED with its submission " +
@@ -883,8 +891,9 @@ func toAPIEquityPlacement(p EquityPlacement) api.AdvancedEquityPlacement {
 	}
 }
 
-// equityFailure is a failure's code and, for a coded refusal, its detail.
-func equityFailure(err error) (string, string) {
+// itemFailure is one item's failure in a run: its code and, for a coded
+// refusal, its detail. An internal fault says only "internal error".
+func itemFailure(err error) (string, string) {
 	if e, ok := errs.As(err); ok && e.Code != errs.CodeInternal {
 		return string(e.Code), e.Detail
 	}
@@ -905,7 +914,7 @@ func toAPIEquityVenueRunItem(it EquityVenueRunItem) api.AdvancedEquityVenueRunIt
 		out.VenueStatus, out.VenueReason = &vs, strPtr(it.Report.Reason)
 	}
 	if it.Err != nil {
-		code, detail := equityFailure(it.Err)
+		code, detail := itemFailure(it.Err)
 		out.ErrorCode, out.Detail = &code, &detail
 	}
 	return out

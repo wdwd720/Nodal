@@ -32,33 +32,41 @@ func NewEquitiesSettlement(d *db.DB, svc *equities.Service, s Settings) *Equitie
 // Spec implements Job.
 func (j *EquitiesSettlement) Spec() Spec { return j.spec }
 
-// Run calls SettleDue -- one account's due settlements per transaction, the
-// way its documentation asks a worker to -- until it returns nothing or the
-// batch of accounts is spent. A failure ends the run: SettleDue starts from
-// the oldest due settlement no other worker holds, so the failing account
-// would be taken first again.
+// Run calls SettleDueBatch -- one account's due settlements per transaction,
+// the way its documentation asks a worker to -- until it takes on nothing or
+// the batch of accounts is spent. SettleDueBatch isolates a settlement it
+// cannot settle -- rolled back alone, recorded with a backoff and left out
+// until the backoff has passed -- so the run reports it as that settlement's
+// failure and goes on to the next account. Only a transaction that fails as
+// a whole ends the run.
 func (j *EquitiesSettlement) Run(ctx context.Context) (Report, error) {
 	var rep Report
 	for accountsDone := 0; accountsDone < j.spec.Batch; accountsDone++ {
 		if err := ctx.Err(); err != nil {
 			return rep, err
 		}
-		var settled []equities.Settlement
+		var batch equities.SettlementBatch
 		err := inUnit(ctx, j.db, func(ctx context.Context, tx pgx.Tx) error {
 			var err error
-			settled, err = j.svc.SettleDue(ctx, tx, equitiesSettleLimit)
+			batch, err = j.svc.SettleDueBatch(ctx, tx, equitiesSettleLimit)
 			return err
 		})
 		if err != nil {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return rep, ctxErr
+			}
 			rep.Examined++
 			rep.fail("next due account", err)
 			return rep, nil
 		}
-		if len(settled) == 0 {
+		if batch.Examined() == 0 {
 			return rep, nil
 		}
-		rep.Examined += len(settled)
-		rep.Changed += len(settled)
+		rep.Examined += batch.Examined()
+		rep.Changed += len(batch.Settled)
+		for _, f := range batch.Failures {
+			rep.fail("settlement "+f.SettlementID.String(), f.Err)
+		}
 	}
 	return rep, nil
 }

@@ -20,6 +20,7 @@ import {
   stableKeys,
   stableRedemptionResultSpec,
   stableReserveSpec,
+  stableSettleReportSpec,
   stableSnapshotChainSpec,
   stableSupplyReconciliationSpec,
 } from "../api/advanced/stable.ts";
@@ -561,6 +562,30 @@ test("the holdings and the asset detail are accepted only in their contract's sh
     () => validated(broken(detail, (c) => (c["alerts"] = [{ ...detail.alerts[0], observed: "deviation" }])), stableAssetDetailSpec, "/x"),
     /^\/x\.alerts\[0\]\.observed$/,
   );
+});
+
+test("a settle pass reports every request it could not act on, with its step and backoff", () => {
+  const report = { value_domain: "SIMULATED", examined: 3, issued: 1, redeemed: 0, queued: 1, failed: 0, waiting: 0, failures: [] };
+  assert.doesNotThrow(() => validated(report, stableSettleReportSpec, "/q"));
+  const failure = {
+    operation: "stableasset.pay_redemption",
+    request_id: "01890a5d-ac96-7a3c-9c8b-1a2b3c4d5e6f",
+    attempts: 1,
+    retry_after: "2026-10-08T12:01:00Z",
+    error_code: "CONFLICT",
+    detail: "the payout's effect is claimed and not applied",
+  };
+  assert.doesNotThrow(() => validated({ ...report, failures: [failure] }, stableSettleReportSpec, "/q"));
+  const refused = (value: unknown, path: RegExp): void => {
+    assert.throws(
+      () => validated(value, stableSettleReportSpec, "/q"),
+      (error: unknown) => error instanceof ContractViolation && path.test(error.path),
+    );
+  };
+  // A pass always says what it could not act on, even when that is nothing.
+  const { failures: _omitted, ...withoutFailures } = report;
+  refused(withoutFailures, /^\/q\.failures$/);
+  refused({ ...report, failures: [{ ...failure, operation: "stableasset.retry" }] }, /^\/q\.failures\[0\]\.operation$/);
 });
 
 test("every account-scoped stable key sits under its account's advanced prefix", () => {

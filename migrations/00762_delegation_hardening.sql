@@ -80,11 +80,12 @@ $$;
 -- +goose StatementEnd
 ALTER FUNCTION cp_delegation_swap_direction() SET search_path = pg_catalog, public, pg_temp;
 
--- Triggers of one event fire in name order: these are named to fire before delegated_swaps_birth and
--- delegated_swaps_guard, so a mislabelled swap is refused as exactly that.
-CREATE TRIGGER delegated_swaps_action_direction BEFORE INSERT ON delegated_swaps
+-- Triggers of one event fire in name order: these are named to fire after delegated_swaps_admit_network (00760: a
+-- row without its network is refused for that first) and before delegated_swaps_birth and delegated_swaps_guard,
+-- so a mislabelled swap is refused as exactly that.
+CREATE TRIGGER delegated_swaps_bind_direction BEFORE INSERT ON delegated_swaps
     FOR EACH ROW EXECUTE FUNCTION cp_delegation_swap_direction();
-CREATE TRIGGER delegated_swaps_action_direction_at_signing BEFORE UPDATE OF status ON delegated_swaps
+CREATE TRIGGER delegated_swaps_bind_direction_at_signing BEFORE UPDATE OF status ON delegated_swaps
     FOR EACH ROW WHEN (NEW.status = 'SIGNED' AND OLD.status IS DISTINCT FROM 'SIGNED')
     EXECUTE FUNCTION cp_delegation_swap_direction();
 

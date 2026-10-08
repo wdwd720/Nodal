@@ -110,4 +110,9 @@
 //   - Activate a CAPABILITY_DISABLE kill switch (the breaker uses the asset's
 //     own status), keep package-level mutable state, read the wall clock, or
 //     use floating point.
+//   - Observe, settle, monitor or reconcile a stable asset or request of
+//     another devnet network than its host's: that host would read its
+//     transactions as never seen. Or let a request a pass cannot settle or
+//     pay stop the others, or take it again before its backoff has passed
+//     (upkeep_failures, 00760).
 package stableasset

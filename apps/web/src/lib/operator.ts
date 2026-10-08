@@ -223,6 +223,8 @@ export const ADVANCED_RECONCILIATION_KINDS = [
   "PREDICTION_ESCROW",
   "CLEARING",
   "DEVNET_CHAIN",
+  "BOOK_JOURNAL",
+  "TRANSFERS",
 ] as const;
 
 export const RECONCILIATION_KIND_MEANING: Readonly<Record<(typeof ADVANCED_RECONCILIATION_KINDS)[number], string>> = {
@@ -232,6 +234,8 @@ export const RECONCILIATION_KIND_MEANING: Readonly<Record<(typeof ADVANCED_RECON
   PREDICTION_ESCROW: "A prediction market's escrowed collateral against the outcome shares it has outstanding.",
   CLEARING: "Whether a clearing house's internal books net to zero across longs and shorts.",
   DEVNET_CHAIN: "Ledger balances against the balances observed on a simulated chain.",
+  BOOK_JOURNAL: "An order book's journal replayed from the empty book against its recorded events, state hashes and orders.",
+  TRANSFERS: "The customer transfer register against its economic effects and the ledger.",
 };
 
 /** The meaning of a kind the overview reported, or a plain statement that this build has none for it. */

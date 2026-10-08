@@ -21,9 +21,20 @@
 // refuses to execute LIVE runs when it is anything other than ACTIVE; it has
 // no code path that can change it.
 //
-// The worker holds no key and signs nothing. Its only money-adjacent write is
-// proposing a trade intent, which the rest of the platform then validates,
-// risk-checks, reserves capital for and executes independently.
+// The worker signs nothing. Its money-adjacent writes are proposals: a trade
+// intent, which the rest of the platform then validates, risk-checks,
+// reserves capital for and executes independently; and, when the sandbox
+// chain is configured (CP_SANDBOX_DEVNET_NETWORK, CP_SANDBOX_DEVNET_SEED_REF),
+// an agent's delegated swap request or withdrawal proposal under a capability
+// its account's owner granted. For those it builds the admission facade
+// (delegation.NewAgentAdmission) from the sandbox seed exactly as cmd/api
+// derives the delegated signer and the venue co-signers -- the facade needs
+// the delegated wallet's address and the venues' co-signers to judge a
+// request -- and hands the derived seeds straight to it: the worker holds no
+// signer, and nothing it holds can sign, submit, settle or decide. The owner's
+// decision, the operator's execute-pending route and the advanced worker's
+// delegation upkeep carry an admitted request further. Without a sandbox
+// chain no agent is offered a delegated tool, and every run is told why.
 //
 // Exit codes: 0 success, 1 failure, 2 usage error.
 package main
@@ -48,6 +59,7 @@ import (
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/config"
 	"github.com/nodal/controlplane/internal/db"
+	"github.com/nodal/controlplane/internal/delegation"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/observability"
 	"github.com/nodal/controlplane/internal/prediction"
@@ -84,9 +96,13 @@ type deps struct {
 	ledger     *prediction.PGLedger
 	resolver   *prediction.Resolver
 	calibrator *prediction.PGCalibrator
-	batch      int
-	tick       time.Duration
-	resolve    time.Duration
+	// delegated is the admission facade, nil when no sandbox chain is
+	// configured; delegatedReason then says why.
+	delegated       *delegation.AgentAdmission
+	delegatedReason string
+	batch           int
+	tick            time.Duration
+	resolve         time.Duration
 }
 
 func run(args []string, lookup func(string) (string, bool), stdout, stderr io.Writer) int {
@@ -163,6 +179,13 @@ env: CP_* (see internal/config); %s (records per pass, default %d)
 
 LIVE mode requires the LIVE_AGENT_TRADING capability gate to be ACTIVE. No
 environment variable can enable it.
+
+Delegated authority (an agent's delegated swap requests and withdrawal
+proposals, PAPER runs only) is wired when the sandbox chain is configured:
+CP_SANDBOX_DEVNET_NETWORK and CP_SANDBOX_DEVNET_SEED_REF, the same values
+cmd/api uses. Without them no agent is offered a delegated tool. Requests are
+admitted against the gates of CP_API_ENABLED_CAPABILITIES and routed by
+CP_API_LEGAL_POLICY, read as cmd/api reads them.
 `, envTickInterval, defaultTickInterval, envResolveInterval, defaultResolveInterval, envBatch, defaultBatch)
 }
 
@@ -231,6 +254,20 @@ func wire(ctx context.Context, lookup func(string) (string, bool), stderr io.Wri
 		return nil, err
 	}
 
+	// Delegated authority, when the sandbox chain is configured: the
+	// admission facade and nothing more (see wireDelegation).
+	admission, delegatedReason, err := wireDelegation(ctx, cfg, resolverCfg, database, clk)
+	if err != nil {
+		database.Close()
+		return nil, err
+	}
+	if admission == nil {
+		log.Warn("delegated authority is not wired", "reason", delegatedReason)
+	} else {
+		log.Info("delegated authority is wired: agents holding a capability may request delegated swaps and propose withdrawals",
+			"network", cfg.Sandbox.DevnetNetwork)
+	}
+
 	// The evaluator, the tool adapters and the model provider are attached by
 	// the composition root once internal/strategy exposes its deterministic
 	// evaluator and provider credentials exist. Until then the runner is
@@ -257,7 +294,11 @@ func wire(ctx context.Context, lookup func(string) (string, bool), stderr io.Wri
 			return nil, errs.New(errs.CodeUnsupported,
 				"agent-worker: the intent emitter is wired by the API composition root; this worker proposes no intents yet")
 		},
-		IRFor: loadIR, BuildVersion: cfg.BuildVersion,
+		// Nil without a sandbox chain: the runtime then tells every run it
+		// holds no delegated tool, and refuses and records a decision that
+		// asks for one.
+		DelegatedFor: delegatedFor(admission, clk, pauses),
+		IRFor:        loadIR, BuildVersion: cfg.BuildVersion,
 	})
 	if err != nil {
 		database.Close()
@@ -268,6 +309,7 @@ func wire(ctx context.Context, lookup func(string) (string, bool), stderr io.Wri
 		cfg: cfg, db: database, log: log, clk: clk, store: store, pauses: pauses,
 		dispatcher: dispatcher, runner: runner, ledger: ledger,
 		resolver: outcomeResolver, calibrator: calibrator,
+		delegated: admission, delegatedReason: delegatedReason,
 		batch:   intFromEnv(lookup, envBatch, defaultBatch),
 		tick:    durationFromEnv(lookup, envTickInterval, defaultTickInterval),
 		resolve: durationFromEnv(lookup, envResolveInterval, defaultResolveInterval),
@@ -302,7 +344,8 @@ func loadIR(ctx context.Context, q db.Querier, strategyVersionID string) (*ir.IR
 
 func cmdRun(ctx context.Context, d *deps) error {
 	d.log.Info("agent worker started",
-		"tick_interval", d.tick.String(), "resolve_interval", d.resolve.String(), "batch", d.batch)
+		"tick_interval", d.tick.String(), "resolve_interval", d.resolve.String(), "batch", d.batch,
+		"delegated_authority", d.delegated != nil)
 	tick := time.NewTicker(d.tick)
 	defer tick.Stop()
 	resolveTick := time.NewTicker(d.resolve)
