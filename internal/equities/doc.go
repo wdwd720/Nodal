@@ -57,6 +57,14 @@
 //     disclosure and the schedule that produced it are stored with the fill,
 //     and fees.VerifyQuote is re-run before anything is posted.
 //
+//   - Fee booking: every spread and fee a fill charges is booked through the
+//     fee ledger (internal/feeledger) in the transaction that applies the
+//     fill -- the schedule ensured in force under its equities key, the
+//     payer's disclosure byte for byte the fill's own, every component on its
+//     own pair inside the fill's journal and registered against it and its
+//     effect (feebooking.go). The database refuses a fill whose charges the
+//     fee ledger did not book (00764, FW001).
+//
 //   - Corporate actions: split, reverse split (cash-in-lieu for fractional
 //     remainders under an explicit rounding policy), cash dividend for
 //     holders of record, symbol change (a terms amendment, no posting) and
@@ -92,8 +100,9 @@
 //   - Execute live: no adapter in this build talks to a real broker, and
 //     NewExecutionAdapter refuses provider mode live whatever the
 //     environment, while fake and sandbox are refused in STAGING and PROD.
-//   - Book the venue, hide a spread, or charge anything the stored fee
-//     disclosure does not account for.
+//   - Book the venue, hide a spread, charge anything the stored fee
+//     disclosure does not account for, or charge anything the fee ledger
+//     did not book.
 //   - Let shares or cash be spent twice: every order is backed by a capital
 //     reservation on the WALLET it will draw from, and the ledger refuses a
 //     negative WALLET.

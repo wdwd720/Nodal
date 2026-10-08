@@ -190,7 +190,8 @@ func routeRefusalReasons(route settlement.Route) []string {
 }
 
 // AcceptOrder turns a ROUTED equity intent into an order: it authorizes the
-// capability, validates the order against the instrument (lots, limit price,
+// capability (and SPREAD_ENGINE, when the order's fill can be charged),
+// validates the order against the instrument (lots, limit price,
 // pending corporate actions), prices it (the mark, the venue's indicative
 // price and the fee schedule), evaluates the risk kernel with every required
 // section and records the decision, and reserves the capital the order will
@@ -261,8 +262,19 @@ func (s *Service) AcceptOrder(ctx context.Context, tx pgx.Tx, intentID econ.Inte
 		}
 	}
 
-	// 1. The capability, in this mode, in this deployment.
-	if err := s.auth.Require(ctx, tx, gates.Equities, in.Mode); err != nil {
+	// 1. The capabilities, in this mode, in this deployment: EQUITIES, and
+	// SPREAD_ENGINE when the listing's schedule can charge the fill -- the
+	// fee ledger books a charge only under it, so an order whose fill could
+	// not be booked is refused here, at its own stage (feebooking.go). A
+	// SPREAD_ENGINE refusal's reasons name it.
+	for _, c := range []gates.Capability{gates.Equities, gates.SpreadEngine} {
+		if c == gates.SpreadEngine && !s.canCharge(l) {
+			continue
+		}
+		err := s.auth.Require(ctx, tx, c, in.Mode)
+		if err == nil {
+			continue
+		}
 		code := RejectCapabilityNotApproved
 		switch errs.CodeOf(err) {
 		case errs.CodeCapabilityNotApproved:
@@ -271,7 +283,15 @@ func (s *Service) AcceptOrder(ctx context.Context, tx pgx.Tx, intentID econ.Inte
 		default:
 			return Order{}, err
 		}
-		return s.reject(ctx, tx, in, o, code, fieldStrings(err, "reasons"))
+		reasons := fieldStrings(err, "reasons")
+		if c != gates.Equities {
+			named := make([]string, 0, len(reasons))
+			for _, r := range reasons {
+				named = append(named, string(c)+":"+r)
+			}
+			reasons = named
+		}
+		return s.reject(ctx, tx, in, o, code, reasons)
 	}
 	// 2. The order's shape against the instrument.
 	if code, ok := checkQuantity(o.Quantity, t); !ok {
@@ -301,8 +321,10 @@ func (s *Service) AcceptOrder(ctx context.Context, tx pgx.Tx, intentID econ.Inte
 		if mark == nil {
 			return s.reject(ctx, tx, in, o, RejectNoMark, nil)
 		}
-		q, err := s.adapter.Quote(ctx, QuoteRequest{Symbol: o.Symbol, ExchangeMIC: o.ExchangeMIC, Side: o.Side, Quantity: o.Quantity,
-			QuantityDecimals: o.QuantityDecimals, PriceScale: o.PriceScale, TickSize: o.TickSize, Mark: mark, At: now})
+		q, err := s.adapter.Quote(ctx, QuoteRequest{
+			Symbol: o.Symbol, ExchangeMIC: o.ExchangeMIC, Side: o.Side, Quantity: o.Quantity,
+			QuantityDecimals: o.QuantityDecimals, PriceScale: o.PriceScale, TickSize: o.TickSize, Mark: mark, At: now,
+		})
 		if err != nil {
 			return Order{}, err
 		}
@@ -461,8 +483,10 @@ func (s *Service) priceOrder(o Order, l Listing, reference money.Quantity, strat
 	if err != nil {
 		return fees.Quote{}, errs.Wrap(err, errs.CodeValidationFailed, "equities: reference price")
 	}
-	return sch.Quote(fees.QuoteInput{Side: feeSide(o.Side), BaseQty: o.Quantity, BaseDecimals: o.QuantityDecimals,
-		QuoteDecimals: l.CashAsset.Decimals, ReferencePrice: price, StrategyOriginated: strategy})
+	return sch.Quote(fees.QuoteInput{
+		Side: feeSide(o.Side), BaseQty: o.Quantity, BaseDecimals: o.QuantityDecimals,
+		QuoteDecimals: l.CashAsset.Decimals, ReferencePrice: price, StrategyOriginated: strategy,
+	})
 }
 
 // blockingAction returns an effective, unapplied corporate action that must
@@ -489,7 +513,8 @@ func (s *Service) blockingAction(ctx context.Context, q db.Querier, iid instrume
 }
 
 func (s *Service) evaluateRisk(ctx context.Context, tx pgx.Tx, in econ.Intent, l Listing, side Side, sessionOpen bool,
-	mark *Mark, notional money.USD, now time.Time) (risk.AdvancedDecision, risk.DecisionID, error) {
+	mark *Mark, notional money.USD, now time.Time,
+) (risk.AdvancedDecision, risk.DecisionID, error) {
 	acct, err := s.accounts.Get(ctx, tx, in.AccountID)
 	if err != nil {
 		return risk.AdvancedDecision{}, risk.DecisionID{}, err
@@ -581,9 +606,11 @@ type submission struct {
 }
 
 func submissionRequest(o Order) submission {
-	return submission{OrderID: o.ID.String(), Broker: o.Broker, Symbol: o.Symbol, ExchangeMIC: o.ExchangeMIC, Side: o.Side,
+	return submission{
+		OrderID: o.ID.String(), Broker: o.Broker, Symbol: o.Symbol, ExchangeMIC: o.ExchangeMIC, Side: o.Side,
 		Type: o.Type, Quantity: o.Quantity, LimitPrice: o.LimitPrice, ProtectionPrice: o.ProtectionPrice,
-		PriceScale: o.PriceScale, ExtendedHours: o.ExtendedHours, ExpiresAt: o.ExpiresAt.UTC()}
+		PriceScale: o.PriceScale, ExtendedHours: o.ExtendedHours, ExpiresAt: o.ExpiresAt.UTC(),
+	}
 }
 
 // Order returns one order.
@@ -654,9 +681,12 @@ func (s *Service) venueContext(ctx context.Context, q db.Querier, oid OrderID) (
 // executionBlocked reports whether an order already at the venue may not
 // execute now. It mirrors what AcceptOrder would refuse for a new order: an
 // instrument that does not trade (HALTED, RESTRICTED, DELISTED), a buy on an
-// instrument that only closes (CLOSE_ONLY, DELISTING), and the kill-switch
+// instrument that only closes (CLOSE_ONLY, DELISTING), the kill-switch
 // matrix for the order's class -- a buy is NEW_RISK, a sell REDUCE_RISK --
-// on its account, instrument and capability.
+// on its account, instrument and capability, and a buy whose fill the fee
+// ledger could not book now (SPREAD_ENGINE refused in its mode while its
+// schedule can charge the fill). A sell's charge is booked as risk
+// reduction, which none of that stops (feebooking.go).
 func (s *Service) executionBlocked(ctx context.Context, q db.Querier, l Listing, o Order) (bool, error) {
 	switch l.Instrument.Status {
 	case assets.StatusActive:
@@ -675,9 +705,16 @@ func (s *Service) executionBlocked(ctx context.Context, q db.Querier, l Listing,
 	if o.Side == SideBuy {
 		class = killswitch.NewRisk
 	}
-	_, blocked := snap.Blocking(killswitch.Action{Class: class, AccountID: o.AccountID.String(),
-		InstrumentID: l.Instrument.ID.String(), Capability: string(gates.Equities)}, killswitch.Policy{})
-	return blocked, nil
+	if _, blocked := snap.Blocking(killswitch.Action{
+		Class: class, AccountID: o.AccountID.String(),
+		InstrumentID: l.Instrument.ID.String(), Capability: string(gates.Equities),
+	}, killswitch.Policy{}); blocked {
+		return true, nil
+	}
+	if o.Side == SideBuy {
+		return s.chargingBlocked(ctx, q, l, o.Mode)
+	}
+	return false, nil
 }
 
 // PlaceAtVenue submits an ACCEPTED order to the venue with the current mark.
@@ -757,9 +794,12 @@ func (s *Service) MarkSubmissionUnknown(ctx context.Context, tx pgx.Tx, oid Orde
 //
 //   - OPEN: the order rests at the venue.
 //   - FILLED: the trade is priced under the fee schedule, the quote is
-//     re-verified with fees.VerifyQuote, the SIM_TRADE posting is made, the
-//     reservation is consumed, the fill (with its full disclosure and the
-//     schedule that produced it) and its T+1 settlement are recorded.
+//     re-verified with fees.VerifyQuote, the reservation is consumed, the
+//     payer's disclosure is recorded in the fee ledger, the SIM_TRADE
+//     posting is made with every charge on its own pair and the charges are
+//     booked against it in the fee ledger (feebooking.go), and the fill (with
+//     its full disclosure and the schedule that produced it) and its T+1
+//     settlement are recorded.
 //   - REJECTED, CANCELLED, EXPIRED: the reservation is released.
 //
 // An answer for a terminal order is a replay when it agrees with what was
@@ -860,14 +900,18 @@ func (s *Service) settleSubmission(ctx context.Context, tx pgx.Tx, o Order, r Or
 		_, err = s.effects.Fail(ctx, tx, e.ID, failure, s.actor, "the venue answered "+string(r.Status))
 		return err
 	}
-	_, err = s.effects.Apply(ctx, tx, e.ID, econ.ApplyRequest{ExternalRef: r.BrokerOrderID, Actor: s.actor,
-		Reason: "the venue answered " + string(r.Status)})
+	_, err = s.effects.Apply(ctx, tx, e.ID, econ.ApplyRequest{
+		ExternalRef: r.BrokerOrderID, Actor: s.actor,
+		Reason: "the venue answered " + string(r.Status),
+	})
 	return err
 }
 
 func (s *Service) applyOpen(ctx context.Context, tx pgx.Tx, o Order, r OrderReport, now time.Time) (Order, error) {
-	out, err := transitionOrder(ctx, tx, o, orderTransition{to: OrderOpen, actor: s.actor, reason: "resting at the venue",
-		brokerOrderID: r.BrokerOrderID}, now)
+	out, err := transitionOrder(ctx, tx, o, orderTransition{
+		to: OrderOpen, actor: s.actor, reason: "resting at the venue",
+		brokerOrderID: r.BrokerOrderID,
+	}, now)
 	if err != nil {
 		return Order{}, err
 	}
