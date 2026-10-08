@@ -61,8 +61,21 @@ async function visibleText(page: Page): Promise<string> {
   // this reads "Checking this session with the backend…" and proves nothing.
   await expect(page.locator("h1")).toHaveCount(1);
   // Includes the text of disabled-control explanations and disclosures, which
-  // is exactly the copy most likely to drift.
-  return page.evaluate(() => document.body.innerText);
+  // is exactly the copy most likely to drift. It leaves out the machine
+  // identifiers the backend minted -- ids, hashes, idempotency and effect
+  // keys -- which every page renders as <code>: they name a record and claim
+  // nothing, and one may spell a word this list forbids (a derivative fill's
+  // effect key ends ":cash", the name of its ledger leg) without the page
+  // saying anything about money. Everything a person reads as language is
+  // still read.
+  return page.evaluate(() => {
+    let text = document.body.innerText;
+    for (const code of Array.from(document.querySelectorAll("code"))) {
+      const identifier = code.innerText;
+      if (identifier !== "") text = text.replace(identifier, " ");
+    }
+    return text;
+  });
 }
 
 for (const route of ROUTES) {

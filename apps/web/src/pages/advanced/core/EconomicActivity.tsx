@@ -201,7 +201,9 @@ function EffectsPanel(props: { readonly accountId: string }): ReactNode {
                 <tr key={effect.id}>
                   <th scope="row">
                     {effect.effect_kind} <Pill tone="neutral">{effect.subsystem}</Pill>
-                    <span className="cell-note">key {effect.effect_key}</span>
+                    <span className="cell-note">
+                      key <code className="mono-small">{effect.effect_key}</code>
+                    </span>
                     <span className="cell-note">
                       id <code className="mono-small">{effect.id}</code>
                     </span>
