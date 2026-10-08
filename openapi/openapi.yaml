@@ -2627,8 +2627,578 @@ paths:
   # >>> advanced:treasury paths (insert this subsystem's paths directly below; keep the marker)
 
   # >>> advanced:stable paths (insert this subsystem's paths directly below; keep the marker)
+  #
+  # The sandbox stable asset (internal/stableasset): a platform stable asset that exists only as
+  # SIMULATED value on the simulated chain sbx-solana, issued by a STABLE_ISSUER facility against a
+  # fully reserved policy whose peg is quoted in the sandbox dollar. An issuance (a mint) posts only once
+  # its chain transaction is FINALIZED; a redemption (a burn) is its exact inverse. Quantities are exact
+  # base units of the asset named; supply_value, eligible and eligible_reserve are exact decimals of the
+  # peg's quote unit, never rounded. A reserve snapshot is a signed, hash-linked record of the sandbox
+  # books and the simulated chain; it is not an attestation and says so in its body. A submission whose
+  # outcome is unknown is shown as SUBMISSION_UNKNOWN with its reconciliation state, never as a success
+  # or a failure. Every route answers UNSUPPORTED where no sandbox chain is configured.
+  /advanced/stable-assets:
+    get:
+      tags: [advanced]
+      summary: The registered sandbox stable assets with their status, peg, issuance cap and reserve policy
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Stable assets, oldest first (the service does not page; the list is bounded by limit)
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableAssetList" } } }
+        "422": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Operator — register a sandbox stable asset pegged in the sandbox dollar (step-up)
+      description: >-
+        Creates the devnet mint (its authority is the platform issuer signer alone), the SIMULATED asset,
+        the STABLE_ISSUER facility and the reserve policy. The peg is quoted in the sandbox dollar, which is
+        not the caller's choice. Registering an identical definition again returns the existing asset; a
+        different definition under the same name is CONFLICT.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/StableAssetDefinition" } } }
+      responses:
+        "200":
+          description: The registered stable asset
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableAssetDetail" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/stable-assets/holdings:
+    get:
+      tags: [advanced]
+      summary: An account's holdings of every stable asset, on the books and on the simulated chain, and what it can pay a mint with
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The account's stable asset holdings (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableHoldings" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/stable-assets/issuances:
+    get:
+      tags: [advanced]
+      summary: An account's issuance (mint) requests, newest first
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { in: query, name: stable_asset_id, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of issuance requests (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableIssuancePage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/stable-assets/issuances/{stableIssuanceId}:
+    get:
+      tags: [advanced]
+      summary: One issuance request with its chain transaction and reconciliation state
+      parameters:
+        - { in: path, name: stableIssuanceId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The issuance request (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableIssuance" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/stable-assets/redemptions:
+    get:
+      tags: [advanced]
+      summary: An account's redemption (burn) requests, newest first
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { in: query, name: stable_asset_id, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of redemption requests (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableRedemptionPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/stable-assets/redemptions/{stableRedemptionId}:
+    get:
+      tags: [advanced]
+      summary: One redemption request with its chain transaction and reconciliation state
+      parameters:
+        - { in: path, name: stableRedemptionId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The redemption request (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableRedemption" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/stable-assets/ops/resolve-unknown:
+    post:
+      tags: [advanced]
+      summary: Operator — settle every issuance and redemption whose submission outcome is unknown, from the chain by transaction id (step-up)
+      description: >-
+        Requests in SUBMISSION_UNKNOWN, and requests still SUBMITTING past the grace period, are settled from
+        the simulated chain's status of their own transaction: FINALIZED posts and applies, FAILED or expired
+        fails and releases, anything else waits. Nothing is ever resubmitted. In SANDBOX mode the platform
+        produces the blocks, so a landed transaction finalizes only after blocks are produced.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        content: { application/json: { schema: { $ref: "#/components/schemas/StableBatchRequest" } } }
+      responses:
+        "200":
+          description: What the pass examined and how each request ended
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableSettleReport" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/stable-assets/{stableAssetId}:
+    get:
+      tags: [advanced]
+      summary: One stable asset with its status history and recent peg-monitor alerts
+      parameters:
+        - { in: path, name: stableAssetId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The stable asset (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableAssetDetail" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/stable-assets/{stableAssetId}/reserve:
+    get:
+      tags: [advanced]
+      summary: The issuer's reserve ledger for one stable asset and its coverage of issued supply at the peg
+      description: >-
+        Issued supply and the reserve are the STABLE_ISSUER facility's ledger balances; pending figures are
+        derived from request states and never booked. Each reserve asset is counted at its verified price
+        (a cash equivalent at most par) times its eligibility factor; one with no fresh price counts zero and
+        is listed as unverified.
+      parameters:
+        - { in: path, name: stableAssetId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The reserve position (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableReserve" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/stable-assets/{stableAssetId}/snapshots:
+    get:
+      tags: [advanced]
+      summary: The signed reserve snapshot chain and its verification against the snapshot signer's public key
+      description: >-
+        The whole chain is verified from the snapshots and the snapshot signer's public key alone: each body
+        re-encodes to exactly its canonical bytes, hashes to its hash, carries a valid Ed25519 signature by
+        that key, names the previous snapshot's hash and carries the disclaimer. The newest `limit`
+        snapshots are returned, oldest first; `verified` on each says whether it and every snapshot before
+        it verify.
+      parameters:
+        - { in: path, name: stableAssetId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: The snapshot chain and its verification (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableSnapshotChain" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Operator — record the next signed reserve and supply snapshot (moves no value)
+      parameters:
+        - { in: path, name: stableAssetId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: The snapshot as recorded, and the chain's verification after it
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableSnapshotResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/stable-assets/{stableAssetId}/issuances:
+    post:
+      tags: [advanced]
+      summary: Issue (mint) stable units into your sandbox wallet, paid in an eligible cash-equivalent reserve asset at the peg
+      description: >-
+        The service admits the issuance against the cap and the reserve, evaluates Risk Kernel V2, reserves
+        the payment, signs the planned TOKEN_MINT_TO and submits it exactly once. 200 when the request is
+        final (ISSUED, or FAILED with its failure code); 202 when it is recorded and not final: awaiting the
+        chain in DEVNET mode, or SUBMISSION_UNKNOWN when the submission's outcome is unknown, in which case
+        it is reconciled from the chain by transaction id and never resubmitted.
+      parameters:
+        - { in: path, name: stableAssetId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/StableIssueRequest" } } }
+      responses:
+        "200":
+          description: The issuance request, final
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableIssuanceResult" } } }
+        "202":
+          description: The issuance request, recorded and not final (see reconciliation for an unknown outcome)
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableIssuanceResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/stable-assets/{stableAssetId}/redemptions:
+    post:
+      tags: [advanced]
+      summary: Redeem (burn) stable units from your sandbox wallet for the policy's cash-equivalent reserve asset at par
+      description: >-
+        The holder's units are reserved, the custodied key signs the planned TOKEN_BURN, it is submitted
+        exactly once, and the redemption posts only after the burn is FINALIZED (or is queued in redemption
+        mode QUEUED). 200 when final; 202 when recorded and not final, including SUBMISSION_UNKNOWN.
+      parameters:
+        - { in: path, name: stableAssetId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/StableRedeemRequest" } } }
+      responses:
+        "200":
+          description: The redemption request, final
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableRedemptionResult" } } }
+        "202":
+          description: The redemption request, recorded and not final (see reconciliation for an unknown outcome)
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableRedemptionResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/stable-assets/{stableAssetId}/pause:
+    post:
+      tags: [advanced]
+      summary: Operator — pause issuance and redemption of a stable asset, with a reason (step-up)
+      parameters:
+        - { in: path, name: stableAssetId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/StableReasonRequest" } } }
+      responses:
+        "200":
+          description: The stable asset after the change
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableAssetDetail" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/stable-assets/{stableAssetId}/resume:
+    post:
+      tags: [advanced]
+      summary: Operator — resume a paused stable asset, with a reason (step-up; the circuit breaker never resumes)
+      parameters:
+        - { in: path, name: stableAssetId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/StableReasonRequest" } } }
+      responses:
+        "200":
+          description: The stable asset after the change
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableAssetDetail" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/stable-assets/{stableAssetId}/monitor-runs:
+    post:
+      tags: [advanced]
+      summary: Operator — run the peg monitor (market price against the peg, reserve coverage, supply against the chain)
+      description: >-
+        Moves no value. A deviation above the threshold, coverage under 100% or a supply mismatch trips the
+        circuit breaker, which pauses the asset; it never resumes it.
+      parameters:
+        - { in: path, name: stableAssetId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: The monitor's findings
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableMonitorReport" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/stable-assets/{stableAssetId}/reconciliations:
+    post:
+      tags: [advanced]
+      summary: Operator — reconcile the stable asset's supply (ledger, every holding, the chain, the reserve)
+      description: >-
+        Moves no value. A mismatch opens a material STABLE_RESERVE reconciliation record that blocks new risk
+        and trips the circuit breaker; a match is recorded.
+      parameters:
+        - { in: path, name: stableAssetId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: The supply reconciliation
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableSupplyReconciliation" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/stable-assets/{stableAssetId}/redemption-queue/run:
+    post:
+      tags: [advanced]
+      summary: Operator — pay out the queued redemptions of a stable asset, oldest first (step-up)
+      parameters:
+        - { in: path, name: stableAssetId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        content: { application/json: { schema: { $ref: "#/components/schemas/StableBatchRequest" } } }
+      responses:
+        "200":
+          description: What the run examined and paid
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableSettleReport" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
 
   # >>> advanced:bridge paths (insert this subsystem's paths directly below; keep the marker)
+  #
+  # Cross-chain capital (internal/bridge) over the persistent simulated chain host (internal/devnethost):
+  # routes join a SIMULATED asset on one simulated chain to its bridged twin on another; a leg moves an
+  # account's units through BRIDGE_REQUESTED → SOURCE_FINALIZED → MESSAGE_IN_FLIGHT → DESTINATION_FINALIZED
+  # → RECONCILED, each posting made only once the chain transaction it records is FINALIZED. The chains are
+  # a simulation the books are reconciled against; every unit is SIMULATED value. The chain routes are the
+  # host's (shared with the stable asset): status for display, and in LOCAL, TEST and DEV only, block
+  # production and fault injection. Every route answers UNSUPPORTED where no sandbox chain is configured.
+  /advanced/bridge/routes:
+    get:
+      tags: [advanced]
+      summary: The bridge routes between the simulated chains
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Routes, oldest first (the service does not page; the list is bounded by limit)
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeRouteList" } } }
+        "422": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Operator — open a route from a SIMULATED asset on its simulated chain to a bridged twin on another (step-up)
+      description: >-
+        Creates the destination mint (whose authority no key holds, so only an attested release mints it),
+        the destination asset and the route's BRIDGE facility. Creating an identical route again returns it;
+        another route under the same name is CONFLICT.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/BridgeRouteDefinition" } } }
+      responses:
+        "200":
+          description: The route
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeRoute" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/bridge/routes/{bridgeRouteId}:
+    get:
+      tags: [advanced]
+      summary: One bridge route
+      parameters:
+        - { in: path, name: bridgeRouteId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The route (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeRoute" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/bridge/routes/{bridgeRouteId}/pause:
+    post:
+      tags: [advanced]
+      summary: Operator — pause a route, with a reason; legs already in flight still complete (step-up)
+      parameters:
+        - { in: path, name: bridgeRouteId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/BridgeReasonRequest" } } }
+      responses:
+        "200":
+          description: The route after the change
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeRoute" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/bridge/routes/{bridgeRouteId}/resume:
+    post:
+      tags: [advanced]
+      summary: Operator — resume a paused route, with a reason (step-up; the circuit breaker never resumes)
+      parameters:
+        - { in: path, name: bridgeRouteId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/BridgeReasonRequest" } } }
+      responses:
+        "200":
+          description: The route after the change
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeRoute" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/bridge/routes/{bridgeRouteId}/reconciliations:
+    post:
+      tags: [advanced]
+      summary: Operator — reconcile a route's books with both chains (moves no value)
+      description: >-
+        A mismatch opens a material BRIDGE reconciliation record that blocks new risk and pauses the route
+        (its circuit breaker); a match is recorded.
+      parameters:
+        - { in: path, name: bridgeRouteId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: The route reconciliation
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeRouteReconciliation" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/bridge/legs:
+    get:
+      tags: [advanced]
+      summary: An account's bridge legs, newest first
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of legs (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeLegPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Bridge units of a route's source asset from your sandbox wallet on its chain to your wallet on the destination chain
+      description: >-
+        The service checks the route, the holder's balance on the source chain, Risk Kernel V2 and the
+        units' reservation, has the holder's custodied key sign the planned BRIDGE_LOCK, and submits it
+        exactly once. 200 when the leg is final (RECONCILED, or FAILED with its failure code); 202 when it is
+        recorded and not final: in flight, in manual review, awaiting the chain in DEVNET mode, or with a
+        submission whose outcome is unknown (reconciliation state AWAITING), which is reconciled from the
+        chain by transaction id and never resubmitted.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/BridgeLegRequest" } } }
+      responses:
+        "200":
+          description: The leg, final
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeLegResult" } } }
+        "202":
+          description: The leg, recorded and not final
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeLegResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/bridge/legs/{bridgeLegId}:
+    get:
+      tags: [advanced]
+      summary: One leg with its lock and release transactions on the chains and every state it passed through
+      parameters:
+        - { in: path, name: bridgeLegId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The leg (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeLegDetail" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/bridge/legs/{bridgeLegId}/reconcile:
+    post:
+      tags: [advanced]
+      summary: Operator — settle a leg from both chains by transaction id and reconcile it (step-up)
+      description: >-
+        Drives the leg as far as the chains allow now — never resubmitting a lock and never racing a release
+        that can still land; a SANDBOX leg is driven by producing blocks — and, once its destination is
+        final, checks the lock, the release and both postings against the chains.
+      parameters:
+        - { in: path, name: bridgeLegId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: The leg, final
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeLegResult" } } }
+        "202":
+          description: The leg, not final yet
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeLegResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/bridge/holdings:
+    get:
+      tags: [advanced]
+      summary: An account's simulated holdings by chain, its value in flight between chains, and the haircut it counts at
+      description: >-
+        Holdings are the account's ledger WALLET balances of SIMULATED assets, grouped by each asset's chain.
+        In flight is the bridge's part of buying power under the deployment's haircut policy: each open leg,
+        where its value is held, and the factor it counts at with the reason. Refused with
+        RECONCILIATION_REQUIRED when the legs and the ledger disagree.
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: Holdings by chain and value in flight (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeHoldings" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/bridge/chains:
+    get:
+      tags: [advanced]
+      summary: The simulated chains' tips, finality and parameters, for display
+      responses:
+        "200":
+          description: Both chains of the host
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeChains" } } }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/bridge/chains/{bridgeChainId}/blocks:
+    post:
+      tags: [advanced]
+      summary: Operator — produce blocks on a simulated chain (step-up)
+      description: >-
+        The platform is the block producer of SANDBOX mode: producing blocks lets submitted transactions be
+        included and finalize. It never submits or settles anything itself.
+      parameters:
+        - { in: path, name: bridgeChainId, required: true, schema: { $ref: "#/components/schemas/BridgeChainId" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/BridgeBlocksRequest" } } }
+      responses:
+        "200":
+          description: The chain after the blocks
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeBlocksResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/bridge/chains/{bridgeChainId}/faults:
+    post:
+      tags: [advanced]
+      summary: Operator — inject a submission fault on a simulated chain (LOCAL, TEST and DEV only; step-up)
+      description: >-
+        Arms the chain to answer the next submission with a timeout that lands (TIMEOUT_BUT_LAND) or does
+        not (TIMEOUT_AND_DROP), to drop the next `count` submissions (DROP_NEXT), to hold every accepted
+        transaction for `count` blocks (DELAY_INCLUSION), or disarms every fault (CLEAR_FAULTS). Refused with
+        FORBIDDEN (reason FAULT_INJECTION_FORBIDDEN) outside LOCAL, TEST and DEV.
+      parameters:
+        - { in: path, name: bridgeChainId, required: true, schema: { $ref: "#/components/schemas/BridgeChainId" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/BridgeFaultRequest" } } }
+      responses:
+        "200":
+          description: The fault armed, and the chain
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeFaultResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
 
   # >>> advanced:predmarket paths (insert this subsystem's paths directly below; keep the marker)
   # Prediction markets (internal/predmarket): complete sets of outcome shares against the sandbox dollar,
@@ -6995,8 +7565,896 @@ components:
     # >>> advanced:treasury schemas (insert this subsystem's schemas directly below; keep the marker)
 
     # >>> advanced:stable schemas (insert this subsystem's schemas directly below; keep the marker)
+    #
+    # The sandbox stable asset (internal/stableasset). The enums carry x-enum-varnames so their Go constants
+    # never collide with another schema's (ACTIVE, FAILED, SANDBOX and others already exist unprefixed).
+    StableAssetStatus:
+      type: string
+      enum: [ACTIVE, PAUSED, RETIRED]
+      x-enum-varnames: [StableAssetStatusActive, StableAssetStatusPaused, StableAssetStatusRetired]
+      description: ACTIVE issues and redeems; PAUSED (by an operator or the circuit breaker) does neither; RETIRED issues nothing and keeps redeeming.
+    StableReserveKind:
+      type: string
+      enum: [CASH_EQUIVALENT, TOKENIZED]
+      x-enum-varnames: [StableReserveKindCashEquivalent, StableReserveKindTokenized]
+    StableRedemptionMode:
+      type: string
+      enum: [INSTANT, QUEUED]
+      x-enum-varnames: [StableRedemptionModeInstant, StableRedemptionModeQueued]
+    StableRequestMode:
+      type: string
+      enum: [SANDBOX, DEVNET]
+      x-enum-varnames: [StableRequestModeSandbox, StableRequestModeDevnet]
+      description: >-
+        SANDBOX: the platform produces the simulated chain's blocks and drives the request to a final state.
+        DEVNET: the request is only observed, and finalizes as the chain's blocks arrive.
+    StableIssuanceStatus:
+      type: string
+      enum: [SUBMITTING, SUBMITTED, SUBMISSION_UNKNOWN, ISSUED, FAILED]
+      x-enum-varnames: [StableIssuanceStatusSubmitting, StableIssuanceStatusSubmitted, StableIssuanceStatusSubmissionUnknown,
+                        StableIssuanceStatusIssued, StableIssuanceStatusFailed]
+      description: >-
+        SUBMITTING: signed and recorded, about to be (or being) submitted. SUBMITTED: the chain accepted it.
+        SUBMISSION_UNKNOWN: the submission's outcome is unknown; only reconciliation by transaction id
+        settles it. ISSUED: final on chain and STABLE_ISSUANCE posted. FAILED: failed on chain, expired or
+        refused; the payment's reservation was released and nothing was posted.
+    StableRedemptionStatus:
+      type: string
+      enum: [SUBMITTING, SUBMITTED, SUBMISSION_UNKNOWN, REDEMPTION_QUEUED, REDEEMED, FAILED]
+      x-enum-varnames: [StableRedemptionStatusSubmitting, StableRedemptionStatusSubmitted, StableRedemptionStatusSubmissionUnknown,
+                        StableRedemptionStatusRedemptionQueued, StableRedemptionStatusRedeemed, StableRedemptionStatusFailed]
+      description: >-
+        As an issuance; REDEMPTION_QUEUED: the burn is final on chain and its payout waits for the operator's
+        queue run (redemption mode QUEUED); REDEEMED: STABLE_REDEMPTION posted.
+    StableReconciliationState:
+      type: string
+      enum: [NOT_REQUIRED, AWAITING, RESOLVED]
+      x-enum-varnames: [StableReconciliationNotRequired, StableReconciliationAwaiting, StableReconciliationResolved]
+      description: >-
+        NOT_REQUIRED: the submission's outcome was never unknown. AWAITING: it is unknown now, and the
+        request waits to be settled from the chain by transaction id. RESOLVED: it was unknown and has been
+        settled from the chain.
+    StableEffectStatus:
+      type: string
+      enum: [PENDING, APPLIED, UNKNOWN, FAILED, COMPENSATED]
+      x-enum-varnames: [StableEffectStatusPending, StableEffectStatusApplied, StableEffectStatusUnknown, StableEffectStatusFailed,
+                        StableEffectStatusCompensated]
+    StableAlertKind:
+      type: string
+      enum: [PRICE_DEVIATION, PRICE_STALE, RESERVE_SHORTFALL, RESERVE_PRICE_STALE, SUPPLY_MISMATCH]
+      x-enum-varnames: [StableAlertKindPriceDeviation, StableAlertKindPriceStale, StableAlertKindReserveShortfall,
+                        StableAlertKindReservePriceStale, StableAlertKindSupplyMismatch]
+    StableAlertSeverity:
+      type: string
+      enum: [WARNING, CRITICAL]
+      x-enum-varnames: [StableAlertSeverityWarning, StableAlertSeverityCritical]
+    StableSnapshotFailure:
+      type: string
+      enum: [SNAPSHOT_BODY_NOT_CANONICAL, SNAPSHOT_HASH_MISMATCH, SNAPSHOT_SIGNATURE_INVALID, SNAPSHOT_CHAIN_BROKEN,
+             SNAPSHOT_KEY_MISMATCH, SNAPSHOT_DISCLAIMER_MISSING]
+      x-enum-varnames: [StableSnapshotFailureBodyNotCanonical, StableSnapshotFailureHashMismatch, StableSnapshotFailureSignatureInvalid,
+                        StableSnapshotFailureChainBroken, StableSnapshotFailureKeyMismatch, StableSnapshotFailureDisclaimerMissing]
+    StableDecimal:
+      type: string
+      pattern: '^[0-9]+(\.[0-9]+)?$'
+      description: A non-negative decimal written out exactly; it is never rounded, and one that is not exact where it is used is refused.
+    StableValue:
+      type: string
+      pattern: '^-?[0-9]+(\.[0-9]+)?$'
+      description: >-
+        An exact amount of the peg's quote unit (whole sandbox dollars), written out in full: base units times
+        a price times a factor, never rounded.
+    StableActor:
+      type: object
+      required: [actor_type, actor_id]
+      properties:
+        actor_type: { type: string }
+        actor_id: { type: string }
+    StablePrice:
+      type: object
+      required: [mantissa, scale, decimal, quote, source, observed_at]
+      description: The price of one whole unit, exactly mantissa × 10^-scale of the quote asset.
+      properties:
+        mantissa: { $ref: "#/components/schemas/Quantity" }
+        scale: { type: integer }
+        decimal: { $ref: "#/components/schemas/StableDecimal" }
+        quote: { type: string, description: "The quote asset's id" }
+        source: { type: string, description: "The price's source: the asset's oracle source, PAR for the peg's own quote asset, TARGET_PEG for the peg" }
+        observed_at: { $ref: "#/components/schemas/Timestamp" }
+    StableReserveAsset:
+      type: object
+      required: [asset_id, symbol, decimals, kind, factor_bps, accepted_for_mint]
+      properties:
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        decimals: { type: integer }
+        kind: { $ref: "#/components/schemas/StableReserveKind" }
+        factor_bps: { $ref: "#/components/schemas/BPS" }
+        accepted_for_mint: { type: boolean, description: "An issuance may be paid in it (cash equivalents only)" }
+    StableAsset:
+      type: object
+      required: [value_domain, id, name, symbol, peg_currency, asset_id, facility_id, network, chain, mint, decimals, status,
+                 issuance_cap, mint_authority_mode, mint_authority, burn_authority_mode, redemption_mode, peg, oracle_source,
+                 max_price_age_ms, peg_deviation_threshold_bps, attestable, reserves, created_by, created_at, updated_at]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        id: { $ref: "#/components/schemas/UUID" }
+        name: { type: string }
+        symbol: { type: string }
+        peg_currency: { type: string }
+        asset_id: { $ref: "#/components/schemas/UUID", description: "The SIMULATED asset customers hold" }
+        facility_id: { $ref: "#/components/schemas/UUID", description: "The STABLE_ISSUER facility whose books are the reserve" }
+        network: { type: string }
+        chain: { type: string }
+        mint: { type: string, description: "The devnet mint address" }
+        decimals: { type: integer }
+        status: { $ref: "#/components/schemas/StableAssetStatus" }
+        issuance_cap: { $ref: "#/components/schemas/Quantity" }
+        mint_authority_mode: { type: string }
+        mint_authority: { type: string, description: "The issuer signer's public address; no other key can mint" }
+        burn_authority_mode: { type: string }
+        redemption_mode: { $ref: "#/components/schemas/StableRedemptionMode" }
+        peg: { $ref: "#/components/schemas/StablePrice" }
+        oracle_source: { type: string }
+        max_price_age_ms: { type: integer, format: int64 }
+        peg_deviation_threshold_bps: { $ref: "#/components/schemas/BPS" }
+        attestable: { type: boolean, description: "The asset publishes signed reserve snapshots" }
+        reserves: { type: array, items: { $ref: "#/components/schemas/StableReserveAsset" } }
+        created_by: { $ref: "#/components/schemas/StableActor" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+    StableAssetList:
+      type: object
+      required: [value_domain, items]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        items: { type: array, items: { $ref: "#/components/schemas/StableAsset" } }
+    StableAssetTransition:
+      type: object
+      required: [from_status, to_status, actor, reason, occurred_at]
+      properties:
+        from_status: { type: string, description: "The status before, NONE for the registration" }
+        to_status: { $ref: "#/components/schemas/StableAssetStatus" }
+        actor: { $ref: "#/components/schemas/StableActor" }
+        reason: { type: string }
+        occurred_at: { $ref: "#/components/schemas/Timestamp" }
+    StableAlert:
+      type: object
+      required: [id, kind, severity, breaker_tripped, observed, observed_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        kind: { $ref: "#/components/schemas/StableAlertKind" }
+        severity: { $ref: "#/components/schemas/StableAlertSeverity" }
+        breaker_tripped: { type: boolean, description: "This finding paused the asset" }
+        observed: { type: object, additionalProperties: true, description: "What the monitor observed, as it recorded it" }
+        observed_at: { $ref: "#/components/schemas/Timestamp" }
+    StableAssetDetail:
+      type: object
+      required: [value_domain, asset, transitions, alerts]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        asset: { $ref: "#/components/schemas/StableAsset" }
+        transitions: { type: array, items: { $ref: "#/components/schemas/StableAssetTransition" }, description: "Every status change, oldest first" }
+        alerts: { type: array, items: { $ref: "#/components/schemas/StableAlert" }, description: "The newest peg-monitor alerts, newest first" }
+    StableReserveHolding:
+      type: object
+      required: [asset_id, symbol, decimals, kind, quantity, factor_bps, eligible]
+      properties:
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        decimals: { type: integer }
+        kind: { $ref: "#/components/schemas/StableReserveKind" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        factor_bps: { $ref: "#/components/schemas/BPS" }
+        price: { $ref: "#/components/schemas/StablePrice", description: "The verified price it is counted at; absent: no fresh price, so it counts zero" }
+        eligible: { $ref: "#/components/schemas/StableValue", description: "quantity × price × factor, exact" }
+    StableReserve:
+      type: object
+      required: [value_domain, stable_asset_id, symbol, decimals, as_of, peg, issued_supply, cash_equivalent_reserve, tokenized_reserve,
+                 pending_mint, receivable, pending_burn, pending_redemption, supply_value, eligible_reserve, coverage_bps, covered,
+                 unverified_reserve_asset_ids]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        stable_asset_id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        decimals: { type: integer }
+        as_of: { $ref: "#/components/schemas/Timestamp" }
+        peg: { $ref: "#/components/schemas/StablePrice" }
+        issued_supply: { $ref: "#/components/schemas/Quantity", description: "The issuer's STABLE_OUTSTANDING (ledger)" }
+        cash_equivalent_reserve: { type: array, items: { $ref: "#/components/schemas/StableReserveHolding" }, description: "The issuer's STABLE_RESERVE in each cash equivalent (ledger)" }
+        tokenized_reserve: { type: array, items: { $ref: "#/components/schemas/StableReserveHolding" }, description: "The issuer's STABLE_RESERVE in each tokenized asset (ledger)" }
+        pending_mint: { $ref: "#/components/schemas/Quantity", description: "Supply reserved by issuances not yet final (request states, never booked)" }
+        receivable: { type: array, items: { $ref: "#/components/schemas/StableReserveHolding" }, description: "Customers' payments held by reservations for those issuances" }
+        pending_burn: { $ref: "#/components/schemas/Quantity", description: "Units of redemptions not yet final on chain" }
+        pending_redemption: { type: array, items: { $ref: "#/components/schemas/StableReserveHolding" }, description: "Payouts of redemptions not yet posted" }
+        supply_value: { $ref: "#/components/schemas/StableValue", description: "Issued supply at the peg" }
+        eligible_reserve: { $ref: "#/components/schemas/StableValue", description: "The eligible value of both reserve lines" }
+        coverage_bps: { type: integer, format: int64, description: "floor(eligible_reserve / supply_value × 10000); 10000 when nothing is issued" }
+        covered: { type: boolean, description: "The eligible reserve covers issued supply at the peg" }
+        unverified_reserve_asset_ids: { type: array, items: { $ref: "#/components/schemas/UUID" }, description: "Reserve assets holding a balance with no fresh price" }
+    StableSnapshotPrice:
+      type: object
+      required: [mantissa, scale, quote, source, at]
+      properties:
+        mantissa: { type: string }
+        scale: { type: integer }
+        quote: { type: string }
+        source: { type: string }
+        at: { $ref: "#/components/schemas/Timestamp" }
+    StableSnapshotReserve:
+      type: object
+      required: [asset_id, kind, balance, decimals, factor_bps, eligible]
+      properties:
+        asset_id: { type: string }
+        kind: { type: string }
+        balance: { type: string }
+        decimals: { type: string }
+        factor_bps: { type: string }
+        price: { $ref: "#/components/schemas/StableSnapshotPrice", description: "Absent where the canonical body has null (no fresh price)" }
+        eligible: { type: string }
+    StableSnapshotComposition:
+      type: object
+      required: [kind, eligible, share_bps]
+      properties:
+        kind: { type: string }
+        eligible: { type: string }
+        share_bps: { type: string }
+    StableSnapshotBody:
+      type: object
+      description: The snapshot's body, field for field as its canonical JSON states it; every number is a string.
+      required: [version, disclaimer, stable_asset_id, asset_id, chain, mint, seq, taken_at, prev_hash, ledger_supply, chain_supply,
+                 pending_mint, pending_burn, peg, reserves, composition, supply_value, eligible_reserve, coverage_bps]
+      properties:
+        version: { type: string }
+        disclaimer: { type: string }
+        stable_asset_id: { type: string }
+        asset_id: { type: string }
+        chain: { type: string }
+        mint: { type: string }
+        seq: { type: string }
+        taken_at: { $ref: "#/components/schemas/Timestamp" }
+        prev_hash: { type: string }
+        ledger_supply: { type: string }
+        chain_supply: { type: string }
+        pending_mint: { type: string }
+        pending_burn: { type: string }
+        peg: { $ref: "#/components/schemas/StableSnapshotPrice" }
+        reserves: { type: array, items: { $ref: "#/components/schemas/StableSnapshotReserve" } }
+        composition: { type: array, items: { $ref: "#/components/schemas/StableSnapshotComposition" } }
+        supply_value: { type: string }
+        eligible_reserve: { type: string }
+        coverage_bps: { type: string }
+    StableSnapshot:
+      type: object
+      required: [seq, taken_at, hash, prev_hash, signature, signer_public_key, evidence_ref, verified, canonical_body, body]
+      properties:
+        seq: { type: integer, format: int64 }
+        taken_at: { $ref: "#/components/schemas/Timestamp" }
+        hash: { type: string, description: "hex SHA-256 of canonical_body" }
+        prev_hash: { type: string, description: "hex hash of the snapshot before; empty for the first" }
+        signature: { type: string, description: "hex Ed25519 signature over the domain-separated hash" }
+        signer_public_key: { type: string, description: "hex Ed25519 public key stored with the snapshot" }
+        evidence_ref: { type: string }
+        verified: { type: boolean, description: "This snapshot and every snapshot before it verify against the snapshot signer's public key" }
+        canonical_body: { type: string, description: "The exact canonical JSON the hash covers" }
+        body: { $ref: "#/components/schemas/StableSnapshotBody" }
+    StableSnapshotVerification:
+      type: object
+      required: [verified, checked, public_key, disclaimer]
+      properties:
+        verified: { type: boolean, description: "Every snapshot of the chain verifies" }
+        checked: { type: integer, description: "How many snapshots the chain holds, all of them checked" }
+        failed_index: { type: integer, description: "Position (from 0, oldest first) of the first snapshot that does not verify" }
+        reason: { $ref: "#/components/schemas/StableSnapshotFailure" }
+        public_key: { type: string, description: "hex Ed25519 public key of the snapshot signer the chain is verified against" }
+        disclaimer: { type: string, description: "What a snapshot is and is not, as every snapshot body states it" }
+    StableSnapshotChain:
+      type: object
+      required: [value_domain, stable_asset_id, verification, total, items]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        stable_asset_id: { $ref: "#/components/schemas/UUID" }
+        verification: { $ref: "#/components/schemas/StableSnapshotVerification" }
+        total: { type: integer }
+        items: { type: array, items: { $ref: "#/components/schemas/StableSnapshot" }, description: "The newest snapshots up to limit, oldest first" }
+    StableSnapshotResult:
+      type: object
+      required: [value_domain, snapshot, verification]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        snapshot: { $ref: "#/components/schemas/StableSnapshot" }
+        verification: { $ref: "#/components/schemas/StableSnapshotVerification" }
+    StableReconciliation:
+      type: object
+      required: [state, effect_status]
+      properties:
+        state: { $ref: "#/components/schemas/StableReconciliationState" }
+        effect_status: { $ref: "#/components/schemas/StableEffectStatus" }
+        unknown_since: { $ref: "#/components/schemas/Timestamp" }
+        resolved_at: { $ref: "#/components/schemas/Timestamp" }
+    StableIssuance:
+      type: object
+      required: [value_domain, id, stable_asset_id, symbol, decimals, account_id, intent_id, effect_id, mode, quantity, reserve_asset_id,
+                 reserve_symbol, reserve_decimals, reserve_quantity, reserve_price, recipient, chain, tx_id, plan_hash, status,
+                 reconciliation, created_at, updated_at]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        id: { $ref: "#/components/schemas/UUID" }
+        stable_asset_id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        decimals: { type: integer }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        intent_id: { $ref: "#/components/schemas/UUID" }
+        effect_id: { $ref: "#/components/schemas/UUID" }
+        mode: { $ref: "#/components/schemas/StableRequestMode" }
+        quantity: { $ref: "#/components/schemas/Quantity", description: "Stable units issued" }
+        reserve_asset_id: { $ref: "#/components/schemas/UUID" }
+        reserve_symbol: { type: string }
+        reserve_decimals: { type: integer }
+        reserve_quantity: { $ref: "#/components/schemas/Quantity", description: "The payment, in the reserve asset's base units" }
+        reserve_price: { $ref: "#/components/schemas/StablePrice", description: "The verified price the plan priced the payment at" }
+        recipient: { type: string, description: "The account's custodied wallet address on the chain" }
+        chain: { type: string }
+        tx_id: { type: string }
+        plan_hash: { type: string, description: "hex hash of the canonical mint plan the transaction's memo binds" }
+        status: { $ref: "#/components/schemas/StableIssuanceStatus" }
+        failure_code: { type: string }
+        reconciliation: { $ref: "#/components/schemas/StableReconciliation" }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        final_slot: { type: integer, format: int64 }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+    StableIssuancePage:
+      type: object
+      required: [value_domain, items, next_cursor]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        items: { type: array, items: { $ref: "#/components/schemas/StableIssuance" } }
+        next_cursor: { type: [string, "null"] }
+    StableIssuanceResult:
+      type: object
+      required: [value_domain, replay, settled, issuance]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        replay: { type: boolean, description: "The key named a request the service already recorded; nothing was submitted again" }
+        settled: { type: boolean, description: "The request is final (ISSUED or FAILED)" }
+        issuance: { $ref: "#/components/schemas/StableIssuance" }
+    StableRedemption:
+      type: object
+      required: [value_domain, id, stable_asset_id, symbol, decimals, account_id, intent_id, effect_id, mode, quantity, payout_asset_id,
+                 payout_symbol, payout_decimals, payout_quantity, redemption_mode, holder, chain, tx_id, plan_hash, status,
+                 reconciliation, created_at, updated_at]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        id: { $ref: "#/components/schemas/UUID" }
+        stable_asset_id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        decimals: { type: integer }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        intent_id: { $ref: "#/components/schemas/UUID" }
+        effect_id: { $ref: "#/components/schemas/UUID" }
+        mode: { $ref: "#/components/schemas/StableRequestMode" }
+        quantity: { $ref: "#/components/schemas/Quantity", description: "Stable units burned" }
+        payout_asset_id: { $ref: "#/components/schemas/UUID" }
+        payout_symbol: { type: string }
+        payout_decimals: { type: integer }
+        payout_quantity: { $ref: "#/components/schemas/Quantity", description: "What the redemption pays, at the peg, rounded down" }
+        redemption_mode: { $ref: "#/components/schemas/StableRedemptionMode" }
+        holder: { type: string, description: "The account's custodied wallet address on the chain" }
+        chain: { type: string }
+        tx_id: { type: string }
+        plan_hash: { type: string }
+        status: { $ref: "#/components/schemas/StableRedemptionStatus" }
+        failure_code: { type: string }
+        reconciliation: { $ref: "#/components/schemas/StableReconciliation" }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        final_slot: { type: integer, format: int64 }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+    StableRedemptionPage:
+      type: object
+      required: [value_domain, items, next_cursor]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        items: { type: array, items: { $ref: "#/components/schemas/StableRedemption" } }
+        next_cursor: { type: [string, "null"] }
+    StableRedemptionResult:
+      type: object
+      required: [value_domain, replay, settled, redemption]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        replay: { type: boolean }
+        settled: { type: boolean, description: "The request is final (REDEEMED or FAILED)" }
+        redemption: { $ref: "#/components/schemas/StableRedemption" }
+    StableHolding:
+      type: object
+      required: [stable_asset_id, asset_id, symbol, decimals, chain, status, wallet, reserved, held, available, chain_balance]
+      properties:
+        stable_asset_id: { $ref: "#/components/schemas/UUID" }
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        decimals: { type: integer }
+        chain: { type: string }
+        status: { $ref: "#/components/schemas/StableAssetStatus" }
+        wallet: { $ref: "#/components/schemas/Quantity", description: "The account's WALLET balance on the books" }
+        reserved: { $ref: "#/components/schemas/Quantity", description: "Held by capital reservations, for instance a redemption in flight" }
+        held: { $ref: "#/components/schemas/Quantity", description: "Under active withdrawal holds" }
+        available: { $ref: "#/components/schemas/Quantity", description: "wallet − reserved − held, never below zero (the capital service's arithmetic)" }
+        chain_balance: { $ref: "#/components/schemas/Quantity", description: "The custodied wallet's balance on the simulated chain, which the books are reconciled against" }
+    StablePaymentAsset:
+      type: object
+      required: [asset_id, symbol, decimals, wallet, reserved, held, available]
+      properties:
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        decimals: { type: integer }
+        wallet: { $ref: "#/components/schemas/Quantity" }
+        reserved: { $ref: "#/components/schemas/Quantity" }
+        held: { $ref: "#/components/schemas/Quantity" }
+        available: { $ref: "#/components/schemas/Quantity" }
+    StableHoldings:
+      type: object
+      required: [value_domain, account_id, holder_address, as_of, items, payment_assets]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        holder_address: { type: string, description: "The account's custodied wallet address on the simulated chains" }
+        as_of: { $ref: "#/components/schemas/Timestamp" }
+        items: { type: array, items: { $ref: "#/components/schemas/StableHolding" }, description: "One line per registered stable asset" }
+        payment_assets: { type: array, items: { $ref: "#/components/schemas/StablePaymentAsset" }, description: "Every reserve asset an issuance may be paid in" }
+    StableSupplyReconciliation:
+      type: object
+      required: [value_domain, stable_asset_id, ledger_outstanding, customer_wallet_sum, held_elsewhere, chain_supply, landed_unposted_mints,
+                 landed_unposted_burns, expected_chain_supply, supply_value, eligible_reserve, coverage_bps, supply_matches,
+                 wallets_match, covered, matched, breaker_tripped]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        stable_asset_id: { $ref: "#/components/schemas/UUID" }
+        ledger_outstanding: { $ref: "#/components/schemas/Quantity", description: "The issuer's STABLE_OUTSTANDING" }
+        customer_wallet_sum: { $ref: "#/components/schemas/Quantity", description: "Every customer WALLET balance of the asset" }
+        held_elsewhere: { $ref: "#/components/schemas/Quantity", description: "Every other holding of the asset on the ledger: a bridge escrow, collateral, a house inventory, collected fees" }
+        chain_supply: { $ref: "#/components/schemas/Quantity", description: "The devnet mint's supply" }
+        landed_unposted_mints: { $ref: "#/components/schemas/Quantity" }
+        landed_unposted_burns: { $ref: "#/components/schemas/Quantity" }
+        expected_chain_supply: { $ref: "#/components/schemas/Quantity", description: "ledger_outstanding + landed_unposted_mints − landed_unposted_burns" }
+        supply_value: { $ref: "#/components/schemas/StableValue" }
+        eligible_reserve: { $ref: "#/components/schemas/StableValue" }
+        coverage_bps: { type: integer, format: int64 }
+        supply_matches: { type: boolean, description: "chain_supply = expected_chain_supply" }
+        wallets_match: { type: boolean, description: "customer_wallet_sum + held_elsewhere = ledger_outstanding" }
+        covered: { type: boolean }
+        matched: { type: boolean, description: "Books, holdings, chain and reserve all agree" }
+        record_id: { $ref: "#/components/schemas/UUID", description: "The STABLE_RESERVE reconciliation record this run opened or refreshed" }
+        breaker_tripped: { type: boolean, description: "This run paused the asset" }
+    StableMonitorReport:
+      type: object
+      required: [value_domain, stable_asset_id, observed_at, price_stale, deviation_bps, alerts, breaker_tripped, status, reserve, supply]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        stable_asset_id: { $ref: "#/components/schemas/UUID" }
+        observed_at: { $ref: "#/components/schemas/Timestamp" }
+        market_price: { $ref: "#/components/schemas/StablePrice", description: "The asset's own oracle price; absent when none is fresh" }
+        price_stale: { type: boolean }
+        deviation_bps: { type: integer, format: int64, description: "ceil(|price − peg| / peg × 10000)" }
+        alerts: { type: array, items: { $ref: "#/components/schemas/StableAlertKind" } }
+        breaker_tripped: { type: boolean, description: "This run paused the asset" }
+        status: { $ref: "#/components/schemas/StableAssetStatus" }
+        reserve: { $ref: "#/components/schemas/StableReserve" }
+        supply: { $ref: "#/components/schemas/StableSupplyReconciliation" }
+    StableSettleReport:
+      type: object
+      required: [value_domain, examined, issued, redeemed, queued, failed, waiting]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        examined: { type: integer }
+        issued: { type: integer }
+        redeemed: { type: integer }
+        queued: { type: integer }
+        failed: { type: integer }
+        waiting: { type: integer, description: "Requests whose transaction is not final yet" }
+    StableReserveSpec:
+      type: object
+      required: [asset_id, kind, factor_bps, accepted_for_mint]
+      properties:
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        kind: { $ref: "#/components/schemas/StableReserveKind" }
+        factor_bps: { $ref: "#/components/schemas/BPS" }
+        accepted_for_mint: { type: boolean }
+    StableAssetDefinition:
+      type: object
+      required: [name, symbol, peg_currency, decimals, issuance_cap, redemption_mode, peg, oracle_source, max_price_age_ms,
+                 peg_deviation_threshold_bps, attestable, reserves]
+      properties:
+        name: { type: string, description: "1..63 bytes of [a-z0-9-]; generic, never a public brand" }
+        symbol: { type: string }
+        peg_currency: { type: string }
+        decimals: { type: integer, minimum: 0, maximum: 18 }
+        issuance_cap: { $ref: "#/components/schemas/Quantity" }
+        redemption_mode: { $ref: "#/components/schemas/StableRedemptionMode" }
+        peg: { $ref: "#/components/schemas/StableDecimal", description: "The target price of one whole unit in the sandbox dollar" }
+        oracle_source: { type: string }
+        max_price_age_ms: { type: integer, format: int64, minimum: 1 }
+        peg_deviation_threshold_bps: { type: integer, minimum: 1, maximum: 10000 }
+        attestable: { type: boolean }
+        reserves: { type: array, items: { $ref: "#/components/schemas/StableReserveSpec" } }
+    StableIssueRequest:
+      type: object
+      required: [account_id, quantity, reserve_asset_id, mode]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        quantity: { $ref: "#/components/schemas/Quantity", description: "Stable units to issue, in base units" }
+        reserve_asset_id: { $ref: "#/components/schemas/UUID", description: "The cash-equivalent reserve asset that pays" }
+        mode: { $ref: "#/components/schemas/StableRequestMode" }
+    StableRedeemRequest:
+      type: object
+      required: [account_id, quantity, mode]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        quantity: { $ref: "#/components/schemas/Quantity", description: "Stable units to redeem, in base units" }
+        mode: { $ref: "#/components/schemas/StableRequestMode" }
+    StableReasonRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string }
+    StableBatchRequest:
+      type: object
+      properties:
+        limit: { type: integer, minimum: 1, maximum: 500, description: "At most this many requests; 100 when absent" }
 
     # >>> advanced:bridge schemas (insert this subsystem's schemas directly below; keep the marker)
+    #
+    # Cross-chain capital (internal/bridge) and the simulated chain host (internal/devnethost). The enums
+    # carry x-enum-varnames so their Go constants never collide with another schema's.
+    BridgeChainId:
+      type: string
+      enum: [sbx-solana, sbx-ethereum]
+      x-enum-varnames: [BridgeChainIdSbxSolana, BridgeChainIdSbxEthereum]
+    BridgeRouteStatus:
+      type: string
+      enum: [ACTIVE, PAUSED, CLOSED]
+      x-enum-varnames: [BridgeRouteStatusActive, BridgeRouteStatusPaused, BridgeRouteStatusClosed]
+      description: ACTIVE takes new legs; PAUSED (by an operator or the reconciliation breaker) takes none while legs in flight complete.
+    BridgeLegStatus:
+      type: string
+      enum: [AVAILABLE, RESERVED, BRIDGE_REQUESTED, SOURCE_FINALIZED, MESSAGE_IN_FLIGHT, DESTINATION_OBSERVED, DESTINATION_FINALIZED,
+             RECONCILED, FAILED, MANUAL_REVIEW]
+      x-enum-varnames: [BridgeLegStatusAvailable, BridgeLegStatusReserved, BridgeLegStatusBridgeRequested, BridgeLegStatusSourceFinalized,
+                        BridgeLegStatusMessageInFlight, BridgeLegStatusDestinationObserved, BridgeLegStatusDestinationFinalized,
+                        BridgeLegStatusReconciled, BridgeLegStatusFailed, BridgeLegStatusManualReview]
+    BridgeLegHolding:
+      type: string
+      enum: [WALLET_SOURCE_RESERVED, BRIDGE_IN_FLIGHT, WALLET_DESTINATION, NONE]
+      x-enum-varnames: [BridgeLegHoldingWalletSourceReserved, BridgeLegHoldingBridgeInFlight, BridgeLegHoldingWalletDestination,
+                        BridgeLegHoldingNone]
+      description: >-
+        Which ledger account holds the leg's value now: still in the source wallet under a reservation, in
+        BRIDGE_IN_FLIGHT, in the destination wallet, or nowhere (it moved nothing, or was refunded).
+    BridgeLegMode:
+      type: string
+      enum: [SANDBOX, DEVNET]
+      x-enum-varnames: [BridgeLegModeSandbox, BridgeLegModeDevnet]
+    BridgeAttemptKind:
+      type: string
+      enum: [RELEASE, REFUND]
+      x-enum-varnames: [BridgeAttemptKindRelease, BridgeAttemptKindRefund]
+    BridgeTxState:
+      type: string
+      enum: [NOT_FOUND, PENDING, CONFIRMED, FINALIZED, FAILED]
+      x-enum-varnames: [BridgeTxStateNotFound, BridgeTxStatePending, BridgeTxStateConfirmed, BridgeTxStateFinalized, BridgeTxStateFailed]
+    BridgeFaultKind:
+      type: string
+      enum: [TIMEOUT_BUT_LAND, TIMEOUT_AND_DROP, DROP_NEXT, DELAY_INCLUSION, CLEAR_FAULTS]
+      x-enum-varnames: [BridgeFaultKindTimeoutButLand, BridgeFaultKindTimeoutAndDrop, BridgeFaultKindDropNext, BridgeFaultKindDelayInclusion,
+                        BridgeFaultKindClearFaults]
+    BridgeReconciliationState:
+      type: string
+      enum: [NOT_REQUIRED, AWAITING, RESOLVED]
+      x-enum-varnames: [BridgeReconciliationNotRequired, BridgeReconciliationAwaiting, BridgeReconciliationResolved]
+      description: >-
+        NOT_REQUIRED: no submission of the leg had an unknown outcome. AWAITING: one does now, and the leg waits
+        to be settled from the chains by transaction id. RESOLVED: one did, and it has been settled from the chains.
+    BridgeEffectStatus:
+      type: string
+      enum: [PENDING, APPLIED, UNKNOWN, FAILED, COMPENSATED]
+      x-enum-varnames: [BridgeEffectStatusPending, BridgeEffectStatusApplied, BridgeEffectStatusUnknown, BridgeEffectStatusFailed,
+                        BridgeEffectStatusCompensated]
+    BridgeDecimal:
+      type: string
+      pattern: '^[0-9]+(\.[0-9]+)?$'
+      description: A non-negative decimal written out exactly; it is never rounded.
+    BridgePrice:
+      type: object
+      required: [mantissa, scale, decimal, quote]
+      description: The value of one whole unit, exactly mantissa × 10^-scale of the quote.
+      properties:
+        mantissa: { $ref: "#/components/schemas/Quantity" }
+        scale: { type: integer }
+        decimal: { $ref: "#/components/schemas/BridgeDecimal" }
+        quote: { type: string }
+    BridgeRoute:
+      type: object
+      required: [value_domain, id, name, status, network, facility_id, source_chain, source_asset_id, source_symbol, source_mint,
+                 destination_chain, destination_asset_id, destination_symbol, destination_mint, decimals, attester, unit_price,
+                 max_release_attempts, created_at]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        id: { $ref: "#/components/schemas/UUID" }
+        name: { type: string }
+        status: { $ref: "#/components/schemas/BridgeRouteStatus" }
+        network: { type: string }
+        facility_id: { $ref: "#/components/schemas/UUID", description: "The route's BRIDGE facility" }
+        source_chain: { type: string }
+        source_asset_id: { $ref: "#/components/schemas/UUID" }
+        source_symbol: { type: string }
+        source_mint: { type: string }
+        destination_chain: { type: string }
+        destination_asset_id: { $ref: "#/components/schemas/UUID" }
+        destination_symbol: { type: string }
+        destination_mint: { type: string, description: "A mint whose authority no key holds; only an attested release mints it" }
+        decimals: { type: integer }
+        attester: { type: string, description: "The bridge authority whose signature a release needs" }
+        unit_price: { $ref: "#/components/schemas/BridgePrice", description: "The route's value of one whole unit, for the risk notional and buying power" }
+        max_release_attempts: { type: integer }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+    BridgeRouteList:
+      type: object
+      required: [value_domain, items]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        items: { type: array, items: { $ref: "#/components/schemas/BridgeRoute" } }
+    BridgeRouteDefinition:
+      type: object
+      required: [name, source_asset_id, destination_chain, destination_symbol, unit_price, max_release_attempts]
+      properties:
+        name: { type: string, description: "1..63 bytes of [a-z0-9-]; generic, never a public brand" }
+        source_asset_id: { $ref: "#/components/schemas/UUID", description: "A SIMULATED asset on a simulated chain whose devnet mint exists" }
+        destination_chain: { $ref: "#/components/schemas/BridgeChainId" }
+        destination_symbol: { type: string }
+        unit_price: { $ref: "#/components/schemas/BridgeDecimal", description: "The value of one whole unit in USD (a paper dollar is 1)" }
+        max_release_attempts: { type: integer, minimum: 1, maximum: 20 }
+    BridgeReasonRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string }
+    BridgeRouteReconciliation:
+      type: object
+      required: [value_domain, route_id, locked, outstanding, in_flight, refunded, escrow, destination_supply, landed_unposted_locks,
+                 landed_unposted_releases, expected_escrow, expected_supply, books_conserve, escrow_matches, supply_matches, matched,
+                 breaker_tripped]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        route_id: { $ref: "#/components/schemas/UUID" }
+        locked: { $ref: "#/components/schemas/Quantity", description: "The facility's BRIDGE_LOCKED of the source asset" }
+        outstanding: { $ref: "#/components/schemas/Quantity", description: "The facility's BRIDGE_OUTSTANDING of the destination asset" }
+        in_flight: { $ref: "#/components/schemas/Quantity", description: "Every customer's BRIDGE_IN_FLIGHT of the source asset" }
+        refunded: { $ref: "#/components/schemas/Quantity" }
+        escrow: { $ref: "#/components/schemas/Quantity", description: "The source chain's escrow balance of the source mint" }
+        destination_supply: { $ref: "#/components/schemas/Quantity", description: "The destination mint's supply" }
+        landed_unposted_locks: { $ref: "#/components/schemas/Quantity" }
+        landed_unposted_releases: { $ref: "#/components/schemas/Quantity" }
+        expected_escrow: { $ref: "#/components/schemas/Quantity", description: "locked + refunded + landed_unposted_locks" }
+        expected_supply: { $ref: "#/components/schemas/Quantity", description: "outstanding + landed_unposted_releases" }
+        books_conserve: { type: boolean, description: "locked = outstanding + in_flight" }
+        escrow_matches: { type: boolean }
+        supply_matches: { type: boolean }
+        matched: { type: boolean }
+        record_id: { $ref: "#/components/schemas/UUID", description: "The BRIDGE reconciliation record this run opened or refreshed" }
+        breaker_tripped: { type: boolean, description: "This run paused the route" }
+    BridgeLegRequest:
+      type: object
+      required: [account_id, route_id, quantity, mode]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        route_id: { $ref: "#/components/schemas/UUID" }
+        quantity: { $ref: "#/components/schemas/Quantity", description: "Units of the route's source asset, in base units" }
+        mode: { $ref: "#/components/schemas/BridgeLegMode" }
+    BridgeReconciliation:
+      type: object
+      required: [state]
+      properties:
+        state: { $ref: "#/components/schemas/BridgeReconciliationState" }
+        unknown_since: { $ref: "#/components/schemas/Timestamp" }
+        resolved_at: { $ref: "#/components/schemas/Timestamp" }
+    BridgeLeg:
+      type: object
+      required: [value_domain, id, route_id, account_id, intent_id, mode, quantity, decimals, source_chain, source_asset_id, source_symbol,
+                 destination_chain, destination_asset_id, destination_symbol, source_owner, destination_owner, nonce, plan_hash,
+                 status, holding, reconciliation, created_at, updated_at]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        id: { $ref: "#/components/schemas/UUID" }
+        route_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        intent_id: { $ref: "#/components/schemas/UUID" }
+        mode: { $ref: "#/components/schemas/BridgeLegMode" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        decimals: { type: integer }
+        source_chain: { type: string }
+        source_asset_id: { $ref: "#/components/schemas/UUID" }
+        source_symbol: { type: string }
+        destination_chain: { type: string }
+        destination_asset_id: { $ref: "#/components/schemas/UUID" }
+        destination_symbol: { type: string }
+        source_owner: { type: string }
+        destination_owner: { type: string }
+        nonce: { type: string, description: "The lock's single-use nonce, a decimal string" }
+        plan_hash: { type: string, description: "hex hash of the bridge plan the lock's memo binds" }
+        status: { $ref: "#/components/schemas/BridgeLegStatus" }
+        holding: { $ref: "#/components/schemas/BridgeLegHolding" }
+        failure_code: { type: string }
+        lock_tx_id: { type: string }
+        source_effect_status: { $ref: "#/components/schemas/BridgeEffectStatus" }
+        destination_effect_status: { $ref: "#/components/schemas/BridgeEffectStatus" }
+        refund_effect_status: { $ref: "#/components/schemas/BridgeEffectStatus" }
+        reconciliation: { $ref: "#/components/schemas/BridgeReconciliation" }
+        source_journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        destination_journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        refund_journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+    BridgeChainTx:
+      type: object
+      required: [chain, tx_id, state, final]
+      description: What the simulated chain says of one transaction at the instant of the read.
+      properties:
+        chain: { type: string }
+        tx_id: { type: string }
+        state: { $ref: "#/components/schemas/BridgeTxState" }
+        final: { type: boolean, description: "The block that included it is finalized, so this status can never change" }
+        height: { type: integer, format: int64, description: "The block height it was included at, when included" }
+        error: { type: string, description: "The chain's error code of a failed transaction" }
+    BridgeLegAttempt:
+      type: object
+      required: [number, kind, chain, tx_id, blockhash_height, created_at, on_chain]
+      properties:
+        number: { type: integer }
+        kind: { $ref: "#/components/schemas/BridgeAttemptKind" }
+        chain: { type: string }
+        tx_id: { type: string }
+        blockhash_height: { type: integer, format: int64 }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        on_chain: { $ref: "#/components/schemas/BridgeChainTx" }
+    BridgeLegTransition:
+      type: object
+      required: [from_status, to_status, actor_type, actor_id, reason, occurred_at]
+      properties:
+        from_status: { type: string, description: "The state before, NONE for the leg's birth" }
+        to_status: { $ref: "#/components/schemas/BridgeLegStatus" }
+        actor_type: { type: string }
+        actor_id: { type: string }
+        reason: { type: string }
+        occurred_at: { $ref: "#/components/schemas/Timestamp" }
+    BridgeLegDetail:
+      type: object
+      required: [value_domain, leg, attempts, transitions]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        leg: { $ref: "#/components/schemas/BridgeLeg" }
+        lock: { $ref: "#/components/schemas/BridgeChainTx", description: "The lock on the source chain; absent before it is signed" }
+        attempts: { type: array, items: { $ref: "#/components/schemas/BridgeLegAttempt" }, description: "Release and refund attempts, in order" }
+        transitions: { type: array, items: { $ref: "#/components/schemas/BridgeLegTransition" }, description: "Every state the leg passed through, oldest first" }
+    BridgeLegPage:
+      type: object
+      required: [value_domain, items, next_cursor]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        items: { type: array, items: { $ref: "#/components/schemas/BridgeLeg" } }
+        next_cursor: { type: [string, "null"] }
+    BridgeLegResult:
+      type: object
+      required: [value_domain, replay, settled, leg]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        replay: { type: boolean, description: "The key named a leg the service already recorded; nothing was submitted again" }
+        settled: { type: boolean, description: "The leg is final (RECONCILED or FAILED)" }
+        leg: { $ref: "#/components/schemas/BridgeLeg" }
+    BridgeChain:
+      type: object
+      required: [id, tip_slot, tip_height, tip_hash, finalized_height, blockhash_window, finality_depth, fee_per_tx]
+      properties:
+        id: { $ref: "#/components/schemas/BridgeChainId" }
+        tip_slot: { type: integer, format: int64 }
+        tip_height: { type: integer, format: int64 }
+        tip_hash: { type: string }
+        finalized_height: { type: integer, format: int64, description: "A transaction at or below it is final" }
+        blockhash_window: { type: integer, format: int64 }
+        finality_depth: { type: integer, format: int64 }
+        fee_per_tx: { $ref: "#/components/schemas/Quantity", description: "Native units each transaction pays" }
+        bridge_authority: { type: string, description: "The attester the chain's bridge programs accept" }
+    BridgeChains:
+      type: object
+      required: [value_domain, network, fault_injection_allowed, chains]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        network: { type: string }
+        fault_injection_allowed: { type: boolean, description: "True in LOCAL, TEST and DEV only" }
+        chains: { type: array, items: { $ref: "#/components/schemas/BridgeChain" } }
+    BridgeBlocksRequest:
+      type: object
+      required: [count]
+      properties:
+        count: { type: integer, minimum: 1, maximum: 1000 }
+    BridgeBlocksResult:
+      type: object
+      required: [value_domain, produced, chain]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        produced: { type: integer, description: "How many blocks were produced" }
+        chain: { $ref: "#/components/schemas/BridgeChain" }
+    BridgeFaultRequest:
+      type: object
+      required: [kind]
+      properties:
+        kind: { $ref: "#/components/schemas/BridgeFaultKind" }
+        count: { type: integer, minimum: 0, maximum: 1000, description: "DROP_NEXT: submissions to drop; DELAY_INCLUSION: blocks to hold each transaction (0 restores immediate inclusion)" }
+    BridgeFaultResult:
+      type: object
+      required: [value_domain, kind, chain]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        kind: { $ref: "#/components/schemas/BridgeFaultKind" }
+        count: { type: integer }
+        chain: { $ref: "#/components/schemas/BridgeChain" }
+    BridgeHolding:
+      type: object
+      required: [asset_id, symbol, decimals, quantity]
+      properties:
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        decimals: { type: integer }
+        quantity: { $ref: "#/components/schemas/Quantity", description: "The account's WALLET balance on the books" }
+    BridgeChainHoldings:
+      type: object
+      required: [chain, holdings]
+      properties:
+        chain: { type: string, description: "The chain the assets live on" }
+        holdings: { type: array, items: { $ref: "#/components/schemas/BridgeHolding" } }
+    BridgeInFlightHolding:
+      type: object
+      required: [asset_id, symbol, decimals, quantity, marked_usd, factor_bps, reason]
+      properties:
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        decimals: { type: integer }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        marked_usd: { $ref: "#/components/schemas/USD", description: "The quantity at the route's unit price, rounded down" }
+        factor_bps: { $ref: "#/components/schemas/BPS", description: "The share of it that counts toward buying power" }
+        reason: { type: string }
+    BridgeInFlightLeg:
+      type: object
+      required: [leg_id, route_id, asset_id, symbol, decimals, status, holding, quantity, factor_bps, reason]
+      properties:
+        leg_id: { $ref: "#/components/schemas/UUID" }
+        route_id: { $ref: "#/components/schemas/UUID" }
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        decimals: { type: integer }
+        status: { $ref: "#/components/schemas/BridgeLegStatus" }
+        holding: { $ref: "#/components/schemas/BridgeLegHolding" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        factor_bps: { $ref: "#/components/schemas/BPS" }
+        reason: { type: string }
+    BridgeHaircutPolicy:
+      type: object
+      required: [version, in_flight_bps, observed_bps]
+      properties:
+        version: { type: string }
+        in_flight_bps: { $ref: "#/components/schemas/BPS", description: "The factor of value whose lock is final and whose release is not observed" }
+        observed_bps: { $ref: "#/components/schemas/BPS", description: "The factor once a release is confirmed, not final, on the destination" }
+    BridgeHoldings:
+      type: object
+      required: [value_domain, account_id, as_of, chains, in_flight, legs, pending_locks_usd, policy]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        as_of: { $ref: "#/components/schemas/Timestamp" }
+        chains: { type: array, items: { $ref: "#/components/schemas/BridgeChainHoldings" }, description: "WALLET balances of SIMULATED assets, by chain" }
+        in_flight: { type: array, items: { $ref: "#/components/schemas/BridgeInFlightHolding" }, description: "Value in BRIDGE_IN_FLIGHT, by asset and factor" }
+        legs: { type: array, items: { $ref: "#/components/schemas/BridgeInFlightLeg" }, description: "Every open leg, where its value is held, and the factor it counts at" }
+        pending_locks_usd: { $ref: "#/components/schemas/USD", description: "Units still in a source wallet under a reservation whose lock is not final, at the route's unit price" }
+        policy: { $ref: "#/components/schemas/BridgeHaircutPolicy" }
 
     # >>> advanced:predmarket schemas (insert this subsystem's schemas directly below; keep the marker)
     PredictionMarketStatus:

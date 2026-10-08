@@ -95,8 +95,15 @@ type Ports struct {
 	// >>> advanced:treasury port
 
 	// >>> advanced:stable port
+	// Stable serves the sandbox stable asset (internal/stableasset); every
+	// figure is value domain SIMULATED. A nil port -- no sandbox chain is
+	// configured -- answers UNSUPPORTED.
+	Stable StableAssetPort
 
 	// >>> advanced:bridge port
+	// Bridge serves cross-chain capital (internal/bridge) and the simulated
+	// chain host both subsystems run on. A nil port answers UNSUPPORTED.
+	Bridge BridgePort
 
 	// >>> advanced:predmarket port
 	// PredictionMarkets serves prediction markets (internal/predmarket);
