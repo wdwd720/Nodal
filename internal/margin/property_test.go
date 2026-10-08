@@ -425,12 +425,14 @@ func TestProp_HaircutIsMonotoneInEachFactor(t *testing.T) {
 	})
 }
 
-// TestProp_LiquidationIsDeterministicReduceOnlyAndTerminates: for any state,
-// the plan is the same every time; every order is a reduce-only sale of a
-// risky holding (or numeraire applied to loans), never larger than the
-// holding and never above the slippage cap; executing plans step after step
-// never increases any risky holding or the gross exposure, and the case
-// reaches a stopping decision within its step budget.
+// TestProp_LiquidationIsDeterministicReduceOnlyAndTerminates: for any state
+// and any free wallet cash, the plan is the same every time; every order is a
+// reduce-only sale of a risky holding (or numeraire applied to loans, or free
+// cash swept into them, never more than is owed or free), never larger than
+// the holding and never above the slippage cap; executing plans step after
+// step never increases any risky holding or the gross exposure, and the case
+// reaches a stopping decision within its budget of trading steps plus the
+// terminal accounting (one application of collateral, one sweep).
 func TestProp_LiquidationIsDeterministicReduceOnlyAndTerminates(t *testing.T) {
 	p := DefaultPolicy()
 	rapid.Check(t, func(t *rapid.T) {
@@ -438,12 +440,14 @@ func TestProp_LiquidationIsDeterministicReduceOnlyAndTerminates(t *testing.T) {
 		fill := money.BPS(rapid.SampledFrom([]int64{10_000, 10_000, 5_000, 1}).Draw(t, "fill"))
 		venue := rapid.IntRange(0, 9).Draw(t, "venueDraw") > 0
 		atCap := rapid.Bool().Draw(t, "atCap")
+		free := money.QuantityFromInt64(rapid.SampledFrom([]int64{0, 0, 1, 1_000_000, 50_000_000_000}).Draw(t, "free"))
 		cur := s
+		trading := 0
 		for steps := 0; ; steps++ {
-			if steps > p.MaxLiquidationSteps+1 {
+			if trading > p.MaxLiquidationSteps || steps > p.MaxLiquidationSteps+2 {
 				t.Fatalf("the case did not stop within its budget")
 			}
-			in := PlanInput{State: cur, StepsTaken: steps, VenueAvailable: venue, SlippageAtCap: atCap}
+			in := PlanInput{State: cur, StepsTaken: trading, VenueAvailable: venue, SlippageAtCap: atCap, FreeNumeraire: free}
 			pl, err := PlanLiquidation(p, in)
 			if err != nil {
 				t.Fatalf("plan: %v", err)
@@ -452,11 +456,13 @@ func TestProp_LiquidationIsDeterministicReduceOnlyAndTerminates(t *testing.T) {
 			if err != nil || again.Hash != pl.Hash {
 				t.Fatalf("plan is not deterministic")
 			}
-			if pl.Decision != DecisionSell && pl.Decision != DecisionSellAll && pl.Decision != DecisionApplyCollateral {
+			if pl.Decision != DecisionSell && pl.Decision != DecisionSellAll && pl.Decision != DecisionApplyCollateral &&
+				pl.Decision != DecisionSweepWallet {
 				return
 			}
 			for _, o := range pl.Orders {
-				if o.Action == ActionSell {
+				switch o.Action {
+				case ActionSell:
 					i := cur.holding(o.AssetID)
 					if i < 0 || cur.Holdings[i].Numeraire || o.Quantity.Cmp(cur.Holdings[i].Quantity) > 0 || !o.Quantity.IsPositive() {
 						t.Fatalf("order is not reduce-only: %+v", o)
@@ -464,15 +470,25 @@ func TestProp_LiquidationIsDeterministicReduceOnlyAndTerminates(t *testing.T) {
 					if o.SlippageBPS > p.LiquidationSlippageCapBPS {
 						t.Fatalf("slippage %d above the cap", o.SlippageBPS)
 					}
+				case ActionSweepWallet:
+					if !o.Quantity.IsPositive() || o.Quantity.Cmp(free) > 0 || o.Quantity.Cmp(cur.LoanTotal()) > 0 {
+						t.Fatalf("a sweep takes more than is free or owed: %+v", o)
+					}
 				}
 				if !o.Proceeds.Equal(o.Fee.Add(o.Repay).Add(o.Excess)) {
 					t.Fatalf("proceeds do not split exactly")
 				}
 			}
 			before := pl.Before
-			next, _, err := ExecuteFirst(p, cur, pl, fill)
+			next, done, err := ExecuteFirst(p, cur, pl, fill)
 			if err != nil {
 				t.Fatalf("execute: %v", err)
+			}
+			switch done.Action {
+			case ActionSell:
+				trading++
+			case ActionSweepWallet:
+				free = free.Sub(done.Quantity)
 			}
 			for _, h := range cur.Holdings {
 				if h.Numeraire {

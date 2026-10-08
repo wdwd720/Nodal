@@ -131,12 +131,13 @@ func SpotBuyPosting(m PostingMeta, acct accounts.AccountID, quote assets.AssetID
 
 // LiquidationPosting is LIQUIDATION: the forced, reduce-only sale posted like
 // a SIM_TRADE. The sold quantity leaves MARGIN_COLLATERAL (where the
-// position is held) for TRADING_OUTFLOW, the proceeds arrive in WALLET from
-// TRADING_INFLOW, and the liquidation fee leaves WALLET as FEES_PLATFORM and
-// arrives in the insurance fund (Dr INSURANCE_FUND_CASH / Cr
-// INSURANCE_FUND_CAPITAL). The repayment and any excess are their own
-// MARGIN_REPAY and MARGIN_COLLATERAL_MOVE postings.
-func LiquidationPosting(m PostingMeta, acct accounts.AccountID, fund econ.Facility, base assets.AssetID, qty money.Quantity,
+// position is held) for TRADING_OUTFLOW, and the proceeds arrive in WALLET
+// from TRADING_INFLOW. The liquidation fee is the model's "explicit fee
+// inside a trade" (§5), both of its sides in the chart's own pairing: the
+// customer pays it (Dr FEES_PLATFORM / Cr WALLET) and the platform earns it
+// (Dr PLATFORM_FEE_RECEIVABLE / Cr PLATFORM_FEE_REVENUE). The repayment and
+// any excess are their own MARGIN_REPAY and MARGIN_COLLATERAL_MOVE postings.
+func LiquidationPosting(m PostingMeta, acct accounts.AccountID, base assets.AssetID, qty money.Quantity,
 	quote assets.AssetID, proceeds, fee money.Quantity) (ledger.Posting, error) {
 	if err := positive(qty, "a liquidation quantity"); err != nil {
 		return ledger.Posting{}, err
@@ -157,10 +158,30 @@ func LiquidationPosting(m PostingMeta, acct accounts.AccountID, fund econ.Facili
 		entries = append(entries,
 			dr(ledger.CustomerAccount(acct, ledger.CodeFeesPlatform, quote), fee),
 			cr(ledger.CustomerAccount(acct, ledger.CodeWallet, quote), fee),
-			dr(fund.Account(ledger.CodeInsuranceFundCash, quote), fee),
-			cr(fund.Account(ledger.CodeInsuranceFundCapital, quote), fee))
+			dr(ledger.PlatformAccount(ledger.CodePlatformFeeReceivable, quote), fee),
+			cr(ledger.PlatformAccount(ledger.CodePlatformFeeRevenue, quote), fee))
 	}
 	return m.posting(ledger.KindLiquidation, entries), nil
+}
+
+// DeficitRepaymentPosting repays a covered deficit to the insurance fund
+// that covered it, posted as MARGIN_REPAY (a repayment of margin debt; here
+// the debt is the fund's claim, not the pool's loan): C: Dr DEFICIT / Cr
+// WALLET; F(insurance): Dr INSURANCE_FUND_CASH / Cr DEFICIT_RECEIVABLE. It
+// is the exact inverse of the fund's half of DEFICIT_COVERAGE.
+func DeficitRepaymentPosting(m PostingMeta, acct accounts.AccountID, fund econ.Facility, asset assets.AssetID, qty money.Quantity) (ledger.Posting, error) {
+	if err := positive(qty, "a deficit repayment"); err != nil {
+		return ledger.Posting{}, err
+	}
+	if fund.Kind != ledger.FacilityInsuranceFund {
+		return ledger.Posting{}, errs.Newf(errs.CodeValidationFailed, "margin: a deficit is repaid to an insurance fund, not a %s", fund.Kind)
+	}
+	return m.posting(ledger.KindMarginRepay, []ledger.Entry{
+		dr(ledger.CustomerAccount(acct, ledger.CodeDeficit, asset), qty),
+		cr(ledger.CustomerAccount(acct, ledger.CodeWallet, asset), qty),
+		dr(fund.Account(ledger.CodeInsuranceFundCash, asset), qty),
+		cr(fund.Account(ledger.CodeDeficitReceivable, asset), qty),
+	}), nil
 }
 
 // DeficitCoveragePosting is DEFICIT_COVERAGE: C: Dr MARGIN_LOAN / Cr DEFICIT;

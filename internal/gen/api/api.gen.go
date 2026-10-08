@@ -852,22 +852,31 @@ func (e AdvancedTransferStatus) Valid() bool {
 
 // Defines values for AssetKind.
 const (
-	FIAT         AssetKind = "FIAT"
-	NATIVE       AssetKind = "NATIVE"
-	SPLTOKEN     AssetKind = "SPL_TOKEN"
-	SPLTOKEN2022 AssetKind = "SPL_TOKEN_2022"
+	AssetKindCredit       AssetKind = "CREDIT"
+	AssetKindFiat         AssetKind = "FIAT"
+	AssetKindNative       AssetKind = "NATIVE"
+	AssetKindNativeAsset  AssetKind = "NATIVE_ASSET"
+	AssetKindSimulated    AssetKind = "SIMULATED"
+	AssetKindSplToken     AssetKind = "SPL_TOKEN"
+	AssetKindSplToken2022 AssetKind = "SPL_TOKEN_2022"
 )
 
 // Valid indicates whether the value is a known member of the AssetKind enum.
 func (e AssetKind) Valid() bool {
 	switch e {
-	case FIAT:
+	case AssetKindCredit:
 		return true
-	case NATIVE:
+	case AssetKindFiat:
 		return true
-	case SPLTOKEN:
+	case AssetKindNative:
 		return true
-	case SPLTOKEN2022:
+	case AssetKindNativeAsset:
+		return true
+	case AssetKindSimulated:
+		return true
+	case AssetKindSplToken:
+		return true
+	case AssetKindSplToken2022:
 		return true
 	default:
 		return false
@@ -1222,6 +1231,240 @@ func (e DepositDetailStatus) Valid() bool {
 	}
 }
 
+// Defines values for DerivativeBookStatus.
+const (
+	DerivativeBookRefused DerivativeBookStatus = "REFUSED"
+	DerivativeBookValued  DerivativeBookStatus = "VALUED"
+)
+
+// Valid indicates whether the value is a known member of the DerivativeBookStatus enum.
+func (e DerivativeBookStatus) Valid() bool {
+	switch e {
+	case DerivativeBookRefused:
+		return true
+	case DerivativeBookValued:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DerivativeFillSide.
+const (
+	DerivativeFillBuy  DerivativeFillSide = "BUY"
+	DerivativeFillSell DerivativeFillSide = "SELL"
+)
+
+// Valid indicates whether the value is a known member of the DerivativeFillSide enum.
+func (e DerivativeFillSide) Valid() bool {
+	switch e {
+	case DerivativeFillBuy:
+		return true
+	case DerivativeFillSell:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DerivativeFillSource.
+const (
+	DerivativeFillSourceAssignment DerivativeFillSource = "ASSIGNMENT"
+	DerivativeFillSourceBook       DerivativeFillSource = "BOOK"
+	DerivativeFillSourceExercise   DerivativeFillSource = "EXERCISE"
+	DerivativeFillSourceExpiry     DerivativeFillSource = "EXPIRY"
+	DerivativeFillSourcePaper      DerivativeFillSource = "PAPER"
+)
+
+// Valid indicates whether the value is a known member of the DerivativeFillSource enum.
+func (e DerivativeFillSource) Valid() bool {
+	switch e {
+	case DerivativeFillSourceAssignment:
+		return true
+	case DerivativeFillSourceBook:
+		return true
+	case DerivativeFillSourceExercise:
+		return true
+	case DerivativeFillSourceExpiry:
+		return true
+	case DerivativeFillSourcePaper:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DerivativeFlowKind.
+const (
+	DerivativeFlowFunding          DerivativeFlowKind = "FUNDING"
+	DerivativeFlowFutureSettlement DerivativeFlowKind = "FUTURE_SETTLEMENT"
+	DerivativeFlowOptionAssignment DerivativeFlowKind = "OPTION_ASSIGNMENT"
+	DerivativeFlowOptionExercise   DerivativeFlowKind = "OPTION_EXERCISE"
+	DerivativeFlowOptionPremium    DerivativeFlowKind = "OPTION_PREMIUM"
+	DerivativeFlowRealized         DerivativeFlowKind = "REALIZED"
+	DerivativeFlowVariationMargin  DerivativeFlowKind = "VARIATION_MARGIN"
+)
+
+// Valid indicates whether the value is a known member of the DerivativeFlowKind enum.
+func (e DerivativeFlowKind) Valid() bool {
+	switch e {
+	case DerivativeFlowFunding:
+		return true
+	case DerivativeFlowFutureSettlement:
+		return true
+	case DerivativeFlowOptionAssignment:
+		return true
+	case DerivativeFlowOptionExercise:
+		return true
+	case DerivativeFlowOptionPremium:
+		return true
+	case DerivativeFlowRealized:
+		return true
+	case DerivativeFlowVariationMargin:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DerivativeFundingDirection.
+const (
+	DerivativeFundingPay     DerivativeFundingDirection = "PAY"
+	DerivativeFundingReceive DerivativeFundingDirection = "RECEIVE"
+)
+
+// Valid indicates whether the value is a known member of the DerivativeFundingDirection enum.
+func (e DerivativeFundingDirection) Valid() bool {
+	switch e {
+	case DerivativeFundingPay:
+		return true
+	case DerivativeFundingReceive:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DerivativeKind.
+const (
+	DerivativeKindFuture    DerivativeKind = "FUTURE"
+	DerivativeKindOption    DerivativeKind = "OPTION"
+	DerivativeKindPerpetual DerivativeKind = "PERPETUAL"
+)
+
+// Valid indicates whether the value is a known member of the DerivativeKind enum.
+func (e DerivativeKind) Valid() bool {
+	switch e {
+	case DerivativeKindFuture:
+		return true
+	case DerivativeKindOption:
+		return true
+	case DerivativeKindPerpetual:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DerivativePositionStatus.
+const (
+	DerivativePositionClosed  DerivativePositionStatus = "CLOSED"
+	DerivativePositionOpen    DerivativePositionStatus = "OPEN"
+	DerivativePositionSettled DerivativePositionStatus = "SETTLED"
+)
+
+// Valid indicates whether the value is a known member of the DerivativePositionStatus enum.
+func (e DerivativePositionStatus) Valid() bool {
+	switch e {
+	case DerivativePositionClosed:
+		return true
+	case DerivativePositionOpen:
+		return true
+	case DerivativePositionSettled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DerivativeRunKind.
+const (
+	DerivativeRunFunding         DerivativeRunKind = "FUNDING"
+	DerivativeRunVariationMargin DerivativeRunKind = "VARIATION_MARGIN"
+)
+
+// Valid indicates whether the value is a known member of the DerivativeRunKind enum.
+func (e DerivativeRunKind) Valid() bool {
+	switch e {
+	case DerivativeRunFunding:
+		return true
+	case DerivativeRunVariationMargin:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DerivativeSettlementKind.
+const (
+	DerivativeSettlementFuture DerivativeSettlementKind = "FUTURE"
+	DerivativeSettlementOption DerivativeSettlementKind = "OPTION"
+)
+
+// Valid indicates whether the value is a known member of the DerivativeSettlementKind enum.
+func (e DerivativeSettlementKind) Valid() bool {
+	switch e {
+	case DerivativeSettlementFuture:
+		return true
+	case DerivativeSettlementOption:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DerivativeSide.
+const (
+	DerivativeSideLong  DerivativeSide = "LONG"
+	DerivativeSideShort DerivativeSide = "SHORT"
+)
+
+// Valid indicates whether the value is a known member of the DerivativeSide enum.
+func (e DerivativeSide) Valid() bool {
+	switch e {
+	case DerivativeSideLong:
+		return true
+	case DerivativeSideShort:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DerivativeValuationStatus.
+const (
+	DerivativeValuationNotApplicable DerivativeValuationStatus = "NOT_APPLICABLE"
+	DerivativeValuationNotComputed   DerivativeValuationStatus = "NOT_COMPUTED"
+	DerivativeValuationRefused       DerivativeValuationStatus = "REFUSED"
+	DerivativeValuationValued        DerivativeValuationStatus = "VALUED"
+)
+
+// Valid indicates whether the value is a known member of the DerivativeValuationStatus enum.
+func (e DerivativeValuationStatus) Valid() bool {
+	switch e {
+	case DerivativeValuationNotApplicable:
+		return true
+	case DerivativeValuationNotComputed:
+		return true
+	case DerivativeValuationRefused:
+		return true
+	case DerivativeValuationValued:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for EconomicEffectStatus.
 const (
 	EconomicEffectStatusAPPLIED     EconomicEffectStatus = "APPLIED"
@@ -1488,16 +1731,16 @@ func (e InstrumentTermsOptionRight) Valid() bool {
 
 // Defines values for InstrumentTermsSettlementStyle.
 const (
-	CASH     InstrumentTermsSettlementStyle = "CASH"
-	PHYSICAL InstrumentTermsSettlementStyle = "PHYSICAL"
+	InstrumentTermsSettlementStyleCASH     InstrumentTermsSettlementStyle = "CASH"
+	InstrumentTermsSettlementStylePHYSICAL InstrumentTermsSettlementStyle = "PHYSICAL"
 )
 
 // Valid indicates whether the value is a known member of the InstrumentTermsSettlementStyle enum.
 func (e InstrumentTermsSettlementStyle) Valid() bool {
 	switch e {
-	case CASH:
+	case InstrumentTermsSettlementStyleCASH:
 		return true
-	case PHYSICAL:
+	case InstrumentTermsSettlementStylePHYSICAL:
 		return true
 	default:
 		return false
@@ -1723,6 +1966,234 @@ func (e KillSwitchRequestAction) Valid() bool {
 	case KillSwitchRequestActionActivate:
 		return true
 	case KillSwitchRequestActionRelease:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MarginAccountStatus.
+const (
+	MarginAccountStatusBANKRUPT    MarginAccountStatus = "BANKRUPT"
+	MarginAccountStatusCLOSED      MarginAccountStatus = "CLOSED"
+	MarginAccountStatusLIQUIDATING MarginAccountStatus = "LIQUIDATING"
+	MarginAccountStatusMARGINCALL  MarginAccountStatus = "MARGIN_CALL"
+	MarginAccountStatusNORMAL      MarginAccountStatus = "NORMAL"
+	MarginAccountStatusWARNING     MarginAccountStatus = "WARNING"
+)
+
+// Valid indicates whether the value is a known member of the MarginAccountStatus enum.
+func (e MarginAccountStatus) Valid() bool {
+	switch e {
+	case MarginAccountStatusBANKRUPT:
+		return true
+	case MarginAccountStatusCLOSED:
+		return true
+	case MarginAccountStatusLIQUIDATING:
+		return true
+	case MarginAccountStatusMARGINCALL:
+		return true
+	case MarginAccountStatusNORMAL:
+		return true
+	case MarginAccountStatusWARNING:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MarginCallStatus.
+const (
+	MarginCallStatusLIQUIDATED MarginCallStatus = "LIQUIDATED"
+	MarginCallStatusMET        MarginCallStatus = "MET"
+	MarginCallStatusOPEN       MarginCallStatus = "OPEN"
+)
+
+// Valid indicates whether the value is a known member of the MarginCallStatus enum.
+func (e MarginCallStatus) Valid() bool {
+	switch e {
+	case MarginCallStatusLIQUIDATED:
+		return true
+	case MarginCallStatusMET:
+		return true
+	case MarginCallStatusOPEN:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MarginCaseStatus.
+const (
+	MarginCaseStatusAWAITINGPRICE MarginCaseStatus = "AWAITING_PRICE"
+	MarginCaseStatusAWAITINGVENUE MarginCaseStatus = "AWAITING_VENUE"
+	MarginCaseStatusBANKRUPT      MarginCaseStatus = "BANKRUPT"
+	MarginCaseStatusCOMPLETED     MarginCaseStatus = "COMPLETED"
+	MarginCaseStatusINPROGRESS    MarginCaseStatus = "IN_PROGRESS"
+	MarginCaseStatusMANUALREVIEW  MarginCaseStatus = "MANUAL_REVIEW"
+)
+
+// Valid indicates whether the value is a known member of the MarginCaseStatus enum.
+func (e MarginCaseStatus) Valid() bool {
+	switch e {
+	case MarginCaseStatusAWAITINGPRICE:
+		return true
+	case MarginCaseStatusAWAITINGVENUE:
+		return true
+	case MarginCaseStatusBANKRUPT:
+		return true
+	case MarginCaseStatusCOMPLETED:
+		return true
+	case MarginCaseStatusINPROGRESS:
+		return true
+	case MarginCaseStatusMANUALREVIEW:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MarginLiquidationTarget.
+const (
+	INITIALMARGIN         MarginLiquidationTarget = "INITIAL_MARGIN"
+	MAINTENANCEPLUSBUFFER MarginLiquidationTarget = "MAINTENANCE_PLUS_BUFFER"
+)
+
+// Valid indicates whether the value is a known member of the MarginLiquidationTarget enum.
+func (e MarginLiquidationTarget) Valid() bool {
+	switch e {
+	case INITIALMARGIN:
+		return true
+	case MAINTENANCEPLUSBUFFER:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MarginMode.
+const (
+	MarginModeCASH     MarginMode = "CASH"
+	MarginModeCROSS    MarginMode = "CROSS"
+	MarginModeISOLATED MarginMode = "ISOLATED"
+)
+
+// Valid indicates whether the value is a known member of the MarginMode enum.
+func (e MarginMode) Valid() bool {
+	switch e {
+	case MarginModeCASH:
+		return true
+	case MarginModeCROSS:
+		return true
+	case MarginModeISOLATED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MarginPlanDecision.
+const (
+	MarginPlanDecisionAPPLYCOLLATERAL MarginPlanDecision = "APPLY_COLLATERAL"
+	MarginPlanDecisionAWAITPRICE      MarginPlanDecision = "AWAIT_PRICE"
+	MarginPlanDecisionAWAITVENUE      MarginPlanDecision = "AWAIT_VENUE"
+	MarginPlanDecisionBANKRUPT        MarginPlanDecision = "BANKRUPT"
+	MarginPlanDecisionCOMPLETE        MarginPlanDecision = "COMPLETE"
+	MarginPlanDecisionMANUALREVIEW    MarginPlanDecision = "MANUAL_REVIEW"
+	MarginPlanDecisionSELL            MarginPlanDecision = "SELL"
+	MarginPlanDecisionSELLALL         MarginPlanDecision = "SELL_ALL"
+)
+
+// Valid indicates whether the value is a known member of the MarginPlanDecision enum.
+func (e MarginPlanDecision) Valid() bool {
+	switch e {
+	case MarginPlanDecisionAPPLYCOLLATERAL:
+		return true
+	case MarginPlanDecisionAWAITPRICE:
+		return true
+	case MarginPlanDecisionAWAITVENUE:
+		return true
+	case MarginPlanDecisionBANKRUPT:
+		return true
+	case MarginPlanDecisionCOMPLETE:
+		return true
+	case MarginPlanDecisionMANUALREVIEW:
+		return true
+	case MarginPlanDecisionSELL:
+		return true
+	case MarginPlanDecisionSELLALL:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MarginStepAction.
+const (
+	MarginStepActionAPPLYCOLLATERAL MarginStepAction = "APPLY_COLLATERAL"
+	MarginStepActionSELL            MarginStepAction = "SELL"
+)
+
+// Valid indicates whether the value is a known member of the MarginStepAction enum.
+func (e MarginStepAction) Valid() bool {
+	switch e {
+	case MarginStepActionAPPLYCOLLATERAL:
+		return true
+	case MarginStepActionSELL:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MarginStressScenario.
+const (
+	BRIDGEDELAYED     MarginStressScenario = "BRIDGE_DELAYED"
+	COLLATERALDEPEG   MarginStressScenario = "COLLATERAL_DEPEG"
+	EXTREMESPREAD     MarginStressScenario = "EXTREME_SPREAD"
+	GAPDOWN10         MarginStressScenario = "GAP_DOWN_10"
+	GAPDOWN25         MarginStressScenario = "GAP_DOWN_25"
+	GAPDOWN5          MarginStressScenario = "GAP_DOWN_5"
+	GAPDOWN50         MarginStressScenario = "GAP_DOWN_50"
+	GAPUP10           MarginStressScenario = "GAP_UP_10"
+	GAPUP25           MarginStressScenario = "GAP_UP_25"
+	GAPUP5            MarginStressScenario = "GAP_UP_5"
+	GAPUP50           MarginStressScenario = "GAP_UP_50"
+	ORACLEUNAVAILABLE MarginStressScenario = "ORACLE_UNAVAILABLE"
+	PARTIALFILL       MarginStressScenario = "PARTIAL_FILL"
+	VENUEUNAVAILABLE  MarginStressScenario = "VENUE_UNAVAILABLE"
+)
+
+// Valid indicates whether the value is a known member of the MarginStressScenario enum.
+func (e MarginStressScenario) Valid() bool {
+	switch e {
+	case BRIDGEDELAYED:
+		return true
+	case COLLATERALDEPEG:
+		return true
+	case EXTREMESPREAD:
+		return true
+	case GAPDOWN10:
+		return true
+	case GAPDOWN25:
+		return true
+	case GAPDOWN5:
+		return true
+	case GAPDOWN50:
+		return true
+	case GAPUP10:
+		return true
+	case GAPUP25:
+		return true
+	case GAPUP5:
+		return true
+	case GAPUP50:
+		return true
+	case ORACLEUNAVAILABLE:
+		return true
+	case PARTIALFILL:
+		return true
+	case VENUEUNAVAILABLE:
 		return true
 	default:
 		return false
@@ -2128,6 +2599,96 @@ func (e PayoutRequestState) Valid() bool {
 	}
 }
 
+// Defines values for PredictionMarketMode.
+const (
+	PredictionMarketModePAPER   PredictionMarketMode = "PAPER"
+	PredictionMarketModeSANDBOX PredictionMarketMode = "SANDBOX"
+)
+
+// Valid indicates whether the value is a known member of the PredictionMarketMode enum.
+func (e PredictionMarketMode) Valid() bool {
+	switch e {
+	case PredictionMarketModePAPER:
+		return true
+	case PredictionMarketModeSANDBOX:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PredictionOracleKind.
+const (
+	PredictionOracleKindSANDBOX PredictionOracleKind = "SANDBOX"
+)
+
+// Valid indicates whether the value is a known member of the PredictionOracleKind enum.
+func (e PredictionOracleKind) Valid() bool {
+	switch e {
+	case PredictionOracleKindSANDBOX:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PredictionResolutionKind.
+const (
+	DISPUTEOVERTURNED PredictionResolutionKind = "DISPUTE_OVERTURNED"
+	DISPUTEUPHELD     PredictionResolutionKind = "DISPUTE_UPHELD"
+	ORACLE            PredictionResolutionKind = "ORACLE"
+)
+
+// Valid indicates whether the value is a known member of the PredictionResolutionKind enum.
+func (e PredictionResolutionKind) Valid() bool {
+	switch e {
+	case DISPUTEOVERTURNED:
+		return true
+	case DISPUTEUPHELD:
+		return true
+	case ORACLE:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PredictionRoundingPolicy.
+const (
+	EXACT          PredictionRoundingPolicy = "EXACT"
+	FLOORPERHOLDER PredictionRoundingPolicy = "FLOOR_PER_HOLDER"
+)
+
+// Valid indicates whether the value is a known member of the PredictionRoundingPolicy enum.
+func (e PredictionRoundingPolicy) Valid() bool {
+	switch e {
+	case EXACT:
+		return true
+	case FLOORPERHOLDER:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PredictionSetAction.
+const (
+	ISSUE  PredictionSetAction = "ISSUE"
+	REDEEM PredictionSetAction = "REDEEM"
+)
+
+// Valid indicates whether the value is a known member of the PredictionSetAction enum.
+func (e PredictionSetAction) Valid() bool {
+	switch e {
+	case ISSUE:
+		return true
+	case REDEEM:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PrincipalActorType.
 const (
 	PrincipalActorTypeOPERATOR PrincipalActorType = "OPERATOR"
@@ -2274,31 +2835,31 @@ func (e ReconciliationRecordMode) Valid() bool {
 
 // Defines values for ReconciliationRecordStatus.
 const (
-	ESCALATED         ReconciliationRecordStatus = "ESCALATED"
-	INVESTIGATING     ReconciliationRecordStatus = "INVESTIGATING"
-	MATCHED           ReconciliationRecordStatus = "MATCHED"
-	MISMATCH          ReconciliationRecordStatus = "MISMATCH"
-	OPEN              ReconciliationRecordStatus = "OPEN"
-	RESOLVEDAUTOMATIC ReconciliationRecordStatus = "RESOLVED_AUTOMATIC"
-	RESOLVEDMANUAL    ReconciliationRecordStatus = "RESOLVED_MANUAL"
+	ReconciliationRecordStatusESCALATED         ReconciliationRecordStatus = "ESCALATED"
+	ReconciliationRecordStatusINVESTIGATING     ReconciliationRecordStatus = "INVESTIGATING"
+	ReconciliationRecordStatusMATCHED           ReconciliationRecordStatus = "MATCHED"
+	ReconciliationRecordStatusMISMATCH          ReconciliationRecordStatus = "MISMATCH"
+	ReconciliationRecordStatusOPEN              ReconciliationRecordStatus = "OPEN"
+	ReconciliationRecordStatusRESOLVEDAUTOMATIC ReconciliationRecordStatus = "RESOLVED_AUTOMATIC"
+	ReconciliationRecordStatusRESOLVEDMANUAL    ReconciliationRecordStatus = "RESOLVED_MANUAL"
 )
 
 // Valid indicates whether the value is a known member of the ReconciliationRecordStatus enum.
 func (e ReconciliationRecordStatus) Valid() bool {
 	switch e {
-	case ESCALATED:
+	case ReconciliationRecordStatusESCALATED:
 		return true
-	case INVESTIGATING:
+	case ReconciliationRecordStatusINVESTIGATING:
 		return true
-	case MATCHED:
+	case ReconciliationRecordStatusMATCHED:
 		return true
-	case MISMATCH:
+	case ReconciliationRecordStatusMISMATCH:
 		return true
-	case OPEN:
+	case ReconciliationRecordStatusOPEN:
 		return true
-	case RESOLVEDAUTOMATIC:
+	case ReconciliationRecordStatusRESOLVEDAUTOMATIC:
 		return true
-	case RESOLVEDMANUAL:
+	case ReconciliationRecordStatusRESOLVEDMANUAL:
 		return true
 	default:
 		return false
@@ -4896,6 +5457,27 @@ type CreatePayoutRequest struct {
 	DestinationId *UUID `json:"destination_id,omitempty"`
 }
 
+// CreatePredictionMarketRequest defines model for CreatePredictionMarketRequest.
+type CreatePredictionMarketRequest struct {
+	CloseAt Timestamp `json:"close_at"`
+
+	// DisputeWindowMs Whole milliseconds within 0..30 days
+	DisputeWindowMs int64                `json:"dispute_window_ms"`
+	Mode            PredictionMarketMode `json:"mode"`
+	OpenAt          Timestamp            `json:"open_at"`
+
+	// OraclePublicKey hex Ed25519 public key (64 hex characters)
+	OraclePublicKey string `json:"oracle_public_key"`
+	OracleSource    string `json:"oracle_source"`
+
+	// Outcomes 2..64 distinct symbols of 1..24 of A-Z 0-9 _ -
+	Outcomes []string `json:"outcomes"`
+	Question string   `json:"question"`
+
+	// Symbol 1..32 of A-Z 0-9 _ -, starting alphanumeric
+	Symbol string `json:"symbol"`
+}
+
 // CreditBalance The breakdown PART XX requires. gross is every remaining unit; payout_eligible is what the named policy version permits to be withdrawn right now. They are different numbers and the product must never show one where it means the other.
 type CreditBalance struct {
 	// AccountId UUIDv7 in canonical form
@@ -5087,6 +5669,886 @@ type DepositPage struct {
 	Items      []Deposit                 `json:"items"`
 	NextCursor nullable.Nullable[string] `json:"next_cursor"`
 }
+
+// DerivativeAnalyticsInputs defines model for DerivativeAnalyticsInputs.
+type DerivativeAnalyticsInputs struct {
+	DividendYieldBps int64 `json:"dividend_yield_bps"`
+	RateBps          int64 `json:"rate_bps"`
+	VolBps           int64 `json:"vol_bps"`
+}
+
+// DerivativeAsset The asset amounts are counted in, so base units can be read as the decimal they denote.
+type DerivativeAsset struct {
+	Decimals int `json:"decimals"`
+
+	// Id UUIDv7 in canonical form
+	Id     UUID   `json:"id"`
+	Symbol string `json:"symbol"`
+}
+
+// DerivativeBook The account's open derivative book as the service values it, in USD of the valuation asset with conservative rounding
+type DerivativeBook struct {
+	AsOf Timestamp `json:"as_of"`
+
+	// EquityAdjustment USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	EquityAdjustment USD `json:"equity_adjustment"`
+
+	// GrossNotional USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	GrossNotional USD `json:"gross_notional"`
+
+	// InitialMargin USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	InitialMargin USD `json:"initial_margin"`
+
+	// MaintenanceMargin USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	MaintenanceMargin USD    `json:"maintenance_margin"`
+	MaxInitialBps     int64  `json:"max_initial_bps"`
+	PolicyHash        string `json:"policy_hash"`
+	PolicyVersion     string `json:"policy_version"`
+
+	// Positions Open positions valued
+	Positions int `json:"positions"`
+
+	// QuoteAsset The asset amounts are counted in, so base units can be read as the decimal they denote.
+	QuoteAsset DerivativeAsset `json:"quote_asset"`
+
+	// UnrealizedPnl USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	UnrealizedPnl USD `json:"unrealized_pnl"`
+}
+
+// DerivativeBookStatus defines model for DerivativeBookStatus.
+type DerivativeBookStatus string
+
+// DerivativeClassRates defines model for DerivativeClassRates.
+type DerivativeClassRates struct {
+	InitialBps     int64  `json:"initial_bps"`
+	MaintenanceBps int64  `json:"maintenance_bps"`
+	RiskClass      string `json:"risk_class"`
+}
+
+// DerivativeClearingFundingRequest defines model for DerivativeClearingFundingRequest.
+type DerivativeClearingFundingRequest struct {
+	// AssetId UUIDv7 in canonical form
+	AssetId *UUID `json:"asset_id,omitempty"`
+
+	// Quantity Base units of the asset; positive
+	//
+	// Examples: 1500000000
+	Quantity Quantity `json:"quantity"`
+}
+
+// DerivativeClearingFundingResult defines model for DerivativeClearingFundingResult.
+type DerivativeClearingFundingResult struct {
+	// Asset The asset amounts are counted in, so base units can be read as the decimal they denote.
+	Asset                 DerivativeAsset `json:"asset"`
+	JournalTransactionIds []UUID          `json:"journal_transaction_ids"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity Quantity `json:"quantity"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// DerivativeClearingReconcileRequest defines model for DerivativeClearingReconcileRequest.
+type DerivativeClearingReconcileRequest struct {
+	// AssetId UUIDv7 in canonical form
+	AssetId *UUID `json:"asset_id,omitempty"`
+}
+
+// DerivativeClearingReport defines model for DerivativeClearingReport.
+type DerivativeClearingReport struct {
+	// Asset The asset amounts are counted in, so base units can be read as the decimal they denote.
+	Asset DerivativeAsset `json:"asset"`
+
+	// Capital The clearing house's CLEARING_CAPITAL ledger balance
+	//
+	// Examples: 1500000000
+	Capital Quantity `json:"capital"`
+
+	// ClearingHouseId UUIDv7 in canonical form
+	ClearingHouseId UUID `json:"clearing_house_id"`
+
+	// Difference result minus expected_result
+	//
+	// Examples: 1500000000
+	Difference Quantity `json:"difference"`
+
+	// ExpectedResult Minus register_net: what CLEARING_RESULT must be
+	//
+	// Examples: 1500000000
+	ExpectedResult Quantity `json:"expected_result"`
+	Flows          int64    `json:"flows"`
+
+	// Holdings The clearing house's CLEARING_CASH ledger balance
+	//
+	// Examples: 1500000000
+	Holdings          Quantity `json:"holdings"`
+	InternallyMatched bool     `json:"internally_matched"`
+
+	// Matched The books agree with the register and balance
+	Matched         bool                     `json:"matched"`
+	NetOpenInterest []DerivativeOpenInterest `json:"net_open_interest"`
+
+	// RecordId The CLEARING reconciliation record opened or refreshed for a mismatch
+	RecordId *UUID `json:"record_id,omitempty"`
+
+	// RegisterNet The sum of the register's customer-side amounts
+	//
+	// Examples: 1500000000
+	RegisterNet Quantity `json:"register_net"`
+
+	// RegisterShortfall Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	RegisterShortfall Quantity `json:"register_shortfall"`
+
+	// Result The clearing house's CLEARING_RESULT ledger balance
+	//
+	// Examples: 1500000000
+	Result Quantity `json:"result"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// DerivativeCloseRequest defines model for DerivativeCloseRequest.
+type DerivativeCloseRequest struct {
+	Mode AdvancedMode `json:"mode"`
+
+	// Quantity Contracts to close; absent closes the position
+	//
+	// Examples: 1500000000
+	Quantity *Quantity `json:"quantity,omitempty"`
+}
+
+// DerivativeContract defines model for DerivativeContract.
+type DerivativeContract struct {
+	CanonicalName string `json:"canonical_name"`
+
+	// Id UUIDv7 in canonical form
+	Id         UUID            `json:"id"`
+	Kind       DerivativeKind  `json:"kind"`
+	LatestMark *DerivativeMark `json:"latest_mark,omitempty"`
+
+	// Marked False when the contract has never been marked; latest_mark is then absent
+	Marked    bool   `json:"marked"`
+	RiskClass string `json:"risk_class"`
+
+	// Settled True once the contract has been finally settled; settlement is then present
+	Settled    bool                  `json:"settled"`
+	Settlement *DerivativeSettlement `json:"settlement,omitempty"`
+
+	// SettlementAsset The asset amounts are counted in, so base units can be read as the decimal they denote.
+	SettlementAsset DerivativeAsset `json:"settlement_asset"`
+	Status          string          `json:"status"`
+	Terms           InstrumentTerms `json:"terms"`
+
+	// TermsHash hex sha256 of the canonical terms in force
+	TermsHash    string `json:"terms_hash"`
+	TermsVersion int    `json:"terms_version"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// DerivativeContractList defines model for DerivativeContractList.
+type DerivativeContractList struct {
+	Items []DerivativeContract `json:"items"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// DerivativeDecimal A non-negative decimal written out exactly. It is never rounded; one that is not exact where it is used is refused.
+//
+// Examples: 2500.50
+type DerivativeDecimal = string
+
+// DerivativeExerciseRequest defines model for DerivativeExerciseRequest.
+type DerivativeExerciseRequest struct {
+	Mode AdvancedMode `json:"mode"`
+
+	// Quantity Contracts to exercise; absent exercises every one held
+	//
+	// Examples: 1500000000
+	Quantity *Quantity `json:"quantity,omitempty"`
+}
+
+// DerivativeFill defines model for DerivativeFill.
+type DerivativeFill struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// AmountSettled What the customer received (> 0) or paid (< 0) the clearing house for this fill
+	//
+	// Examples: 1500000000
+	AmountSettled Quantity `json:"amount_settled"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// InstrumentId UUIDv7 in canonical form
+	InstrumentId UUID `json:"instrument_id"`
+
+	// IntentId UUIDv7 in canonical form
+	IntentId *UUID `json:"intent_id,omitempty"`
+
+	// MarkId UUIDv7 in canonical form
+	MarkId     *UUID     `json:"mark_id,omitempty"`
+	OccurredAt Timestamp `json:"occurred_at"`
+
+	// PositionId UUIDv7 in canonical form
+	PositionId UUID `json:"position_id"`
+
+	// PriceMantissa Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	PriceMantissa Quantity `json:"price_mantissa"`
+	PriceScale    int      `json:"price_scale"`
+
+	// Quantity Signed contracts the fill moved the position by
+	//
+	// Examples: 1500000000
+	Quantity Quantity `json:"quantity"`
+
+	// RealizedPnl Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	RealizedPnl Quantity `json:"realized_pnl"`
+
+	// RiskDecisionId UUIDv7 in canonical form
+	RiskDecisionId *UUID                `json:"risk_decision_id,omitempty"`
+	Side           DerivativeFillSide   `json:"side"`
+	SlippageBps    int64                `json:"slippage_bps"`
+	Source         DerivativeFillSource `json:"source"`
+
+	// Value Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Value Quantity `json:"value"`
+}
+
+// DerivativeFillSide defines model for DerivativeFillSide.
+type DerivativeFillSide string
+
+// DerivativeFillSource defines model for DerivativeFillSource.
+type DerivativeFillSource string
+
+// DerivativeFlow defines model for DerivativeFlow.
+type DerivativeFlow struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// Amount Signed from the customer's side: > 0 received from the clearing house, < 0 paid to it
+	//
+	// Examples: 1500000000
+	Amount Quantity `json:"amount"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// InstrumentId UUIDv7 in canonical form
+	InstrumentId UUID `json:"instrument_id"`
+
+	// JournalTransactionId UUIDv7 in canonical form
+	JournalTransactionId *UUID              `json:"journal_transaction_id,omitempty"`
+	Kind                 DerivativeFlowKind `json:"kind"`
+	OccurredAt           Timestamp          `json:"occurred_at"`
+
+	// PositionId UUIDv7 in canonical form
+	PositionId    UUID   `json:"position_id"`
+	ReferenceId   string `json:"reference_id"`
+	ReferenceType string `json:"reference_type"`
+
+	// SettlementAsset The asset amounts are counted in, so base units can be read as the decimal they denote.
+	SettlementAsset DerivativeAsset `json:"settlement_asset"`
+
+	// Shortfall What the customer owed and could not pay; the clearing house absorbed it
+	//
+	// Examples: 1500000000
+	Shortfall Quantity `json:"shortfall"`
+	Symbol    string   `json:"symbol"`
+}
+
+// DerivativeFlowKind defines model for DerivativeFlowKind.
+type DerivativeFlowKind string
+
+// DerivativeFlowPage defines model for DerivativeFlowPage.
+type DerivativeFlowPage struct {
+	Items      []DerivativeFlow          `json:"items"`
+	NextCursor nullable.Nullable[string] `json:"next_cursor"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// DerivativeFundingAccrual defines model for DerivativeFundingAccrual.
+type DerivativeFundingAccrual struct {
+	// Amount What the position paid or received for the interval (never negative; direction says which)
+	//
+	// Examples: 1500000000
+	Amount    Quantity                   `json:"amount"`
+	Clamped   bool                       `json:"clamped"`
+	Direction DerivativeFundingDirection `json:"direction"`
+
+	// FlowId UUIDv7 in canonical form
+	FlowId *UUID `json:"flow_id,omitempty"`
+
+	// FundingRateId UUIDv7 in canonical form
+	FundingRateId UUID `json:"funding_rate_id"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// InstrumentId UUIDv7 in canonical form
+	InstrumentId  UUID      `json:"instrument_id"`
+	IntervalEnd   Timestamp `json:"interval_end"`
+	IntervalStart Timestamp `json:"interval_start"`
+
+	// MarkMantissa The last mark of the interval
+	//
+	// Examples: 1500000000
+	MarkMantissa Quantity `json:"mark_mantissa"`
+
+	// PerContractAmount Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	PerContractAmount Quantity `json:"per_contract_amount"`
+
+	// PositionId UUIDv7 in canonical form
+	PositionId     UUID  `json:"position_id"`
+	PremiumIndexE8 int64 `json:"premium_index_e8"`
+	PriceScale     int   `json:"price_scale"`
+
+	// Quantity The position's signed contracts at the funding time (the interval end)
+	//
+	// Examples: 1500000000
+	Quantity Quantity `json:"quantity"`
+
+	// RateE8 The clamped funding rate in 10^-8 per interval
+	RateE8 int64 `json:"rate_e8"`
+
+	// SettlementAsset The asset amounts are counted in, so base units can be read as the decimal they denote.
+	SettlementAsset DerivativeAsset `json:"settlement_asset"`
+	Symbol          string          `json:"symbol"`
+}
+
+// DerivativeFundingAccrualPage defines model for DerivativeFundingAccrualPage.
+type DerivativeFundingAccrualPage struct {
+	Items      []DerivativeFundingAccrual `json:"items"`
+	NextCursor nullable.Nullable[string]  `json:"next_cursor"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// DerivativeFundingDirection defines model for DerivativeFundingDirection.
+type DerivativeFundingDirection string
+
+// DerivativeKind defines model for DerivativeKind.
+type DerivativeKind string
+
+// DerivativeMark defines model for DerivativeMark.
+type DerivativeMark struct {
+	// HasIndex False when the mark was recorded without an index (the underlying's spot)
+	HasIndex bool `json:"has_index"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// IndexMantissa Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	IndexMantissa *Quantity `json:"index_mantissa,omitempty"`
+	IndexScale    *int      `json:"index_scale,omitempty"`
+	IndexSource   *string   `json:"index_source,omitempty"`
+
+	// InstrumentId UUIDv7 in canonical form
+	InstrumentId UUID `json:"instrument_id"`
+
+	// MarkMantissa Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	MarkMantissa Quantity  `json:"mark_mantissa"`
+	ObservedAt   Timestamp `json:"observed_at"`
+
+	// PriceScale The mark is mark_mantissa at this many decimal places (the contract's price scale)
+	PriceScale int       `json:"price_scale"`
+	RecordedAt Timestamp `json:"recorded_at"`
+	Source     string    `json:"source"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// DerivativeMarkPage defines model for DerivativeMarkPage.
+type DerivativeMarkPage struct {
+	Items      []DerivativeMark          `json:"items"`
+	NextCursor nullable.Nullable[string] `json:"next_cursor"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// DerivativeMarkRequest defines model for DerivativeMarkRequest.
+type DerivativeMarkRequest struct {
+	// Index A non-negative decimal written out exactly. It is never rounded; one that is not exact where it is used is refused.
+	//
+	// Examples: 2500.50
+	Index *DerivativeDecimal `json:"index,omitempty"`
+
+	// Mark A non-negative decimal written out exactly. It is never rounded; one that is not exact where it is used is refused.
+	//
+	// Examples: 2500.50
+	Mark       DerivativeDecimal `json:"mark"`
+	ObservedAt *Timestamp        `json:"observed_at,omitempty"`
+	Source     string            `json:"source"`
+}
+
+// DerivativeModelDecimal A model value as an exact decimal string (rounded half-even to 18 places by the model where it says so)
+type DerivativeModelDecimal = string
+
+// DerivativeOpenInterest defines model for DerivativeOpenInterest.
+type DerivativeOpenInterest struct {
+	// InstrumentId UUIDv7 in canonical form
+	InstrumentId UUID `json:"instrument_id"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity Quantity `json:"quantity"`
+}
+
+// DerivativeOpenRequest defines model for DerivativeOpenRequest.
+type DerivativeOpenRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// InstrumentId UUIDv7 in canonical form
+	InstrumentId UUID         `json:"instrument_id"`
+	Mode         AdvancedMode `json:"mode"`
+
+	// Quantity Contracts; positive and a whole number of lots
+	//
+	// Examples: 1500000000
+	Quantity Quantity       `json:"quantity"`
+	Side     DerivativeSide `json:"side"`
+}
+
+// DerivativeOptionAnalytics Reference values of a model, labelled as such by the service. Not a quote, not a settlement price, never posted, and not advice.
+type DerivativeOptionAnalytics struct {
+	AsOf Timestamp `json:"as_of"`
+
+	// Delta A model value as an exact decimal string (rounded half-even to 18 places by the model where it says so)
+	Delta DerivativeModelDecimal `json:"delta"`
+
+	// Gamma A model value as an exact decimal string (rounded half-even to 18 places by the model where it says so)
+	Gamma DerivativeModelDecimal `json:"gamma"`
+
+	// ImpliedVol A model value as an exact decimal string (rounded half-even to 18 places by the model where it says so)
+	ImpliedVol *DerivativeModelDecimal `json:"implied_vol,omitempty"`
+
+	// ImpliedVolReason Why no implied volatility could be solved from the mark (a stable reason code)
+	ImpliedVolReason *string                   `json:"implied_vol_reason,omitempty"`
+	Inputs           DerivativeAnalyticsInputs `json:"inputs"`
+
+	// InstrumentId UUIDv7 in canonical form
+	InstrumentId UUID `json:"instrument_id"`
+
+	// Intrinsic A model value as an exact decimal string (rounded half-even to 18 places by the model where it says so)
+	Intrinsic DerivativeModelDecimal `json:"intrinsic"`
+
+	// Label The service's own label: a reference model value, not a quote
+	Label string         `json:"label"`
+	Mark  DerivativeMark `json:"mark"`
+	Model string         `json:"model"`
+
+	// Price A model value as an exact decimal string (rounded half-even to 18 places by the model where it says so)
+	Price  DerivativeModelDecimal `json:"price"`
+	Regime string                 `json:"regime"`
+	Right  string                 `json:"right"`
+
+	// Spot A model value as an exact decimal string (rounded half-even to 18 places by the model where it says so)
+	Spot DerivativeModelDecimal `json:"spot"`
+
+	// Strike A model value as an exact decimal string (rounded half-even to 18 places by the model where it says so)
+	Strike DerivativeModelDecimal `json:"strike"`
+	Style  string                 `json:"style"`
+
+	// ThetaPerDay A model value as an exact decimal string (rounded half-even to 18 places by the model where it says so)
+	ThetaPerDay DerivativeModelDecimal `json:"theta_per_day"`
+
+	// ThetaPerYear A model value as an exact decimal string (rounded half-even to 18 places by the model where it says so)
+	ThetaPerYear DerivativeModelDecimal `json:"theta_per_year"`
+
+	// TimeValue A model value as an exact decimal string (rounded half-even to 18 places by the model where it says so)
+	TimeValue *DerivativeModelDecimal `json:"time_value,omitempty"`
+
+	// TimeYears A model value as an exact decimal string (rounded half-even to 18 places by the model where it says so)
+	TimeYears DerivativeModelDecimal `json:"time_years"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+
+	// Vega A model value as an exact decimal string (rounded half-even to 18 places by the model where it says so)
+	Vega DerivativeModelDecimal `json:"vega"`
+
+	// VegaPerVolPoint A model value as an exact decimal string (rounded half-even to 18 places by the model where it says so)
+	VegaPerVolPoint DerivativeModelDecimal `json:"vega_per_vol_point"`
+
+	// Vol A model value as an exact decimal string (rounded half-even to 18 places by the model where it says so)
+	Vol DerivativeModelDecimal `json:"vol"`
+}
+
+// DerivativePolicy defines model for DerivativePolicy.
+type DerivativePolicy struct {
+	ExpiryGapShockBps      int64 `json:"expiry_gap_shock_bps"`
+	ExpiryGapWindowMs      int64 `json:"expiry_gap_window_ms"`
+	FundingBufferIntervals int64 `json:"funding_buffer_intervals"`
+
+	// FundingRateScale The denominator of every *_e8 rate (10^8)
+	FundingRateScale int64 `json:"funding_rate_scale"`
+
+	// Hash hex sha256 of the policy's canonical JSON
+	Hash string `json:"hash"`
+
+	// Linear Initial and maintenance rates of futures and perpetuals by the underlying's risk class; an unlisted class cannot be traded
+	Linear []DerivativeClassRates `json:"linear"`
+
+	// MaxFundingRateE8 Funding is clamped to plus or minus this many 10^-8 per interval
+	MaxFundingRateE8          int64 `json:"max_funding_rate_e8"`
+	OptionMaintenanceRatioBps int64 `json:"option_maintenance_ratio_bps"`
+	OptionMinMarginBps        int64 `json:"option_min_margin_bps"`
+
+	// OptionShocksBps The scenario grid a written option's worst loss is computed over
+	OptionShocksBps []int64 `json:"option_shocks_bps"`
+
+	// PaperSlippageBps A paper buy fills this far above the mark and a sell this far below
+	PaperSlippageBps          int64  `json:"paper_slippage_bps"`
+	VariationMarginIntervalMs int64  `json:"variation_margin_interval_ms"`
+	Version                   string `json:"version"`
+}
+
+// DerivativePosition defines model for DerivativePosition.
+type DerivativePosition struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID       `json:"account_id"`
+	ClosedAt  *Timestamp `json:"closed_at,omitempty"`
+
+	// CostValue Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	CostValue Quantity `json:"cost_value"`
+
+	// FundingPnl Funding received (> 0) or paid (< 0) over the position's life
+	//
+	// Examples: 1500000000
+	FundingPnl Quantity `json:"funding_pnl"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// InstrumentId UUIDv7 in canonical form
+	InstrumentId UUID           `json:"instrument_id"`
+	Kind         DerivativeKind `json:"kind"`
+
+	// MarginPosted Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	MarginPosted Quantity  `json:"margin_posted"`
+	OpenedAt     Timestamp `json:"opened_at"`
+	PriceScale   int       `json:"price_scale"`
+
+	// Quantity Signed contracts: long > 0, short < 0
+	//
+	// Examples: 1500000000
+	Quantity Quantity `json:"quantity"`
+
+	// RealizedPnl Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	RealizedPnl Quantity `json:"realized_pnl"`
+
+	// SettledValue Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	SettledValue Quantity `json:"settled_value"`
+
+	// SettlementAsset The asset amounts are counted in, so base units can be read as the decimal they denote.
+	SettlementAsset DerivativeAsset `json:"settlement_asset"`
+
+	// Shortfall Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Shortfall Quantity `json:"shortfall"`
+
+	// Side Absent once the position is flat
+	Side             *DerivativeSide              `json:"side,omitempty"`
+	Status           DerivativePositionStatus     `json:"status"`
+	Symbol           string                       `json:"symbol"`
+	Valuation        *DerivativePositionValuation `json:"valuation,omitempty"`
+	ValuationRefusal *DerivativeRefusal           `json:"valuation_refusal,omitempty"`
+
+	// ValuationStatus VALUED: valuation is present. REFUSED: the service could not value the account's open book and valuation_refusal says why; no figure is given in its place. NOT_APPLICABLE: the position is not open. NOT_COMPUTED: this answer (a trade result) does not value the position; read it to.
+	ValuationStatus DerivativeValuationStatus `json:"valuation_status"`
+	Version         int64                     `json:"version"`
+}
+
+// DerivativePositionPage defines model for DerivativePositionPage.
+type DerivativePositionPage struct {
+	// Book The account's open derivative book as the service values it, in USD of the valuation asset with conservative rounding
+	Book        *DerivativeBook           `json:"book,omitempty"`
+	BookRefusal *DerivativeRefusal        `json:"book_refusal,omitempty"`
+	BookStatus  DerivativeBookStatus      `json:"book_status"`
+	Items       []DerivativePosition      `json:"items"`
+	NextCursor  nullable.Nullable[string] `json:"next_cursor"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// DerivativePositionStatus defines model for DerivativePositionStatus.
+type DerivativePositionStatus string
+
+// DerivativePositionValuation defines model for DerivativePositionValuation.
+type DerivativePositionValuation struct {
+	// AverageEntryPriceMantissa Exact cost over quantity at the price scale, rounded half-even once (display only)
+	//
+	// Examples: 1500000000
+	AverageEntryPriceMantissa Quantity `json:"average_entry_price_mantissa"`
+
+	// EquityAdjustment What the position adds to equity beyond the ledger balances buying power counts
+	//
+	// Examples: 1500000000
+	EquityAdjustment Quantity `json:"equity_adjustment"`
+
+	// MarkId UUIDv7 in canonical form
+	MarkId UUID `json:"mark_id"`
+
+	// MarkMantissa Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	MarkMantissa   Quantity  `json:"mark_mantissa"`
+	MarkObservedAt Timestamp `json:"mark_observed_at"`
+
+	// Requirement The margin requirement at the mark, in base units of the settlement asset (every rounding up)
+	Requirement DerivativeRequirement `json:"requirement"`
+
+	// UnrealizedPnl Quantity times the contract value at the mark, less the cost value
+	//
+	// Examples: 1500000000
+	UnrealizedPnl Quantity `json:"unrealized_pnl"`
+}
+
+// DerivativeRefusal defines model for DerivativeRefusal.
+type DerivativeRefusal struct {
+	// Code The stable code the service refused with
+	Code   string `json:"code"`
+	Detail string `json:"detail"`
+}
+
+// DerivativeRequirement The margin requirement at the mark, in base units of the settlement asset (every rounding up)
+type DerivativeRequirement struct {
+	// FundingBuffer Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	FundingBuffer Quantity `json:"funding_buffer"`
+
+	// Initial Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Initial Quantity `json:"initial"`
+
+	// Maintenance Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Maintenance Quantity `json:"maintenance"`
+
+	// Notional Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Notional Quantity `json:"notional"`
+
+	// ScenarioLoss Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	ScenarioLoss Quantity `json:"scenario_loss"`
+}
+
+// DerivativeRunKind defines model for DerivativeRunKind.
+type DerivativeRunKind string
+
+// DerivativeRunRequest defines model for DerivativeRunRequest.
+type DerivativeRunRequest struct {
+	// IntervalStart On the interval grid: a whole number of intervals since the Unix epoch
+	IntervalStart Timestamp `json:"interval_start"`
+}
+
+// DerivativeRunResult defines model for DerivativeRunResult.
+type DerivativeRunResult struct {
+	Clamped *bool `json:"clamped,omitempty"`
+
+	// InstrumentId UUIDv7 in canonical form
+	InstrumentId          UUID              `json:"instrument_id"`
+	IntervalEnd           Timestamp         `json:"interval_end"`
+	IntervalStart         Timestamp         `json:"interval_start"`
+	JournalTransactionIds []UUID            `json:"journal_transaction_ids"`
+	Kind                  DerivativeRunKind `json:"kind"`
+
+	// MarkId UUIDv7 in canonical form
+	MarkId *UUID `json:"mark_id,omitempty"`
+
+	// Paid Collected from payers; absent on a replay
+	//
+	// Examples: 1500000000
+	Paid *Quantity `json:"paid,omitempty"`
+
+	// PerContractAmount Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	PerContractAmount *Quantity `json:"per_contract_amount,omitempty"`
+
+	// Positions Positions the run covered
+	Positions      *int   `json:"positions,omitempty"`
+	PremiumIndexE8 *int64 `json:"premium_index_e8,omitempty"`
+	RateE8         *int64 `json:"rate_e8,omitempty"`
+
+	// Received Paid to receivers; absent on a replay
+	//
+	// Examples: 1500000000
+	Received *Quantity `json:"received,omitempty"`
+
+	// Replay True when the interval had already been run; nothing was written and its flows are in the register
+	Replay bool `json:"replay"`
+
+	// RunId UUIDv7 in canonical form
+	RunId UUID `json:"run_id"`
+
+	// SettlementAsset The asset amounts are counted in, so base units can be read as the decimal they denote.
+	SettlementAsset DerivativeAsset `json:"settlement_asset"`
+
+	// Shortfall What payers could not pay; absent on a replay
+	//
+	// Examples: 1500000000
+	Shortfall *Quantity `json:"shortfall,omitempty"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// DerivativeSettleRequest defines model for DerivativeSettleRequest.
+type DerivativeSettleRequest struct {
+	// Price A non-negative decimal written out exactly. It is never rounded; one that is not exact where it is used is refused.
+	//
+	// Examples: 2500.50
+	Price *DerivativeDecimal `json:"price,omitempty"`
+
+	// PriceSource Required with price
+	PriceSource *string `json:"price_source,omitempty"`
+}
+
+// DerivativeSettlement defines model for DerivativeSettlement.
+type DerivativeSettlement struct {
+	// Id UUIDv7 in canonical form
+	Id        UUID                     `json:"id"`
+	Kind      DerivativeSettlementKind `json:"kind"`
+	Positions int                      `json:"positions"`
+
+	// PriceMantissa A future's final price, or the underlying's price an option settled at
+	//
+	// Examples: 1500000000
+	PriceMantissa Quantity  `json:"price_mantissa"`
+	PriceScale    int       `json:"price_scale"`
+	PriceSource   string    `json:"price_source"`
+	SettledAt     Timestamp `json:"settled_at"`
+}
+
+// DerivativeSettlementKind defines model for DerivativeSettlementKind.
+type DerivativeSettlementKind string
+
+// DerivativeSettlementResult defines model for DerivativeSettlementResult.
+type DerivativeSettlementResult struct {
+	ExerciseIds []UUID `json:"exercise_ids"`
+
+	// InstrumentId UUIDv7 in canonical form
+	InstrumentId UUID `json:"instrument_id"`
+
+	// IntrinsicPerContract Options only; absent on a replay
+	//
+	// Examples: 1500000000
+	IntrinsicPerContract  *Quantity                `json:"intrinsic_per_contract,omitempty"`
+	JournalTransactionIds []UUID                   `json:"journal_transaction_ids"`
+	Kind                  DerivativeSettlementKind `json:"kind"`
+
+	// Paid Absent on a replay
+	//
+	// Examples: 1500000000
+	Paid      *Quantity `json:"paid,omitempty"`
+	Positions int       `json:"positions"`
+
+	// PriceMantissa Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	PriceMantissa Quantity `json:"price_mantissa"`
+	PriceScale    int      `json:"price_scale"`
+
+	// Received Absent on a replay
+	//
+	// Examples: 1500000000
+	Received *Quantity `json:"received,omitempty"`
+	Replay   bool      `json:"replay"`
+
+	// SettlementAsset The asset amounts are counted in, so base units can be read as the decimal they denote.
+	SettlementAsset DerivativeAsset `json:"settlement_asset"`
+
+	// SettlementId UUIDv7 in canonical form
+	SettlementId UUID `json:"settlement_id"`
+
+	// Shortfall Absent on a replay
+	//
+	// Examples: 1500000000
+	Shortfall *Quantity `json:"shortfall,omitempty"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// DerivativeSide defines model for DerivativeSide.
+type DerivativeSide string
+
+// DerivativeTradeResult defines model for DerivativeTradeResult.
+type DerivativeTradeResult struct {
+	// ExerciseId UUIDv7 in canonical form
+	ExerciseId            *UUID               `json:"exercise_id,omitempty"`
+	Fill                  *DerivativeFill     `json:"fill,omitempty"`
+	Intent                EconomicIntent      `json:"intent"`
+	JournalTransactionIds []UUID              `json:"journal_transaction_ids"`
+	Position              *DerivativePosition `json:"position,omitempty"`
+
+	// Replay True when the service had already carried out this idempotency key; nothing was written this time
+	Replay bool `json:"replay"`
+
+	// RiskDecisionId UUIDv7 in canonical form
+	RiskDecisionId *UUID `json:"risk_decision_id,omitempty"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// DerivativeValuationStatus VALUED: valuation is present. REFUSED: the service could not value the account's open book and valuation_refusal says why; no figure is given in its place. NOT_APPLICABLE: the position is not open. NOT_COMPUTED: this answer (a trade result) does not value the position; read it to.
+type DerivativeValuationStatus string
 
 // EconomicEffect defines model for EconomicEffect.
 type EconomicEffect struct {
@@ -5642,6 +7104,1092 @@ type KillSwitchRequest struct {
 // KillSwitchRequestAction defines model for KillSwitchRequest.Action.
 type KillSwitchRequestAction string
 
+// MarginAccount defines model for MarginAccount.
+type MarginAccount struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// InsuranceFundId UUIDv7 in canonical form
+	InsuranceFundId UUID `json:"insurance_fund_id"`
+
+	// IsolatedAssetId UUIDv7 in canonical form
+	IsolatedAssetId *UUID `json:"isolated_asset_id,omitempty"`
+
+	// LendingPoolId UUIDv7 in canonical form
+	LendingPoolId UUID `json:"lending_pool_id"`
+
+	// MarginMode CASH takes no leverage; ISOLATED margins one risky asset; CROSS shares the collateral across positions.
+	MarginMode MarginMode   `json:"margin_mode"`
+	Mode       AdvancedMode `json:"mode"`
+
+	// NumeraireAssetId UUIDv7 in canonical form
+	NumeraireAssetId UUID                `json:"numeraire_asset_id"`
+	OpenedAt         Timestamp           `json:"opened_at"`
+	PolicyVersion    string              `json:"policy_version"`
+	Status           MarginAccountStatus `json:"status"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// MarginAccountDetail defines model for MarginAccountDetail.
+type MarginAccountDetail struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// Evaluation The margin engine's deterministic evaluation. equity = eligible_collateral + realized_pnl + unrealized_pnl − borrow_liabilities − accrued_fees − accrued_interest; liquidation_buffer = equity − maintenance_margin (negative once eligible for liquidation). Quantities are numeraire base units.
+	Evaluation MarginEvaluation `json:"evaluation"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// InsuranceFundId UUIDv7 in canonical form
+	InsuranceFundId UUID `json:"insurance_fund_id"`
+
+	// IsolatedAssetId UUIDv7 in canonical form
+	IsolatedAssetId *UUID       `json:"isolated_asset_id,omitempty"`
+	LatestCase      *MarginCase `json:"latest_case,omitempty"`
+
+	// LendingPoolId UUIDv7 in canonical form
+	LendingPoolId UUID         `json:"lending_pool_id"`
+	Loans         []MarginLoan `json:"loans"`
+
+	// MarginMode CASH takes no leverage; ISOLATED margins one risky asset; CROSS shares the collateral across positions.
+	MarginMode MarginMode   `json:"margin_mode"`
+	Mode       AdvancedMode `json:"mode"`
+
+	// NumeraireAssetId UUIDv7 in canonical form
+	NumeraireAssetId UUID                `json:"numeraire_asset_id"`
+	OpenCall         *MarginCall         `json:"open_call,omitempty"`
+	OpenedAt         Timestamp           `json:"opened_at"`
+	PolicyVersion    string              `json:"policy_version"`
+	Status           MarginAccountStatus `json:"status"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// MarginAccountRef defines model for MarginAccountRef.
+type MarginAccountRef struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+}
+
+// MarginAccountStatus defines model for MarginAccountStatus.
+type MarginAccountStatus string
+
+// MarginAmountRequest defines model for MarginAmountRequest.
+type MarginAmountRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// Amount Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Amount Quantity `json:"amount"`
+}
+
+// MarginBatchRequest defines model for MarginBatchRequest.
+type MarginBatchRequest struct {
+	Limit *int `json:"limit,omitempty"`
+}
+
+// MarginCall defines model for MarginCall.
+type MarginCall struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// Deficiency Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Deficiency Quantity `json:"deficiency"`
+
+	// Equity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Equity         Quantity `json:"equity"`
+	EvaluationHash string   `json:"evaluation_hash"`
+
+	// Id UUIDv7 in canonical form
+	Id       UUID      `json:"id"`
+	IssuedAt Timestamp `json:"issued_at"`
+
+	// MaintenanceMargin Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	MaintenanceMargin Quantity `json:"maintenance_margin"`
+
+	// MarginAccountId UUIDv7 in canonical form
+	MarginAccountId UUID `json:"margin_account_id"`
+
+	// NumeraireAssetId UUIDv7 in canonical form
+	NumeraireAssetId  UUID             `json:"numeraire_asset_id"`
+	NumeraireDecimals int              `json:"numeraire_decimals"`
+	ResolvedAt        *Timestamp       `json:"resolved_at,omitempty"`
+	Status            MarginCallStatus `json:"status"`
+}
+
+// MarginCallPage defines model for MarginCallPage.
+type MarginCallPage struct {
+	Items      []MarginCall              `json:"items"`
+	NextCursor nullable.Nullable[string] `json:"next_cursor"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// MarginCallStatus defines model for MarginCallStatus.
+type MarginCallStatus string
+
+// MarginCase defines model for MarginCase.
+type MarginCase struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID       `json:"account_id"`
+	ClosedAt  *Timestamp `json:"closed_at,omitempty"`
+
+	// Deficit Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Deficit *Quantity `json:"deficit,omitempty"`
+
+	// DeficitCoverageJournalTransactionId UUIDv7 in canonical form
+	DeficitCoverageJournalTransactionId *UUID      `json:"deficit_coverage_journal_transaction_id,omitempty"`
+	DeficitCoveredAt                    *Timestamp `json:"deficit_covered_at,omitempty"`
+
+	// Id UUIDv7 in canonical form
+	Id         UUID   `json:"id"`
+	LastReason string `json:"last_reason"`
+
+	// MarginAccountId UUIDv7 in canonical form
+	MarginAccountId UUID `json:"margin_account_id"`
+
+	// MarginCallId UUIDv7 in canonical form
+	MarginCallId UUID `json:"margin_call_id"`
+	MaxSteps     int  `json:"max_steps"`
+
+	// NumeraireAssetId UUIDv7 in canonical form
+	NumeraireAssetId  UUID                    `json:"numeraire_asset_id"`
+	NumeraireDecimals int                     `json:"numeraire_decimals"`
+	OpenedAt          Timestamp               `json:"opened_at"`
+	PolicyVersion     string                  `json:"policy_version"`
+	Status            MarginCaseStatus        `json:"status"`
+	StepsExecuted     int                     `json:"steps_executed"`
+	Target            MarginLiquidationTarget `json:"target"`
+}
+
+// MarginCaseDetail defines model for MarginCaseDetail.
+type MarginCaseDetail struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID       `json:"account_id"`
+	ClosedAt  *Timestamp `json:"closed_at,omitempty"`
+
+	// Deficit Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Deficit *Quantity `json:"deficit,omitempty"`
+
+	// DeficitCoverageJournalTransactionId UUIDv7 in canonical form
+	DeficitCoverageJournalTransactionId *UUID      `json:"deficit_coverage_journal_transaction_id,omitempty"`
+	DeficitCoveredAt                    *Timestamp `json:"deficit_covered_at,omitempty"`
+
+	// Id UUIDv7 in canonical form
+	Id         UUID   `json:"id"`
+	LastReason string `json:"last_reason"`
+
+	// MarginAccountId UUIDv7 in canonical form
+	MarginAccountId UUID `json:"margin_account_id"`
+
+	// MarginCallId UUIDv7 in canonical form
+	MarginCallId UUID `json:"margin_call_id"`
+	MaxSteps     int  `json:"max_steps"`
+
+	// NumeraireAssetId UUIDv7 in canonical form
+	NumeraireAssetId  UUID                    `json:"numeraire_asset_id"`
+	NumeraireDecimals int                     `json:"numeraire_decimals"`
+	OpenedAt          Timestamp               `json:"opened_at"`
+	PolicyVersion     string                  `json:"policy_version"`
+	Status            MarginCaseStatus        `json:"status"`
+	Steps             []MarginLiquidationStep `json:"steps"`
+	StepsExecuted     int                     `json:"steps_executed"`
+	Target            MarginLiquidationTarget `json:"target"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// MarginCasePage defines model for MarginCasePage.
+type MarginCasePage struct {
+	Items      []MarginCase              `json:"items"`
+	NextCursor nullable.Nullable[string] `json:"next_cursor"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// MarginCaseStatus defines model for MarginCaseStatus.
+type MarginCaseStatus string
+
+// MarginCollateralRequest defines model for MarginCollateralRequest.
+type MarginCollateralRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// AssetId UUIDv7 in canonical form
+	AssetId UUID `json:"asset_id"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity Quantity `json:"quantity"`
+}
+
+// MarginCollateralResult defines model for MarginCollateralResult.
+type MarginCollateralResult struct {
+	// EffectId UUIDv7 in canonical form
+	EffectId UUID `json:"effect_id"`
+
+	// Evaluation The margin engine's deterministic evaluation. equity = eligible_collateral + realized_pnl + unrealized_pnl − borrow_liabilities − accrued_fees − accrued_interest; liquidation_buffer = equity − maintenance_margin (negative once eligible for liquidation). Quantities are numeraire base units.
+	Evaluation *MarginEvaluation `json:"evaluation,omitempty"`
+
+	// IntentId UUIDv7 in canonical form
+	IntentId *UUID `json:"intent_id,omitempty"`
+
+	// JournalTransactionId UUIDv7 in canonical form
+	JournalTransactionId UUID `json:"journal_transaction_id"`
+
+	// MarginAccountId UUIDv7 in canonical form
+	MarginAccountId UUID `json:"margin_account_id"`
+
+	// MoveId UUIDv7 in canonical form
+	MoveId UUID `json:"move_id"`
+
+	// Replayed the service found this operation already applied and posted nothing; no evaluation is reported
+	Replayed bool `json:"replayed"`
+
+	// ReservationId UUIDv7 in canonical form
+	ReservationId *UUID               `json:"reservation_id,omitempty"`
+	Status        MarginAccountStatus `json:"status"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// MarginDeficitResult defines model for MarginDeficitResult.
+type MarginDeficitResult struct {
+	Case MarginCase `json:"case"`
+
+	// CaseId UUIDv7 in canonical form
+	CaseId UUID `json:"case_id"`
+
+	// Deficit Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Deficit Quantity `json:"deficit"`
+
+	// JournalTransactionId UUIDv7 in canonical form
+	JournalTransactionId UUID `json:"journal_transaction_id"`
+	Replayed             bool `json:"replayed"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// MarginEvaluated defines model for MarginEvaluated.
+type MarginEvaluated struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID        `json:"account_id"`
+	Call      *MarginCall `json:"call,omitempty"`
+
+	// Evaluation The margin engine's deterministic evaluation. equity = eligible_collateral + realized_pnl + unrealized_pnl − borrow_liabilities − accrued_fees − accrued_interest; liquidation_buffer = equity − maintenance_margin (negative once eligible for liquidation). Quantities are numeraire base units.
+	Evaluation MarginEvaluation `json:"evaluation"`
+
+	// MarginAccountId UUIDv7 in canonical form
+	MarginAccountId UUID                `json:"margin_account_id"`
+	PreviousStatus  MarginAccountStatus `json:"previous_status"`
+	Status          MarginAccountStatus `json:"status"`
+}
+
+// MarginEvaluation The margin engine's deterministic evaluation. equity = eligible_collateral + realized_pnl + unrealized_pnl − borrow_liabilities − accrued_fees − accrued_interest; liquidation_buffer = equity − maintenance_margin (negative once eligible for liquidation). Quantities are numeraire base units.
+type MarginEvaluation struct {
+	// AccruedFees Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	AccruedFees Quantity `json:"accrued_fees"`
+
+	// AccruedInterest Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	AccruedInterest Quantity  `json:"accrued_interest"`
+	At              Timestamp `json:"at"`
+
+	// BorrowLiabilities Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	BorrowLiabilities Quantity `json:"borrow_liabilities"`
+
+	// Capacity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Capacity Quantity `json:"capacity"`
+
+	// EffectiveLeverageBps basis points, rounded up
+	EffectiveLeverageBps int64 `json:"effective_leverage_bps"`
+
+	// EligibleCollateral Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	EligibleCollateral Quantity `json:"eligible_collateral"`
+
+	// Equity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Equity Quantity `json:"equity"`
+
+	// GrossExposure Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	GrossExposure Quantity            `json:"gross_exposure"`
+	Hash          string              `json:"hash"`
+	Health        MarginAccountStatus `json:"health"`
+	Holdings      []MarginHolding     `json:"holdings"`
+
+	// InitialMargin Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	InitialMargin Quantity `json:"initial_margin"`
+
+	// LeverageCapBps basis points of gross exposure over equity (50000 = 5x)
+	LeverageCapBps    int64 `json:"leverage_cap_bps"`
+	LeverageUnbounded bool  `json:"leverage_unbounded"`
+	Levered           bool  `json:"levered"`
+
+	// LiquidationBuffer Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	LiquidationBuffer   Quantity `json:"liquidation_buffer"`
+	LiquidationEligible bool     `json:"liquidation_eligible"`
+
+	// MaintenanceMargin Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	MaintenanceMargin Quantity `json:"maintenance_margin"`
+
+	// MarginAvailable Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	MarginAvailable Quantity `json:"margin_available"`
+
+	// MarketValue Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	MarketValue  Quantity `json:"market_value"`
+	MissingMarks bool     `json:"missing_marks"`
+
+	// NetAssetValue Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	NetAssetValue Quantity `json:"net_asset_value"`
+
+	// NetExposure Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	NetExposure  Quantity   `json:"net_exposure"`
+	NewestMarkAt *Timestamp `json:"newest_mark_at,omitempty"`
+
+	// NumeraireAssetId UUIDv7 in canonical form
+	NumeraireAssetId  UUID       `json:"numeraire_asset_id"`
+	NumeraireDecimals int        `json:"numeraire_decimals"`
+	OldestMarkAt      *Timestamp `json:"oldest_mark_at,omitempty"`
+	PolicyHash        string     `json:"policy_hash"`
+	PolicyVersion     string     `json:"policy_version"`
+	PricesFresh       bool       `json:"prices_fresh"`
+
+	// RealizedPnl Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	RealizedPnl Quantity `json:"realized_pnl"`
+	StaleAssets []UUID   `json:"stale_assets"`
+
+	// UnrealizedPnl Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	UnrealizedPnl Quantity `json:"unrealized_pnl"`
+
+	// Usd The engine's cent rendering, rounded so the account can only look less healthy (assets and equity down, liabilities and requirements up).
+	Usd MarginEvaluationUSD `json:"usd"`
+
+	// WarningThreshold Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	WarningThreshold Quantity `json:"warning_threshold"`
+}
+
+// MarginEvaluationUSD The engine's cent rendering, rounded so the account can only look less healthy (assets and equity down, liabilities and requirements up).
+type MarginEvaluationUSD struct {
+	// AccruedInterest USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	AccruedInterest USD `json:"accrued_interest"`
+
+	// BorrowLiabilities USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	BorrowLiabilities USD `json:"borrow_liabilities"`
+
+	// EligibleCollateral USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	EligibleCollateral USD `json:"eligible_collateral"`
+
+	// Equity USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	Equity USD `json:"equity"`
+
+	// GrossExposure USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	GrossExposure USD `json:"gross_exposure"`
+
+	// InitialMargin USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	InitialMargin USD `json:"initial_margin"`
+
+	// LiquidationBuffer USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	LiquidationBuffer USD `json:"liquidation_buffer"`
+
+	// MaintenanceMargin USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	MaintenanceMargin USD `json:"maintenance_margin"`
+
+	// MarginAvailable USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	MarginAvailable USD `json:"margin_available"`
+
+	// MarketValue USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	MarketValue USD `json:"market_value"`
+
+	// WarningThreshold USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	WarningThreshold USD `json:"warning_threshold"`
+}
+
+// MarginFacilities defines model for MarginFacilities.
+type MarginFacilities struct {
+	AssetDecimals int `json:"asset_decimals"`
+
+	// AssetId UUIDv7 in canonical form
+	AssetId       UUID           `json:"asset_id"`
+	InsuranceFund MarginFacility `json:"insurance_fund"`
+	LendingPool   MarginFacility `json:"lending_pool"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// MarginFacility defines model for MarginFacility.
+type MarginFacility struct {
+	// Available sandbox-dollar base units the facility holds unlent (lending pool) or undrawn (insurance fund)
+	//
+	// Examples: 1500000000
+	Available Quantity `json:"available"`
+
+	// Id UUIDv7 in canonical form
+	Id     UUID   `json:"id"`
+	Kind   string `json:"kind"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
+}
+
+// MarginFailure defines model for MarginFailure.
+type MarginFailure struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId *UUID  `json:"account_id,omitempty"`
+	Code      string `json:"code"`
+	Detail    string `json:"detail"`
+}
+
+// MarginHaircut defines model for MarginHaircut.
+type MarginHaircut struct {
+	// ConcentrationBps Basis points; 10000 == 100%
+	ConcentrationBps BPS `json:"concentration_bps"`
+
+	// CrossChainBps Basis points; 10000 == 100%
+	CrossChainBps BPS `json:"cross_chain_bps"`
+
+	// LiquidityBps Basis points; 10000 == 100%
+	LiquidityBps BPS `json:"liquidity_bps"`
+
+	// OracleBps Basis points; 10000 == 100%
+	OracleBps BPS `json:"oracle_bps"`
+
+	// SettlementBps Basis points; 10000 == 100%
+	SettlementBps BPS `json:"settlement_bps"`
+
+	// TotalBps Basis points; 10000 == 100%
+	TotalBps BPS `json:"total_bps"`
+
+	// VenueBps Basis points; 10000 == 100%
+	VenueBps BPS `json:"venue_bps"`
+
+	// VolatilityBps Basis points; 10000 == 100%
+	VolatilityBps BPS `json:"volatility_bps"`
+
+	// ZeroValue A stale, missing or future mark (or a delayed bridge) makes the collateral worthless.
+	ZeroValue bool `json:"zero_value"`
+}
+
+// MarginHolding defines model for MarginHolding.
+type MarginHolding struct {
+	// AssetId UUIDv7 in canonical form
+	AssetId UUID `json:"asset_id"`
+
+	// CollateralValue Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	CollateralValue Quantity `json:"collateral_value"`
+
+	// ConcentrationShareBps Basis points; 10000 == 100%
+	ConcentrationShareBps BPS `json:"concentration_share_bps"`
+
+	// Exposure Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Exposure Quantity      `json:"exposure"`
+	Fresh    bool          `json:"fresh"`
+	Haircut  MarginHaircut `json:"haircut"`
+
+	// InitialMargin Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	InitialMargin Quantity `json:"initial_margin"`
+
+	// MaintenanceMargin Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	MaintenanceMargin Quantity `json:"maintenance_margin"`
+
+	// Mark the mark the evaluation used; present on reads
+	Mark   *MarginPrice `json:"mark,omitempty"`
+	MarkAt *Timestamp   `json:"mark_at,omitempty"`
+
+	// MarketValue Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	MarketValue Quantity `json:"market_value"`
+	Numeraire   bool     `json:"numeraire"`
+	Priced      bool     `json:"priced"`
+
+	// Quantity base units of the asset
+	//
+	// Examples: 1500000000
+	Quantity Quantity `json:"quantity"`
+}
+
+// MarginLeveragedBuyRequest defines model for MarginLeveragedBuyRequest.
+type MarginLeveragedBuyRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// AssetId UUIDv7 in canonical form
+	AssetId UUID `json:"asset_id"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity Quantity `json:"quantity"`
+}
+
+// MarginLeveragedBuyResult defines model for MarginLeveragedBuyResult.
+type MarginLeveragedBuyResult struct {
+	// BorrowJournalTransactionId UUIDv7 in canonical form
+	BorrowJournalTransactionId UUID `json:"borrow_journal_transaction_id"`
+
+	// CollateralJournalTransactionId UUIDv7 in canonical form
+	CollateralJournalTransactionId UUID `json:"collateral_journal_transaction_id"`
+
+	// Cost numeraire base units borrowed: quantity × execution price, rounded up
+	//
+	// Examples: 1500000000
+	Cost Quantity `json:"cost"`
+
+	// Evaluation The margin engine's deterministic evaluation. equity = eligible_collateral + realized_pnl + unrealized_pnl − borrow_liabilities − accrued_fees − accrued_interest; liquidation_buffer = equity − maintenance_margin (negative once eligible for liquidation). Quantities are numeraire base units.
+	Evaluation *MarginEvaluation `json:"evaluation,omitempty"`
+
+	// ExecutionPrice mark × (1 + slippage_bps)
+	ExecutionPrice *MarginPrice `json:"execution_price,omitempty"`
+
+	// IntentId UUIDv7 in canonical form
+	IntentId UUID `json:"intent_id"`
+
+	// LotId UUIDv7 in canonical form
+	LotId *UUID `json:"lot_id,omitempty"`
+
+	// MarginAccountId UUIDv7 in canonical form
+	MarginAccountId UUID `json:"margin_account_id"`
+
+	// Mark The price of one whole unit in the numeraire, exactly mantissa × 10^-scale.
+	Mark     *MarginPrice `json:"mark,omitempty"`
+	Replayed bool         `json:"replayed"`
+
+	// ReservationId UUIDv7 in canonical form
+	ReservationId *UUID `json:"reservation_id,omitempty"`
+
+	// SlippageBps Basis points; 10000 == 100%
+	SlippageBps *BPS                `json:"slippage_bps,omitempty"`
+	Status      MarginAccountStatus `json:"status"`
+
+	// TradeJournalTransactionId UUIDv7 in canonical form
+	TradeJournalTransactionId UUID `json:"trade_journal_transaction_id"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// MarginLiquidateRequest defines model for MarginLiquidateRequest.
+type MarginLiquidateRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// ExpectedStep The step meant (1 for the first); 0 or absent means whatever step is next. A step already executed is returned, not repeated.
+	ExpectedStep *int `json:"expected_step,omitempty"`
+}
+
+// MarginLiquidationOrder defines model for MarginLiquidationOrder.
+type MarginLiquidationOrder struct {
+	Action MarginStepAction `json:"action"`
+
+	// AssetId UUIDv7 in canonical form
+	AssetId UUID `json:"asset_id"`
+
+	// Excess Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Excess Quantity `json:"excess"`
+
+	// ExecutionPrice The price of one whole unit in the numeraire, exactly mantissa × 10^-scale.
+	ExecutionPrice *MarginPrice `json:"execution_price,omitempty"`
+
+	// Fee Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Fee Quantity `json:"fee"`
+
+	// Mark The price of one whole unit in the numeraire, exactly mantissa × 10^-scale.
+	Mark *MarginPrice `json:"mark,omitempty"`
+
+	// Proceeds Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Proceeds Quantity `json:"proceeds"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity Quantity `json:"quantity"`
+
+	// Repay Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Repay Quantity `json:"repay"`
+
+	// SlippageBps Basis points; 10000 == 100%
+	SlippageBps BPS `json:"slippage_bps"`
+}
+
+// MarginLiquidationResult defines model for MarginLiquidationResult.
+type MarginLiquidationResult struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId     UUID                `json:"account_id"`
+	AccountStatus MarginAccountStatus `json:"account_status"`
+	Case          *MarginCase         `json:"case,omitempty"`
+	Decision      MarginPlanDecision  `json:"decision"`
+
+	// Eligible false when the account needed no liquidation and no case was opened
+	Eligible bool `json:"eligible"`
+
+	// MarginAccountId UUIDv7 in canonical form
+	MarginAccountId   UUID                   `json:"margin_account_id"`
+	NumeraireDecimals int                    `json:"numeraire_decimals"`
+	Plan              *MarginPlan            `json:"plan,omitempty"`
+	Reason            string                 `json:"reason"`
+	Replayed          bool                   `json:"replayed"`
+	Step              *MarginLiquidationStep `json:"step,omitempty"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// MarginLiquidationStep defines model for MarginLiquidationStep.
+type MarginLiquidationStep struct {
+	Action MarginStepAction `json:"action"`
+
+	// AssetId UUIDv7 in canonical form
+	AssetId UUID `json:"asset_id"`
+
+	// EquityAfter Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	EquityAfter Quantity `json:"equity_after"`
+
+	// EquityBefore Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	EquityBefore Quantity `json:"equity_before"`
+
+	// Excess Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Excess Quantity `json:"excess"`
+
+	// ExcessJournalTransactionId UUIDv7 in canonical form
+	ExcessJournalTransactionId *UUID     `json:"excess_journal_transaction_id,omitempty"`
+	ExecutedAt                 Timestamp `json:"executed_at"`
+
+	// ExecutionPrice The price of one whole unit in the numeraire, exactly mantissa × 10^-scale.
+	ExecutionPrice *MarginPrice `json:"execution_price,omitempty"`
+
+	// Fee Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Fee Quantity `json:"fee"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// Mark The price of one whole unit in the numeraire, exactly mantissa × 10^-scale.
+	Mark     *MarginPrice `json:"mark,omitempty"`
+	PlanHash string       `json:"plan_hash"`
+
+	// Proceeds Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Proceeds Quantity `json:"proceeds"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity Quantity `json:"quantity"`
+
+	// ReleaseJournalTransactionId UUIDv7 in canonical form
+	ReleaseJournalTransactionId *UUID `json:"release_journal_transaction_id,omitempty"`
+
+	// Repaid Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Repaid Quantity `json:"repaid"`
+
+	// RepayJournalTransactionId UUIDv7 in canonical form
+	RepayJournalTransactionId *UUID `json:"repay_journal_transaction_id,omitempty"`
+
+	// SlippageBps Basis points; 10000 == 100%
+	SlippageBps BPS `json:"slippage_bps"`
+
+	// SlippageCapBps Basis points; 10000 == 100%
+	SlippageCapBps BPS `json:"slippage_cap_bps"`
+	StepNo         int `json:"step_no"`
+
+	// TradeJournalTransactionId UUIDv7 in canonical form
+	TradeJournalTransactionId *UUID `json:"trade_journal_transaction_id,omitempty"`
+}
+
+// MarginLiquidationTarget defines model for MarginLiquidationTarget.
+type MarginLiquidationTarget string
+
+// MarginLoan defines model for MarginLoan.
+type MarginLoan struct {
+	AccruedThrough Timestamp `json:"accrued_through"`
+
+	// Interest interest posted (capitalized) and not yet repaid
+	//
+	// Examples: 1500000000
+	Interest Quantity `json:"interest"`
+
+	// LotId UUIDv7 in canonical form
+	LotId UUID `json:"lot_id"`
+
+	// Principal outstanding principal
+	//
+	// Examples: 1500000000
+	Principal Quantity `json:"principal"`
+
+	// RateBps annual simple rate
+	RateBps int64 `json:"rate_bps"`
+}
+
+// MarginLoanAllocation defines model for MarginLoanAllocation.
+type MarginLoanAllocation struct {
+	// Interest Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Interest Quantity `json:"interest"`
+
+	// LotId UUIDv7 in canonical form
+	LotId UUID `json:"lot_id"`
+
+	// Principal Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Principal Quantity `json:"principal"`
+}
+
+// MarginLoanResult defines model for MarginLoanResult.
+type MarginLoanResult struct {
+	Allocations []MarginLoanAllocation `json:"allocations"`
+
+	// EffectId UUIDv7 in canonical form
+	EffectId UUID `json:"effect_id"`
+
+	// Evaluation The margin engine's deterministic evaluation. equity = eligible_collateral + realized_pnl + unrealized_pnl − borrow_liabilities − accrued_fees − accrued_interest; liquidation_buffer = equity − maintenance_margin (negative once eligible for liquidation). Quantities are numeraire base units.
+	Evaluation *MarginEvaluation `json:"evaluation,omitempty"`
+
+	// IntentId UUIDv7 in canonical form
+	IntentId UUID `json:"intent_id"`
+
+	// JournalTransactionId UUIDv7 in canonical form
+	JournalTransactionId UUID `json:"journal_transaction_id"`
+
+	// LotId UUIDv7 in canonical form
+	LotId *UUID `json:"lot_id,omitempty"`
+
+	// MarginAccountId UUIDv7 in canonical form
+	MarginAccountId UUID                `json:"margin_account_id"`
+	Replayed        bool                `json:"replayed"`
+	Status          MarginAccountStatus `json:"status"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// MarginMarkToMarketResult defines model for MarginMarkToMarketResult.
+type MarginMarkToMarketResult struct {
+	Evaluated []MarginEvaluated `json:"evaluated"`
+	Failures  []MarginFailure   `json:"failures"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// MarginMode CASH takes no leverage; ISOLATED margins one risky asset; CROSS shares the collateral across positions.
+type MarginMode string
+
+// MarginOpenRequest defines model for MarginOpenRequest.
+type MarginOpenRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// IsolatedAssetId UUIDv7 in canonical form
+	IsolatedAssetId *UUID `json:"isolated_asset_id,omitempty"`
+
+	// MarginMode CASH takes no leverage; ISOLATED margins one risky asset; CROSS shares the collateral across positions.
+	MarginMode MarginMode   `json:"margin_mode"`
+	Mode       AdvancedMode `json:"mode"`
+}
+
+// MarginPlan defines model for MarginPlan.
+type MarginPlan struct {
+	Decision MarginPlanDecision `json:"decision"`
+
+	// DeficitUnits Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	DeficitUnits Quantity                 `json:"deficit_units"`
+	Hash         string                   `json:"hash"`
+	Orders       []MarginLiquidationOrder `json:"orders"`
+	Reason       string                   `json:"reason"`
+	StepsTaken   int                      `json:"steps_taken"`
+	Target       MarginLiquidationTarget  `json:"target"`
+
+	// TargetUnits Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	TargetUnits Quantity `json:"target_units"`
+}
+
+// MarginPlanDecision defines model for MarginPlanDecision.
+type MarginPlanDecision string
+
+// MarginPrice The price of one whole unit in the numeraire, exactly mantissa × 10^-scale.
+type MarginPrice struct {
+	// Mantissa Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Mantissa   Quantity   `json:"mantissa"`
+	ObservedAt *Timestamp `json:"observed_at,omitempty"`
+	Scale      int        `json:"scale"`
+	Source     *string    `json:"source,omitempty"`
+}
+
+// MarginQueue defines model for MarginQueue.
+type MarginQueue struct {
+	Items []MarginQueueEntry `json:"items"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// MarginQueueEntry defines model for MarginQueueEntry.
+type MarginQueueEntry struct {
+	Account MarginAccount `json:"account"`
+
+	// Evaluation The margin engine's deterministic evaluation. equity = eligible_collateral + realized_pnl + unrealized_pnl − borrow_liabilities − accrued_fees − accrued_interest; liquidation_buffer = equity − maintenance_margin (negative once eligible for liquidation). Quantities are numeraire base units.
+	Evaluation        *MarginEvaluation `json:"evaluation,omitempty"`
+	EvaluationError   *MarginFailure    `json:"evaluation_error,omitempty"`
+	LatestCase        *MarginCase       `json:"latest_case,omitempty"`
+	NumeraireDecimals int               `json:"numeraire_decimals"`
+	OpenCall          *MarginCall       `json:"open_call,omitempty"`
+}
+
+// MarginQueueRunResult defines model for MarginQueueRunResult.
+type MarginQueueRunResult struct {
+	Failures []MarginFailure           `json:"failures"`
+	Results  []MarginLiquidationResult `json:"results"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// MarginSeedRequest defines model for MarginSeedRequest.
+type MarginSeedRequest struct {
+	// FundAmount Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	FundAmount Quantity `json:"fund_amount"`
+
+	// PoolAmount Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	PoolAmount Quantity `json:"pool_amount"`
+}
+
+// MarginStepAction defines model for MarginStepAction.
+type MarginStepAction string
+
+// MarginStressResult defines model for MarginStressResult.
+type MarginStressResult struct {
+	// Deficit Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Deficit Quantity `json:"deficit"`
+
+	// DeficitUsd USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	DeficitUsd USD `json:"deficit_usd"`
+
+	// EquityAfter Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	EquityAfter Quantity `json:"equity_after"`
+
+	// EquityAfterUsd USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	EquityAfterUsd USD  `json:"equity_after_usd"`
+	Executable     bool `json:"executable"`
+
+	// InitialAfter Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	InitialAfter Quantity `json:"initial_after"`
+
+	// InsuranceFundDraw Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	InsuranceFundDraw Quantity `json:"insurance_fund_draw"`
+
+	// InsuranceFundDrawUsd USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	InsuranceFundDrawUsd USD `json:"insurance_fund_draw_usd"`
+
+	// MaintenanceAfter Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	MaintenanceAfter Quantity `json:"maintenance_after"`
+
+	// MaintenanceAfterUsd USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	MaintenanceAfterUsd USD                  `json:"maintenance_after_usd"`
+	Outcome             MarginPlanDecision   `json:"outcome"`
+	Scenario            MarginStressScenario `json:"scenario"`
+
+	// ShockBps Basis points; 10000 == 100%
+	ShockBps       BPS  `json:"shock_bps"`
+	StepsSimulated int  `json:"steps_simulated"`
+	WouldLiquidate bool `json:"would_liquidate"`
+}
+
+// MarginStressRun defines model for MarginStressRun.
+type MarginStressRun struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// Id UUIDv7 in canonical form
+	Id        UUID   `json:"id"`
+	InputHash string `json:"input_hash"`
+
+	// MarginAccountId UUIDv7 in canonical form
+	MarginAccountId UUID `json:"margin_account_id"`
+
+	// NumeraireAssetId UUIDv7 in canonical form
+	NumeraireAssetId  UUID                 `json:"numeraire_asset_id"`
+	NumeraireDecimals int                  `json:"numeraire_decimals"`
+	PolicyHash        string               `json:"policy_hash"`
+	PolicyVersion     string               `json:"policy_version"`
+	ReportHash        string               `json:"report_hash"`
+	Results           []MarginStressResult `json:"results"`
+	RunAt             Timestamp            `json:"run_at"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// MarginStressRunPage defines model for MarginStressRunPage.
+type MarginStressRunPage struct {
+	Items      []MarginStressRunSummary  `json:"items"`
+	NextCursor nullable.Nullable[string] `json:"next_cursor"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// MarginStressRunSummary defines model for MarginStressRunSummary.
+type MarginStressRunSummary struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// Id UUIDv7 in canonical form
+	Id        UUID   `json:"id"`
+	InputHash string `json:"input_hash"`
+
+	// MarginAccountId UUIDv7 in canonical form
+	MarginAccountId UUID `json:"margin_account_id"`
+
+	// NumeraireAssetId UUIDv7 in canonical form
+	NumeraireAssetId  UUID      `json:"numeraire_asset_id"`
+	NumeraireDecimals int       `json:"numeraire_decimals"`
+	PolicyHash        string    `json:"policy_hash"`
+	PolicyVersion     string    `json:"policy_version"`
+	ReportHash        string    `json:"report_hash"`
+	RunAt             Timestamp `json:"run_at"`
+}
+
+// MarginStressScenario defines model for MarginStressScenario.
+type MarginStressScenario string
+
 // NativeAsset defines model for NativeAsset.
 type NativeAsset struct {
 	ActivatedAt *Timestamp `json:"activated_at,omitempty"`
@@ -6118,6 +8666,507 @@ type PayoutRequestState string
 // PayoutRequestPage defines model for PayoutRequestPage.
 type PayoutRequestPage struct {
 	Items []PayoutRequest `json:"items"`
+}
+
+// PredictionActor defines model for PredictionActor.
+type PredictionActor struct {
+	ActorId   string `json:"actor_id"`
+	ActorType string `json:"actor_type"`
+}
+
+// PredictionBookOutcome defines model for PredictionBookOutcome.
+type PredictionBookOutcome struct {
+	// HeldByCustomers Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	HeldByCustomers Quantity `json:"held_by_customers"`
+	Index           int      `json:"index"`
+
+	// ShareAssetId UUIDv7 in canonical form
+	ShareAssetId UUID `json:"share_asset_id"`
+
+	// SharesIssued Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	SharesIssued Quantity `json:"shares_issued"`
+
+	// SharesOutstanding Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	SharesOutstanding Quantity `json:"shares_outstanding"`
+	Symbol            string   `json:"symbol"`
+}
+
+// PredictionDispute defines model for PredictionDispute.
+type PredictionDispute struct {
+	EvidenceRef    string `json:"evidence_ref"`
+	EvidenceSha256 string `json:"evidence_sha256"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// MarketId UUIDv7 in canonical form
+	MarketId UUID            `json:"market_id"`
+	RaisedAt Timestamp       `json:"raised_at"`
+	RaisedBy PredictionActor `json:"raised_by"`
+	Reason   string          `json:"reason"`
+
+	// ResolutionId UUIDv7 in canonical form
+	ResolutionId UUID `json:"resolution_id"`
+}
+
+// PredictionDisputeRequest defines model for PredictionDisputeRequest.
+type PredictionDisputeRequest struct {
+	Evidence map[string]interface{} `json:"evidence"`
+
+	// Reason 8..2000 characters
+	Reason string `json:"reason"`
+}
+
+// PredictionDisputeResult defines model for PredictionDisputeResult.
+type PredictionDisputeResult struct {
+	Dispute PredictionDispute `json:"dispute"`
+	Market  PredictionMarket  `json:"market"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// PredictionEscrowBooks defines model for PredictionEscrowBooks.
+type PredictionEscrowBooks struct {
+	// Collateral Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Collateral Quantity `json:"collateral"`
+
+	// CollateralAssetId UUIDv7 in canonical form
+	CollateralAssetId  UUID   `json:"collateral_asset_id"`
+	CollateralDecimals int    `json:"collateral_decimals"`
+	CollateralSymbol   string `json:"collateral_symbol"`
+
+	// Escrow Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Escrow Quantity `json:"escrow"`
+
+	// MarketId UUIDv7 in canonical form
+	MarketId UUID `json:"market_id"`
+
+	// MarketStatus One of DRAFT, OPEN, CLOSED, RESOLVING, RESOLVED, DISPUTED, SETTLED, VOIDED. DRAFT → OPEN → CLOSED → RESOLVING → RESOLVED → SETTLED; RESOLVED → DISPUTED → RESOLVED or VOIDED; any state but SETTLED and VOIDED → VOIDED. Declared without an enum on purpose: its values are shared with other schemas' enums, and a shared enum value renames the generated constants of every schema that holds it.
+	MarketStatus PredictionMarketStatus  `json:"market_status"`
+	Outcomes     []PredictionBookOutcome `json:"outcomes"`
+
+	// Reconciles True when the books satisfy escrow = collateral = outstanding(i) + residual and issued(i) = outstanding(i) = held(i)
+	Reconciles bool `json:"reconciles"`
+
+	// Residual The residual the market's settlement record discloses; zero without one
+	//
+	// Examples: 1500000000
+	Residual      Quantity `json:"residual"`
+	ShareDecimals int      `json:"share_decimals"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+	Violations  []string             `json:"violations"`
+}
+
+// PredictionEscrowReconciliation defines model for PredictionEscrowReconciliation.
+type PredictionEscrowReconciliation struct {
+	BlocksNewRisk bool                   `json:"blocks_new_risk"`
+	Difference    map[string]interface{} `json:"difference"`
+	Expected      map[string]interface{} `json:"expected"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// Kind PREDICTION_ESCROW
+	Kind      string     `json:"kind"`
+	MatchedAt *Timestamp `json:"matched_at,omitempty"`
+	Material  bool       `json:"material"`
+
+	// Mode EVENT_DRIVEN, PERIODIC or FULL
+	Mode      string                 `json:"mode"`
+	Observed  map[string]interface{} `json:"observed"`
+	OpenedAt  Timestamp              `json:"opened_at"`
+	ScopeId   string                 `json:"scope_id"`
+	ScopeType string                 `json:"scope_type"`
+
+	// Status OPEN, MATCHED, MISMATCH, INVESTIGATING, RESOLVED_AUTOMATIC, RESOLVED_MANUAL or ESCALATED
+	Status string `json:"status"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// PredictionMarket defines model for PredictionMarket.
+type PredictionMarket struct {
+	CloseAt Timestamp `json:"close_at"`
+
+	// CollateralAssetId UUIDv7 in canonical form
+	CollateralAssetId  UUID            `json:"collateral_asset_id"`
+	CollateralDecimals int             `json:"collateral_decimals"`
+	CollateralSymbol   string          `json:"collateral_symbol"`
+	CreatedAt          Timestamp       `json:"created_at"`
+	CreatedBy          PredictionActor `json:"created_by"`
+
+	// CurrentResolutionId UUIDv7 in canonical form
+	CurrentResolutionId *UUID `json:"current_resolution_id,omitempty"`
+
+	// DefinitionHash hex sha256 of the canonical definition
+	DefinitionHash  string `json:"definition_hash"`
+	DisputeWindowMs int64  `json:"dispute_window_ms"`
+
+	// FacilityId The PREDICTION_MARKET facility whose books are the market's escrow
+	FacilityId UUID `json:"facility_id"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// InstrumentId UUIDv7 in canonical form
+	InstrumentId UUID                 `json:"instrument_id"`
+	Mode         PredictionMarketMode `json:"mode"`
+	OpenAt       Timestamp            `json:"open_at"`
+
+	// OraclePublicKey hex Ed25519 public key the market accepts reports from
+	OraclePublicKey string              `json:"oracle_public_key"`
+	OracleSource    string              `json:"oracle_source"`
+	Outcomes        []PredictionOutcome `json:"outcomes"`
+	Question        string              `json:"question"`
+	ShareDecimals   int                 `json:"share_decimals"`
+
+	// Status One of DRAFT, OPEN, CLOSED, RESOLVING, RESOLVED, DISPUTED, SETTLED, VOIDED. DRAFT → OPEN → CLOSED → RESOLVING → RESOLVED → SETTLED; RESOLVED → DISPUTED → RESOLVED or VOIDED; any state but SETTLED and VOIDED → VOIDED. Declared without an enum on purpose: its values are shared with other schemas' enums, and a shared enum value renames the generated constants of every schema that holds it.
+	Status PredictionMarketStatus `json:"status"`
+	Symbol string                 `json:"symbol"`
+
+	// UnitQuantity Collateral base units one complete set costs and one winning share pays
+	//
+	// Examples: 1500000000
+	UnitQuantity Quantity  `json:"unit_quantity"`
+	UpdatedAt    Timestamp `json:"updated_at"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// PredictionMarketDetail defines model for PredictionMarketDetail.
+type PredictionMarketDetail struct {
+	// Disputes Oldest first
+	Disputes []PredictionDispute `json:"disputes"`
+	Market   PredictionMarket    `json:"market"`
+
+	// Resolutions Oldest first
+	Resolutions []PredictionResolution `json:"resolutions"`
+
+	// Settlement Absent until the market settles or is voided
+	Settlement *PredictionSettlement `json:"settlement,omitempty"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// PredictionMarketList defines model for PredictionMarketList.
+type PredictionMarketList struct {
+	Items []PredictionMarket `json:"items"`
+
+	// Status One of DRAFT, OPEN, CLOSED, RESOLVING, RESOLVED, DISPUTED, SETTLED, VOIDED. DRAFT → OPEN → CLOSED → RESOLVING → RESOLVED → SETTLED; RESOLVED → DISPUTED → RESOLVED or VOIDED; any state but SETTLED and VOIDED → VOIDED. Declared without an enum on purpose: its values are shared with other schemas' enums, and a shared enum value renames the generated constants of every schema that holds it.
+	Status PredictionMarketStatus `json:"status"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// PredictionMarketMode defines model for PredictionMarketMode.
+type PredictionMarketMode string
+
+// PredictionMarketStatus One of DRAFT, OPEN, CLOSED, RESOLVING, RESOLVED, DISPUTED, SETTLED, VOIDED. DRAFT → OPEN → CLOSED → RESOLVING → RESOLVED → SETTLED; RESOLVED → DISPUTED → RESOLVED or VOIDED; any state but SETTLED and VOIDED → VOIDED. Declared without an enum on purpose: its values are shared with other schemas' enums, and a shared enum value renames the generated constants of every schema that holds it.
+type PredictionMarketStatus = string
+
+// PredictionOracle defines model for PredictionOracle.
+type PredictionOracle struct {
+	Kind PredictionOracleKind `json:"kind"`
+
+	// PublicKey hex Ed25519 public key
+	PublicKey string `json:"public_key"`
+	Source    string `json:"source"`
+}
+
+// PredictionOracleKind defines model for PredictionOracle.Kind.
+type PredictionOracleKind string
+
+// PredictionOracleObservation defines model for PredictionOracleObservation.
+type PredictionOracleObservation struct {
+	Report     PredictionOracleReport `json:"report"`
+	ReportHash string                 `json:"report_hash"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// PredictionOracleObservationRequest defines model for PredictionOracleObservationRequest.
+type PredictionOracleObservationRequest struct {
+	// Evidence The source document the oracle saw (1..16384 bytes); its sha256 is signed
+	Evidence   string    `json:"evidence"`
+	ObservedAt Timestamp `json:"observed_at"`
+	Outcome    string    `json:"outcome"`
+}
+
+// PredictionOracleReport defines model for PredictionOracleReport.
+type PredictionOracleReport struct {
+	// Evidence standard base64
+	Evidence string `json:"evidence"`
+	MarketId string `json:"market_id"`
+
+	// ObservedAt RFC 3339 in UTC
+	ObservedAt string `json:"observed_at"`
+	Outcome    string `json:"outcome"`
+
+	// Signature standard base64 Ed25519 signature
+	Signature string `json:"signature"`
+	Source    string `json:"source"`
+}
+
+// PredictionOutcome defines model for PredictionOutcome.
+type PredictionOutcome struct {
+	Index int `json:"index"`
+
+	// InstrumentId The outcome's EVENT_OUTCOME instrument for the internal order book
+	InstrumentId UUID `json:"instrument_id"`
+
+	// ShareAssetId UUIDv7 in canonical form
+	ShareAssetId UUID   `json:"share_asset_id"`
+	Symbol       string `json:"symbol"`
+}
+
+// PredictionPayoutLine defines model for PredictionPayoutLine.
+type PredictionPayoutLine struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// Amount Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Amount Quantity `json:"amount"`
+
+	// IntentId UUIDv7 in canonical form
+	IntentId UUID `json:"intent_id"`
+
+	// JournalTransactionId UUIDv7 in canonical form
+	JournalTransactionId *UUID                  `json:"journal_transaction_id,omitempty"`
+	Shares               []PredictionShareCount `json:"shares"`
+}
+
+// PredictionPosition defines model for PredictionPosition.
+type PredictionPosition struct {
+	AsOf          Timestamp `json:"as_of"`
+	OutcomeIndex  int       `json:"outcome_index"`
+	OutcomeSymbol string    `json:"outcome_symbol"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity Quantity `json:"quantity"`
+
+	// ShareAssetId UUIDv7 in canonical form
+	ShareAssetId UUID `json:"share_asset_id"`
+}
+
+// PredictionPositionList defines model for PredictionPositionList.
+type PredictionPositionList struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID                 `json:"account_id"`
+	Items     []PredictionPosition `json:"items"`
+
+	// MarketId UUIDv7 in canonical form
+	MarketId      UUID `json:"market_id"`
+	ShareDecimals int  `json:"share_decimals"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// PredictionResolution defines model for PredictionResolution.
+type PredictionResolution struct {
+	AcceptedAt Timestamp       `json:"accepted_at"`
+	AcceptedBy PredictionActor `json:"accepted_by"`
+
+	// DisputeId UUIDv7 in canonical form
+	DisputeId      *UUID  `json:"dispute_id,omitempty"`
+	EvidenceRef    string `json:"evidence_ref"`
+	EvidenceSha256 string `json:"evidence_sha256"`
+
+	// Id UUIDv7 in canonical form
+	Id   UUID                     `json:"id"`
+	Kind PredictionResolutionKind `json:"kind"`
+
+	// MarketId UUIDv7 in canonical form
+	MarketId      UUID   `json:"market_id"`
+	OutcomeIndex  int    `json:"outcome_index"`
+	OutcomeSymbol string `json:"outcome_symbol"`
+	Reason        string `json:"reason"`
+
+	// ReportHash hex sha256 of the verified report's signed bytes and signature
+	ReportHash       *string    `json:"report_hash,omitempty"`
+	ReportObservedAt *Timestamp `json:"report_observed_at,omitempty"`
+	ReportSource     *string    `json:"report_source,omitempty"`
+
+	// SupersedesId UUIDv7 in canonical form
+	SupersedesId *UUID `json:"supersedes_id,omitempty"`
+}
+
+// PredictionResolutionKind defines model for PredictionResolutionKind.
+type PredictionResolutionKind string
+
+// PredictionResolutionResult defines model for PredictionResolutionResult.
+type PredictionResolutionResult struct {
+	Market PredictionMarket `json:"market"`
+
+	// Replay True when the report had already been accepted; nothing changed
+	Replay     bool                 `json:"replay"`
+	Resolution PredictionResolution `json:"resolution"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// PredictionResolveRequest defines model for PredictionResolveRequest.
+type PredictionResolveRequest struct {
+	Reason *string `json:"reason,omitempty"`
+}
+
+// PredictionRoundingPolicy defines model for PredictionRoundingPolicy.
+type PredictionRoundingPolicy string
+
+// PredictionRulingRequest defines model for PredictionRulingRequest.
+type PredictionRulingRequest struct {
+	Evidence *map[string]interface{} `json:"evidence,omitempty"`
+
+	// Reason 8..2000 characters
+	Reason string `json:"reason"`
+}
+
+// PredictionSetAction defines model for PredictionSetAction.
+type PredictionSetAction string
+
+// PredictionSetRequest defines model for PredictionSetRequest.
+type PredictionSetRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// Quantity Complete sets in share base units, a positive multiple of the market's unit_quantity
+	//
+	// Examples: 1500000000
+	Quantity Quantity `json:"quantity"`
+}
+
+// PredictionSetResult defines model for PredictionSetResult.
+type PredictionSetResult struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID                `json:"account_id"`
+	Action    PredictionSetAction `json:"action"`
+	Effect    *EconomicEffect     `json:"effect,omitempty"`
+	Intent    EconomicIntent      `json:"intent"`
+
+	// JournalTransactionId UUIDv7 in canonical form
+	JournalTransactionId *UUID `json:"journal_transaction_id,omitempty"`
+
+	// MarketId UUIDv7 in canonical form
+	MarketId UUID `json:"market_id"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity Quantity `json:"quantity"`
+
+	// Replay True when the economic intent already existed; nothing new happened
+	Replay           bool    `json:"replay"`
+	RiskDecisionHash *string `json:"risk_decision_hash,omitempty"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// PredictionSettlement defines model for PredictionSettlement.
+type PredictionSettlement struct {
+	// EscrowBefore Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	EscrowBefore   Quantity `json:"escrow_before"`
+	EvidenceRef    string   `json:"evidence_ref"`
+	EvidenceSha256 string   `json:"evidence_sha256"`
+	HolderCount    int      `json:"holder_count"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// Kind PAYOUT (a resolved market paid its winners) or REFUND (a void refunded every share); no enum, see PredictionMarketStatus
+	Kind PredictionSettlementKind `json:"kind"`
+
+	// MarketId UUIDv7 in canonical form
+	MarketId     UUID `json:"market_id"`
+	OutcomeCount int  `json:"outcome_count"`
+
+	// RefundRatePerShare Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	RefundRatePerShare *Quantity `json:"refund_rate_per_share,omitempty"`
+
+	// Residual What the escrow keeps; zero after a payout, disclosed after a refund
+	//
+	// Examples: 1500000000
+	Residual Quantity `json:"residual"`
+
+	// ResolutionId UUIDv7 in canonical form
+	ResolutionId   *UUID                    `json:"resolution_id,omitempty"`
+	RoundingPolicy PredictionRoundingPolicy `json:"rounding_policy"`
+	SettledAt      Timestamp                `json:"settled_at"`
+	SettledBy      PredictionActor          `json:"settled_by"`
+
+	// TotalPaid Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	TotalPaid Quantity `json:"total_paid"`
+
+	// UnitQuantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	UnitQuantity         Quantity `json:"unit_quantity"`
+	WinningOutcomeIndex  *int     `json:"winning_outcome_index,omitempty"`
+	WinningOutcomeSymbol *string  `json:"winning_outcome_symbol,omitempty"`
+}
+
+// PredictionSettlementKind PAYOUT (a resolved market paid its winners) or REFUND (a void refunded every share); no enum, see PredictionMarketStatus
+type PredictionSettlementKind = string
+
+// PredictionSettlementResult defines model for PredictionSettlementResult.
+type PredictionSettlementResult struct {
+	// Lines What this call paid, one line per holder; empty on a replay
+	Lines  []PredictionPayoutLine `json:"lines"`
+	Market PredictionMarket       `json:"market"`
+
+	// Replay True when the market had already settled (or been voided); nothing was paid
+	Replay     bool                 `json:"replay"`
+	Settlement PredictionSettlement `json:"settlement"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// PredictionShareCount defines model for PredictionShareCount.
+type PredictionShareCount struct {
+	OutcomeSymbol string `json:"outcome_symbol"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity Quantity `json:"quantity"`
+}
+
+// PredictionVoidRequest defines model for PredictionVoidRequest.
+type PredictionVoidRequest struct {
+	Evidence *map[string]interface{} `json:"evidence,omitempty"`
+
+	// Reason 8..2000 characters
+	Reason string `json:"reason"`
 }
 
 // Principal defines model for Principal.
@@ -6863,6 +9912,109 @@ type GetAdvancedBuyingPowerParams struct {
 	AccountId UUID `form:"account_id" json:"account_id"`
 }
 
+// PostAdvancedDerivativesClearingHouseFundingParams defines parameters for PostAdvancedDerivativesClearingHouseFunding.
+type PostAdvancedDerivativesClearingHouseFundingParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedDerivativesClearingHouseReconciliationsParams defines parameters for PostAdvancedDerivativesClearingHouseReconciliations.
+type PostAdvancedDerivativesClearingHouseReconciliationsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetAdvancedDerivativesContractsParams defines parameters for GetAdvancedDerivativesContracts.
+type GetAdvancedDerivativesContractsParams struct {
+	Kind  *DerivativeKind `form:"kind,omitempty" json:"kind,omitempty"`
+	Limit *Limit          `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetAdvancedDerivativesContractsInstrumentIdAnalyticsParams defines parameters for GetAdvancedDerivativesContractsInstrumentIdAnalytics.
+type GetAdvancedDerivativesContractsInstrumentIdAnalyticsParams struct {
+	// VolBps Annualised volatility the model prices with, in basis points (1 to 100000)
+	VolBps int64 `form:"vol_bps" json:"vol_bps"`
+
+	// RateBps Continuously compounded rate in basis points (-10000 to 10000); 0 when absent
+	RateBps *int64 `form:"rate_bps,omitempty" json:"rate_bps,omitempty"`
+
+	// DividendYieldBps Continuous dividend yield in basis points (-10000 to 10000); 0 when absent
+	DividendYieldBps *int64 `form:"dividend_yield_bps,omitempty" json:"dividend_yield_bps,omitempty"`
+}
+
+// PostAdvancedDerivativesContractsInstrumentIdFundingRunsParams defines parameters for PostAdvancedDerivativesContractsInstrumentIdFundingRuns.
+type PostAdvancedDerivativesContractsInstrumentIdFundingRunsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetAdvancedDerivativesContractsInstrumentIdMarksParams defines parameters for GetAdvancedDerivativesContractsInstrumentIdMarks.
+type GetAdvancedDerivativesContractsInstrumentIdMarksParams struct {
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PostAdvancedDerivativesContractsInstrumentIdMarksParams defines parameters for PostAdvancedDerivativesContractsInstrumentIdMarks.
+type PostAdvancedDerivativesContractsInstrumentIdMarksParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedDerivativesContractsInstrumentIdSettlementParams defines parameters for PostAdvancedDerivativesContractsInstrumentIdSettlement.
+type PostAdvancedDerivativesContractsInstrumentIdSettlementParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedDerivativesContractsInstrumentIdVariationMarginRunsParams defines parameters for PostAdvancedDerivativesContractsInstrumentIdVariationMarginRuns.
+type PostAdvancedDerivativesContractsInstrumentIdVariationMarginRunsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetAdvancedDerivativesFlowsParams defines parameters for GetAdvancedDerivativesFlows.
+type GetAdvancedDerivativesFlowsParams struct {
+	AccountId  UUID                `form:"account_id" json:"account_id"`
+	PositionId *UUID               `form:"position_id,omitempty" json:"position_id,omitempty"`
+	Kind       *DerivativeFlowKind `form:"kind,omitempty" json:"kind,omitempty"`
+	Cursor     *Cursor             `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit      *Limit              `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetAdvancedDerivativesFundingAccrualsParams defines parameters for GetAdvancedDerivativesFundingAccruals.
+type GetAdvancedDerivativesFundingAccrualsParams struct {
+	AccountId  UUID    `form:"account_id" json:"account_id"`
+	PositionId *UUID   `form:"position_id,omitempty" json:"position_id,omitempty"`
+	Cursor     *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit      *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetAdvancedDerivativesPositionsParams defines parameters for GetAdvancedDerivativesPositions.
+type GetAdvancedDerivativesPositionsParams struct {
+	AccountId UUID                      `form:"account_id" json:"account_id"`
+	Status    *DerivativePositionStatus `form:"status,omitempty" json:"status,omitempty"`
+	Cursor    *Cursor                   `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit     *Limit                    `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PostAdvancedDerivativesPositionsParams defines parameters for PostAdvancedDerivativesPositions.
+type PostAdvancedDerivativesPositionsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedDerivativesPositionsPositionIdCloseParams defines parameters for PostAdvancedDerivativesPositionsPositionIdClose.
+type PostAdvancedDerivativesPositionsPositionIdCloseParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedDerivativesPositionsPositionIdExerciseParams defines parameters for PostAdvancedDerivativesPositionsPositionIdExercise.
+type PostAdvancedDerivativesPositionsPositionIdExerciseParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // GetAdvancedEffectsParams defines parameters for GetAdvancedEffects.
 type GetAdvancedEffectsParams struct {
 	AccountId UUID    `form:"account_id" json:"account_id"`
@@ -6978,6 +10130,217 @@ type GetAdvancedIntentsParams struct {
 	AccountId UUID    `form:"account_id" json:"account_id"`
 	Cursor    *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 	Limit     *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetAdvancedMarginAccountParams defines parameters for GetAdvancedMarginAccount.
+type GetAdvancedMarginAccountParams struct {
+	AccountId UUID `form:"account_id" json:"account_id"`
+}
+
+// PostAdvancedMarginAccountParams defines parameters for PostAdvancedMarginAccount.
+type PostAdvancedMarginAccountParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedMarginAccountCloseParams defines parameters for PostAdvancedMarginAccountClose.
+type PostAdvancedMarginAccountCloseParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedMarginBorrowParams defines parameters for PostAdvancedMarginBorrow.
+type PostAdvancedMarginBorrowParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetAdvancedMarginCallsParams defines parameters for GetAdvancedMarginCalls.
+type GetAdvancedMarginCallsParams struct {
+	AccountId UUID    `form:"account_id" json:"account_id"`
+	Cursor    *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit     *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetAdvancedMarginCasesParams defines parameters for GetAdvancedMarginCases.
+type GetAdvancedMarginCasesParams struct {
+	AccountId UUID    `form:"account_id" json:"account_id"`
+	Cursor    *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit     *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PostAdvancedMarginCollateralPostParams defines parameters for PostAdvancedMarginCollateralPost.
+type PostAdvancedMarginCollateralPostParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedMarginCollateralReleaseParams defines parameters for PostAdvancedMarginCollateralRelease.
+type PostAdvancedMarginCollateralReleaseParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedMarginLeveragedBuysParams defines parameters for PostAdvancedMarginLeveragedBuys.
+type PostAdvancedMarginLeveragedBuysParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetAdvancedMarginOpsCallsParams defines parameters for GetAdvancedMarginOpsCalls.
+type GetAdvancedMarginOpsCallsParams struct {
+	Status *MarginCallStatus `form:"status,omitempty" json:"status,omitempty"`
+	Cursor *Cursor           `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit            `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitParams defines parameters for PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit.
+type PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedMarginOpsFacilitiesSeedParams defines parameters for PostAdvancedMarginOpsFacilitiesSeed.
+type PostAdvancedMarginOpsFacilitiesSeedParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedMarginOpsLiquidationsParams defines parameters for PostAdvancedMarginOpsLiquidations.
+type PostAdvancedMarginOpsLiquidationsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedMarginOpsMarkToMarketParams defines parameters for PostAdvancedMarginOpsMarkToMarket.
+type PostAdvancedMarginOpsMarkToMarketParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetAdvancedMarginOpsQueueParams defines parameters for GetAdvancedMarginOpsQueue.
+type GetAdvancedMarginOpsQueueParams struct {
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PostAdvancedMarginOpsQueueRunParams defines parameters for PostAdvancedMarginOpsQueueRun.
+type PostAdvancedMarginOpsQueueRunParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedMarginOpsStressRunsParams defines parameters for PostAdvancedMarginOpsStressRuns.
+type PostAdvancedMarginOpsStressRunsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedMarginRepayParams defines parameters for PostAdvancedMarginRepay.
+type PostAdvancedMarginRepayParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetAdvancedMarginStressRunsParams defines parameters for GetAdvancedMarginStressRuns.
+type GetAdvancedMarginStressRunsParams struct {
+	AccountId UUID    `form:"account_id" json:"account_id"`
+	Cursor    *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit     *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PostAdvancedMarginStressRunsParams defines parameters for PostAdvancedMarginStressRuns.
+type PostAdvancedMarginStressRunsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetAdvancedPredictionMarketsParams defines parameters for GetAdvancedPredictionMarkets.
+type GetAdvancedPredictionMarketsParams struct {
+	Status PredictionMarketStatus `form:"status" json:"status"`
+	Limit  *Limit                 `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PostAdvancedPredictionMarketsParams defines parameters for PostAdvancedPredictionMarkets.
+type PostAdvancedPredictionMarketsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedPredictionMarketsMarketIdCloseParams defines parameters for PostAdvancedPredictionMarketsMarketIdClose.
+type PostAdvancedPredictionMarketsMarketIdCloseParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedPredictionMarketsMarketIdDisputeParams defines parameters for PostAdvancedPredictionMarketsMarketIdDispute.
+type PostAdvancedPredictionMarketsMarketIdDisputeParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedPredictionMarketsMarketIdIssuancesParams defines parameters for PostAdvancedPredictionMarketsMarketIdIssuances.
+type PostAdvancedPredictionMarketsMarketIdIssuancesParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedPredictionMarketsMarketIdOpenParams defines parameters for PostAdvancedPredictionMarketsMarketIdOpen.
+type PostAdvancedPredictionMarketsMarketIdOpenParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedPredictionMarketsMarketIdOracleObservationsParams defines parameters for PostAdvancedPredictionMarketsMarketIdOracleObservations.
+type PostAdvancedPredictionMarketsMarketIdOracleObservationsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetAdvancedPredictionMarketsMarketIdPositionsParams defines parameters for GetAdvancedPredictionMarketsMarketIdPositions.
+type GetAdvancedPredictionMarketsMarketIdPositionsParams struct {
+	AccountId UUID `form:"account_id" json:"account_id"`
+}
+
+// PostAdvancedPredictionMarketsMarketIdReconcileParams defines parameters for PostAdvancedPredictionMarketsMarketIdReconcile.
+type PostAdvancedPredictionMarketsMarketIdReconcileParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedPredictionMarketsMarketIdRedemptionsParams defines parameters for PostAdvancedPredictionMarketsMarketIdRedemptions.
+type PostAdvancedPredictionMarketsMarketIdRedemptionsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedPredictionMarketsMarketIdRequestResolutionParams defines parameters for PostAdvancedPredictionMarketsMarketIdRequestResolution.
+type PostAdvancedPredictionMarketsMarketIdRequestResolutionParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedPredictionMarketsMarketIdResolveParams defines parameters for PostAdvancedPredictionMarketsMarketIdResolve.
+type PostAdvancedPredictionMarketsMarketIdResolveParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedPredictionMarketsMarketIdSettleParams defines parameters for PostAdvancedPredictionMarketsMarketIdSettle.
+type PostAdvancedPredictionMarketsMarketIdSettleParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedPredictionMarketsMarketIdUpholdParams defines parameters for PostAdvancedPredictionMarketsMarketIdUphold.
+type PostAdvancedPredictionMarketsMarketIdUpholdParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedPredictionMarketsMarketIdVoidParams defines parameters for PostAdvancedPredictionMarketsMarketIdVoid.
+type PostAdvancedPredictionMarketsMarketIdVoidParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
 // GetAdvancedRiskDecisionsParams defines parameters for GetAdvancedRiskDecisions.
@@ -7261,6 +10624,33 @@ type PostAdvancedBooksInstrumentIdOrdersJSONRequestBody = AdvancedBookOrderReque
 // PostAdvancedBooksInstrumentIdStatusJSONRequestBody defines body for PostAdvancedBooksInstrumentIdStatus for application/json ContentType.
 type PostAdvancedBooksInstrumentIdStatusJSONRequestBody = AdvancedBookStatusRequest
 
+// PostAdvancedDerivativesClearingHouseFundingJSONRequestBody defines body for PostAdvancedDerivativesClearingHouseFunding for application/json ContentType.
+type PostAdvancedDerivativesClearingHouseFundingJSONRequestBody = DerivativeClearingFundingRequest
+
+// PostAdvancedDerivativesClearingHouseReconciliationsJSONRequestBody defines body for PostAdvancedDerivativesClearingHouseReconciliations for application/json ContentType.
+type PostAdvancedDerivativesClearingHouseReconciliationsJSONRequestBody = DerivativeClearingReconcileRequest
+
+// PostAdvancedDerivativesContractsInstrumentIdFundingRunsJSONRequestBody defines body for PostAdvancedDerivativesContractsInstrumentIdFundingRuns for application/json ContentType.
+type PostAdvancedDerivativesContractsInstrumentIdFundingRunsJSONRequestBody = DerivativeRunRequest
+
+// PostAdvancedDerivativesContractsInstrumentIdMarksJSONRequestBody defines body for PostAdvancedDerivativesContractsInstrumentIdMarks for application/json ContentType.
+type PostAdvancedDerivativesContractsInstrumentIdMarksJSONRequestBody = DerivativeMarkRequest
+
+// PostAdvancedDerivativesContractsInstrumentIdSettlementJSONRequestBody defines body for PostAdvancedDerivativesContractsInstrumentIdSettlement for application/json ContentType.
+type PostAdvancedDerivativesContractsInstrumentIdSettlementJSONRequestBody = DerivativeSettleRequest
+
+// PostAdvancedDerivativesContractsInstrumentIdVariationMarginRunsJSONRequestBody defines body for PostAdvancedDerivativesContractsInstrumentIdVariationMarginRuns for application/json ContentType.
+type PostAdvancedDerivativesContractsInstrumentIdVariationMarginRunsJSONRequestBody = DerivativeRunRequest
+
+// PostAdvancedDerivativesPositionsJSONRequestBody defines body for PostAdvancedDerivativesPositions for application/json ContentType.
+type PostAdvancedDerivativesPositionsJSONRequestBody = DerivativeOpenRequest
+
+// PostAdvancedDerivativesPositionsPositionIdCloseJSONRequestBody defines body for PostAdvancedDerivativesPositionsPositionIdClose for application/json ContentType.
+type PostAdvancedDerivativesPositionsPositionIdCloseJSONRequestBody = DerivativeCloseRequest
+
+// PostAdvancedDerivativesPositionsPositionIdExerciseJSONRequestBody defines body for PostAdvancedDerivativesPositionsPositionIdExercise for application/json ContentType.
+type PostAdvancedDerivativesPositionsPositionIdExerciseJSONRequestBody = DerivativeExerciseRequest
+
 // PostAdvancedEquitiesCalendarHolidaysJSONRequestBody defines body for PostAdvancedEquitiesCalendarHolidays for application/json ContentType.
 type PostAdvancedEquitiesCalendarHolidaysJSONRequestBody = AdvancedEquityHolidayRequest
 
@@ -7284,6 +10674,69 @@ type PostAdvancedEquitiesSettlementRunsJSONRequestBody = AdvancedEquitySettlemen
 
 // PostAdvancedEquitiesVenueRunsJSONRequestBody defines body for PostAdvancedEquitiesVenueRuns for application/json ContentType.
 type PostAdvancedEquitiesVenueRunsJSONRequestBody = AdvancedEquityVenueRunRequest
+
+// PostAdvancedMarginAccountJSONRequestBody defines body for PostAdvancedMarginAccount for application/json ContentType.
+type PostAdvancedMarginAccountJSONRequestBody = MarginOpenRequest
+
+// PostAdvancedMarginAccountCloseJSONRequestBody defines body for PostAdvancedMarginAccountClose for application/json ContentType.
+type PostAdvancedMarginAccountCloseJSONRequestBody = MarginAccountRef
+
+// PostAdvancedMarginBorrowJSONRequestBody defines body for PostAdvancedMarginBorrow for application/json ContentType.
+type PostAdvancedMarginBorrowJSONRequestBody = MarginAmountRequest
+
+// PostAdvancedMarginCollateralPostJSONRequestBody defines body for PostAdvancedMarginCollateralPost for application/json ContentType.
+type PostAdvancedMarginCollateralPostJSONRequestBody = MarginCollateralRequest
+
+// PostAdvancedMarginCollateralReleaseJSONRequestBody defines body for PostAdvancedMarginCollateralRelease for application/json ContentType.
+type PostAdvancedMarginCollateralReleaseJSONRequestBody = MarginCollateralRequest
+
+// PostAdvancedMarginLeveragedBuysJSONRequestBody defines body for PostAdvancedMarginLeveragedBuys for application/json ContentType.
+type PostAdvancedMarginLeveragedBuysJSONRequestBody = MarginLeveragedBuyRequest
+
+// PostAdvancedMarginOpsFacilitiesSeedJSONRequestBody defines body for PostAdvancedMarginOpsFacilitiesSeed for application/json ContentType.
+type PostAdvancedMarginOpsFacilitiesSeedJSONRequestBody = MarginSeedRequest
+
+// PostAdvancedMarginOpsLiquidationsJSONRequestBody defines body for PostAdvancedMarginOpsLiquidations for application/json ContentType.
+type PostAdvancedMarginOpsLiquidationsJSONRequestBody = MarginLiquidateRequest
+
+// PostAdvancedMarginOpsMarkToMarketJSONRequestBody defines body for PostAdvancedMarginOpsMarkToMarket for application/json ContentType.
+type PostAdvancedMarginOpsMarkToMarketJSONRequestBody = MarginBatchRequest
+
+// PostAdvancedMarginOpsQueueRunJSONRequestBody defines body for PostAdvancedMarginOpsQueueRun for application/json ContentType.
+type PostAdvancedMarginOpsQueueRunJSONRequestBody = MarginBatchRequest
+
+// PostAdvancedMarginOpsStressRunsJSONRequestBody defines body for PostAdvancedMarginOpsStressRuns for application/json ContentType.
+type PostAdvancedMarginOpsStressRunsJSONRequestBody = MarginAccountRef
+
+// PostAdvancedMarginRepayJSONRequestBody defines body for PostAdvancedMarginRepay for application/json ContentType.
+type PostAdvancedMarginRepayJSONRequestBody = MarginAmountRequest
+
+// PostAdvancedMarginStressRunsJSONRequestBody defines body for PostAdvancedMarginStressRuns for application/json ContentType.
+type PostAdvancedMarginStressRunsJSONRequestBody = MarginAccountRef
+
+// PostAdvancedPredictionMarketsJSONRequestBody defines body for PostAdvancedPredictionMarkets for application/json ContentType.
+type PostAdvancedPredictionMarketsJSONRequestBody = CreatePredictionMarketRequest
+
+// PostAdvancedPredictionMarketsMarketIdDisputeJSONRequestBody defines body for PostAdvancedPredictionMarketsMarketIdDispute for application/json ContentType.
+type PostAdvancedPredictionMarketsMarketIdDisputeJSONRequestBody = PredictionDisputeRequest
+
+// PostAdvancedPredictionMarketsMarketIdIssuancesJSONRequestBody defines body for PostAdvancedPredictionMarketsMarketIdIssuances for application/json ContentType.
+type PostAdvancedPredictionMarketsMarketIdIssuancesJSONRequestBody = PredictionSetRequest
+
+// PostAdvancedPredictionMarketsMarketIdOracleObservationsJSONRequestBody defines body for PostAdvancedPredictionMarketsMarketIdOracleObservations for application/json ContentType.
+type PostAdvancedPredictionMarketsMarketIdOracleObservationsJSONRequestBody = PredictionOracleObservationRequest
+
+// PostAdvancedPredictionMarketsMarketIdRedemptionsJSONRequestBody defines body for PostAdvancedPredictionMarketsMarketIdRedemptions for application/json ContentType.
+type PostAdvancedPredictionMarketsMarketIdRedemptionsJSONRequestBody = PredictionSetRequest
+
+// PostAdvancedPredictionMarketsMarketIdResolveJSONRequestBody defines body for PostAdvancedPredictionMarketsMarketIdResolve for application/json ContentType.
+type PostAdvancedPredictionMarketsMarketIdResolveJSONRequestBody = PredictionResolveRequest
+
+// PostAdvancedPredictionMarketsMarketIdUpholdJSONRequestBody defines body for PostAdvancedPredictionMarketsMarketIdUphold for application/json ContentType.
+type PostAdvancedPredictionMarketsMarketIdUpholdJSONRequestBody = PredictionRulingRequest
+
+// PostAdvancedPredictionMarketsMarketIdVoidJSONRequestBody defines body for PostAdvancedPredictionMarketsMarketIdVoid for application/json ContentType.
+type PostAdvancedPredictionMarketsMarketIdVoidJSONRequestBody = PredictionVoidRequest
 
 // PostAdvancedTransfersJSONRequestBody defines body for PostAdvancedTransfers for application/json ContentType.
 type PostAdvancedTransfersJSONRequestBody = AdvancedTransferSendRequest
@@ -7461,6 +10914,60 @@ type ServerInterface interface {
 	// GetAdvancedCapabilities Every advanced capability, its modes, and whether each mode may run in this deployment
 	// (GET /advanced/capabilities)
 	GetAdvancedCapabilities(w http.ResponseWriter, r *http.Request)
+	// PostAdvancedDerivativesClearingHouseFunding Capitalize the clearing house in a sandbox asset (operator; requires step-up)
+	// (POST /advanced/derivatives/clearing-house/funding)
+	PostAdvancedDerivativesClearingHouseFunding(w http.ResponseWriter, r *http.Request, params PostAdvancedDerivativesClearingHouseFundingParams)
+	// PostAdvancedDerivativesClearingHouseReconciliations Reconcile the clearing house's books against the flow register (operator; reconciliation kind CLEARING)
+	// (POST /advanced/derivatives/clearing-house/reconciliations)
+	PostAdvancedDerivativesClearingHouseReconciliations(w http.ResponseWriter, r *http.Request, params PostAdvancedDerivativesClearingHouseReconciliationsParams)
+	// GetAdvancedDerivativesContracts Derivative contracts with the canonical terms the service trades them on and their latest mark
+	// (GET /advanced/derivatives/contracts)
+	GetAdvancedDerivativesContracts(w http.ResponseWriter, r *http.Request, params GetAdvancedDerivativesContractsParams)
+	// GetAdvancedDerivativesContractsInstrumentId One derivative contract, its terms in force, latest mark and final settlement
+	// (GET /advanced/derivatives/contracts/{instrumentId})
+	GetAdvancedDerivativesContractsInstrumentId(w http.ResponseWriter, r *http.Request, instrumentId UUID)
+	// GetAdvancedDerivativesContractsInstrumentIdAnalytics Reference analytics of an option at its latest mark -- model values, never a quote
+	// (GET /advanced/derivatives/contracts/{instrumentId}/analytics)
+	GetAdvancedDerivativesContractsInstrumentIdAnalytics(w http.ResponseWriter, r *http.Request, instrumentId UUID, params GetAdvancedDerivativesContractsInstrumentIdAnalyticsParams)
+	// PostAdvancedDerivativesContractsInstrumentIdFundingRuns Charge one funding interval of a perpetual (operator; requires step-up)
+	// (POST /advanced/derivatives/contracts/{instrumentId}/funding-runs)
+	PostAdvancedDerivativesContractsInstrumentIdFundingRuns(w http.ResponseWriter, r *http.Request, instrumentId UUID, params PostAdvancedDerivativesContractsInstrumentIdFundingRunsParams)
+	// GetAdvancedDerivativesContractsInstrumentIdMarks The marks recorded for a contract, newest observation first
+	// (GET /advanced/derivatives/contracts/{instrumentId}/marks)
+	GetAdvancedDerivativesContractsInstrumentIdMarks(w http.ResponseWriter, r *http.Request, instrumentId UUID, params GetAdvancedDerivativesContractsInstrumentIdMarksParams)
+	// PostAdvancedDerivativesContractsInstrumentIdMarks Record a sandbox mark for a contract (operator)
+	// (POST /advanced/derivatives/contracts/{instrumentId}/marks)
+	PostAdvancedDerivativesContractsInstrumentIdMarks(w http.ResponseWriter, r *http.Request, instrumentId UUID, params PostAdvancedDerivativesContractsInstrumentIdMarksParams)
+	// PostAdvancedDerivativesContractsInstrumentIdSettlement Settle an expired future or option once and for all (operator; requires step-up)
+	// (POST /advanced/derivatives/contracts/{instrumentId}/settlement)
+	PostAdvancedDerivativesContractsInstrumentIdSettlement(w http.ResponseWriter, r *http.Request, instrumentId UUID, params PostAdvancedDerivativesContractsInstrumentIdSettlementParams)
+	// PostAdvancedDerivativesContractsInstrumentIdVariationMarginRuns Settle one variation-margin interval of a future or perpetual (operator; requires step-up)
+	// (POST /advanced/derivatives/contracts/{instrumentId}/variation-margin-runs)
+	PostAdvancedDerivativesContractsInstrumentIdVariationMarginRuns(w http.ResponseWriter, r *http.Request, instrumentId UUID, params PostAdvancedDerivativesContractsInstrumentIdVariationMarginRunsParams)
+	// GetAdvancedDerivativesFlows The account's register of clearing-house flows (realized, variation margin, funding, premium, settlement), newest first
+	// (GET /advanced/derivatives/flows)
+	GetAdvancedDerivativesFlows(w http.ResponseWriter, r *http.Request, params GetAdvancedDerivativesFlowsParams)
+	// GetAdvancedDerivativesFundingAccruals Perpetual funding accrued to the account's positions, one row per position and interval, newest first
+	// (GET /advanced/derivatives/funding-accruals)
+	GetAdvancedDerivativesFundingAccruals(w http.ResponseWriter, r *http.Request, params GetAdvancedDerivativesFundingAccrualsParams)
+	// GetAdvancedDerivativesPolicy The versioned margin, funding and paper-fill policy every derivative decision records
+	// (GET /advanced/derivatives/policy)
+	GetAdvancedDerivativesPolicy(w http.ResponseWriter, r *http.Request)
+	// GetAdvancedDerivativesPositions An account's derivative positions with the service's valuation of its open book, oldest first
+	// (GET /advanced/derivatives/positions)
+	GetAdvancedDerivativesPositions(w http.ResponseWriter, r *http.Request, params GetAdvancedDerivativesPositionsParams)
+	// PostAdvancedDerivativesPositions Open a position or add to one in one of your own accounts (paper fill at the mark plus disclosed slippage)
+	// (POST /advanced/derivatives/positions)
+	PostAdvancedDerivativesPositions(w http.ResponseWriter, r *http.Request, params PostAdvancedDerivativesPositionsParams)
+	// GetAdvancedDerivativesPositionsPositionId One derivative position, to its account's owner or an operator; anyone else is told it does not exist
+	// (GET /advanced/derivatives/positions/{positionId})
+	GetAdvancedDerivativesPositionsPositionId(w http.ResponseWriter, r *http.Request, positionId UUID)
+	// PostAdvancedDerivativesPositionsPositionIdClose Reduce or close one of your own open positions (paper fill; never refused for a stale mark)
+	// (POST /advanced/derivatives/positions/{positionId}/close)
+	PostAdvancedDerivativesPositionsPositionIdClose(w http.ResponseWriter, r *http.Request, positionId UUID, params PostAdvancedDerivativesPositionsPositionIdCloseParams)
+	// PostAdvancedDerivativesPositionsPositionIdExercise Exercise held American options before expiry (settled at the fresh index, assigned FIFO to writers)
+	// (POST /advanced/derivatives/positions/{positionId}/exercise)
+	PostAdvancedDerivativesPositionsPositionIdExercise(w http.ResponseWriter, r *http.Request, positionId UUID, params PostAdvancedDerivativesPositionsPositionIdExerciseParams)
 	// GetAdvancedEffects Economic effects of an account (the exactly-once register), newest first
 	// (GET /advanced/effects)
 	GetAdvancedEffects(w http.ResponseWriter, r *http.Request, params GetAdvancedEffectsParams)
@@ -7533,6 +11040,126 @@ type ServerInterface interface {
 	// GetAdvancedIntentsIntentId One economic intent
 	// (GET /advanced/intents/{intentId})
 	GetAdvancedIntentsIntentId(w http.ResponseWriter, r *http.Request, intentId UUID)
+	// GetAdvancedMarginAccount An account's margin account, evaluated by the margin engine at the instant of the read
+	// (GET /advanced/margin/account)
+	GetAdvancedMarginAccount(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginAccountParams)
+	// PostAdvancedMarginAccount Open a margin account in PAPER or SANDBOX mode with the sandbox dollar as numeraire
+	// (POST /advanced/margin/account)
+	PostAdvancedMarginAccount(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginAccountParams)
+	// PostAdvancedMarginAccountClose Close a margin account that holds nothing and owes the lending pool nothing
+	// (POST /advanced/margin/account/close)
+	PostAdvancedMarginAccountClose(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginAccountCloseParams)
+	// PostAdvancedMarginBorrow Borrow the numeraire from the lending pool into the wallet (MARGIN_BORROW; Risk Kernel V2 decides)
+	// (POST /advanced/margin/borrow)
+	PostAdvancedMarginBorrow(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginBorrowParams)
+	// GetAdvancedMarginCalls Margin calls of an account, newest first
+	// (GET /advanced/margin/calls)
+	GetAdvancedMarginCalls(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginCallsParams)
+	// GetAdvancedMarginCases Liquidation cases of an account, newest first
+	// (GET /advanced/margin/cases)
+	GetAdvancedMarginCases(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginCasesParams)
+	// GetAdvancedMarginCasesMarginCaseId One liquidation case with every step it executed
+	// (GET /advanced/margin/cases/{marginCaseId})
+	GetAdvancedMarginCasesMarginCaseId(w http.ResponseWriter, r *http.Request, marginCaseId UUID)
+	// PostAdvancedMarginCollateralPost Move collateral from the wallet into the margin account (MARGIN_COLLATERAL_MOVE)
+	// (POST /advanced/margin/collateral/post)
+	PostAdvancedMarginCollateralPost(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginCollateralPostParams)
+	// PostAdvancedMarginCollateralRelease Release collateral from the margin account to the wallet (Risk Kernel V2 decides)
+	// (POST /advanced/margin/collateral/release)
+	PostAdvancedMarginCollateralRelease(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginCollateralReleaseParams)
+	// PostAdvancedMarginLeveragedBuys Buy an asset entirely on margin at mark plus the disclosed paper slippage (Risk Kernel V2 decides)
+	// (POST /advanced/margin/leveraged-buys)
+	PostAdvancedMarginLeveragedBuys(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginLeveragedBuysParams)
+	// GetAdvancedMarginOpsCalls Operator — margin calls across every account, newest first
+	// (GET /advanced/margin/ops/calls)
+	GetAdvancedMarginOpsCalls(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginOpsCallsParams)
+	// PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit Operator — have the insurance fund cover a bankrupt case's deficit (DEFICIT_COVERAGE; step-up)
+	// (POST /advanced/margin/ops/cases/{marginCaseId}/cover-deficit)
+	PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit(w http.ResponseWriter, r *http.Request, marginCaseId UUID, params PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitParams)
+	// PostAdvancedMarginOpsFacilitiesSeed Operator — fund the lending pool and the insurance fund in sandbox dollars (FACILITY_FUNDING; step-up)
+	// (POST /advanced/margin/ops/facilities/seed)
+	PostAdvancedMarginOpsFacilitiesSeed(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginOpsFacilitiesSeedParams)
+	// PostAdvancedMarginOpsLiquidations Operator — execute at most one deterministic liquidation step of one account (step-up)
+	// (POST /advanced/margin/ops/liquidations)
+	PostAdvancedMarginOpsLiquidations(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginOpsLiquidationsParams)
+	// PostAdvancedMarginOpsMarkToMarket Operator — evaluate open margin accounts, moving them between NORMAL, WARNING and MARGIN_CALL
+	// (POST /advanced/margin/ops/mark-to-market)
+	PostAdvancedMarginOpsMarkToMarket(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginOpsMarkToMarketParams)
+	// GetAdvancedMarginOpsQueue Operator — accounts in MARGIN_CALL or LIQUIDATING under the service's policy, with their live evaluation
+	// (GET /advanced/margin/ops/queue)
+	GetAdvancedMarginOpsQueue(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginOpsQueueParams)
+	// PostAdvancedMarginOpsQueueRun Operator — run one liquidation step for each of the most under-margined accounts (step-up)
+	// (POST /advanced/margin/ops/queue/run)
+	PostAdvancedMarginOpsQueueRun(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginOpsQueueRunParams)
+	// PostAdvancedMarginOpsStressRuns Operator — run every stress scenario against any account's margin account and store the report
+	// (POST /advanced/margin/ops/stress-runs)
+	PostAdvancedMarginOpsStressRuns(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginOpsStressRunsParams)
+	// PostAdvancedMarginRepay Repay loans from the wallet, interest first and oldest lot first (MARGIN_REPAY)
+	// (POST /advanced/margin/repay)
+	PostAdvancedMarginRepay(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginRepayParams)
+	// GetAdvancedMarginStressRuns Stored stress runs of an account, newest first
+	// (GET /advanced/margin/stress-runs)
+	GetAdvancedMarginStressRuns(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginStressRunsParams)
+	// PostAdvancedMarginStressRuns Run every stress scenario against your margin account and store the report (moves no value)
+	// (POST /advanced/margin/stress-runs)
+	PostAdvancedMarginStressRuns(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginStressRunsParams)
+	// GetAdvancedMarginStressRunsMarginStressRunId One stored stress run with every scenario's result
+	// (GET /advanced/margin/stress-runs/{marginStressRunId})
+	GetAdvancedMarginStressRunsMarginStressRunId(w http.ResponseWriter, r *http.Request, marginStressRunId UUID)
+	// GetAdvancedPredictionMarkets Prediction markets in one lifecycle status, soonest close first
+	// (GET /advanced/prediction-markets)
+	GetAdvancedPredictionMarkets(w http.ResponseWriter, r *http.Request, params GetAdvancedPredictionMarketsParams)
+	// PostAdvancedPredictionMarkets Define a prediction market in DRAFT, collateralised in the sandbox dollar (operator)
+	// (POST /advanced/prediction-markets)
+	PostAdvancedPredictionMarkets(w http.ResponseWriter, r *http.Request, params PostAdvancedPredictionMarketsParams)
+	// GetAdvancedPredictionMarketsOracle The oracle this deployment resolves prediction markets from (sandbox oracle in LOCAL, TEST and DEV only)
+	// (GET /advanced/prediction-markets/oracle)
+	GetAdvancedPredictionMarketsOracle(w http.ResponseWriter, r *http.Request)
+	// GetAdvancedPredictionMarketsMarketId One market with its outcomes, resolutions, disputes and settlement record
+	// (GET /advanced/prediction-markets/{marketId})
+	GetAdvancedPredictionMarketsMarketId(w http.ResponseWriter, r *http.Request, marketId MarketId)
+	// GetAdvancedPredictionMarketsMarketIdBooks The market's escrow books, one snapshot, and whether they satisfy the escrow identity
+	// (GET /advanced/prediction-markets/{marketId}/books)
+	GetAdvancedPredictionMarketsMarketIdBooks(w http.ResponseWriter, r *http.Request, marketId MarketId)
+	// PostAdvancedPredictionMarketsMarketIdClose Close an OPEN market at or after its close time (operator)
+	// (POST /advanced/prediction-markets/{marketId}/close)
+	PostAdvancedPredictionMarketsMarketIdClose(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdCloseParams)
+	// PostAdvancedPredictionMarketsMarketIdDispute Dispute a RESOLVED market's oracle resolution, blocking settlement (operator)
+	// (POST /advanced/prediction-markets/{marketId}/dispute)
+	PostAdvancedPredictionMarketsMarketIdDispute(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdDisputeParams)
+	// PostAdvancedPredictionMarketsMarketIdIssuances Issue complete sets (collateral into the escrow, one share of every outcome per set)
+	// (POST /advanced/prediction-markets/{marketId}/issuances)
+	PostAdvancedPredictionMarketsMarketIdIssuances(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdIssuancesParams)
+	// PostAdvancedPredictionMarketsMarketIdOpen Open a DRAFT market at or after its open time (operator)
+	// (POST /advanced/prediction-markets/{marketId}/open)
+	PostAdvancedPredictionMarketsMarketIdOpen(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdOpenParams)
+	// PostAdvancedPredictionMarketsMarketIdOracleObservations Record what the sandbox oracle observed for a market (operator; sandbox oracle only)
+	// (POST /advanced/prediction-markets/{marketId}/oracle-observations)
+	PostAdvancedPredictionMarketsMarketIdOracleObservations(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdOracleObservationsParams)
+	// GetAdvancedPredictionMarketsMarketIdPositions An account's outcome shares in one market
+	// (GET /advanced/prediction-markets/{marketId}/positions)
+	GetAdvancedPredictionMarketsMarketIdPositions(w http.ResponseWriter, r *http.Request, marketId MarketId, params GetAdvancedPredictionMarketsMarketIdPositionsParams)
+	// PostAdvancedPredictionMarketsMarketIdReconcile Run the PREDICTION_ESCROW reconciliation for one market (operator; compares and records, moves nothing)
+	// (POST /advanced/prediction-markets/{marketId}/reconcile)
+	PostAdvancedPredictionMarketsMarketIdReconcile(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdReconcileParams)
+	// PostAdvancedPredictionMarketsMarketIdRedemptions Redeem complete sets (one share of every outcome per set back into collateral)
+	// (POST /advanced/prediction-markets/{marketId}/redemptions)
+	PostAdvancedPredictionMarketsMarketIdRedemptions(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdRedemptionsParams)
+	// PostAdvancedPredictionMarketsMarketIdRequestResolution Move a CLOSED market to RESOLVING, awaiting an oracle report (operator)
+	// (POST /advanced/prediction-markets/{marketId}/request-resolution)
+	PostAdvancedPredictionMarketsMarketIdRequestResolution(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdRequestResolutionParams)
+	// PostAdvancedPredictionMarketsMarketIdResolve Resolve from the configured oracle's report, verified against the market's oracle key (operator)
+	// (POST /advanced/prediction-markets/{marketId}/resolve)
+	PostAdvancedPredictionMarketsMarketIdResolve(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdResolveParams)
+	// PostAdvancedPredictionMarketsMarketIdSettle Settle a RESOLVED market from its escrow once its dispute window has passed (operator)
+	// (POST /advanced/prediction-markets/{marketId}/settle)
+	PostAdvancedPredictionMarketsMarketIdSettle(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdSettleParams)
+	// PostAdvancedPredictionMarketsMarketIdUphold Close a dispute keeping the disputed outcome (operator; not the creator, not the disputer)
+	// (POST /advanced/prediction-markets/{marketId}/uphold)
+	PostAdvancedPredictionMarketsMarketIdUphold(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdUpholdParams)
+	// PostAdvancedPredictionMarketsMarketIdVoid Void a market that has not settled and refund every share (operator; not the creator)
+	// (POST /advanced/prediction-markets/{marketId}/void)
+	PostAdvancedPredictionMarketsMarketIdVoid(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdVoidParams)
 	// GetAdvancedRiskDecisions Risk Kernel V2 decisions about an account's intents, newest first
 	// (GET /advanced/risk/decisions)
 	GetAdvancedRiskDecisions(w http.ResponseWriter, r *http.Request, params GetAdvancedRiskDecisionsParams)
@@ -7926,6 +11553,114 @@ func (_ Unimplemented) GetAdvancedCapabilities(w http.ResponseWriter, r *http.Re
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// PostAdvancedDerivativesClearingHouseFunding Capitalize the clearing house in a sandbox asset (operator; requires step-up)
+// (POST /advanced/derivatives/clearing-house/funding)
+func (_ Unimplemented) PostAdvancedDerivativesClearingHouseFunding(w http.ResponseWriter, r *http.Request, params PostAdvancedDerivativesClearingHouseFundingParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedDerivativesClearingHouseReconciliations Reconcile the clearing house's books against the flow register (operator; reconciliation kind CLEARING)
+// (POST /advanced/derivatives/clearing-house/reconciliations)
+func (_ Unimplemented) PostAdvancedDerivativesClearingHouseReconciliations(w http.ResponseWriter, r *http.Request, params PostAdvancedDerivativesClearingHouseReconciliationsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedDerivativesContracts Derivative contracts with the canonical terms the service trades them on and their latest mark
+// (GET /advanced/derivatives/contracts)
+func (_ Unimplemented) GetAdvancedDerivativesContracts(w http.ResponseWriter, r *http.Request, params GetAdvancedDerivativesContractsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedDerivativesContractsInstrumentId One derivative contract, its terms in force, latest mark and final settlement
+// (GET /advanced/derivatives/contracts/{instrumentId})
+func (_ Unimplemented) GetAdvancedDerivativesContractsInstrumentId(w http.ResponseWriter, r *http.Request, instrumentId UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedDerivativesContractsInstrumentIdAnalytics Reference analytics of an option at its latest mark -- model values, never a quote
+// (GET /advanced/derivatives/contracts/{instrumentId}/analytics)
+func (_ Unimplemented) GetAdvancedDerivativesContractsInstrumentIdAnalytics(w http.ResponseWriter, r *http.Request, instrumentId UUID, params GetAdvancedDerivativesContractsInstrumentIdAnalyticsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedDerivativesContractsInstrumentIdFundingRuns Charge one funding interval of a perpetual (operator; requires step-up)
+// (POST /advanced/derivatives/contracts/{instrumentId}/funding-runs)
+func (_ Unimplemented) PostAdvancedDerivativesContractsInstrumentIdFundingRuns(w http.ResponseWriter, r *http.Request, instrumentId UUID, params PostAdvancedDerivativesContractsInstrumentIdFundingRunsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedDerivativesContractsInstrumentIdMarks The marks recorded for a contract, newest observation first
+// (GET /advanced/derivatives/contracts/{instrumentId}/marks)
+func (_ Unimplemented) GetAdvancedDerivativesContractsInstrumentIdMarks(w http.ResponseWriter, r *http.Request, instrumentId UUID, params GetAdvancedDerivativesContractsInstrumentIdMarksParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedDerivativesContractsInstrumentIdMarks Record a sandbox mark for a contract (operator)
+// (POST /advanced/derivatives/contracts/{instrumentId}/marks)
+func (_ Unimplemented) PostAdvancedDerivativesContractsInstrumentIdMarks(w http.ResponseWriter, r *http.Request, instrumentId UUID, params PostAdvancedDerivativesContractsInstrumentIdMarksParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedDerivativesContractsInstrumentIdSettlement Settle an expired future or option once and for all (operator; requires step-up)
+// (POST /advanced/derivatives/contracts/{instrumentId}/settlement)
+func (_ Unimplemented) PostAdvancedDerivativesContractsInstrumentIdSettlement(w http.ResponseWriter, r *http.Request, instrumentId UUID, params PostAdvancedDerivativesContractsInstrumentIdSettlementParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedDerivativesContractsInstrumentIdVariationMarginRuns Settle one variation-margin interval of a future or perpetual (operator; requires step-up)
+// (POST /advanced/derivatives/contracts/{instrumentId}/variation-margin-runs)
+func (_ Unimplemented) PostAdvancedDerivativesContractsInstrumentIdVariationMarginRuns(w http.ResponseWriter, r *http.Request, instrumentId UUID, params PostAdvancedDerivativesContractsInstrumentIdVariationMarginRunsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedDerivativesFlows The account's register of clearing-house flows (realized, variation margin, funding, premium, settlement), newest first
+// (GET /advanced/derivatives/flows)
+func (_ Unimplemented) GetAdvancedDerivativesFlows(w http.ResponseWriter, r *http.Request, params GetAdvancedDerivativesFlowsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedDerivativesFundingAccruals Perpetual funding accrued to the account's positions, one row per position and interval, newest first
+// (GET /advanced/derivatives/funding-accruals)
+func (_ Unimplemented) GetAdvancedDerivativesFundingAccruals(w http.ResponseWriter, r *http.Request, params GetAdvancedDerivativesFundingAccrualsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedDerivativesPolicy The versioned margin, funding and paper-fill policy every derivative decision records
+// (GET /advanced/derivatives/policy)
+func (_ Unimplemented) GetAdvancedDerivativesPolicy(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedDerivativesPositions An account's derivative positions with the service's valuation of its open book, oldest first
+// (GET /advanced/derivatives/positions)
+func (_ Unimplemented) GetAdvancedDerivativesPositions(w http.ResponseWriter, r *http.Request, params GetAdvancedDerivativesPositionsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedDerivativesPositions Open a position or add to one in one of your own accounts (paper fill at the mark plus disclosed slippage)
+// (POST /advanced/derivatives/positions)
+func (_ Unimplemented) PostAdvancedDerivativesPositions(w http.ResponseWriter, r *http.Request, params PostAdvancedDerivativesPositionsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedDerivativesPositionsPositionId One derivative position, to its account's owner or an operator; anyone else is told it does not exist
+// (GET /advanced/derivatives/positions/{positionId})
+func (_ Unimplemented) GetAdvancedDerivativesPositionsPositionId(w http.ResponseWriter, r *http.Request, positionId UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedDerivativesPositionsPositionIdClose Reduce or close one of your own open positions (paper fill; never refused for a stale mark)
+// (POST /advanced/derivatives/positions/{positionId}/close)
+func (_ Unimplemented) PostAdvancedDerivativesPositionsPositionIdClose(w http.ResponseWriter, r *http.Request, positionId UUID, params PostAdvancedDerivativesPositionsPositionIdCloseParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedDerivativesPositionsPositionIdExercise Exercise held American options before expiry (settled at the fresh index, assigned FIFO to writers)
+// (POST /advanced/derivatives/positions/{positionId}/exercise)
+func (_ Unimplemented) PostAdvancedDerivativesPositionsPositionIdExercise(w http.ResponseWriter, r *http.Request, positionId UUID, params PostAdvancedDerivativesPositionsPositionIdExerciseParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // GetAdvancedEffects Economic effects of an account (the exactly-once register), newest first
 // (GET /advanced/effects)
 func (_ Unimplemented) GetAdvancedEffects(w http.ResponseWriter, r *http.Request, params GetAdvancedEffectsParams) {
@@ -8067,6 +11802,246 @@ func (_ Unimplemented) GetAdvancedIntents(w http.ResponseWriter, r *http.Request
 // GetAdvancedIntentsIntentId One economic intent
 // (GET /advanced/intents/{intentId})
 func (_ Unimplemented) GetAdvancedIntentsIntentId(w http.ResponseWriter, r *http.Request, intentId UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedMarginAccount An account's margin account, evaluated by the margin engine at the instant of the read
+// (GET /advanced/margin/account)
+func (_ Unimplemented) GetAdvancedMarginAccount(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginAccountParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedMarginAccount Open a margin account in PAPER or SANDBOX mode with the sandbox dollar as numeraire
+// (POST /advanced/margin/account)
+func (_ Unimplemented) PostAdvancedMarginAccount(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginAccountParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedMarginAccountClose Close a margin account that holds nothing and owes the lending pool nothing
+// (POST /advanced/margin/account/close)
+func (_ Unimplemented) PostAdvancedMarginAccountClose(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginAccountCloseParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedMarginBorrow Borrow the numeraire from the lending pool into the wallet (MARGIN_BORROW; Risk Kernel V2 decides)
+// (POST /advanced/margin/borrow)
+func (_ Unimplemented) PostAdvancedMarginBorrow(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginBorrowParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedMarginCalls Margin calls of an account, newest first
+// (GET /advanced/margin/calls)
+func (_ Unimplemented) GetAdvancedMarginCalls(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginCallsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedMarginCases Liquidation cases of an account, newest first
+// (GET /advanced/margin/cases)
+func (_ Unimplemented) GetAdvancedMarginCases(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginCasesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedMarginCasesMarginCaseId One liquidation case with every step it executed
+// (GET /advanced/margin/cases/{marginCaseId})
+func (_ Unimplemented) GetAdvancedMarginCasesMarginCaseId(w http.ResponseWriter, r *http.Request, marginCaseId UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedMarginCollateralPost Move collateral from the wallet into the margin account (MARGIN_COLLATERAL_MOVE)
+// (POST /advanced/margin/collateral/post)
+func (_ Unimplemented) PostAdvancedMarginCollateralPost(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginCollateralPostParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedMarginCollateralRelease Release collateral from the margin account to the wallet (Risk Kernel V2 decides)
+// (POST /advanced/margin/collateral/release)
+func (_ Unimplemented) PostAdvancedMarginCollateralRelease(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginCollateralReleaseParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedMarginLeveragedBuys Buy an asset entirely on margin at mark plus the disclosed paper slippage (Risk Kernel V2 decides)
+// (POST /advanced/margin/leveraged-buys)
+func (_ Unimplemented) PostAdvancedMarginLeveragedBuys(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginLeveragedBuysParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedMarginOpsCalls Operator — margin calls across every account, newest first
+// (GET /advanced/margin/ops/calls)
+func (_ Unimplemented) GetAdvancedMarginOpsCalls(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginOpsCallsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit Operator — have the insurance fund cover a bankrupt case's deficit (DEFICIT_COVERAGE; step-up)
+// (POST /advanced/margin/ops/cases/{marginCaseId}/cover-deficit)
+func (_ Unimplemented) PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit(w http.ResponseWriter, r *http.Request, marginCaseId UUID, params PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedMarginOpsFacilitiesSeed Operator — fund the lending pool and the insurance fund in sandbox dollars (FACILITY_FUNDING; step-up)
+// (POST /advanced/margin/ops/facilities/seed)
+func (_ Unimplemented) PostAdvancedMarginOpsFacilitiesSeed(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginOpsFacilitiesSeedParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedMarginOpsLiquidations Operator — execute at most one deterministic liquidation step of one account (step-up)
+// (POST /advanced/margin/ops/liquidations)
+func (_ Unimplemented) PostAdvancedMarginOpsLiquidations(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginOpsLiquidationsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedMarginOpsMarkToMarket Operator — evaluate open margin accounts, moving them between NORMAL, WARNING and MARGIN_CALL
+// (POST /advanced/margin/ops/mark-to-market)
+func (_ Unimplemented) PostAdvancedMarginOpsMarkToMarket(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginOpsMarkToMarketParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedMarginOpsQueue Operator — accounts in MARGIN_CALL or LIQUIDATING under the service's policy, with their live evaluation
+// (GET /advanced/margin/ops/queue)
+func (_ Unimplemented) GetAdvancedMarginOpsQueue(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginOpsQueueParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedMarginOpsQueueRun Operator — run one liquidation step for each of the most under-margined accounts (step-up)
+// (POST /advanced/margin/ops/queue/run)
+func (_ Unimplemented) PostAdvancedMarginOpsQueueRun(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginOpsQueueRunParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedMarginOpsStressRuns Operator — run every stress scenario against any account's margin account and store the report
+// (POST /advanced/margin/ops/stress-runs)
+func (_ Unimplemented) PostAdvancedMarginOpsStressRuns(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginOpsStressRunsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedMarginRepay Repay loans from the wallet, interest first and oldest lot first (MARGIN_REPAY)
+// (POST /advanced/margin/repay)
+func (_ Unimplemented) PostAdvancedMarginRepay(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginRepayParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedMarginStressRuns Stored stress runs of an account, newest first
+// (GET /advanced/margin/stress-runs)
+func (_ Unimplemented) GetAdvancedMarginStressRuns(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginStressRunsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedMarginStressRuns Run every stress scenario against your margin account and store the report (moves no value)
+// (POST /advanced/margin/stress-runs)
+func (_ Unimplemented) PostAdvancedMarginStressRuns(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginStressRunsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedMarginStressRunsMarginStressRunId One stored stress run with every scenario's result
+// (GET /advanced/margin/stress-runs/{marginStressRunId})
+func (_ Unimplemented) GetAdvancedMarginStressRunsMarginStressRunId(w http.ResponseWriter, r *http.Request, marginStressRunId UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedPredictionMarkets Prediction markets in one lifecycle status, soonest close first
+// (GET /advanced/prediction-markets)
+func (_ Unimplemented) GetAdvancedPredictionMarkets(w http.ResponseWriter, r *http.Request, params GetAdvancedPredictionMarketsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedPredictionMarkets Define a prediction market in DRAFT, collateralised in the sandbox dollar (operator)
+// (POST /advanced/prediction-markets)
+func (_ Unimplemented) PostAdvancedPredictionMarkets(w http.ResponseWriter, r *http.Request, params PostAdvancedPredictionMarketsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedPredictionMarketsOracle The oracle this deployment resolves prediction markets from (sandbox oracle in LOCAL, TEST and DEV only)
+// (GET /advanced/prediction-markets/oracle)
+func (_ Unimplemented) GetAdvancedPredictionMarketsOracle(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedPredictionMarketsMarketId One market with its outcomes, resolutions, disputes and settlement record
+// (GET /advanced/prediction-markets/{marketId})
+func (_ Unimplemented) GetAdvancedPredictionMarketsMarketId(w http.ResponseWriter, r *http.Request, marketId MarketId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedPredictionMarketsMarketIdBooks The market's escrow books, one snapshot, and whether they satisfy the escrow identity
+// (GET /advanced/prediction-markets/{marketId}/books)
+func (_ Unimplemented) GetAdvancedPredictionMarketsMarketIdBooks(w http.ResponseWriter, r *http.Request, marketId MarketId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedPredictionMarketsMarketIdClose Close an OPEN market at or after its close time (operator)
+// (POST /advanced/prediction-markets/{marketId}/close)
+func (_ Unimplemented) PostAdvancedPredictionMarketsMarketIdClose(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdCloseParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedPredictionMarketsMarketIdDispute Dispute a RESOLVED market's oracle resolution, blocking settlement (operator)
+// (POST /advanced/prediction-markets/{marketId}/dispute)
+func (_ Unimplemented) PostAdvancedPredictionMarketsMarketIdDispute(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdDisputeParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedPredictionMarketsMarketIdIssuances Issue complete sets (collateral into the escrow, one share of every outcome per set)
+// (POST /advanced/prediction-markets/{marketId}/issuances)
+func (_ Unimplemented) PostAdvancedPredictionMarketsMarketIdIssuances(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdIssuancesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedPredictionMarketsMarketIdOpen Open a DRAFT market at or after its open time (operator)
+// (POST /advanced/prediction-markets/{marketId}/open)
+func (_ Unimplemented) PostAdvancedPredictionMarketsMarketIdOpen(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdOpenParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedPredictionMarketsMarketIdOracleObservations Record what the sandbox oracle observed for a market (operator; sandbox oracle only)
+// (POST /advanced/prediction-markets/{marketId}/oracle-observations)
+func (_ Unimplemented) PostAdvancedPredictionMarketsMarketIdOracleObservations(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdOracleObservationsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedPredictionMarketsMarketIdPositions An account's outcome shares in one market
+// (GET /advanced/prediction-markets/{marketId}/positions)
+func (_ Unimplemented) GetAdvancedPredictionMarketsMarketIdPositions(w http.ResponseWriter, r *http.Request, marketId MarketId, params GetAdvancedPredictionMarketsMarketIdPositionsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedPredictionMarketsMarketIdReconcile Run the PREDICTION_ESCROW reconciliation for one market (operator; compares and records, moves nothing)
+// (POST /advanced/prediction-markets/{marketId}/reconcile)
+func (_ Unimplemented) PostAdvancedPredictionMarketsMarketIdReconcile(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdReconcileParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedPredictionMarketsMarketIdRedemptions Redeem complete sets (one share of every outcome per set back into collateral)
+// (POST /advanced/prediction-markets/{marketId}/redemptions)
+func (_ Unimplemented) PostAdvancedPredictionMarketsMarketIdRedemptions(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdRedemptionsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedPredictionMarketsMarketIdRequestResolution Move a CLOSED market to RESOLVING, awaiting an oracle report (operator)
+// (POST /advanced/prediction-markets/{marketId}/request-resolution)
+func (_ Unimplemented) PostAdvancedPredictionMarketsMarketIdRequestResolution(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdRequestResolutionParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedPredictionMarketsMarketIdResolve Resolve from the configured oracle's report, verified against the market's oracle key (operator)
+// (POST /advanced/prediction-markets/{marketId}/resolve)
+func (_ Unimplemented) PostAdvancedPredictionMarketsMarketIdResolve(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdResolveParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedPredictionMarketsMarketIdSettle Settle a RESOLVED market from its escrow once its dispute window has passed (operator)
+// (POST /advanced/prediction-markets/{marketId}/settle)
+func (_ Unimplemented) PostAdvancedPredictionMarketsMarketIdSettle(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdSettleParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedPredictionMarketsMarketIdUphold Close a dispute keeping the disputed outcome (operator; not the creator, not the disputer)
+// (POST /advanced/prediction-markets/{marketId}/uphold)
+func (_ Unimplemented) PostAdvancedPredictionMarketsMarketIdUphold(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdUpholdParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedPredictionMarketsMarketIdVoid Void a market that has not settled and refund every share (operator; not the creator)
+// (POST /advanced/prediction-markets/{marketId}/void)
+func (_ Unimplemented) PostAdvancedPredictionMarketsMarketIdVoid(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdVoidParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -10006,6 +13981,929 @@ func (siw *ServerInterfaceWrapper) GetAdvancedCapabilities(w http.ResponseWriter
 	handler.ServeHTTP(w, r)
 }
 
+// PostAdvancedDerivativesClearingHouseFunding operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedDerivativesClearingHouseFunding(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedDerivativesClearingHouseFundingParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedDerivativesClearingHouseFunding(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedDerivativesClearingHouseReconciliations operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedDerivativesClearingHouseReconciliations(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedDerivativesClearingHouseReconciliationsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedDerivativesClearingHouseReconciliations(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedDerivativesContracts operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedDerivativesContracts(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedDerivativesContractsParams
+
+	// ------------- Optional query parameter "kind" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "kind", r.URL.Query(), &params.Kind, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "kind"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedDerivativesContracts(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedDerivativesContractsInstrumentId operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedDerivativesContractsInstrumentId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "instrumentId" -------------
+	var instrumentId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "instrumentId", chi.URLParam(r, "instrumentId"), &instrumentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "instrumentId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedDerivativesContractsInstrumentId(w, r, instrumentId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedDerivativesContractsInstrumentIdAnalytics operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedDerivativesContractsInstrumentIdAnalytics(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "instrumentId" -------------
+	var instrumentId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "instrumentId", chi.URLParam(r, "instrumentId"), &instrumentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "instrumentId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedDerivativesContractsInstrumentIdAnalyticsParams
+
+	// ------------- Required query parameter "vol_bps" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "vol_bps", r.URL.Query(), &params.VolBps, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "vol_bps"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "vol_bps", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "rate_bps" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "rate_bps", r.URL.Query(), &params.RateBps, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "rate_bps"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "rate_bps", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "dividend_yield_bps" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "dividend_yield_bps", r.URL.Query(), &params.DividendYieldBps, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "dividend_yield_bps"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "dividend_yield_bps", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedDerivativesContractsInstrumentIdAnalytics(w, r, instrumentId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedDerivativesContractsInstrumentIdFundingRuns operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedDerivativesContractsInstrumentIdFundingRuns(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "instrumentId" -------------
+	var instrumentId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "instrumentId", chi.URLParam(r, "instrumentId"), &instrumentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "instrumentId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedDerivativesContractsInstrumentIdFundingRunsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedDerivativesContractsInstrumentIdFundingRuns(w, r, instrumentId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedDerivativesContractsInstrumentIdMarks operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedDerivativesContractsInstrumentIdMarks(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "instrumentId" -------------
+	var instrumentId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "instrumentId", chi.URLParam(r, "instrumentId"), &instrumentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "instrumentId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedDerivativesContractsInstrumentIdMarksParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedDerivativesContractsInstrumentIdMarks(w, r, instrumentId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedDerivativesContractsInstrumentIdMarks operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedDerivativesContractsInstrumentIdMarks(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "instrumentId" -------------
+	var instrumentId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "instrumentId", chi.URLParam(r, "instrumentId"), &instrumentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "instrumentId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedDerivativesContractsInstrumentIdMarksParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedDerivativesContractsInstrumentIdMarks(w, r, instrumentId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedDerivativesContractsInstrumentIdSettlement operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedDerivativesContractsInstrumentIdSettlement(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "instrumentId" -------------
+	var instrumentId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "instrumentId", chi.URLParam(r, "instrumentId"), &instrumentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "instrumentId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedDerivativesContractsInstrumentIdSettlementParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedDerivativesContractsInstrumentIdSettlement(w, r, instrumentId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedDerivativesContractsInstrumentIdVariationMarginRuns operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedDerivativesContractsInstrumentIdVariationMarginRuns(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "instrumentId" -------------
+	var instrumentId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "instrumentId", chi.URLParam(r, "instrumentId"), &instrumentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "instrumentId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedDerivativesContractsInstrumentIdVariationMarginRunsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedDerivativesContractsInstrumentIdVariationMarginRuns(w, r, instrumentId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedDerivativesFlows operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedDerivativesFlows(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedDerivativesFlowsParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "position_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "position_id", r.URL.Query(), &params.PositionId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "position_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "position_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "kind" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "kind", r.URL.Query(), &params.Kind, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "kind"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedDerivativesFlows(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedDerivativesFundingAccruals operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedDerivativesFundingAccruals(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedDerivativesFundingAccrualsParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "position_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "position_id", r.URL.Query(), &params.PositionId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "position_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "position_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedDerivativesFundingAccruals(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedDerivativesPolicy operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedDerivativesPolicy(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedDerivativesPolicy(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedDerivativesPositions operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedDerivativesPositions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedDerivativesPositionsParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedDerivativesPositions(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedDerivativesPositions operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedDerivativesPositions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedDerivativesPositionsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedDerivativesPositions(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedDerivativesPositionsPositionId operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedDerivativesPositionsPositionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "positionId" -------------
+	var positionId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "positionId", chi.URLParam(r, "positionId"), &positionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "positionId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedDerivativesPositionsPositionId(w, r, positionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedDerivativesPositionsPositionIdClose operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedDerivativesPositionsPositionIdClose(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "positionId" -------------
+	var positionId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "positionId", chi.URLParam(r, "positionId"), &positionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "positionId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedDerivativesPositionsPositionIdCloseParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedDerivativesPositionsPositionIdClose(w, r, positionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedDerivativesPositionsPositionIdExercise operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedDerivativesPositionsPositionIdExercise(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "positionId" -------------
+	var positionId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "positionId", chi.URLParam(r, "positionId"), &positionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "positionId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedDerivativesPositionsPositionIdExerciseParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedDerivativesPositionsPositionIdExercise(w, r, positionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetAdvancedEffects operation middleware
 func (siw *ServerInterfaceWrapper) GetAdvancedEffects(w http.ResponseWriter, r *http.Request) {
 
@@ -11078,6 +15976,1846 @@ func (siw *ServerInterfaceWrapper) GetAdvancedIntentsIntentId(w http.ResponseWri
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetAdvancedIntentsIntentId(w, r, intentId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedMarginAccount operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedMarginAccount(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedMarginAccountParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedMarginAccount(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedMarginAccount operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedMarginAccount(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedMarginAccountParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedMarginAccount(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedMarginAccountClose operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedMarginAccountClose(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedMarginAccountCloseParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedMarginAccountClose(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedMarginBorrow operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedMarginBorrow(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedMarginBorrowParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedMarginBorrow(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedMarginCalls operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedMarginCalls(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedMarginCallsParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedMarginCalls(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedMarginCases operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedMarginCases(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedMarginCasesParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedMarginCases(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedMarginCasesMarginCaseId operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedMarginCasesMarginCaseId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marginCaseId" -------------
+	var marginCaseId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marginCaseId", chi.URLParam(r, "marginCaseId"), &marginCaseId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marginCaseId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedMarginCasesMarginCaseId(w, r, marginCaseId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedMarginCollateralPost operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedMarginCollateralPost(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedMarginCollateralPostParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedMarginCollateralPost(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedMarginCollateralRelease operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedMarginCollateralRelease(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedMarginCollateralReleaseParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedMarginCollateralRelease(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedMarginLeveragedBuys operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedMarginLeveragedBuys(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedMarginLeveragedBuysParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedMarginLeveragedBuys(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedMarginOpsCalls operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedMarginOpsCalls(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedMarginOpsCallsParams
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedMarginOpsCalls(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marginCaseId" -------------
+	var marginCaseId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marginCaseId", chi.URLParam(r, "marginCaseId"), &marginCaseId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marginCaseId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit(w, r, marginCaseId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedMarginOpsFacilitiesSeed operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedMarginOpsFacilitiesSeed(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedMarginOpsFacilitiesSeedParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedMarginOpsFacilitiesSeed(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedMarginOpsLiquidations operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedMarginOpsLiquidations(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedMarginOpsLiquidationsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedMarginOpsLiquidations(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedMarginOpsMarkToMarket operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedMarginOpsMarkToMarket(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedMarginOpsMarkToMarketParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedMarginOpsMarkToMarket(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedMarginOpsQueue operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedMarginOpsQueue(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedMarginOpsQueueParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedMarginOpsQueue(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedMarginOpsQueueRun operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedMarginOpsQueueRun(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedMarginOpsQueueRunParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedMarginOpsQueueRun(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedMarginOpsStressRuns operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedMarginOpsStressRuns(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedMarginOpsStressRunsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedMarginOpsStressRuns(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedMarginRepay operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedMarginRepay(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedMarginRepayParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedMarginRepay(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedMarginStressRuns operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedMarginStressRuns(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedMarginStressRunsParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedMarginStressRuns(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedMarginStressRuns operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedMarginStressRuns(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedMarginStressRunsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedMarginStressRuns(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedMarginStressRunsMarginStressRunId operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedMarginStressRunsMarginStressRunId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marginStressRunId" -------------
+	var marginStressRunId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marginStressRunId", chi.URLParam(r, "marginStressRunId"), &marginStressRunId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marginStressRunId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedMarginStressRunsMarginStressRunId(w, r, marginStressRunId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedPredictionMarkets operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedPredictionMarkets(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedPredictionMarketsParams
+
+	// ------------- Required query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedPredictionMarkets(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedPredictionMarkets operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedPredictionMarkets(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedPredictionMarketsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedPredictionMarkets(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedPredictionMarketsOracle operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedPredictionMarketsOracle(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedPredictionMarketsOracle(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedPredictionMarketsMarketId operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedPredictionMarketsMarketId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedPredictionMarketsMarketId(w, r, marketId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedPredictionMarketsMarketIdBooks operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedPredictionMarketsMarketIdBooks(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedPredictionMarketsMarketIdBooks(w, r, marketId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedPredictionMarketsMarketIdClose operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedPredictionMarketsMarketIdClose(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedPredictionMarketsMarketIdCloseParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedPredictionMarketsMarketIdClose(w, r, marketId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedPredictionMarketsMarketIdDispute operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedPredictionMarketsMarketIdDispute(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedPredictionMarketsMarketIdDisputeParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedPredictionMarketsMarketIdDispute(w, r, marketId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedPredictionMarketsMarketIdIssuances operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedPredictionMarketsMarketIdIssuances(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedPredictionMarketsMarketIdIssuancesParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedPredictionMarketsMarketIdIssuances(w, r, marketId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedPredictionMarketsMarketIdOpen operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedPredictionMarketsMarketIdOpen(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedPredictionMarketsMarketIdOpenParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedPredictionMarketsMarketIdOpen(w, r, marketId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedPredictionMarketsMarketIdOracleObservations operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedPredictionMarketsMarketIdOracleObservations(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedPredictionMarketsMarketIdOracleObservationsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedPredictionMarketsMarketIdOracleObservations(w, r, marketId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedPredictionMarketsMarketIdPositions operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedPredictionMarketsMarketIdPositions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedPredictionMarketsMarketIdPositionsParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedPredictionMarketsMarketIdPositions(w, r, marketId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedPredictionMarketsMarketIdReconcile operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedPredictionMarketsMarketIdReconcile(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedPredictionMarketsMarketIdReconcileParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedPredictionMarketsMarketIdReconcile(w, r, marketId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedPredictionMarketsMarketIdRedemptions operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedPredictionMarketsMarketIdRedemptions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedPredictionMarketsMarketIdRedemptionsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedPredictionMarketsMarketIdRedemptions(w, r, marketId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedPredictionMarketsMarketIdRequestResolution operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedPredictionMarketsMarketIdRequestResolution(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedPredictionMarketsMarketIdRequestResolutionParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedPredictionMarketsMarketIdRequestResolution(w, r, marketId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedPredictionMarketsMarketIdResolve operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedPredictionMarketsMarketIdResolve(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedPredictionMarketsMarketIdResolveParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedPredictionMarketsMarketIdResolve(w, r, marketId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedPredictionMarketsMarketIdSettle operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedPredictionMarketsMarketIdSettle(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedPredictionMarketsMarketIdSettleParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedPredictionMarketsMarketIdSettle(w, r, marketId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedPredictionMarketsMarketIdUphold operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedPredictionMarketsMarketIdUphold(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedPredictionMarketsMarketIdUpholdParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedPredictionMarketsMarketIdUphold(w, r, marketId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedPredictionMarketsMarketIdVoid operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedPredictionMarketsMarketIdVoid(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedPredictionMarketsMarketIdVoidParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedPredictionMarketsMarketIdVoid(w, r, marketId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -13580,6 +20318,126 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/advanced/buying-power", wrapper.GetAdvancedBuyingPower)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/margin/account", wrapper.GetAdvancedMarginAccount)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/margin/account", wrapper.PostAdvancedMarginAccount)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/margin/account/close", wrapper.PostAdvancedMarginAccountClose)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/margin/collateral/post", wrapper.PostAdvancedMarginCollateralPost)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/margin/collateral/release", wrapper.PostAdvancedMarginCollateralRelease)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/margin/borrow", wrapper.PostAdvancedMarginBorrow)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/margin/repay", wrapper.PostAdvancedMarginRepay)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/margin/leveraged-buys", wrapper.PostAdvancedMarginLeveragedBuys)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/margin/calls", wrapper.GetAdvancedMarginCalls)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/margin/cases", wrapper.GetAdvancedMarginCases)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/margin/cases/{marginCaseId}", wrapper.GetAdvancedMarginCasesMarginCaseId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/margin/stress-runs", wrapper.GetAdvancedMarginStressRuns)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/margin/stress-runs", wrapper.PostAdvancedMarginStressRuns)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/margin/stress-runs/{marginStressRunId}", wrapper.GetAdvancedMarginStressRunsMarginStressRunId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/margin/ops/facilities/seed", wrapper.PostAdvancedMarginOpsFacilitiesSeed)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/margin/ops/mark-to-market", wrapper.PostAdvancedMarginOpsMarkToMarket)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/margin/ops/queue", wrapper.GetAdvancedMarginOpsQueue)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/margin/ops/queue/run", wrapper.PostAdvancedMarginOpsQueueRun)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/margin/ops/liquidations", wrapper.PostAdvancedMarginOpsLiquidations)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/margin/ops/cases/{marginCaseId}/cover-deficit", wrapper.PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/margin/ops/stress-runs", wrapper.PostAdvancedMarginOpsStressRuns)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/margin/ops/calls", wrapper.GetAdvancedMarginOpsCalls)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/derivatives/policy", wrapper.GetAdvancedDerivativesPolicy)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/derivatives/contracts", wrapper.GetAdvancedDerivativesContracts)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/derivatives/contracts/{instrumentId}", wrapper.GetAdvancedDerivativesContractsInstrumentId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/derivatives/contracts/{instrumentId}/marks", wrapper.GetAdvancedDerivativesContractsInstrumentIdMarks)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/derivatives/contracts/{instrumentId}/marks", wrapper.PostAdvancedDerivativesContractsInstrumentIdMarks)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/derivatives/contracts/{instrumentId}/analytics", wrapper.GetAdvancedDerivativesContractsInstrumentIdAnalytics)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/derivatives/contracts/{instrumentId}/variation-margin-runs", wrapper.PostAdvancedDerivativesContractsInstrumentIdVariationMarginRuns)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/derivatives/contracts/{instrumentId}/funding-runs", wrapper.PostAdvancedDerivativesContractsInstrumentIdFundingRuns)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/derivatives/contracts/{instrumentId}/settlement", wrapper.PostAdvancedDerivativesContractsInstrumentIdSettlement)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/derivatives/positions", wrapper.GetAdvancedDerivativesPositions)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/derivatives/positions", wrapper.PostAdvancedDerivativesPositions)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/derivatives/positions/{positionId}", wrapper.GetAdvancedDerivativesPositionsPositionId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/derivatives/positions/{positionId}/close", wrapper.PostAdvancedDerivativesPositionsPositionIdClose)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/derivatives/positions/{positionId}/exercise", wrapper.PostAdvancedDerivativesPositionsPositionIdExercise)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/derivatives/flows", wrapper.GetAdvancedDerivativesFlows)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/derivatives/funding-accruals", wrapper.GetAdvancedDerivativesFundingAccruals)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/derivatives/clearing-house/funding", wrapper.PostAdvancedDerivativesClearingHouseFunding)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/derivatives/clearing-house/reconciliations", wrapper.PostAdvancedDerivativesClearingHouseReconciliations)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/advanced/equities/listings", wrapper.GetAdvancedEquitiesListings)
 	})
 	r.Group(func(r chi.Router) {
@@ -13707,6 +20565,60 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/advanced/transfers/faucet/allowance", wrapper.GetAdvancedTransfersFaucetAllowance)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/prediction-markets", wrapper.GetAdvancedPredictionMarkets)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/prediction-markets", wrapper.PostAdvancedPredictionMarkets)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/prediction-markets/oracle", wrapper.GetAdvancedPredictionMarketsOracle)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/prediction-markets/{marketId}", wrapper.GetAdvancedPredictionMarketsMarketId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/prediction-markets/{marketId}/books", wrapper.GetAdvancedPredictionMarketsMarketIdBooks)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/prediction-markets/{marketId}/positions", wrapper.GetAdvancedPredictionMarketsMarketIdPositions)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/prediction-markets/{marketId}/issuances", wrapper.PostAdvancedPredictionMarketsMarketIdIssuances)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/prediction-markets/{marketId}/redemptions", wrapper.PostAdvancedPredictionMarketsMarketIdRedemptions)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/prediction-markets/{marketId}/open", wrapper.PostAdvancedPredictionMarketsMarketIdOpen)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/prediction-markets/{marketId}/close", wrapper.PostAdvancedPredictionMarketsMarketIdClose)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/prediction-markets/{marketId}/request-resolution", wrapper.PostAdvancedPredictionMarketsMarketIdRequestResolution)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/prediction-markets/{marketId}/oracle-observations", wrapper.PostAdvancedPredictionMarketsMarketIdOracleObservations)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/prediction-markets/{marketId}/resolve", wrapper.PostAdvancedPredictionMarketsMarketIdResolve)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/prediction-markets/{marketId}/dispute", wrapper.PostAdvancedPredictionMarketsMarketIdDispute)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/prediction-markets/{marketId}/uphold", wrapper.PostAdvancedPredictionMarketsMarketIdUphold)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/prediction-markets/{marketId}/void", wrapper.PostAdvancedPredictionMarketsMarketIdVoid)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/prediction-markets/{marketId}/settle", wrapper.PostAdvancedPredictionMarketsMarketIdSettle)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/prediction-markets/{marketId}/reconcile", wrapper.PostAdvancedPredictionMarketsMarketIdReconcile)
 	})
 
 	return r
@@ -15410,6 +22322,1392 @@ func (response GetAdvancedCapabilities200JSONResponse) VisitGetAdvancedCapabilit
 	return err
 }
 
+type PostAdvancedDerivativesClearingHouseFundingRequestObject struct {
+	Params PostAdvancedDerivativesClearingHouseFundingParams
+	Body   *PostAdvancedDerivativesClearingHouseFundingJSONRequestBody
+}
+
+type PostAdvancedDerivativesClearingHouseFundingResponseObject interface {
+	VisitPostAdvancedDerivativesClearingHouseFundingResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedDerivativesClearingHouseFunding200JSONResponse DerivativeClearingFundingResult
+
+func (response PostAdvancedDerivativesClearingHouseFunding200JSONResponse) VisitPostAdvancedDerivativesClearingHouseFundingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesClearingHouseFunding400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedDerivativesClearingHouseFunding400ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesClearingHouseFundingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesClearingHouseFunding403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesClearingHouseFunding403ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesClearingHouseFundingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesClearingHouseFunding404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesClearingHouseFunding404ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesClearingHouseFundingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesClearingHouseFunding409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesClearingHouseFunding409ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesClearingHouseFundingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesClearingHouseFunding422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesClearingHouseFunding422ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesClearingHouseFundingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesClearingHouseReconciliationsRequestObject struct {
+	Params PostAdvancedDerivativesClearingHouseReconciliationsParams
+	Body   *PostAdvancedDerivativesClearingHouseReconciliationsJSONRequestBody
+}
+
+type PostAdvancedDerivativesClearingHouseReconciliationsResponseObject interface {
+	VisitPostAdvancedDerivativesClearingHouseReconciliationsResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedDerivativesClearingHouseReconciliations200JSONResponse DerivativeClearingReport
+
+func (response PostAdvancedDerivativesClearingHouseReconciliations200JSONResponse) VisitPostAdvancedDerivativesClearingHouseReconciliationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesClearingHouseReconciliations400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedDerivativesClearingHouseReconciliations400ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesClearingHouseReconciliationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesClearingHouseReconciliations403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesClearingHouseReconciliations403ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesClearingHouseReconciliationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesClearingHouseReconciliations404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesClearingHouseReconciliations404ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesClearingHouseReconciliationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesClearingHouseReconciliations422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesClearingHouseReconciliations422ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesClearingHouseReconciliationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedDerivativesContractsRequestObject struct {
+	Params GetAdvancedDerivativesContractsParams
+}
+
+type GetAdvancedDerivativesContractsResponseObject interface {
+	VisitGetAdvancedDerivativesContractsResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedDerivativesContracts200JSONResponse DerivativeContractList
+
+func (response GetAdvancedDerivativesContracts200JSONResponse) VisitGetAdvancedDerivativesContractsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedDerivativesContracts400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedDerivativesContracts400ApplicationProblemPlusJSONResponse) VisitGetAdvancedDerivativesContractsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedDerivativesContracts422ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedDerivativesContracts422ApplicationProblemPlusJSONResponse) VisitGetAdvancedDerivativesContractsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedDerivativesContractsInstrumentIdRequestObject struct {
+	InstrumentId UUID `json:"instrumentId"`
+}
+
+type GetAdvancedDerivativesContractsInstrumentIdResponseObject interface {
+	VisitGetAdvancedDerivativesContractsInstrumentIdResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedDerivativesContractsInstrumentId200JSONResponse DerivativeContract
+
+func (response GetAdvancedDerivativesContractsInstrumentId200JSONResponse) VisitGetAdvancedDerivativesContractsInstrumentIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedDerivativesContractsInstrumentId404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedDerivativesContractsInstrumentId404ApplicationProblemPlusJSONResponse) VisitGetAdvancedDerivativesContractsInstrumentIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedDerivativesContractsInstrumentId422ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedDerivativesContractsInstrumentId422ApplicationProblemPlusJSONResponse) VisitGetAdvancedDerivativesContractsInstrumentIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedDerivativesContractsInstrumentIdAnalyticsRequestObject struct {
+	InstrumentId UUID `json:"instrumentId"`
+	Params       GetAdvancedDerivativesContractsInstrumentIdAnalyticsParams
+}
+
+type GetAdvancedDerivativesContractsInstrumentIdAnalyticsResponseObject interface {
+	VisitGetAdvancedDerivativesContractsInstrumentIdAnalyticsResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedDerivativesContractsInstrumentIdAnalytics200JSONResponse DerivativeOptionAnalytics
+
+func (response GetAdvancedDerivativesContractsInstrumentIdAnalytics200JSONResponse) VisitGetAdvancedDerivativesContractsInstrumentIdAnalyticsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedDerivativesContractsInstrumentIdAnalytics400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedDerivativesContractsInstrumentIdAnalytics400ApplicationProblemPlusJSONResponse) VisitGetAdvancedDerivativesContractsInstrumentIdAnalyticsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedDerivativesContractsInstrumentIdAnalytics404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedDerivativesContractsInstrumentIdAnalytics404ApplicationProblemPlusJSONResponse) VisitGetAdvancedDerivativesContractsInstrumentIdAnalyticsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedDerivativesContractsInstrumentIdAnalytics422ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedDerivativesContractsInstrumentIdAnalytics422ApplicationProblemPlusJSONResponse) VisitGetAdvancedDerivativesContractsInstrumentIdAnalyticsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesContractsInstrumentIdFundingRunsRequestObject struct {
+	InstrumentId UUID `json:"instrumentId"`
+	Params       PostAdvancedDerivativesContractsInstrumentIdFundingRunsParams
+	Body         *PostAdvancedDerivativesContractsInstrumentIdFundingRunsJSONRequestBody
+}
+
+type PostAdvancedDerivativesContractsInstrumentIdFundingRunsResponseObject interface {
+	VisitPostAdvancedDerivativesContractsInstrumentIdFundingRunsResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedDerivativesContractsInstrumentIdFundingRuns200JSONResponse DerivativeRunResult
+
+func (response PostAdvancedDerivativesContractsInstrumentIdFundingRuns200JSONResponse) VisitPostAdvancedDerivativesContractsInstrumentIdFundingRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesContractsInstrumentIdFundingRuns400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedDerivativesContractsInstrumentIdFundingRuns400ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesContractsInstrumentIdFundingRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesContractsInstrumentIdFundingRuns403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesContractsInstrumentIdFundingRuns403ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesContractsInstrumentIdFundingRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesContractsInstrumentIdFundingRuns404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesContractsInstrumentIdFundingRuns404ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesContractsInstrumentIdFundingRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesContractsInstrumentIdFundingRuns409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesContractsInstrumentIdFundingRuns409ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesContractsInstrumentIdFundingRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesContractsInstrumentIdFundingRuns422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesContractsInstrumentIdFundingRuns422ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesContractsInstrumentIdFundingRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedDerivativesContractsInstrumentIdMarksRequestObject struct {
+	InstrumentId UUID `json:"instrumentId"`
+	Params       GetAdvancedDerivativesContractsInstrumentIdMarksParams
+}
+
+type GetAdvancedDerivativesContractsInstrumentIdMarksResponseObject interface {
+	VisitGetAdvancedDerivativesContractsInstrumentIdMarksResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedDerivativesContractsInstrumentIdMarks200JSONResponse DerivativeMarkPage
+
+func (response GetAdvancedDerivativesContractsInstrumentIdMarks200JSONResponse) VisitGetAdvancedDerivativesContractsInstrumentIdMarksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedDerivativesContractsInstrumentIdMarks400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedDerivativesContractsInstrumentIdMarks400ApplicationProblemPlusJSONResponse) VisitGetAdvancedDerivativesContractsInstrumentIdMarksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedDerivativesContractsInstrumentIdMarks404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedDerivativesContractsInstrumentIdMarks404ApplicationProblemPlusJSONResponse) VisitGetAdvancedDerivativesContractsInstrumentIdMarksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedDerivativesContractsInstrumentIdMarks422ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedDerivativesContractsInstrumentIdMarks422ApplicationProblemPlusJSONResponse) VisitGetAdvancedDerivativesContractsInstrumentIdMarksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesContractsInstrumentIdMarksRequestObject struct {
+	InstrumentId UUID `json:"instrumentId"`
+	Params       PostAdvancedDerivativesContractsInstrumentIdMarksParams
+	Body         *PostAdvancedDerivativesContractsInstrumentIdMarksJSONRequestBody
+}
+
+type PostAdvancedDerivativesContractsInstrumentIdMarksResponseObject interface {
+	VisitPostAdvancedDerivativesContractsInstrumentIdMarksResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedDerivativesContractsInstrumentIdMarks200JSONResponse DerivativeMark
+
+func (response PostAdvancedDerivativesContractsInstrumentIdMarks200JSONResponse) VisitPostAdvancedDerivativesContractsInstrumentIdMarksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesContractsInstrumentIdMarks400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedDerivativesContractsInstrumentIdMarks400ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesContractsInstrumentIdMarksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesContractsInstrumentIdMarks403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesContractsInstrumentIdMarks403ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesContractsInstrumentIdMarksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesContractsInstrumentIdMarks404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesContractsInstrumentIdMarks404ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesContractsInstrumentIdMarksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesContractsInstrumentIdMarks409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesContractsInstrumentIdMarks409ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesContractsInstrumentIdMarksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesContractsInstrumentIdMarks422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesContractsInstrumentIdMarks422ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesContractsInstrumentIdMarksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesContractsInstrumentIdSettlementRequestObject struct {
+	InstrumentId UUID `json:"instrumentId"`
+	Params       PostAdvancedDerivativesContractsInstrumentIdSettlementParams
+	Body         *PostAdvancedDerivativesContractsInstrumentIdSettlementJSONRequestBody
+}
+
+type PostAdvancedDerivativesContractsInstrumentIdSettlementResponseObject interface {
+	VisitPostAdvancedDerivativesContractsInstrumentIdSettlementResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedDerivativesContractsInstrumentIdSettlement200JSONResponse DerivativeSettlementResult
+
+func (response PostAdvancedDerivativesContractsInstrumentIdSettlement200JSONResponse) VisitPostAdvancedDerivativesContractsInstrumentIdSettlementResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesContractsInstrumentIdSettlement400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedDerivativesContractsInstrumentIdSettlement400ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesContractsInstrumentIdSettlementResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesContractsInstrumentIdSettlement403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesContractsInstrumentIdSettlement403ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesContractsInstrumentIdSettlementResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesContractsInstrumentIdSettlement404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesContractsInstrumentIdSettlement404ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesContractsInstrumentIdSettlementResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesContractsInstrumentIdSettlement409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesContractsInstrumentIdSettlement409ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesContractsInstrumentIdSettlementResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesContractsInstrumentIdSettlement422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesContractsInstrumentIdSettlement422ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesContractsInstrumentIdSettlementResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesContractsInstrumentIdVariationMarginRunsRequestObject struct {
+	InstrumentId UUID `json:"instrumentId"`
+	Params       PostAdvancedDerivativesContractsInstrumentIdVariationMarginRunsParams
+	Body         *PostAdvancedDerivativesContractsInstrumentIdVariationMarginRunsJSONRequestBody
+}
+
+type PostAdvancedDerivativesContractsInstrumentIdVariationMarginRunsResponseObject interface {
+	VisitPostAdvancedDerivativesContractsInstrumentIdVariationMarginRunsResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedDerivativesContractsInstrumentIdVariationMarginRuns200JSONResponse DerivativeRunResult
+
+func (response PostAdvancedDerivativesContractsInstrumentIdVariationMarginRuns200JSONResponse) VisitPostAdvancedDerivativesContractsInstrumentIdVariationMarginRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesContractsInstrumentIdVariationMarginRuns400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedDerivativesContractsInstrumentIdVariationMarginRuns400ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesContractsInstrumentIdVariationMarginRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesContractsInstrumentIdVariationMarginRuns403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesContractsInstrumentIdVariationMarginRuns403ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesContractsInstrumentIdVariationMarginRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesContractsInstrumentIdVariationMarginRuns404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesContractsInstrumentIdVariationMarginRuns404ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesContractsInstrumentIdVariationMarginRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesContractsInstrumentIdVariationMarginRuns409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesContractsInstrumentIdVariationMarginRuns409ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesContractsInstrumentIdVariationMarginRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesContractsInstrumentIdVariationMarginRuns422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesContractsInstrumentIdVariationMarginRuns422ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesContractsInstrumentIdVariationMarginRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedDerivativesFlowsRequestObject struct {
+	Params GetAdvancedDerivativesFlowsParams
+}
+
+type GetAdvancedDerivativesFlowsResponseObject interface {
+	VisitGetAdvancedDerivativesFlowsResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedDerivativesFlows200JSONResponse DerivativeFlowPage
+
+func (response GetAdvancedDerivativesFlows200JSONResponse) VisitGetAdvancedDerivativesFlowsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedDerivativesFlows400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedDerivativesFlows400ApplicationProblemPlusJSONResponse) VisitGetAdvancedDerivativesFlowsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedDerivativesFlows403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedDerivativesFlows403ApplicationProblemPlusJSONResponse) VisitGetAdvancedDerivativesFlowsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedDerivativesFlows422ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedDerivativesFlows422ApplicationProblemPlusJSONResponse) VisitGetAdvancedDerivativesFlowsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedDerivativesFundingAccrualsRequestObject struct {
+	Params GetAdvancedDerivativesFundingAccrualsParams
+}
+
+type GetAdvancedDerivativesFundingAccrualsResponseObject interface {
+	VisitGetAdvancedDerivativesFundingAccrualsResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedDerivativesFundingAccruals200JSONResponse DerivativeFundingAccrualPage
+
+func (response GetAdvancedDerivativesFundingAccruals200JSONResponse) VisitGetAdvancedDerivativesFundingAccrualsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedDerivativesFundingAccruals400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedDerivativesFundingAccruals400ApplicationProblemPlusJSONResponse) VisitGetAdvancedDerivativesFundingAccrualsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedDerivativesFundingAccruals403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedDerivativesFundingAccruals403ApplicationProblemPlusJSONResponse) VisitGetAdvancedDerivativesFundingAccrualsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedDerivativesFundingAccruals422ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedDerivativesFundingAccruals422ApplicationProblemPlusJSONResponse) VisitGetAdvancedDerivativesFundingAccrualsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedDerivativesPolicyRequestObject struct {
+}
+
+type GetAdvancedDerivativesPolicyResponseObject interface {
+	VisitGetAdvancedDerivativesPolicyResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedDerivativesPolicy200JSONResponse DerivativePolicy
+
+func (response GetAdvancedDerivativesPolicy200JSONResponse) VisitGetAdvancedDerivativesPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedDerivativesPolicy422ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedDerivativesPolicy422ApplicationProblemPlusJSONResponse) VisitGetAdvancedDerivativesPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedDerivativesPositionsRequestObject struct {
+	Params GetAdvancedDerivativesPositionsParams
+}
+
+type GetAdvancedDerivativesPositionsResponseObject interface {
+	VisitGetAdvancedDerivativesPositionsResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedDerivativesPositions200JSONResponse DerivativePositionPage
+
+func (response GetAdvancedDerivativesPositions200JSONResponse) VisitGetAdvancedDerivativesPositionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedDerivativesPositions400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedDerivativesPositions400ApplicationProblemPlusJSONResponse) VisitGetAdvancedDerivativesPositionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedDerivativesPositions403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedDerivativesPositions403ApplicationProblemPlusJSONResponse) VisitGetAdvancedDerivativesPositionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedDerivativesPositions422ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedDerivativesPositions422ApplicationProblemPlusJSONResponse) VisitGetAdvancedDerivativesPositionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesPositionsRequestObject struct {
+	Params PostAdvancedDerivativesPositionsParams
+	Body   *PostAdvancedDerivativesPositionsJSONRequestBody
+}
+
+type PostAdvancedDerivativesPositionsResponseObject interface {
+	VisitPostAdvancedDerivativesPositionsResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedDerivativesPositions200JSONResponse DerivativeTradeResult
+
+func (response PostAdvancedDerivativesPositions200JSONResponse) VisitPostAdvancedDerivativesPositionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesPositions201JSONResponse DerivativeTradeResult
+
+func (response PostAdvancedDerivativesPositions201JSONResponse) VisitPostAdvancedDerivativesPositionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesPositions400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedDerivativesPositions400ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesPositionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesPositions403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesPositions403ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesPositionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesPositions404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesPositions404ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesPositionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesPositions409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesPositions409ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesPositionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesPositions422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesPositions422ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesPositionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedDerivativesPositionsPositionIdRequestObject struct {
+	PositionId UUID `json:"positionId"`
+}
+
+type GetAdvancedDerivativesPositionsPositionIdResponseObject interface {
+	VisitGetAdvancedDerivativesPositionsPositionIdResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedDerivativesPositionsPositionId200JSONResponse DerivativePosition
+
+func (response GetAdvancedDerivativesPositionsPositionId200JSONResponse) VisitGetAdvancedDerivativesPositionsPositionIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedDerivativesPositionsPositionId404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedDerivativesPositionsPositionId404ApplicationProblemPlusJSONResponse) VisitGetAdvancedDerivativesPositionsPositionIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedDerivativesPositionsPositionId422ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedDerivativesPositionsPositionId422ApplicationProblemPlusJSONResponse) VisitGetAdvancedDerivativesPositionsPositionIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesPositionsPositionIdCloseRequestObject struct {
+	PositionId UUID `json:"positionId"`
+	Params     PostAdvancedDerivativesPositionsPositionIdCloseParams
+	Body       *PostAdvancedDerivativesPositionsPositionIdCloseJSONRequestBody
+}
+
+type PostAdvancedDerivativesPositionsPositionIdCloseResponseObject interface {
+	VisitPostAdvancedDerivativesPositionsPositionIdCloseResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedDerivativesPositionsPositionIdClose200JSONResponse DerivativeTradeResult
+
+func (response PostAdvancedDerivativesPositionsPositionIdClose200JSONResponse) VisitPostAdvancedDerivativesPositionsPositionIdCloseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesPositionsPositionIdClose400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedDerivativesPositionsPositionIdClose400ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesPositionsPositionIdCloseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesPositionsPositionIdClose403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesPositionsPositionIdClose403ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesPositionsPositionIdCloseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesPositionsPositionIdClose404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesPositionsPositionIdClose404ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesPositionsPositionIdCloseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesPositionsPositionIdClose409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesPositionsPositionIdClose409ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesPositionsPositionIdCloseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesPositionsPositionIdClose422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesPositionsPositionIdClose422ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesPositionsPositionIdCloseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesPositionsPositionIdExerciseRequestObject struct {
+	PositionId UUID `json:"positionId"`
+	Params     PostAdvancedDerivativesPositionsPositionIdExerciseParams
+	Body       *PostAdvancedDerivativesPositionsPositionIdExerciseJSONRequestBody
+}
+
+type PostAdvancedDerivativesPositionsPositionIdExerciseResponseObject interface {
+	VisitPostAdvancedDerivativesPositionsPositionIdExerciseResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedDerivativesPositionsPositionIdExercise200JSONResponse DerivativeTradeResult
+
+func (response PostAdvancedDerivativesPositionsPositionIdExercise200JSONResponse) VisitPostAdvancedDerivativesPositionsPositionIdExerciseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesPositionsPositionIdExercise400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedDerivativesPositionsPositionIdExercise400ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesPositionsPositionIdExerciseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesPositionsPositionIdExercise403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesPositionsPositionIdExercise403ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesPositionsPositionIdExerciseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesPositionsPositionIdExercise404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesPositionsPositionIdExercise404ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesPositionsPositionIdExerciseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesPositionsPositionIdExercise409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesPositionsPositionIdExercise409ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesPositionsPositionIdExerciseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedDerivativesPositionsPositionIdExercise422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedDerivativesPositionsPositionIdExercise422ApplicationProblemPlusJSONResponse) VisitPostAdvancedDerivativesPositionsPositionIdExerciseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetAdvancedEffectsRequestObject struct {
 	Params GetAdvancedEffectsParams
 }
@@ -16788,6 +25086,2554 @@ func (response GetAdvancedIntentsIntentId404ApplicationProblemPlusJSONResponse) 
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginAccountRequestObject struct {
+	Params GetAdvancedMarginAccountParams
+}
+
+type GetAdvancedMarginAccountResponseObject interface {
+	VisitGetAdvancedMarginAccountResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedMarginAccount200JSONResponse MarginAccountDetail
+
+func (response GetAdvancedMarginAccount200JSONResponse) VisitGetAdvancedMarginAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginAccount403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedMarginAccount403ApplicationProblemPlusJSONResponse) VisitGetAdvancedMarginAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginAccount404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedMarginAccount404ApplicationProblemPlusJSONResponse) VisitGetAdvancedMarginAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginAccount409ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedMarginAccount409ApplicationProblemPlusJSONResponse) VisitGetAdvancedMarginAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginAccountRequestObject struct {
+	Params PostAdvancedMarginAccountParams
+	Body   *PostAdvancedMarginAccountJSONRequestBody
+}
+
+type PostAdvancedMarginAccountResponseObject interface {
+	VisitPostAdvancedMarginAccountResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedMarginAccount200JSONResponse MarginAccount
+
+func (response PostAdvancedMarginAccount200JSONResponse) VisitPostAdvancedMarginAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginAccount400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedMarginAccount400ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginAccount403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginAccount403ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginAccount404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginAccount404ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginAccount409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginAccount409ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginAccount422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginAccount422ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginAccountCloseRequestObject struct {
+	Params PostAdvancedMarginAccountCloseParams
+	Body   *PostAdvancedMarginAccountCloseJSONRequestBody
+}
+
+type PostAdvancedMarginAccountCloseResponseObject interface {
+	VisitPostAdvancedMarginAccountCloseResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedMarginAccountClose200JSONResponse MarginAccount
+
+func (response PostAdvancedMarginAccountClose200JSONResponse) VisitPostAdvancedMarginAccountCloseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginAccountClose400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedMarginAccountClose400ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginAccountCloseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginAccountClose403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginAccountClose403ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginAccountCloseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginAccountClose404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginAccountClose404ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginAccountCloseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginAccountClose409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginAccountClose409ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginAccountCloseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginBorrowRequestObject struct {
+	Params PostAdvancedMarginBorrowParams
+	Body   *PostAdvancedMarginBorrowJSONRequestBody
+}
+
+type PostAdvancedMarginBorrowResponseObject interface {
+	VisitPostAdvancedMarginBorrowResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedMarginBorrow200JSONResponse MarginLoanResult
+
+func (response PostAdvancedMarginBorrow200JSONResponse) VisitPostAdvancedMarginBorrowResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginBorrow400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedMarginBorrow400ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginBorrowResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginBorrow403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginBorrow403ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginBorrowResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginBorrow404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginBorrow404ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginBorrowResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginBorrow409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginBorrow409ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginBorrowResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginBorrow422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginBorrow422ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginBorrowResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginCallsRequestObject struct {
+	Params GetAdvancedMarginCallsParams
+}
+
+type GetAdvancedMarginCallsResponseObject interface {
+	VisitGetAdvancedMarginCallsResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedMarginCalls200JSONResponse MarginCallPage
+
+func (response GetAdvancedMarginCalls200JSONResponse) VisitGetAdvancedMarginCallsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginCalls400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedMarginCalls400ApplicationProblemPlusJSONResponse) VisitGetAdvancedMarginCallsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginCalls403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedMarginCalls403ApplicationProblemPlusJSONResponse) VisitGetAdvancedMarginCallsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginCasesRequestObject struct {
+	Params GetAdvancedMarginCasesParams
+}
+
+type GetAdvancedMarginCasesResponseObject interface {
+	VisitGetAdvancedMarginCasesResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedMarginCases200JSONResponse MarginCasePage
+
+func (response GetAdvancedMarginCases200JSONResponse) VisitGetAdvancedMarginCasesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginCases400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedMarginCases400ApplicationProblemPlusJSONResponse) VisitGetAdvancedMarginCasesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginCases403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedMarginCases403ApplicationProblemPlusJSONResponse) VisitGetAdvancedMarginCasesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginCasesMarginCaseIdRequestObject struct {
+	MarginCaseId UUID `json:"marginCaseId"`
+}
+
+type GetAdvancedMarginCasesMarginCaseIdResponseObject interface {
+	VisitGetAdvancedMarginCasesMarginCaseIdResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedMarginCasesMarginCaseId200JSONResponse MarginCaseDetail
+
+func (response GetAdvancedMarginCasesMarginCaseId200JSONResponse) VisitGetAdvancedMarginCasesMarginCaseIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginCasesMarginCaseId404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedMarginCasesMarginCaseId404ApplicationProblemPlusJSONResponse) VisitGetAdvancedMarginCasesMarginCaseIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginCollateralPostRequestObject struct {
+	Params PostAdvancedMarginCollateralPostParams
+	Body   *PostAdvancedMarginCollateralPostJSONRequestBody
+}
+
+type PostAdvancedMarginCollateralPostResponseObject interface {
+	VisitPostAdvancedMarginCollateralPostResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedMarginCollateralPost200JSONResponse MarginCollateralResult
+
+func (response PostAdvancedMarginCollateralPost200JSONResponse) VisitPostAdvancedMarginCollateralPostResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginCollateralPost400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedMarginCollateralPost400ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginCollateralPostResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginCollateralPost403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginCollateralPost403ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginCollateralPostResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginCollateralPost404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginCollateralPost404ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginCollateralPostResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginCollateralPost409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginCollateralPost409ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginCollateralPostResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginCollateralPost422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginCollateralPost422ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginCollateralPostResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginCollateralReleaseRequestObject struct {
+	Params PostAdvancedMarginCollateralReleaseParams
+	Body   *PostAdvancedMarginCollateralReleaseJSONRequestBody
+}
+
+type PostAdvancedMarginCollateralReleaseResponseObject interface {
+	VisitPostAdvancedMarginCollateralReleaseResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedMarginCollateralRelease200JSONResponse MarginCollateralResult
+
+func (response PostAdvancedMarginCollateralRelease200JSONResponse) VisitPostAdvancedMarginCollateralReleaseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginCollateralRelease400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedMarginCollateralRelease400ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginCollateralReleaseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginCollateralRelease403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginCollateralRelease403ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginCollateralReleaseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginCollateralRelease404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginCollateralRelease404ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginCollateralReleaseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginCollateralRelease409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginCollateralRelease409ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginCollateralReleaseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginCollateralRelease422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginCollateralRelease422ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginCollateralReleaseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginLeveragedBuysRequestObject struct {
+	Params PostAdvancedMarginLeveragedBuysParams
+	Body   *PostAdvancedMarginLeveragedBuysJSONRequestBody
+}
+
+type PostAdvancedMarginLeveragedBuysResponseObject interface {
+	VisitPostAdvancedMarginLeveragedBuysResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedMarginLeveragedBuys200JSONResponse MarginLeveragedBuyResult
+
+func (response PostAdvancedMarginLeveragedBuys200JSONResponse) VisitPostAdvancedMarginLeveragedBuysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginLeveragedBuys400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedMarginLeveragedBuys400ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginLeveragedBuysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginLeveragedBuys403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginLeveragedBuys403ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginLeveragedBuysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginLeveragedBuys404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginLeveragedBuys404ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginLeveragedBuysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginLeveragedBuys409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginLeveragedBuys409ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginLeveragedBuysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginLeveragedBuys422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginLeveragedBuys422ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginLeveragedBuysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginOpsCallsRequestObject struct {
+	Params GetAdvancedMarginOpsCallsParams
+}
+
+type GetAdvancedMarginOpsCallsResponseObject interface {
+	VisitGetAdvancedMarginOpsCallsResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedMarginOpsCalls200JSONResponse MarginCallPage
+
+func (response GetAdvancedMarginOpsCalls200JSONResponse) VisitGetAdvancedMarginOpsCallsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginOpsCalls400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedMarginOpsCalls400ApplicationProblemPlusJSONResponse) VisitGetAdvancedMarginOpsCallsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginOpsCalls403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedMarginOpsCalls403ApplicationProblemPlusJSONResponse) VisitGetAdvancedMarginOpsCallsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitRequestObject struct {
+	MarginCaseId UUID `json:"marginCaseId"`
+	Params       PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitParams
+}
+
+type PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitResponseObject interface {
+	VisitPostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit200JSONResponse MarginDeficitResult
+
+func (response PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit200JSONResponse) VisitPostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit400ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit403ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit404ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit409ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit422ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsFacilitiesSeedRequestObject struct {
+	Params PostAdvancedMarginOpsFacilitiesSeedParams
+	Body   *PostAdvancedMarginOpsFacilitiesSeedJSONRequestBody
+}
+
+type PostAdvancedMarginOpsFacilitiesSeedResponseObject interface {
+	VisitPostAdvancedMarginOpsFacilitiesSeedResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedMarginOpsFacilitiesSeed200JSONResponse MarginFacilities
+
+func (response PostAdvancedMarginOpsFacilitiesSeed200JSONResponse) VisitPostAdvancedMarginOpsFacilitiesSeedResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsFacilitiesSeed400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedMarginOpsFacilitiesSeed400ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginOpsFacilitiesSeedResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsFacilitiesSeed403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginOpsFacilitiesSeed403ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginOpsFacilitiesSeedResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsFacilitiesSeed409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginOpsFacilitiesSeed409ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginOpsFacilitiesSeedResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsLiquidationsRequestObject struct {
+	Params PostAdvancedMarginOpsLiquidationsParams
+	Body   *PostAdvancedMarginOpsLiquidationsJSONRequestBody
+}
+
+type PostAdvancedMarginOpsLiquidationsResponseObject interface {
+	VisitPostAdvancedMarginOpsLiquidationsResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedMarginOpsLiquidations200JSONResponse MarginLiquidationResult
+
+func (response PostAdvancedMarginOpsLiquidations200JSONResponse) VisitPostAdvancedMarginOpsLiquidationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsLiquidations400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedMarginOpsLiquidations400ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginOpsLiquidationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsLiquidations403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginOpsLiquidations403ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginOpsLiquidationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsLiquidations404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginOpsLiquidations404ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginOpsLiquidationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsLiquidations409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginOpsLiquidations409ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginOpsLiquidationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsMarkToMarketRequestObject struct {
+	Params PostAdvancedMarginOpsMarkToMarketParams
+	Body   *PostAdvancedMarginOpsMarkToMarketJSONRequestBody
+}
+
+type PostAdvancedMarginOpsMarkToMarketResponseObject interface {
+	VisitPostAdvancedMarginOpsMarkToMarketResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedMarginOpsMarkToMarket200JSONResponse MarginMarkToMarketResult
+
+func (response PostAdvancedMarginOpsMarkToMarket200JSONResponse) VisitPostAdvancedMarginOpsMarkToMarketResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsMarkToMarket403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedMarginOpsMarkToMarket403ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginOpsMarkToMarketResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginOpsQueueRequestObject struct {
+	Params GetAdvancedMarginOpsQueueParams
+}
+
+type GetAdvancedMarginOpsQueueResponseObject interface {
+	VisitGetAdvancedMarginOpsQueueResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedMarginOpsQueue200JSONResponse MarginQueue
+
+func (response GetAdvancedMarginOpsQueue200JSONResponse) VisitGetAdvancedMarginOpsQueueResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginOpsQueue403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedMarginOpsQueue403ApplicationProblemPlusJSONResponse) VisitGetAdvancedMarginOpsQueueResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsQueueRunRequestObject struct {
+	Params PostAdvancedMarginOpsQueueRunParams
+	Body   *PostAdvancedMarginOpsQueueRunJSONRequestBody
+}
+
+type PostAdvancedMarginOpsQueueRunResponseObject interface {
+	VisitPostAdvancedMarginOpsQueueRunResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedMarginOpsQueueRun200JSONResponse MarginQueueRunResult
+
+func (response PostAdvancedMarginOpsQueueRun200JSONResponse) VisitPostAdvancedMarginOpsQueueRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsQueueRun403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedMarginOpsQueueRun403ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginOpsQueueRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsStressRunsRequestObject struct {
+	Params PostAdvancedMarginOpsStressRunsParams
+	Body   *PostAdvancedMarginOpsStressRunsJSONRequestBody
+}
+
+type PostAdvancedMarginOpsStressRunsResponseObject interface {
+	VisitPostAdvancedMarginOpsStressRunsResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedMarginOpsStressRuns200JSONResponse MarginStressRun
+
+func (response PostAdvancedMarginOpsStressRuns200JSONResponse) VisitPostAdvancedMarginOpsStressRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsStressRuns400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedMarginOpsStressRuns400ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginOpsStressRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsStressRuns403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginOpsStressRuns403ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginOpsStressRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsStressRuns404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginOpsStressRuns404ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginOpsStressRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginRepayRequestObject struct {
+	Params PostAdvancedMarginRepayParams
+	Body   *PostAdvancedMarginRepayJSONRequestBody
+}
+
+type PostAdvancedMarginRepayResponseObject interface {
+	VisitPostAdvancedMarginRepayResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedMarginRepay200JSONResponse MarginLoanResult
+
+func (response PostAdvancedMarginRepay200JSONResponse) VisitPostAdvancedMarginRepayResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginRepay400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedMarginRepay400ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginRepayResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginRepay403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginRepay403ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginRepayResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginRepay404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginRepay404ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginRepayResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginRepay409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginRepay409ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginRepayResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginRepay422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginRepay422ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginRepayResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginStressRunsRequestObject struct {
+	Params GetAdvancedMarginStressRunsParams
+}
+
+type GetAdvancedMarginStressRunsResponseObject interface {
+	VisitGetAdvancedMarginStressRunsResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedMarginStressRuns200JSONResponse MarginStressRunPage
+
+func (response GetAdvancedMarginStressRuns200JSONResponse) VisitGetAdvancedMarginStressRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginStressRuns400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedMarginStressRuns400ApplicationProblemPlusJSONResponse) VisitGetAdvancedMarginStressRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginStressRuns403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedMarginStressRuns403ApplicationProblemPlusJSONResponse) VisitGetAdvancedMarginStressRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginStressRunsRequestObject struct {
+	Params PostAdvancedMarginStressRunsParams
+	Body   *PostAdvancedMarginStressRunsJSONRequestBody
+}
+
+type PostAdvancedMarginStressRunsResponseObject interface {
+	VisitPostAdvancedMarginStressRunsResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedMarginStressRuns200JSONResponse MarginStressRun
+
+func (response PostAdvancedMarginStressRuns200JSONResponse) VisitPostAdvancedMarginStressRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginStressRuns400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedMarginStressRuns400ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginStressRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginStressRuns403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginStressRuns403ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginStressRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginStressRuns404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginStressRuns404ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginStressRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginStressRuns409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginStressRuns409ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginStressRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginStressRunsMarginStressRunIdRequestObject struct {
+	MarginStressRunId UUID `json:"marginStressRunId"`
+}
+
+type GetAdvancedMarginStressRunsMarginStressRunIdResponseObject interface {
+	VisitGetAdvancedMarginStressRunsMarginStressRunIdResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedMarginStressRunsMarginStressRunId200JSONResponse MarginStressRun
+
+func (response GetAdvancedMarginStressRunsMarginStressRunId200JSONResponse) VisitGetAdvancedMarginStressRunsMarginStressRunIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginStressRunsMarginStressRunId404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedMarginStressRunsMarginStressRunId404ApplicationProblemPlusJSONResponse) VisitGetAdvancedMarginStressRunsMarginStressRunIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedPredictionMarketsRequestObject struct {
+	Params GetAdvancedPredictionMarketsParams
+}
+
+type GetAdvancedPredictionMarketsResponseObject interface {
+	VisitGetAdvancedPredictionMarketsResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedPredictionMarkets200JSONResponse PredictionMarketList
+
+func (response GetAdvancedPredictionMarkets200JSONResponse) VisitGetAdvancedPredictionMarketsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedPredictionMarkets400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedPredictionMarkets400ApplicationProblemPlusJSONResponse) VisitGetAdvancedPredictionMarketsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsRequestObject struct {
+	Params PostAdvancedPredictionMarketsParams
+	Body   *PostAdvancedPredictionMarketsJSONRequestBody
+}
+
+type PostAdvancedPredictionMarketsResponseObject interface {
+	VisitPostAdvancedPredictionMarketsResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedPredictionMarkets200JSONResponse PredictionMarket
+
+func (response PostAdvancedPredictionMarkets200JSONResponse) VisitPostAdvancedPredictionMarketsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarkets201JSONResponse PredictionMarket
+
+func (response PostAdvancedPredictionMarkets201JSONResponse) VisitPostAdvancedPredictionMarketsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarkets403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedPredictionMarkets403ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarkets409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarkets409ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarkets422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarkets422ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedPredictionMarketsOracleRequestObject struct {
+}
+
+type GetAdvancedPredictionMarketsOracleResponseObject interface {
+	VisitGetAdvancedPredictionMarketsOracleResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedPredictionMarketsOracle200JSONResponse PredictionOracle
+
+func (response GetAdvancedPredictionMarketsOracle200JSONResponse) VisitGetAdvancedPredictionMarketsOracleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedPredictionMarketsOracle503ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedPredictionMarketsOracle503ApplicationProblemPlusJSONResponse) VisitGetAdvancedPredictionMarketsOracleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedPredictionMarketsMarketIdRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+}
+
+type GetAdvancedPredictionMarketsMarketIdResponseObject interface {
+	VisitGetAdvancedPredictionMarketsMarketIdResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedPredictionMarketsMarketId200JSONResponse PredictionMarketDetail
+
+func (response GetAdvancedPredictionMarketsMarketId200JSONResponse) VisitGetAdvancedPredictionMarketsMarketIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedPredictionMarketsMarketId404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedPredictionMarketsMarketId404ApplicationProblemPlusJSONResponse) VisitGetAdvancedPredictionMarketsMarketIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedPredictionMarketsMarketIdBooksRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+}
+
+type GetAdvancedPredictionMarketsMarketIdBooksResponseObject interface {
+	VisitGetAdvancedPredictionMarketsMarketIdBooksResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedPredictionMarketsMarketIdBooks200JSONResponse PredictionEscrowBooks
+
+func (response GetAdvancedPredictionMarketsMarketIdBooks200JSONResponse) VisitGetAdvancedPredictionMarketsMarketIdBooksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedPredictionMarketsMarketIdBooks404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedPredictionMarketsMarketIdBooks404ApplicationProblemPlusJSONResponse) VisitGetAdvancedPredictionMarketsMarketIdBooksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdCloseRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+	Params   PostAdvancedPredictionMarketsMarketIdCloseParams
+}
+
+type PostAdvancedPredictionMarketsMarketIdCloseResponseObject interface {
+	VisitPostAdvancedPredictionMarketsMarketIdCloseResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedPredictionMarketsMarketIdClose200JSONResponse PredictionMarket
+
+func (response PostAdvancedPredictionMarketsMarketIdClose200JSONResponse) VisitPostAdvancedPredictionMarketsMarketIdCloseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdClose404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedPredictionMarketsMarketIdClose404ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdCloseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdClose409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdClose409ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdCloseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdDisputeRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+	Params   PostAdvancedPredictionMarketsMarketIdDisputeParams
+	Body     *PostAdvancedPredictionMarketsMarketIdDisputeJSONRequestBody
+}
+
+type PostAdvancedPredictionMarketsMarketIdDisputeResponseObject interface {
+	VisitPostAdvancedPredictionMarketsMarketIdDisputeResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedPredictionMarketsMarketIdDispute200JSONResponse PredictionDisputeResult
+
+func (response PostAdvancedPredictionMarketsMarketIdDispute200JSONResponse) VisitPostAdvancedPredictionMarketsMarketIdDisputeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdDispute404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedPredictionMarketsMarketIdDispute404ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdDisputeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdDispute409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdDispute409ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdDisputeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdIssuancesRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+	Params   PostAdvancedPredictionMarketsMarketIdIssuancesParams
+	Body     *PostAdvancedPredictionMarketsMarketIdIssuancesJSONRequestBody
+}
+
+type PostAdvancedPredictionMarketsMarketIdIssuancesResponseObject interface {
+	VisitPostAdvancedPredictionMarketsMarketIdIssuancesResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedPredictionMarketsMarketIdIssuances200JSONResponse PredictionSetResult
+
+func (response PostAdvancedPredictionMarketsMarketIdIssuances200JSONResponse) VisitPostAdvancedPredictionMarketsMarketIdIssuancesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdIssuances403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedPredictionMarketsMarketIdIssuances403ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdIssuancesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdIssuances404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdIssuances404ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdIssuancesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdIssuances409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdIssuances409ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdIssuancesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdIssuances422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdIssuances422ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdIssuancesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdOpenRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+	Params   PostAdvancedPredictionMarketsMarketIdOpenParams
+}
+
+type PostAdvancedPredictionMarketsMarketIdOpenResponseObject interface {
+	VisitPostAdvancedPredictionMarketsMarketIdOpenResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedPredictionMarketsMarketIdOpen200JSONResponse PredictionMarket
+
+func (response PostAdvancedPredictionMarketsMarketIdOpen200JSONResponse) VisitPostAdvancedPredictionMarketsMarketIdOpenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdOpen404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedPredictionMarketsMarketIdOpen404ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdOpenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdOpen409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdOpen409ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdOpenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdOracleObservationsRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+	Params   PostAdvancedPredictionMarketsMarketIdOracleObservationsParams
+	Body     *PostAdvancedPredictionMarketsMarketIdOracleObservationsJSONRequestBody
+}
+
+type PostAdvancedPredictionMarketsMarketIdOracleObservationsResponseObject interface {
+	VisitPostAdvancedPredictionMarketsMarketIdOracleObservationsResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedPredictionMarketsMarketIdOracleObservations200JSONResponse PredictionOracleObservation
+
+func (response PostAdvancedPredictionMarketsMarketIdOracleObservations200JSONResponse) VisitPostAdvancedPredictionMarketsMarketIdOracleObservationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdOracleObservations404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedPredictionMarketsMarketIdOracleObservations404ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdOracleObservationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdOracleObservations422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdOracleObservations422ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdOracleObservationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdOracleObservations503ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdOracleObservations503ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdOracleObservationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedPredictionMarketsMarketIdPositionsRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+	Params   GetAdvancedPredictionMarketsMarketIdPositionsParams
+}
+
+type GetAdvancedPredictionMarketsMarketIdPositionsResponseObject interface {
+	VisitGetAdvancedPredictionMarketsMarketIdPositionsResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedPredictionMarketsMarketIdPositions200JSONResponse PredictionPositionList
+
+func (response GetAdvancedPredictionMarketsMarketIdPositions200JSONResponse) VisitGetAdvancedPredictionMarketsMarketIdPositionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedPredictionMarketsMarketIdPositions403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedPredictionMarketsMarketIdPositions403ApplicationProblemPlusJSONResponse) VisitGetAdvancedPredictionMarketsMarketIdPositionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedPredictionMarketsMarketIdPositions404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedPredictionMarketsMarketIdPositions404ApplicationProblemPlusJSONResponse) VisitGetAdvancedPredictionMarketsMarketIdPositionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdReconcileRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+	Params   PostAdvancedPredictionMarketsMarketIdReconcileParams
+}
+
+type PostAdvancedPredictionMarketsMarketIdReconcileResponseObject interface {
+	VisitPostAdvancedPredictionMarketsMarketIdReconcileResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedPredictionMarketsMarketIdReconcile200JSONResponse PredictionEscrowReconciliation
+
+func (response PostAdvancedPredictionMarketsMarketIdReconcile200JSONResponse) VisitPostAdvancedPredictionMarketsMarketIdReconcileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdReconcile404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedPredictionMarketsMarketIdReconcile404ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdReconcileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdRedemptionsRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+	Params   PostAdvancedPredictionMarketsMarketIdRedemptionsParams
+	Body     *PostAdvancedPredictionMarketsMarketIdRedemptionsJSONRequestBody
+}
+
+type PostAdvancedPredictionMarketsMarketIdRedemptionsResponseObject interface {
+	VisitPostAdvancedPredictionMarketsMarketIdRedemptionsResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedPredictionMarketsMarketIdRedemptions200JSONResponse PredictionSetResult
+
+func (response PostAdvancedPredictionMarketsMarketIdRedemptions200JSONResponse) VisitPostAdvancedPredictionMarketsMarketIdRedemptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdRedemptions403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedPredictionMarketsMarketIdRedemptions403ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdRedemptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdRedemptions404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdRedemptions404ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdRedemptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdRedemptions409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdRedemptions409ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdRedemptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdRedemptions422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdRedemptions422ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdRedemptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdRequestResolutionRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+	Params   PostAdvancedPredictionMarketsMarketIdRequestResolutionParams
+}
+
+type PostAdvancedPredictionMarketsMarketIdRequestResolutionResponseObject interface {
+	VisitPostAdvancedPredictionMarketsMarketIdRequestResolutionResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedPredictionMarketsMarketIdRequestResolution200JSONResponse PredictionMarket
+
+func (response PostAdvancedPredictionMarketsMarketIdRequestResolution200JSONResponse) VisitPostAdvancedPredictionMarketsMarketIdRequestResolutionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdRequestResolution404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedPredictionMarketsMarketIdRequestResolution404ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdRequestResolutionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdRequestResolution409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdRequestResolution409ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdRequestResolutionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdResolveRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+	Params   PostAdvancedPredictionMarketsMarketIdResolveParams
+	Body     *PostAdvancedPredictionMarketsMarketIdResolveJSONRequestBody
+}
+
+type PostAdvancedPredictionMarketsMarketIdResolveResponseObject interface {
+	VisitPostAdvancedPredictionMarketsMarketIdResolveResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedPredictionMarketsMarketIdResolve200JSONResponse PredictionResolutionResult
+
+func (response PostAdvancedPredictionMarketsMarketIdResolve200JSONResponse) VisitPostAdvancedPredictionMarketsMarketIdResolveResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdResolve403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedPredictionMarketsMarketIdResolve403ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdResolveResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdResolve404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdResolve404ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdResolveResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdResolve409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdResolve409ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdResolveResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdResolve503ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdResolve503ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdResolveResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdSettleRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+	Params   PostAdvancedPredictionMarketsMarketIdSettleParams
+}
+
+type PostAdvancedPredictionMarketsMarketIdSettleResponseObject interface {
+	VisitPostAdvancedPredictionMarketsMarketIdSettleResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedPredictionMarketsMarketIdSettle200JSONResponse PredictionSettlementResult
+
+func (response PostAdvancedPredictionMarketsMarketIdSettle200JSONResponse) VisitPostAdvancedPredictionMarketsMarketIdSettleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdSettle404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedPredictionMarketsMarketIdSettle404ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdSettleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdSettle409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdSettle409ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdSettleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdUpholdRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+	Params   PostAdvancedPredictionMarketsMarketIdUpholdParams
+	Body     *PostAdvancedPredictionMarketsMarketIdUpholdJSONRequestBody
+}
+
+type PostAdvancedPredictionMarketsMarketIdUpholdResponseObject interface {
+	VisitPostAdvancedPredictionMarketsMarketIdUpholdResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedPredictionMarketsMarketIdUphold200JSONResponse PredictionResolutionResult
+
+func (response PostAdvancedPredictionMarketsMarketIdUphold200JSONResponse) VisitPostAdvancedPredictionMarketsMarketIdUpholdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdUphold403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedPredictionMarketsMarketIdUphold403ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdUpholdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdUphold404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdUphold404ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdUpholdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdUphold409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdUphold409ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdUpholdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdVoidRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+	Params   PostAdvancedPredictionMarketsMarketIdVoidParams
+	Body     *PostAdvancedPredictionMarketsMarketIdVoidJSONRequestBody
+}
+
+type PostAdvancedPredictionMarketsMarketIdVoidResponseObject interface {
+	VisitPostAdvancedPredictionMarketsMarketIdVoidResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedPredictionMarketsMarketIdVoid200JSONResponse PredictionSettlementResult
+
+func (response PostAdvancedPredictionMarketsMarketIdVoid200JSONResponse) VisitPostAdvancedPredictionMarketsMarketIdVoidResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdVoid403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedPredictionMarketsMarketIdVoid403ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdVoidResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdVoid404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdVoid404ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdVoidResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedPredictionMarketsMarketIdVoid409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedPredictionMarketsMarketIdVoid409ApplicationProblemPlusJSONResponse) VisitPostAdvancedPredictionMarketsMarketIdVoidResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -19547,6 +30393,60 @@ type StrictServerInterface interface {
 	// GetAdvancedCapabilities Every advanced capability, its modes, and whether each mode may run in this deployment
 	// (GET /advanced/capabilities)
 	GetAdvancedCapabilities(ctx context.Context, request GetAdvancedCapabilitiesRequestObject) (GetAdvancedCapabilitiesResponseObject, error)
+	// PostAdvancedDerivativesClearingHouseFunding Capitalize the clearing house in a sandbox asset (operator; requires step-up)
+	// (POST /advanced/derivatives/clearing-house/funding)
+	PostAdvancedDerivativesClearingHouseFunding(ctx context.Context, request PostAdvancedDerivativesClearingHouseFundingRequestObject) (PostAdvancedDerivativesClearingHouseFundingResponseObject, error)
+	// PostAdvancedDerivativesClearingHouseReconciliations Reconcile the clearing house's books against the flow register (operator; reconciliation kind CLEARING)
+	// (POST /advanced/derivatives/clearing-house/reconciliations)
+	PostAdvancedDerivativesClearingHouseReconciliations(ctx context.Context, request PostAdvancedDerivativesClearingHouseReconciliationsRequestObject) (PostAdvancedDerivativesClearingHouseReconciliationsResponseObject, error)
+	// GetAdvancedDerivativesContracts Derivative contracts with the canonical terms the service trades them on and their latest mark
+	// (GET /advanced/derivatives/contracts)
+	GetAdvancedDerivativesContracts(ctx context.Context, request GetAdvancedDerivativesContractsRequestObject) (GetAdvancedDerivativesContractsResponseObject, error)
+	// GetAdvancedDerivativesContractsInstrumentId One derivative contract, its terms in force, latest mark and final settlement
+	// (GET /advanced/derivatives/contracts/{instrumentId})
+	GetAdvancedDerivativesContractsInstrumentId(ctx context.Context, request GetAdvancedDerivativesContractsInstrumentIdRequestObject) (GetAdvancedDerivativesContractsInstrumentIdResponseObject, error)
+	// GetAdvancedDerivativesContractsInstrumentIdAnalytics Reference analytics of an option at its latest mark -- model values, never a quote
+	// (GET /advanced/derivatives/contracts/{instrumentId}/analytics)
+	GetAdvancedDerivativesContractsInstrumentIdAnalytics(ctx context.Context, request GetAdvancedDerivativesContractsInstrumentIdAnalyticsRequestObject) (GetAdvancedDerivativesContractsInstrumentIdAnalyticsResponseObject, error)
+	// PostAdvancedDerivativesContractsInstrumentIdFundingRuns Charge one funding interval of a perpetual (operator; requires step-up)
+	// (POST /advanced/derivatives/contracts/{instrumentId}/funding-runs)
+	PostAdvancedDerivativesContractsInstrumentIdFundingRuns(ctx context.Context, request PostAdvancedDerivativesContractsInstrumentIdFundingRunsRequestObject) (PostAdvancedDerivativesContractsInstrumentIdFundingRunsResponseObject, error)
+	// GetAdvancedDerivativesContractsInstrumentIdMarks The marks recorded for a contract, newest observation first
+	// (GET /advanced/derivatives/contracts/{instrumentId}/marks)
+	GetAdvancedDerivativesContractsInstrumentIdMarks(ctx context.Context, request GetAdvancedDerivativesContractsInstrumentIdMarksRequestObject) (GetAdvancedDerivativesContractsInstrumentIdMarksResponseObject, error)
+	// PostAdvancedDerivativesContractsInstrumentIdMarks Record a sandbox mark for a contract (operator)
+	// (POST /advanced/derivatives/contracts/{instrumentId}/marks)
+	PostAdvancedDerivativesContractsInstrumentIdMarks(ctx context.Context, request PostAdvancedDerivativesContractsInstrumentIdMarksRequestObject) (PostAdvancedDerivativesContractsInstrumentIdMarksResponseObject, error)
+	// PostAdvancedDerivativesContractsInstrumentIdSettlement Settle an expired future or option once and for all (operator; requires step-up)
+	// (POST /advanced/derivatives/contracts/{instrumentId}/settlement)
+	PostAdvancedDerivativesContractsInstrumentIdSettlement(ctx context.Context, request PostAdvancedDerivativesContractsInstrumentIdSettlementRequestObject) (PostAdvancedDerivativesContractsInstrumentIdSettlementResponseObject, error)
+	// PostAdvancedDerivativesContractsInstrumentIdVariationMarginRuns Settle one variation-margin interval of a future or perpetual (operator; requires step-up)
+	// (POST /advanced/derivatives/contracts/{instrumentId}/variation-margin-runs)
+	PostAdvancedDerivativesContractsInstrumentIdVariationMarginRuns(ctx context.Context, request PostAdvancedDerivativesContractsInstrumentIdVariationMarginRunsRequestObject) (PostAdvancedDerivativesContractsInstrumentIdVariationMarginRunsResponseObject, error)
+	// GetAdvancedDerivativesFlows The account's register of clearing-house flows (realized, variation margin, funding, premium, settlement), newest first
+	// (GET /advanced/derivatives/flows)
+	GetAdvancedDerivativesFlows(ctx context.Context, request GetAdvancedDerivativesFlowsRequestObject) (GetAdvancedDerivativesFlowsResponseObject, error)
+	// GetAdvancedDerivativesFundingAccruals Perpetual funding accrued to the account's positions, one row per position and interval, newest first
+	// (GET /advanced/derivatives/funding-accruals)
+	GetAdvancedDerivativesFundingAccruals(ctx context.Context, request GetAdvancedDerivativesFundingAccrualsRequestObject) (GetAdvancedDerivativesFundingAccrualsResponseObject, error)
+	// GetAdvancedDerivativesPolicy The versioned margin, funding and paper-fill policy every derivative decision records
+	// (GET /advanced/derivatives/policy)
+	GetAdvancedDerivativesPolicy(ctx context.Context, request GetAdvancedDerivativesPolicyRequestObject) (GetAdvancedDerivativesPolicyResponseObject, error)
+	// GetAdvancedDerivativesPositions An account's derivative positions with the service's valuation of its open book, oldest first
+	// (GET /advanced/derivatives/positions)
+	GetAdvancedDerivativesPositions(ctx context.Context, request GetAdvancedDerivativesPositionsRequestObject) (GetAdvancedDerivativesPositionsResponseObject, error)
+	// PostAdvancedDerivativesPositions Open a position or add to one in one of your own accounts (paper fill at the mark plus disclosed slippage)
+	// (POST /advanced/derivatives/positions)
+	PostAdvancedDerivativesPositions(ctx context.Context, request PostAdvancedDerivativesPositionsRequestObject) (PostAdvancedDerivativesPositionsResponseObject, error)
+	// GetAdvancedDerivativesPositionsPositionId One derivative position, to its account's owner or an operator; anyone else is told it does not exist
+	// (GET /advanced/derivatives/positions/{positionId})
+	GetAdvancedDerivativesPositionsPositionId(ctx context.Context, request GetAdvancedDerivativesPositionsPositionIdRequestObject) (GetAdvancedDerivativesPositionsPositionIdResponseObject, error)
+	// PostAdvancedDerivativesPositionsPositionIdClose Reduce or close one of your own open positions (paper fill; never refused for a stale mark)
+	// (POST /advanced/derivatives/positions/{positionId}/close)
+	PostAdvancedDerivativesPositionsPositionIdClose(ctx context.Context, request PostAdvancedDerivativesPositionsPositionIdCloseRequestObject) (PostAdvancedDerivativesPositionsPositionIdCloseResponseObject, error)
+	// PostAdvancedDerivativesPositionsPositionIdExercise Exercise held American options before expiry (settled at the fresh index, assigned FIFO to writers)
+	// (POST /advanced/derivatives/positions/{positionId}/exercise)
+	PostAdvancedDerivativesPositionsPositionIdExercise(ctx context.Context, request PostAdvancedDerivativesPositionsPositionIdExerciseRequestObject) (PostAdvancedDerivativesPositionsPositionIdExerciseResponseObject, error)
 	// GetAdvancedEffects Economic effects of an account (the exactly-once register), newest first
 	// (GET /advanced/effects)
 	GetAdvancedEffects(ctx context.Context, request GetAdvancedEffectsRequestObject) (GetAdvancedEffectsResponseObject, error)
@@ -19619,6 +30519,126 @@ type StrictServerInterface interface {
 	// GetAdvancedIntentsIntentId One economic intent
 	// (GET /advanced/intents/{intentId})
 	GetAdvancedIntentsIntentId(ctx context.Context, request GetAdvancedIntentsIntentIdRequestObject) (GetAdvancedIntentsIntentIdResponseObject, error)
+	// GetAdvancedMarginAccount An account's margin account, evaluated by the margin engine at the instant of the read
+	// (GET /advanced/margin/account)
+	GetAdvancedMarginAccount(ctx context.Context, request GetAdvancedMarginAccountRequestObject) (GetAdvancedMarginAccountResponseObject, error)
+	// PostAdvancedMarginAccount Open a margin account in PAPER or SANDBOX mode with the sandbox dollar as numeraire
+	// (POST /advanced/margin/account)
+	PostAdvancedMarginAccount(ctx context.Context, request PostAdvancedMarginAccountRequestObject) (PostAdvancedMarginAccountResponseObject, error)
+	// PostAdvancedMarginAccountClose Close a margin account that holds nothing and owes the lending pool nothing
+	// (POST /advanced/margin/account/close)
+	PostAdvancedMarginAccountClose(ctx context.Context, request PostAdvancedMarginAccountCloseRequestObject) (PostAdvancedMarginAccountCloseResponseObject, error)
+	// PostAdvancedMarginBorrow Borrow the numeraire from the lending pool into the wallet (MARGIN_BORROW; Risk Kernel V2 decides)
+	// (POST /advanced/margin/borrow)
+	PostAdvancedMarginBorrow(ctx context.Context, request PostAdvancedMarginBorrowRequestObject) (PostAdvancedMarginBorrowResponseObject, error)
+	// GetAdvancedMarginCalls Margin calls of an account, newest first
+	// (GET /advanced/margin/calls)
+	GetAdvancedMarginCalls(ctx context.Context, request GetAdvancedMarginCallsRequestObject) (GetAdvancedMarginCallsResponseObject, error)
+	// GetAdvancedMarginCases Liquidation cases of an account, newest first
+	// (GET /advanced/margin/cases)
+	GetAdvancedMarginCases(ctx context.Context, request GetAdvancedMarginCasesRequestObject) (GetAdvancedMarginCasesResponseObject, error)
+	// GetAdvancedMarginCasesMarginCaseId One liquidation case with every step it executed
+	// (GET /advanced/margin/cases/{marginCaseId})
+	GetAdvancedMarginCasesMarginCaseId(ctx context.Context, request GetAdvancedMarginCasesMarginCaseIdRequestObject) (GetAdvancedMarginCasesMarginCaseIdResponseObject, error)
+	// PostAdvancedMarginCollateralPost Move collateral from the wallet into the margin account (MARGIN_COLLATERAL_MOVE)
+	// (POST /advanced/margin/collateral/post)
+	PostAdvancedMarginCollateralPost(ctx context.Context, request PostAdvancedMarginCollateralPostRequestObject) (PostAdvancedMarginCollateralPostResponseObject, error)
+	// PostAdvancedMarginCollateralRelease Release collateral from the margin account to the wallet (Risk Kernel V2 decides)
+	// (POST /advanced/margin/collateral/release)
+	PostAdvancedMarginCollateralRelease(ctx context.Context, request PostAdvancedMarginCollateralReleaseRequestObject) (PostAdvancedMarginCollateralReleaseResponseObject, error)
+	// PostAdvancedMarginLeveragedBuys Buy an asset entirely on margin at mark plus the disclosed paper slippage (Risk Kernel V2 decides)
+	// (POST /advanced/margin/leveraged-buys)
+	PostAdvancedMarginLeveragedBuys(ctx context.Context, request PostAdvancedMarginLeveragedBuysRequestObject) (PostAdvancedMarginLeveragedBuysResponseObject, error)
+	// GetAdvancedMarginOpsCalls Operator — margin calls across every account, newest first
+	// (GET /advanced/margin/ops/calls)
+	GetAdvancedMarginOpsCalls(ctx context.Context, request GetAdvancedMarginOpsCallsRequestObject) (GetAdvancedMarginOpsCallsResponseObject, error)
+	// PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit Operator — have the insurance fund cover a bankrupt case's deficit (DEFICIT_COVERAGE; step-up)
+	// (POST /advanced/margin/ops/cases/{marginCaseId}/cover-deficit)
+	PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit(ctx context.Context, request PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitRequestObject) (PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitResponseObject, error)
+	// PostAdvancedMarginOpsFacilitiesSeed Operator — fund the lending pool and the insurance fund in sandbox dollars (FACILITY_FUNDING; step-up)
+	// (POST /advanced/margin/ops/facilities/seed)
+	PostAdvancedMarginOpsFacilitiesSeed(ctx context.Context, request PostAdvancedMarginOpsFacilitiesSeedRequestObject) (PostAdvancedMarginOpsFacilitiesSeedResponseObject, error)
+	// PostAdvancedMarginOpsLiquidations Operator — execute at most one deterministic liquidation step of one account (step-up)
+	// (POST /advanced/margin/ops/liquidations)
+	PostAdvancedMarginOpsLiquidations(ctx context.Context, request PostAdvancedMarginOpsLiquidationsRequestObject) (PostAdvancedMarginOpsLiquidationsResponseObject, error)
+	// PostAdvancedMarginOpsMarkToMarket Operator — evaluate open margin accounts, moving them between NORMAL, WARNING and MARGIN_CALL
+	// (POST /advanced/margin/ops/mark-to-market)
+	PostAdvancedMarginOpsMarkToMarket(ctx context.Context, request PostAdvancedMarginOpsMarkToMarketRequestObject) (PostAdvancedMarginOpsMarkToMarketResponseObject, error)
+	// GetAdvancedMarginOpsQueue Operator — accounts in MARGIN_CALL or LIQUIDATING under the service's policy, with their live evaluation
+	// (GET /advanced/margin/ops/queue)
+	GetAdvancedMarginOpsQueue(ctx context.Context, request GetAdvancedMarginOpsQueueRequestObject) (GetAdvancedMarginOpsQueueResponseObject, error)
+	// PostAdvancedMarginOpsQueueRun Operator — run one liquidation step for each of the most under-margined accounts (step-up)
+	// (POST /advanced/margin/ops/queue/run)
+	PostAdvancedMarginOpsQueueRun(ctx context.Context, request PostAdvancedMarginOpsQueueRunRequestObject) (PostAdvancedMarginOpsQueueRunResponseObject, error)
+	// PostAdvancedMarginOpsStressRuns Operator — run every stress scenario against any account's margin account and store the report
+	// (POST /advanced/margin/ops/stress-runs)
+	PostAdvancedMarginOpsStressRuns(ctx context.Context, request PostAdvancedMarginOpsStressRunsRequestObject) (PostAdvancedMarginOpsStressRunsResponseObject, error)
+	// PostAdvancedMarginRepay Repay loans from the wallet, interest first and oldest lot first (MARGIN_REPAY)
+	// (POST /advanced/margin/repay)
+	PostAdvancedMarginRepay(ctx context.Context, request PostAdvancedMarginRepayRequestObject) (PostAdvancedMarginRepayResponseObject, error)
+	// GetAdvancedMarginStressRuns Stored stress runs of an account, newest first
+	// (GET /advanced/margin/stress-runs)
+	GetAdvancedMarginStressRuns(ctx context.Context, request GetAdvancedMarginStressRunsRequestObject) (GetAdvancedMarginStressRunsResponseObject, error)
+	// PostAdvancedMarginStressRuns Run every stress scenario against your margin account and store the report (moves no value)
+	// (POST /advanced/margin/stress-runs)
+	PostAdvancedMarginStressRuns(ctx context.Context, request PostAdvancedMarginStressRunsRequestObject) (PostAdvancedMarginStressRunsResponseObject, error)
+	// GetAdvancedMarginStressRunsMarginStressRunId One stored stress run with every scenario's result
+	// (GET /advanced/margin/stress-runs/{marginStressRunId})
+	GetAdvancedMarginStressRunsMarginStressRunId(ctx context.Context, request GetAdvancedMarginStressRunsMarginStressRunIdRequestObject) (GetAdvancedMarginStressRunsMarginStressRunIdResponseObject, error)
+	// GetAdvancedPredictionMarkets Prediction markets in one lifecycle status, soonest close first
+	// (GET /advanced/prediction-markets)
+	GetAdvancedPredictionMarkets(ctx context.Context, request GetAdvancedPredictionMarketsRequestObject) (GetAdvancedPredictionMarketsResponseObject, error)
+	// PostAdvancedPredictionMarkets Define a prediction market in DRAFT, collateralised in the sandbox dollar (operator)
+	// (POST /advanced/prediction-markets)
+	PostAdvancedPredictionMarkets(ctx context.Context, request PostAdvancedPredictionMarketsRequestObject) (PostAdvancedPredictionMarketsResponseObject, error)
+	// GetAdvancedPredictionMarketsOracle The oracle this deployment resolves prediction markets from (sandbox oracle in LOCAL, TEST and DEV only)
+	// (GET /advanced/prediction-markets/oracle)
+	GetAdvancedPredictionMarketsOracle(ctx context.Context, request GetAdvancedPredictionMarketsOracleRequestObject) (GetAdvancedPredictionMarketsOracleResponseObject, error)
+	// GetAdvancedPredictionMarketsMarketId One market with its outcomes, resolutions, disputes and settlement record
+	// (GET /advanced/prediction-markets/{marketId})
+	GetAdvancedPredictionMarketsMarketId(ctx context.Context, request GetAdvancedPredictionMarketsMarketIdRequestObject) (GetAdvancedPredictionMarketsMarketIdResponseObject, error)
+	// GetAdvancedPredictionMarketsMarketIdBooks The market's escrow books, one snapshot, and whether they satisfy the escrow identity
+	// (GET /advanced/prediction-markets/{marketId}/books)
+	GetAdvancedPredictionMarketsMarketIdBooks(ctx context.Context, request GetAdvancedPredictionMarketsMarketIdBooksRequestObject) (GetAdvancedPredictionMarketsMarketIdBooksResponseObject, error)
+	// PostAdvancedPredictionMarketsMarketIdClose Close an OPEN market at or after its close time (operator)
+	// (POST /advanced/prediction-markets/{marketId}/close)
+	PostAdvancedPredictionMarketsMarketIdClose(ctx context.Context, request PostAdvancedPredictionMarketsMarketIdCloseRequestObject) (PostAdvancedPredictionMarketsMarketIdCloseResponseObject, error)
+	// PostAdvancedPredictionMarketsMarketIdDispute Dispute a RESOLVED market's oracle resolution, blocking settlement (operator)
+	// (POST /advanced/prediction-markets/{marketId}/dispute)
+	PostAdvancedPredictionMarketsMarketIdDispute(ctx context.Context, request PostAdvancedPredictionMarketsMarketIdDisputeRequestObject) (PostAdvancedPredictionMarketsMarketIdDisputeResponseObject, error)
+	// PostAdvancedPredictionMarketsMarketIdIssuances Issue complete sets (collateral into the escrow, one share of every outcome per set)
+	// (POST /advanced/prediction-markets/{marketId}/issuances)
+	PostAdvancedPredictionMarketsMarketIdIssuances(ctx context.Context, request PostAdvancedPredictionMarketsMarketIdIssuancesRequestObject) (PostAdvancedPredictionMarketsMarketIdIssuancesResponseObject, error)
+	// PostAdvancedPredictionMarketsMarketIdOpen Open a DRAFT market at or after its open time (operator)
+	// (POST /advanced/prediction-markets/{marketId}/open)
+	PostAdvancedPredictionMarketsMarketIdOpen(ctx context.Context, request PostAdvancedPredictionMarketsMarketIdOpenRequestObject) (PostAdvancedPredictionMarketsMarketIdOpenResponseObject, error)
+	// PostAdvancedPredictionMarketsMarketIdOracleObservations Record what the sandbox oracle observed for a market (operator; sandbox oracle only)
+	// (POST /advanced/prediction-markets/{marketId}/oracle-observations)
+	PostAdvancedPredictionMarketsMarketIdOracleObservations(ctx context.Context, request PostAdvancedPredictionMarketsMarketIdOracleObservationsRequestObject) (PostAdvancedPredictionMarketsMarketIdOracleObservationsResponseObject, error)
+	// GetAdvancedPredictionMarketsMarketIdPositions An account's outcome shares in one market
+	// (GET /advanced/prediction-markets/{marketId}/positions)
+	GetAdvancedPredictionMarketsMarketIdPositions(ctx context.Context, request GetAdvancedPredictionMarketsMarketIdPositionsRequestObject) (GetAdvancedPredictionMarketsMarketIdPositionsResponseObject, error)
+	// PostAdvancedPredictionMarketsMarketIdReconcile Run the PREDICTION_ESCROW reconciliation for one market (operator; compares and records, moves nothing)
+	// (POST /advanced/prediction-markets/{marketId}/reconcile)
+	PostAdvancedPredictionMarketsMarketIdReconcile(ctx context.Context, request PostAdvancedPredictionMarketsMarketIdReconcileRequestObject) (PostAdvancedPredictionMarketsMarketIdReconcileResponseObject, error)
+	// PostAdvancedPredictionMarketsMarketIdRedemptions Redeem complete sets (one share of every outcome per set back into collateral)
+	// (POST /advanced/prediction-markets/{marketId}/redemptions)
+	PostAdvancedPredictionMarketsMarketIdRedemptions(ctx context.Context, request PostAdvancedPredictionMarketsMarketIdRedemptionsRequestObject) (PostAdvancedPredictionMarketsMarketIdRedemptionsResponseObject, error)
+	// PostAdvancedPredictionMarketsMarketIdRequestResolution Move a CLOSED market to RESOLVING, awaiting an oracle report (operator)
+	// (POST /advanced/prediction-markets/{marketId}/request-resolution)
+	PostAdvancedPredictionMarketsMarketIdRequestResolution(ctx context.Context, request PostAdvancedPredictionMarketsMarketIdRequestResolutionRequestObject) (PostAdvancedPredictionMarketsMarketIdRequestResolutionResponseObject, error)
+	// PostAdvancedPredictionMarketsMarketIdResolve Resolve from the configured oracle's report, verified against the market's oracle key (operator)
+	// (POST /advanced/prediction-markets/{marketId}/resolve)
+	PostAdvancedPredictionMarketsMarketIdResolve(ctx context.Context, request PostAdvancedPredictionMarketsMarketIdResolveRequestObject) (PostAdvancedPredictionMarketsMarketIdResolveResponseObject, error)
+	// PostAdvancedPredictionMarketsMarketIdSettle Settle a RESOLVED market from its escrow once its dispute window has passed (operator)
+	// (POST /advanced/prediction-markets/{marketId}/settle)
+	PostAdvancedPredictionMarketsMarketIdSettle(ctx context.Context, request PostAdvancedPredictionMarketsMarketIdSettleRequestObject) (PostAdvancedPredictionMarketsMarketIdSettleResponseObject, error)
+	// PostAdvancedPredictionMarketsMarketIdUphold Close a dispute keeping the disputed outcome (operator; not the creator, not the disputer)
+	// (POST /advanced/prediction-markets/{marketId}/uphold)
+	PostAdvancedPredictionMarketsMarketIdUphold(ctx context.Context, request PostAdvancedPredictionMarketsMarketIdUpholdRequestObject) (PostAdvancedPredictionMarketsMarketIdUpholdResponseObject, error)
+	// PostAdvancedPredictionMarketsMarketIdVoid Void a market that has not settled and refund every share (operator; not the creator)
+	// (POST /advanced/prediction-markets/{marketId}/void)
+	PostAdvancedPredictionMarketsMarketIdVoid(ctx context.Context, request PostAdvancedPredictionMarketsMarketIdVoidRequestObject) (PostAdvancedPredictionMarketsMarketIdVoidResponseObject, error)
 	// GetAdvancedRiskDecisions Risk Kernel V2 decisions about an account's intents, newest first
 	// (GET /advanced/risk/decisions)
 	GetAdvancedRiskDecisions(ctx context.Context, request GetAdvancedRiskDecisionsRequestObject) (GetAdvancedRiskDecisionsResponseObject, error)
@@ -20875,6 +31895,543 @@ func (sh *strictHandler) GetAdvancedCapabilities(w http.ResponseWriter, r *http.
 	}
 }
 
+// PostAdvancedDerivativesClearingHouseFunding operation middleware
+func (sh *strictHandler) PostAdvancedDerivativesClearingHouseFunding(w http.ResponseWriter, r *http.Request, params PostAdvancedDerivativesClearingHouseFundingParams) {
+	var request PostAdvancedDerivativesClearingHouseFundingRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedDerivativesClearingHouseFundingJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedDerivativesClearingHouseFunding(ctx, request.(PostAdvancedDerivativesClearingHouseFundingRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedDerivativesClearingHouseFunding")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedDerivativesClearingHouseFundingResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedDerivativesClearingHouseFundingResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedDerivativesClearingHouseReconciliations operation middleware
+func (sh *strictHandler) PostAdvancedDerivativesClearingHouseReconciliations(w http.ResponseWriter, r *http.Request, params PostAdvancedDerivativesClearingHouseReconciliationsParams) {
+	var request PostAdvancedDerivativesClearingHouseReconciliationsRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedDerivativesClearingHouseReconciliationsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedDerivativesClearingHouseReconciliations(ctx, request.(PostAdvancedDerivativesClearingHouseReconciliationsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedDerivativesClearingHouseReconciliations")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedDerivativesClearingHouseReconciliationsResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedDerivativesClearingHouseReconciliationsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedDerivativesContracts operation middleware
+func (sh *strictHandler) GetAdvancedDerivativesContracts(w http.ResponseWriter, r *http.Request, params GetAdvancedDerivativesContractsParams) {
+	var request GetAdvancedDerivativesContractsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedDerivativesContracts(ctx, request.(GetAdvancedDerivativesContractsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedDerivativesContracts")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedDerivativesContractsResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedDerivativesContractsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedDerivativesContractsInstrumentId operation middleware
+func (sh *strictHandler) GetAdvancedDerivativesContractsInstrumentId(w http.ResponseWriter, r *http.Request, instrumentId UUID) {
+	var request GetAdvancedDerivativesContractsInstrumentIdRequestObject
+
+	request.InstrumentId = instrumentId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedDerivativesContractsInstrumentId(ctx, request.(GetAdvancedDerivativesContractsInstrumentIdRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedDerivativesContractsInstrumentId")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedDerivativesContractsInstrumentIdResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedDerivativesContractsInstrumentIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedDerivativesContractsInstrumentIdAnalytics operation middleware
+func (sh *strictHandler) GetAdvancedDerivativesContractsInstrumentIdAnalytics(w http.ResponseWriter, r *http.Request, instrumentId UUID, params GetAdvancedDerivativesContractsInstrumentIdAnalyticsParams) {
+	var request GetAdvancedDerivativesContractsInstrumentIdAnalyticsRequestObject
+
+	request.InstrumentId = instrumentId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedDerivativesContractsInstrumentIdAnalytics(ctx, request.(GetAdvancedDerivativesContractsInstrumentIdAnalyticsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedDerivativesContractsInstrumentIdAnalytics")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedDerivativesContractsInstrumentIdAnalyticsResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedDerivativesContractsInstrumentIdAnalyticsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedDerivativesContractsInstrumentIdFundingRuns operation middleware
+func (sh *strictHandler) PostAdvancedDerivativesContractsInstrumentIdFundingRuns(w http.ResponseWriter, r *http.Request, instrumentId UUID, params PostAdvancedDerivativesContractsInstrumentIdFundingRunsParams) {
+	var request PostAdvancedDerivativesContractsInstrumentIdFundingRunsRequestObject
+
+	request.InstrumentId = instrumentId
+	request.Params = params
+
+	var body PostAdvancedDerivativesContractsInstrumentIdFundingRunsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedDerivativesContractsInstrumentIdFundingRuns(ctx, request.(PostAdvancedDerivativesContractsInstrumentIdFundingRunsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedDerivativesContractsInstrumentIdFundingRuns")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedDerivativesContractsInstrumentIdFundingRunsResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedDerivativesContractsInstrumentIdFundingRunsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedDerivativesContractsInstrumentIdMarks operation middleware
+func (sh *strictHandler) GetAdvancedDerivativesContractsInstrumentIdMarks(w http.ResponseWriter, r *http.Request, instrumentId UUID, params GetAdvancedDerivativesContractsInstrumentIdMarksParams) {
+	var request GetAdvancedDerivativesContractsInstrumentIdMarksRequestObject
+
+	request.InstrumentId = instrumentId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedDerivativesContractsInstrumentIdMarks(ctx, request.(GetAdvancedDerivativesContractsInstrumentIdMarksRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedDerivativesContractsInstrumentIdMarks")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedDerivativesContractsInstrumentIdMarksResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedDerivativesContractsInstrumentIdMarksResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedDerivativesContractsInstrumentIdMarks operation middleware
+func (sh *strictHandler) PostAdvancedDerivativesContractsInstrumentIdMarks(w http.ResponseWriter, r *http.Request, instrumentId UUID, params PostAdvancedDerivativesContractsInstrumentIdMarksParams) {
+	var request PostAdvancedDerivativesContractsInstrumentIdMarksRequestObject
+
+	request.InstrumentId = instrumentId
+	request.Params = params
+
+	var body PostAdvancedDerivativesContractsInstrumentIdMarksJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedDerivativesContractsInstrumentIdMarks(ctx, request.(PostAdvancedDerivativesContractsInstrumentIdMarksRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedDerivativesContractsInstrumentIdMarks")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedDerivativesContractsInstrumentIdMarksResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedDerivativesContractsInstrumentIdMarksResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedDerivativesContractsInstrumentIdSettlement operation middleware
+func (sh *strictHandler) PostAdvancedDerivativesContractsInstrumentIdSettlement(w http.ResponseWriter, r *http.Request, instrumentId UUID, params PostAdvancedDerivativesContractsInstrumentIdSettlementParams) {
+	var request PostAdvancedDerivativesContractsInstrumentIdSettlementRequestObject
+
+	request.InstrumentId = instrumentId
+	request.Params = params
+
+	var body PostAdvancedDerivativesContractsInstrumentIdSettlementJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedDerivativesContractsInstrumentIdSettlement(ctx, request.(PostAdvancedDerivativesContractsInstrumentIdSettlementRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedDerivativesContractsInstrumentIdSettlement")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedDerivativesContractsInstrumentIdSettlementResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedDerivativesContractsInstrumentIdSettlementResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedDerivativesContractsInstrumentIdVariationMarginRuns operation middleware
+func (sh *strictHandler) PostAdvancedDerivativesContractsInstrumentIdVariationMarginRuns(w http.ResponseWriter, r *http.Request, instrumentId UUID, params PostAdvancedDerivativesContractsInstrumentIdVariationMarginRunsParams) {
+	var request PostAdvancedDerivativesContractsInstrumentIdVariationMarginRunsRequestObject
+
+	request.InstrumentId = instrumentId
+	request.Params = params
+
+	var body PostAdvancedDerivativesContractsInstrumentIdVariationMarginRunsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedDerivativesContractsInstrumentIdVariationMarginRuns(ctx, request.(PostAdvancedDerivativesContractsInstrumentIdVariationMarginRunsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedDerivativesContractsInstrumentIdVariationMarginRuns")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedDerivativesContractsInstrumentIdVariationMarginRunsResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedDerivativesContractsInstrumentIdVariationMarginRunsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedDerivativesFlows operation middleware
+func (sh *strictHandler) GetAdvancedDerivativesFlows(w http.ResponseWriter, r *http.Request, params GetAdvancedDerivativesFlowsParams) {
+	var request GetAdvancedDerivativesFlowsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedDerivativesFlows(ctx, request.(GetAdvancedDerivativesFlowsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedDerivativesFlows")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedDerivativesFlowsResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedDerivativesFlowsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedDerivativesFundingAccruals operation middleware
+func (sh *strictHandler) GetAdvancedDerivativesFundingAccruals(w http.ResponseWriter, r *http.Request, params GetAdvancedDerivativesFundingAccrualsParams) {
+	var request GetAdvancedDerivativesFundingAccrualsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedDerivativesFundingAccruals(ctx, request.(GetAdvancedDerivativesFundingAccrualsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedDerivativesFundingAccruals")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedDerivativesFundingAccrualsResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedDerivativesFundingAccrualsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedDerivativesPolicy operation middleware
+func (sh *strictHandler) GetAdvancedDerivativesPolicy(w http.ResponseWriter, r *http.Request) {
+	var request GetAdvancedDerivativesPolicyRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedDerivativesPolicy(ctx, request.(GetAdvancedDerivativesPolicyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedDerivativesPolicy")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedDerivativesPolicyResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedDerivativesPolicyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedDerivativesPositions operation middleware
+func (sh *strictHandler) GetAdvancedDerivativesPositions(w http.ResponseWriter, r *http.Request, params GetAdvancedDerivativesPositionsParams) {
+	var request GetAdvancedDerivativesPositionsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedDerivativesPositions(ctx, request.(GetAdvancedDerivativesPositionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedDerivativesPositions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedDerivativesPositionsResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedDerivativesPositionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedDerivativesPositions operation middleware
+func (sh *strictHandler) PostAdvancedDerivativesPositions(w http.ResponseWriter, r *http.Request, params PostAdvancedDerivativesPositionsParams) {
+	var request PostAdvancedDerivativesPositionsRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedDerivativesPositionsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedDerivativesPositions(ctx, request.(PostAdvancedDerivativesPositionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedDerivativesPositions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedDerivativesPositionsResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedDerivativesPositionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedDerivativesPositionsPositionId operation middleware
+func (sh *strictHandler) GetAdvancedDerivativesPositionsPositionId(w http.ResponseWriter, r *http.Request, positionId UUID) {
+	var request GetAdvancedDerivativesPositionsPositionIdRequestObject
+
+	request.PositionId = positionId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedDerivativesPositionsPositionId(ctx, request.(GetAdvancedDerivativesPositionsPositionIdRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedDerivativesPositionsPositionId")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedDerivativesPositionsPositionIdResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedDerivativesPositionsPositionIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedDerivativesPositionsPositionIdClose operation middleware
+func (sh *strictHandler) PostAdvancedDerivativesPositionsPositionIdClose(w http.ResponseWriter, r *http.Request, positionId UUID, params PostAdvancedDerivativesPositionsPositionIdCloseParams) {
+	var request PostAdvancedDerivativesPositionsPositionIdCloseRequestObject
+
+	request.PositionId = positionId
+	request.Params = params
+
+	var body PostAdvancedDerivativesPositionsPositionIdCloseJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedDerivativesPositionsPositionIdClose(ctx, request.(PostAdvancedDerivativesPositionsPositionIdCloseRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedDerivativesPositionsPositionIdClose")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedDerivativesPositionsPositionIdCloseResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedDerivativesPositionsPositionIdCloseResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedDerivativesPositionsPositionIdExercise operation middleware
+func (sh *strictHandler) PostAdvancedDerivativesPositionsPositionIdExercise(w http.ResponseWriter, r *http.Request, positionId UUID, params PostAdvancedDerivativesPositionsPositionIdExerciseParams) {
+	var request PostAdvancedDerivativesPositionsPositionIdExerciseRequestObject
+
+	request.PositionId = positionId
+	request.Params = params
+
+	var body PostAdvancedDerivativesPositionsPositionIdExerciseJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedDerivativesPositionsPositionIdExercise(ctx, request.(PostAdvancedDerivativesPositionsPositionIdExerciseRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedDerivativesPositionsPositionIdExercise")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedDerivativesPositionsPositionIdExerciseResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedDerivativesPositionsPositionIdExerciseResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetAdvancedEffects operation middleware
 func (sh *strictHandler) GetAdvancedEffects(w http.ResponseWriter, r *http.Request, params GetAdvancedEffectsParams) {
 	var request GetAdvancedEffectsRequestObject
@@ -21549,6 +33106,1211 @@ func (sh *strictHandler) GetAdvancedIntentsIntentId(w http.ResponseWriter, r *ht
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetAdvancedIntentsIntentIdResponseObject); ok {
 		if err := validResponse.VisitGetAdvancedIntentsIntentIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedMarginAccount operation middleware
+func (sh *strictHandler) GetAdvancedMarginAccount(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginAccountParams) {
+	var request GetAdvancedMarginAccountRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedMarginAccount(ctx, request.(GetAdvancedMarginAccountRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedMarginAccount")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedMarginAccountResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedMarginAccountResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedMarginAccount operation middleware
+func (sh *strictHandler) PostAdvancedMarginAccount(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginAccountParams) {
+	var request PostAdvancedMarginAccountRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedMarginAccountJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedMarginAccount(ctx, request.(PostAdvancedMarginAccountRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedMarginAccount")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedMarginAccountResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedMarginAccountResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedMarginAccountClose operation middleware
+func (sh *strictHandler) PostAdvancedMarginAccountClose(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginAccountCloseParams) {
+	var request PostAdvancedMarginAccountCloseRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedMarginAccountCloseJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedMarginAccountClose(ctx, request.(PostAdvancedMarginAccountCloseRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedMarginAccountClose")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedMarginAccountCloseResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedMarginAccountCloseResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedMarginBorrow operation middleware
+func (sh *strictHandler) PostAdvancedMarginBorrow(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginBorrowParams) {
+	var request PostAdvancedMarginBorrowRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedMarginBorrowJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedMarginBorrow(ctx, request.(PostAdvancedMarginBorrowRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedMarginBorrow")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedMarginBorrowResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedMarginBorrowResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedMarginCalls operation middleware
+func (sh *strictHandler) GetAdvancedMarginCalls(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginCallsParams) {
+	var request GetAdvancedMarginCallsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedMarginCalls(ctx, request.(GetAdvancedMarginCallsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedMarginCalls")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedMarginCallsResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedMarginCallsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedMarginCases operation middleware
+func (sh *strictHandler) GetAdvancedMarginCases(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginCasesParams) {
+	var request GetAdvancedMarginCasesRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedMarginCases(ctx, request.(GetAdvancedMarginCasesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedMarginCases")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedMarginCasesResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedMarginCasesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedMarginCasesMarginCaseId operation middleware
+func (sh *strictHandler) GetAdvancedMarginCasesMarginCaseId(w http.ResponseWriter, r *http.Request, marginCaseId UUID) {
+	var request GetAdvancedMarginCasesMarginCaseIdRequestObject
+
+	request.MarginCaseId = marginCaseId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedMarginCasesMarginCaseId(ctx, request.(GetAdvancedMarginCasesMarginCaseIdRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedMarginCasesMarginCaseId")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedMarginCasesMarginCaseIdResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedMarginCasesMarginCaseIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedMarginCollateralPost operation middleware
+func (sh *strictHandler) PostAdvancedMarginCollateralPost(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginCollateralPostParams) {
+	var request PostAdvancedMarginCollateralPostRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedMarginCollateralPostJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedMarginCollateralPost(ctx, request.(PostAdvancedMarginCollateralPostRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedMarginCollateralPost")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedMarginCollateralPostResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedMarginCollateralPostResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedMarginCollateralRelease operation middleware
+func (sh *strictHandler) PostAdvancedMarginCollateralRelease(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginCollateralReleaseParams) {
+	var request PostAdvancedMarginCollateralReleaseRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedMarginCollateralReleaseJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedMarginCollateralRelease(ctx, request.(PostAdvancedMarginCollateralReleaseRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedMarginCollateralRelease")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedMarginCollateralReleaseResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedMarginCollateralReleaseResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedMarginLeveragedBuys operation middleware
+func (sh *strictHandler) PostAdvancedMarginLeveragedBuys(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginLeveragedBuysParams) {
+	var request PostAdvancedMarginLeveragedBuysRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedMarginLeveragedBuysJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedMarginLeveragedBuys(ctx, request.(PostAdvancedMarginLeveragedBuysRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedMarginLeveragedBuys")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedMarginLeveragedBuysResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedMarginLeveragedBuysResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedMarginOpsCalls operation middleware
+func (sh *strictHandler) GetAdvancedMarginOpsCalls(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginOpsCallsParams) {
+	var request GetAdvancedMarginOpsCallsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedMarginOpsCalls(ctx, request.(GetAdvancedMarginOpsCallsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedMarginOpsCalls")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedMarginOpsCallsResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedMarginOpsCallsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit operation middleware
+func (sh *strictHandler) PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit(w http.ResponseWriter, r *http.Request, marginCaseId UUID, params PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitParams) {
+	var request PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitRequestObject
+
+	request.MarginCaseId = marginCaseId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit(ctx, request.(PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedMarginOpsFacilitiesSeed operation middleware
+func (sh *strictHandler) PostAdvancedMarginOpsFacilitiesSeed(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginOpsFacilitiesSeedParams) {
+	var request PostAdvancedMarginOpsFacilitiesSeedRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedMarginOpsFacilitiesSeedJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedMarginOpsFacilitiesSeed(ctx, request.(PostAdvancedMarginOpsFacilitiesSeedRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedMarginOpsFacilitiesSeed")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedMarginOpsFacilitiesSeedResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedMarginOpsFacilitiesSeedResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedMarginOpsLiquidations operation middleware
+func (sh *strictHandler) PostAdvancedMarginOpsLiquidations(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginOpsLiquidationsParams) {
+	var request PostAdvancedMarginOpsLiquidationsRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedMarginOpsLiquidationsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedMarginOpsLiquidations(ctx, request.(PostAdvancedMarginOpsLiquidationsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedMarginOpsLiquidations")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedMarginOpsLiquidationsResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedMarginOpsLiquidationsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedMarginOpsMarkToMarket operation middleware
+func (sh *strictHandler) PostAdvancedMarginOpsMarkToMarket(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginOpsMarkToMarketParams) {
+	var request PostAdvancedMarginOpsMarkToMarketRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedMarginOpsMarkToMarketJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedMarginOpsMarkToMarket(ctx, request.(PostAdvancedMarginOpsMarkToMarketRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedMarginOpsMarkToMarket")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedMarginOpsMarkToMarketResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedMarginOpsMarkToMarketResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedMarginOpsQueue operation middleware
+func (sh *strictHandler) GetAdvancedMarginOpsQueue(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginOpsQueueParams) {
+	var request GetAdvancedMarginOpsQueueRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedMarginOpsQueue(ctx, request.(GetAdvancedMarginOpsQueueRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedMarginOpsQueue")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedMarginOpsQueueResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedMarginOpsQueueResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedMarginOpsQueueRun operation middleware
+func (sh *strictHandler) PostAdvancedMarginOpsQueueRun(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginOpsQueueRunParams) {
+	var request PostAdvancedMarginOpsQueueRunRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedMarginOpsQueueRunJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedMarginOpsQueueRun(ctx, request.(PostAdvancedMarginOpsQueueRunRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedMarginOpsQueueRun")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedMarginOpsQueueRunResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedMarginOpsQueueRunResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedMarginOpsStressRuns operation middleware
+func (sh *strictHandler) PostAdvancedMarginOpsStressRuns(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginOpsStressRunsParams) {
+	var request PostAdvancedMarginOpsStressRunsRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedMarginOpsStressRunsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedMarginOpsStressRuns(ctx, request.(PostAdvancedMarginOpsStressRunsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedMarginOpsStressRuns")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedMarginOpsStressRunsResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedMarginOpsStressRunsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedMarginRepay operation middleware
+func (sh *strictHandler) PostAdvancedMarginRepay(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginRepayParams) {
+	var request PostAdvancedMarginRepayRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedMarginRepayJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedMarginRepay(ctx, request.(PostAdvancedMarginRepayRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedMarginRepay")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedMarginRepayResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedMarginRepayResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedMarginStressRuns operation middleware
+func (sh *strictHandler) GetAdvancedMarginStressRuns(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginStressRunsParams) {
+	var request GetAdvancedMarginStressRunsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedMarginStressRuns(ctx, request.(GetAdvancedMarginStressRunsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedMarginStressRuns")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedMarginStressRunsResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedMarginStressRunsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedMarginStressRuns operation middleware
+func (sh *strictHandler) PostAdvancedMarginStressRuns(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginStressRunsParams) {
+	var request PostAdvancedMarginStressRunsRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedMarginStressRunsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedMarginStressRuns(ctx, request.(PostAdvancedMarginStressRunsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedMarginStressRuns")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedMarginStressRunsResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedMarginStressRunsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedMarginStressRunsMarginStressRunId operation middleware
+func (sh *strictHandler) GetAdvancedMarginStressRunsMarginStressRunId(w http.ResponseWriter, r *http.Request, marginStressRunId UUID) {
+	var request GetAdvancedMarginStressRunsMarginStressRunIdRequestObject
+
+	request.MarginStressRunId = marginStressRunId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedMarginStressRunsMarginStressRunId(ctx, request.(GetAdvancedMarginStressRunsMarginStressRunIdRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedMarginStressRunsMarginStressRunId")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedMarginStressRunsMarginStressRunIdResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedMarginStressRunsMarginStressRunIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedPredictionMarkets operation middleware
+func (sh *strictHandler) GetAdvancedPredictionMarkets(w http.ResponseWriter, r *http.Request, params GetAdvancedPredictionMarketsParams) {
+	var request GetAdvancedPredictionMarketsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedPredictionMarkets(ctx, request.(GetAdvancedPredictionMarketsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedPredictionMarkets")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedPredictionMarketsResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedPredictionMarketsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedPredictionMarkets operation middleware
+func (sh *strictHandler) PostAdvancedPredictionMarkets(w http.ResponseWriter, r *http.Request, params PostAdvancedPredictionMarketsParams) {
+	var request PostAdvancedPredictionMarketsRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedPredictionMarketsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedPredictionMarkets(ctx, request.(PostAdvancedPredictionMarketsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedPredictionMarkets")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedPredictionMarketsResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedPredictionMarketsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedPredictionMarketsOracle operation middleware
+func (sh *strictHandler) GetAdvancedPredictionMarketsOracle(w http.ResponseWriter, r *http.Request) {
+	var request GetAdvancedPredictionMarketsOracleRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedPredictionMarketsOracle(ctx, request.(GetAdvancedPredictionMarketsOracleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedPredictionMarketsOracle")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedPredictionMarketsOracleResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedPredictionMarketsOracleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedPredictionMarketsMarketId operation middleware
+func (sh *strictHandler) GetAdvancedPredictionMarketsMarketId(w http.ResponseWriter, r *http.Request, marketId MarketId) {
+	var request GetAdvancedPredictionMarketsMarketIdRequestObject
+
+	request.MarketId = marketId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedPredictionMarketsMarketId(ctx, request.(GetAdvancedPredictionMarketsMarketIdRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedPredictionMarketsMarketId")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedPredictionMarketsMarketIdResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedPredictionMarketsMarketIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedPredictionMarketsMarketIdBooks operation middleware
+func (sh *strictHandler) GetAdvancedPredictionMarketsMarketIdBooks(w http.ResponseWriter, r *http.Request, marketId MarketId) {
+	var request GetAdvancedPredictionMarketsMarketIdBooksRequestObject
+
+	request.MarketId = marketId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedPredictionMarketsMarketIdBooks(ctx, request.(GetAdvancedPredictionMarketsMarketIdBooksRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedPredictionMarketsMarketIdBooks")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedPredictionMarketsMarketIdBooksResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedPredictionMarketsMarketIdBooksResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedPredictionMarketsMarketIdClose operation middleware
+func (sh *strictHandler) PostAdvancedPredictionMarketsMarketIdClose(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdCloseParams) {
+	var request PostAdvancedPredictionMarketsMarketIdCloseRequestObject
+
+	request.MarketId = marketId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedPredictionMarketsMarketIdClose(ctx, request.(PostAdvancedPredictionMarketsMarketIdCloseRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedPredictionMarketsMarketIdClose")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedPredictionMarketsMarketIdCloseResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedPredictionMarketsMarketIdCloseResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedPredictionMarketsMarketIdDispute operation middleware
+func (sh *strictHandler) PostAdvancedPredictionMarketsMarketIdDispute(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdDisputeParams) {
+	var request PostAdvancedPredictionMarketsMarketIdDisputeRequestObject
+
+	request.MarketId = marketId
+	request.Params = params
+
+	var body PostAdvancedPredictionMarketsMarketIdDisputeJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedPredictionMarketsMarketIdDispute(ctx, request.(PostAdvancedPredictionMarketsMarketIdDisputeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedPredictionMarketsMarketIdDispute")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedPredictionMarketsMarketIdDisputeResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedPredictionMarketsMarketIdDisputeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedPredictionMarketsMarketIdIssuances operation middleware
+func (sh *strictHandler) PostAdvancedPredictionMarketsMarketIdIssuances(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdIssuancesParams) {
+	var request PostAdvancedPredictionMarketsMarketIdIssuancesRequestObject
+
+	request.MarketId = marketId
+	request.Params = params
+
+	var body PostAdvancedPredictionMarketsMarketIdIssuancesJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedPredictionMarketsMarketIdIssuances(ctx, request.(PostAdvancedPredictionMarketsMarketIdIssuancesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedPredictionMarketsMarketIdIssuances")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedPredictionMarketsMarketIdIssuancesResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedPredictionMarketsMarketIdIssuancesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedPredictionMarketsMarketIdOpen operation middleware
+func (sh *strictHandler) PostAdvancedPredictionMarketsMarketIdOpen(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdOpenParams) {
+	var request PostAdvancedPredictionMarketsMarketIdOpenRequestObject
+
+	request.MarketId = marketId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedPredictionMarketsMarketIdOpen(ctx, request.(PostAdvancedPredictionMarketsMarketIdOpenRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedPredictionMarketsMarketIdOpen")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedPredictionMarketsMarketIdOpenResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedPredictionMarketsMarketIdOpenResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedPredictionMarketsMarketIdOracleObservations operation middleware
+func (sh *strictHandler) PostAdvancedPredictionMarketsMarketIdOracleObservations(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdOracleObservationsParams) {
+	var request PostAdvancedPredictionMarketsMarketIdOracleObservationsRequestObject
+
+	request.MarketId = marketId
+	request.Params = params
+
+	var body PostAdvancedPredictionMarketsMarketIdOracleObservationsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedPredictionMarketsMarketIdOracleObservations(ctx, request.(PostAdvancedPredictionMarketsMarketIdOracleObservationsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedPredictionMarketsMarketIdOracleObservations")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedPredictionMarketsMarketIdOracleObservationsResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedPredictionMarketsMarketIdOracleObservationsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedPredictionMarketsMarketIdPositions operation middleware
+func (sh *strictHandler) GetAdvancedPredictionMarketsMarketIdPositions(w http.ResponseWriter, r *http.Request, marketId MarketId, params GetAdvancedPredictionMarketsMarketIdPositionsParams) {
+	var request GetAdvancedPredictionMarketsMarketIdPositionsRequestObject
+
+	request.MarketId = marketId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedPredictionMarketsMarketIdPositions(ctx, request.(GetAdvancedPredictionMarketsMarketIdPositionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedPredictionMarketsMarketIdPositions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedPredictionMarketsMarketIdPositionsResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedPredictionMarketsMarketIdPositionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedPredictionMarketsMarketIdReconcile operation middleware
+func (sh *strictHandler) PostAdvancedPredictionMarketsMarketIdReconcile(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdReconcileParams) {
+	var request PostAdvancedPredictionMarketsMarketIdReconcileRequestObject
+
+	request.MarketId = marketId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedPredictionMarketsMarketIdReconcile(ctx, request.(PostAdvancedPredictionMarketsMarketIdReconcileRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedPredictionMarketsMarketIdReconcile")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedPredictionMarketsMarketIdReconcileResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedPredictionMarketsMarketIdReconcileResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedPredictionMarketsMarketIdRedemptions operation middleware
+func (sh *strictHandler) PostAdvancedPredictionMarketsMarketIdRedemptions(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdRedemptionsParams) {
+	var request PostAdvancedPredictionMarketsMarketIdRedemptionsRequestObject
+
+	request.MarketId = marketId
+	request.Params = params
+
+	var body PostAdvancedPredictionMarketsMarketIdRedemptionsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedPredictionMarketsMarketIdRedemptions(ctx, request.(PostAdvancedPredictionMarketsMarketIdRedemptionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedPredictionMarketsMarketIdRedemptions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedPredictionMarketsMarketIdRedemptionsResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedPredictionMarketsMarketIdRedemptionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedPredictionMarketsMarketIdRequestResolution operation middleware
+func (sh *strictHandler) PostAdvancedPredictionMarketsMarketIdRequestResolution(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdRequestResolutionParams) {
+	var request PostAdvancedPredictionMarketsMarketIdRequestResolutionRequestObject
+
+	request.MarketId = marketId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedPredictionMarketsMarketIdRequestResolution(ctx, request.(PostAdvancedPredictionMarketsMarketIdRequestResolutionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedPredictionMarketsMarketIdRequestResolution")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedPredictionMarketsMarketIdRequestResolutionResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedPredictionMarketsMarketIdRequestResolutionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedPredictionMarketsMarketIdResolve operation middleware
+func (sh *strictHandler) PostAdvancedPredictionMarketsMarketIdResolve(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdResolveParams) {
+	var request PostAdvancedPredictionMarketsMarketIdResolveRequestObject
+
+	request.MarketId = marketId
+	request.Params = params
+
+	var body PostAdvancedPredictionMarketsMarketIdResolveJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedPredictionMarketsMarketIdResolve(ctx, request.(PostAdvancedPredictionMarketsMarketIdResolveRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedPredictionMarketsMarketIdResolve")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedPredictionMarketsMarketIdResolveResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedPredictionMarketsMarketIdResolveResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedPredictionMarketsMarketIdSettle operation middleware
+func (sh *strictHandler) PostAdvancedPredictionMarketsMarketIdSettle(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdSettleParams) {
+	var request PostAdvancedPredictionMarketsMarketIdSettleRequestObject
+
+	request.MarketId = marketId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedPredictionMarketsMarketIdSettle(ctx, request.(PostAdvancedPredictionMarketsMarketIdSettleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedPredictionMarketsMarketIdSettle")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedPredictionMarketsMarketIdSettleResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedPredictionMarketsMarketIdSettleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedPredictionMarketsMarketIdUphold operation middleware
+func (sh *strictHandler) PostAdvancedPredictionMarketsMarketIdUphold(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdUpholdParams) {
+	var request PostAdvancedPredictionMarketsMarketIdUpholdRequestObject
+
+	request.MarketId = marketId
+	request.Params = params
+
+	var body PostAdvancedPredictionMarketsMarketIdUpholdJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedPredictionMarketsMarketIdUphold(ctx, request.(PostAdvancedPredictionMarketsMarketIdUpholdRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedPredictionMarketsMarketIdUphold")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedPredictionMarketsMarketIdUpholdResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedPredictionMarketsMarketIdUpholdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedPredictionMarketsMarketIdVoid operation middleware
+func (sh *strictHandler) PostAdvancedPredictionMarketsMarketIdVoid(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostAdvancedPredictionMarketsMarketIdVoidParams) {
+	var request PostAdvancedPredictionMarketsMarketIdVoidRequestObject
+
+	request.MarketId = marketId
+	request.Params = params
+
+	var body PostAdvancedPredictionMarketsMarketIdVoidJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedPredictionMarketsMarketIdVoid(ctx, request.(PostAdvancedPredictionMarketsMarketIdVoidRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedPredictionMarketsMarketIdVoid")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedPredictionMarketsMarketIdVoidResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedPredictionMarketsMarketIdVoidResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -23211,547 +35973,821 @@ func (sh *strictHandler) PostWithdrawals(w http.ResponseWriter, r *http.Request,
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

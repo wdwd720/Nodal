@@ -209,6 +209,10 @@ func registry() []pair {
 		{table: "margin_liquidation_cases", constraint: "margin_liquidation_cases_status_check", source: "margin.AllCaseStatuses()", values: str(margin.AllCaseStatuses())},
 		{table: "margin_liquidation_cases", constraint: "margin_liquidation_cases_target_check", source: "margin.AllLiquidationTargets()", values: str(margin.AllLiquidationTargets())},
 		{table: "margin_liquidation_steps", constraint: "margin_liquidation_steps_action_check", source: "margin.AllStepActions()", values: str(margin.AllStepActions())},
+		// 00754: a MANUAL_REVIEW case leaves only through a resolution one
+		// operator proposes and a second approves.
+		{table: "margin_case_resolutions", constraint: "margin_case_resolutions_outcome_check", source: "margin.AllResolutionOutcomes()", values: str(margin.AllResolutionOutcomes())},
+		{table: "margin_case_resolution_decisions", constraint: "margin_case_resolution_decisions_decision_check", source: "margin.AllResolutionDecisions()", values: str(margin.AllResolutionDecisions())},
 
 		// Migration 00749 (prediction markets).
 		{table: "prediction_markets", constraint: "prediction_markets_status_check", source: "predmarket.AllMarketStatuses()", values: str(predmarket.AllMarketStatuses())},

@@ -1058,8 +1058,742 @@ paths:
         "422": { $ref: "#/components/responses/Problem" }
 
   # >>> advanced:margin paths (insert this subsystem's paths directly below; keep the marker)
+  #
+  # Margin, leverage, borrowing and liquidation of SIMULATED positions
+  # (internal/margin). A customer account has at most one margin account,
+  # addressed by the customer account's id. Values named without _usd are
+  # exact base units of the account's numeraire (the sandbox dollar,
+  # numeraire_decimals) or of the asset named; *_usd figures are the margin
+  # engine's own cent rendering. The margin service decides every refusal.
+  /advanced/margin/account:
+    get:
+      tags: [advanced]
+      summary: An account's margin account, evaluated by the margin engine at the instant of the read
+      description: >-
+        The read changes nothing: the stored status moves only when the account is
+        marked to market or acted on, so `status` can lag `evaluation.health`. Loans
+        are the open borrow lots; accrued interest since the last posted period is
+        `evaluation.accrued_interest`. The engine reports no liquidation price.
+        NOT_FOUND when the account has no margin account.
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The margin account and its evaluation (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/MarginAccountDetail" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Open a margin account in PAPER or SANDBOX mode with the sandbox dollar as numeraire
+      description: >-
+        Opening the same account again on the same terms returns it unchanged; other
+        terms are a CONFLICT. An ISOLATED account names its one risky asset.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/MarginOpenRequest" } } }
+      responses:
+        "200":
+          description: The margin account
+          content: { application/json: { schema: { $ref: "#/components/schemas/MarginAccount" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/margin/account/close:
+    post:
+      tags: [advanced]
+      summary: Close a margin account that holds nothing and owes the lending pool nothing
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/MarginAccountRef" } } }
+      responses:
+        "200":
+          description: The closed margin account
+          content: { application/json: { schema: { $ref: "#/components/schemas/MarginAccount" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/margin/collateral/post:
+    post:
+      tags: [advanced]
+      summary: Move collateral from the wallet into the margin account (MARGIN_COLLATERAL_MOVE)
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/MarginCollateralRequest" } } }
+      responses:
+        "200":
+          description: The collateral move and the account's evaluation after it
+          content: { application/json: { schema: { $ref: "#/components/schemas/MarginCollateralResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/margin/collateral/release:
+    post:
+      tags: [advanced]
+      summary: Release collateral from the margin account to the wallet (Risk Kernel V2 decides)
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/MarginCollateralRequest" } } }
+      responses:
+        "200":
+          description: The collateral move and the account's evaluation after it
+          content: { application/json: { schema: { $ref: "#/components/schemas/MarginCollateralResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/margin/borrow:
+    post:
+      tags: [advanced]
+      summary: Borrow the numeraire from the lending pool into the wallet (MARGIN_BORROW; Risk Kernel V2 decides)
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/MarginAmountRequest" } } }
+      responses:
+        "200":
+          description: The new borrow lot and the account's evaluation after it
+          content: { application/json: { schema: { $ref: "#/components/schemas/MarginLoanResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/margin/repay:
+    post:
+      tags: [advanced]
+      summary: Repay loans from the wallet, interest first and oldest lot first (MARGIN_REPAY)
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/MarginAmountRequest" } } }
+      responses:
+        "200":
+          description: The repayment, its allocation per lot and the account's evaluation after it
+          content: { application/json: { schema: { $ref: "#/components/schemas/MarginLoanResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/margin/leveraged-buys:
+    post:
+      tags: [advanced]
+      summary: Buy an asset entirely on margin at mark plus the disclosed paper slippage (Risk Kernel V2 decides)
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/MarginLeveragedBuyRequest" } } }
+      responses:
+        "200":
+          description: The financed buy, its journals and the account's evaluation after it
+          content: { application/json: { schema: { $ref: "#/components/schemas/MarginLeveragedBuyResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/margin/calls:
+    get:
+      tags: [advanced]
+      summary: Margin calls of an account, newest first
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of margin calls (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/MarginCallPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/margin/cases:
+    get:
+      tags: [advanced]
+      summary: Liquidation cases of an account, newest first
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of liquidation cases (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/MarginCasePage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/margin/cases/{marginCaseId}:
+    get:
+      tags: [advanced]
+      summary: One liquidation case with every step it executed
+      parameters:
+        - { in: path, name: marginCaseId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The case and its steps (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/MarginCaseDetail" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/margin/stress-runs:
+    get:
+      tags: [advanced]
+      summary: Stored stress runs of an account, newest first
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of stress run summaries (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/MarginStressRunPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Run every stress scenario against your margin account and store the report (moves no value)
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/MarginAccountRef" } } }
+      responses:
+        "200":
+          description: The stored stress run
+          content: { application/json: { schema: { $ref: "#/components/schemas/MarginStressRun" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/margin/stress-runs/{marginStressRunId}:
+    get:
+      tags: [advanced]
+      summary: One stored stress run with every scenario's result
+      parameters:
+        - { in: path, name: marginStressRunId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The stress run (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/MarginStressRun" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/margin/ops/facilities/seed:
+    post:
+      tags: [advanced]
+      summary: Operator — fund the lending pool and the insurance fund in sandbox dollars (FACILITY_FUNDING; step-up)
+      description: Exactly once per Idempotency-Key; a different key funds again.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/MarginSeedRequest" } } }
+      responses:
+        "200":
+          description: The facilities and the sandbox dollars each holds after funding
+          content: { application/json: { schema: { $ref: "#/components/schemas/MarginFacilities" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/margin/ops/mark-to-market:
+    post:
+      tags: [advanced]
+      summary: Operator — evaluate open margin accounts, moving them between NORMAL, WARNING and MARGIN_CALL
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        content: { application/json: { schema: { $ref: "#/components/schemas/MarginBatchRequest" } } }
+      responses:
+        "200":
+          description: Every account evaluated and every one that could not be
+          content: { application/json: { schema: { $ref: "#/components/schemas/MarginMarkToMarketResult" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/margin/ops/queue:
+    get:
+      tags: [advanced]
+      summary: Operator — accounts in MARGIN_CALL or LIQUIDATING under the service's policy, with their live evaluation
+      description: >-
+        A queue run takes them most under-margined first and skips an account whose
+        case is in MANUAL_REVIEW (a person owns it); this read lists them by margin
+        account id.
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: The liquidation queue (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/MarginQueue" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/margin/ops/queue/run:
+    post:
+      tags: [advanced]
+      summary: Operator — run one liquidation step for each of the most under-margined accounts (step-up)
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        content: { application/json: { schema: { $ref: "#/components/schemas/MarginBatchRequest" } } }
+      responses:
+        "200":
+          description: Every step taken and every account that could not be processed
+          content: { application/json: { schema: { $ref: "#/components/schemas/MarginQueueRunResult" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/margin/ops/liquidations:
+    post:
+      tags: [advanced]
+      summary: Operator — execute at most one deterministic liquidation step of one account (step-up)
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/MarginLiquidateRequest" } } }
+      responses:
+        "200":
+          description: What the step decided and executed
+          content: { application/json: { schema: { $ref: "#/components/schemas/MarginLiquidationResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/margin/ops/cases/{marginCaseId}/cover-deficit:
+    post:
+      tags: [advanced]
+      summary: Operator — have the insurance fund cover a bankrupt case's deficit (DEFICIT_COVERAGE; step-up)
+      parameters:
+        - { in: path, name: marginCaseId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: The coverage and the case after it
+          content: { application/json: { schema: { $ref: "#/components/schemas/MarginDeficitResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/margin/ops/stress-runs:
+    post:
+      tags: [advanced]
+      summary: Operator — run every stress scenario against any account's margin account and store the report
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/MarginAccountRef" } } }
+      responses:
+        "200":
+          description: The stored stress run
+          content: { application/json: { schema: { $ref: "#/components/schemas/MarginStressRun" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/margin/ops/calls:
+    get:
+      tags: [advanced]
+      summary: Operator — margin calls across every account, newest first
+      parameters:
+        - { in: query, name: status, schema: { $ref: "#/components/schemas/MarginCallStatus" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of margin calls (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/MarginCallPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
 
   # >>> advanced:derivatives paths (insert this subsystem's paths directly below; keep the marker)
+  #
+  # Futures, perpetuals and options in PAPER and SANDBOX mode
+  # (internal/derivatives), cleared through one CLEARING_HOUSE facility. The
+  # service decides every rule -- the settlement compiler's route, the
+  # DERIVATIVES gate and kill switches, Risk Kernel V2 (instrument, oracle
+  # freshness and mark/index divergence, margin after the trade), buying power,
+  # the reservation of margin and premium, the paper fill at the mark plus the
+  # disclosed slippage, variation margin, funding, final settlement, exercise
+  # and assignment -- and these routes only carry its answers. Every figure is
+  # value domain SIMULATED. Amounts are exact base units of the contract's
+  # settlement asset (signed from the customer's side: > 0 received, < 0 paid);
+  # prices are integer mantissas at the contract's price scale.
+  /advanced/derivatives/policy:
+    get:
+      tags: [advanced]
+      summary: The versioned margin, funding and paper-fill policy every derivative decision records
+      responses:
+        "200":
+          description: The policy in force and its hash
+          content: { application/json: { schema: { $ref: "#/components/schemas/DerivativePolicy" } } }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/derivatives/contracts:
+    get:
+      tags: [advanced]
+      summary: Derivative contracts with the canonical terms the service trades them on and their latest mark
+      description: >-
+        Futures, perpetuals and options of the canonical instrument model, ordered
+        by canonical name. Without kind every derivative kind is listed, at most
+        limit contracts in all.
+      parameters:
+        - { in: query, name: kind, schema: { $ref: "#/components/schemas/DerivativeKind" } }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Contracts with their terms in force, latest mark and final settlement
+          content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeContractList" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/derivatives/contracts/{instrumentId}:
+    get:
+      tags: [advanced]
+      summary: One derivative contract, its terms in force, latest mark and final settlement
+      parameters:
+        - { in: path, name: instrumentId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The contract
+          content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeContract" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/derivatives/contracts/{instrumentId}/marks:
+    get:
+      tags: [advanced]
+      summary: The marks recorded for a contract, newest observation first
+      parameters:
+        - { in: path, name: instrumentId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of marks
+          content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeMarkPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Record a sandbox mark for a contract (operator)
+      description: >-
+        The mark must be exact at the contract's price scale and lie on its tick
+        grid; it is never rounded. Without index the service derives the index
+        from the underlying's fresh spot price, or records the mark without one
+        (and everything that needs an index then refuses). An index given here
+        is recorded under the mark's source. The same observation (contract,
+        source, observed_at) again returns the stored mark; a different mark or
+        index for it is CONFLICT. Without observed_at the mark is observed now.
+      parameters:
+        - { in: path, name: instrumentId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeMarkRequest" } } }
+      responses:
+        "200":
+          description: The mark as recorded
+          content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeMark" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/derivatives/contracts/{instrumentId}/analytics:
+    get:
+      tags: [advanced]
+      summary: Reference analytics of an option at its latest mark -- model values, never a quote
+      description: >-
+        Black-Scholes-Merton price, Greeks and implied volatility of the option
+        at its latest mark, whose index is the spot and whose mark is the premium
+        the implied volatility is solved from. Everything here is a reference
+        model value labelled as such: it is not a quote, not a settlement price
+        and never posted, and it is not advice. The inputs the model used are
+        returned with it.
+      parameters:
+        - { in: path, name: instrumentId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - in: query
+          name: vol_bps
+          required: true
+          description: Annualised volatility the model prices with, in basis points (1 to 100000)
+          schema: { type: integer, format: int64 }
+        - in: query
+          name: rate_bps
+          description: Continuously compounded rate in basis points (-10000 to 10000); 0 when absent
+          schema: { type: integer, format: int64 }
+        - in: query
+          name: dividend_yield_bps
+          description: Continuous dividend yield in basis points (-10000 to 10000); 0 when absent
+          schema: { type: integer, format: int64 }
+      responses:
+        "200":
+          description: Reference model values and the inputs used
+          content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeOptionAnalytics" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/derivatives/contracts/{instrumentId}/variation-margin-runs:
+    post:
+      tags: [advanced]
+      summary: Settle one variation-margin interval of a future or perpetual (operator; requires step-up)
+      description: >-
+        Every open position receives or pays the move of its value to the
+        latest fresh mark through the clearing house. An interval is settled
+        only after it ends, at most once, and never after a later one; a repeat
+        writes nothing and says replay. A stale mark is refused
+        (STALE_MARKET_DATA): variation margin is never settled on a stale price.
+      parameters:
+        - { in: path, name: instrumentId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeRunRequest" } } }
+      responses:
+        "200":
+          description: What the run did (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeRunResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/derivatives/contracts/{instrumentId}/funding-runs:
+    post:
+      tags: [advanced]
+      summary: Charge one funding interval of a perpetual (operator; requires step-up)
+      description: >-
+        The premium index is the exact average of (mark - index) / index over
+        the interval's marks that carry an index, clamped to the policy's
+        maximum; every position open at the interval end pays (longs on a
+        positive rate) or receives through the clearing house. Once per
+        interval; a repeat writes nothing and says replay.
+      parameters:
+        - { in: path, name: instrumentId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeRunRequest" } } }
+      responses:
+        "200":
+          description: What the run did (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeRunResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/derivatives/contracts/{instrumentId}/settlement:
+    post:
+      tags: [advanced]
+      summary: Settle an expired future or option once and for all (operator; requires step-up)
+      description: >-
+        Without price the service settles a future at the last fresh mark at or
+        before expiry and an option at that mark's index (in-the-money longs are
+        exercised automatically and assigned FIFO to writers). A given price
+        must be exact on the contract's tick grid and names its source. Once per
+        contract; a repeat returns the first settlement and says replay.
+      parameters:
+        - { in: path, name: instrumentId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeSettleRequest" } } }
+      responses:
+        "200":
+          description: The settlement (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeSettlementResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/derivatives/positions:
+    get:
+      tags: [advanced]
+      summary: An account's derivative positions with the service's valuation of its open book, oldest first
+      description: >-
+        Each open position carries its average entry price, unrealized PnL and
+        initial and maintenance requirement at its latest mark, exactly as the
+        service values the account's book. The service values the book as a
+        whole and fails closed: when any open position cannot be valued (a stale
+        or missing mark) no position is valued and the refusal is returned
+        instead (valuation_status REFUSED), never a figure that would understate
+        the risk. Funding paid or received is funding_pnl; every interval is in
+        /advanced/derivatives/funding-accruals.
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { in: query, name: status, schema: { $ref: "#/components/schemas/DerivativePositionStatus" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of positions with the book's valuation
+          content: { application/json: { schema: { $ref: "#/components/schemas/DerivativePositionPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Open a position or add to one in one of your own accounts (paper fill at the mark plus disclosed slippage)
+      description: >-
+        A refusal the service reaches after recording the intent is RECORDED:
+        the answer is the stable code (RISK_REJECTED, INSUFFICIENT_BUYING_POWER,
+        CAPABILITY_NOT_APPROVED, FORBIDDEN, CONFLICT, ...) with fields intent_id,
+        reasons and, for a risk refusal, risk_decision_id, and the intent stays
+        readable as REJECTED at /advanced/intents/{intentId}. A stale or missing
+        mark refuses a risk-increasing open.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeOpenRequest" } } }
+      responses:
+        "201":
+          description: The position was opened or increased (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeTradeResult" } } }
+        "200":
+          description: Replay of an intent the service had already carried out
+          content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeTradeResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/derivatives/positions/{positionId}:
+    get:
+      tags: [advanced]
+      summary: One derivative position, to its account's owner or an operator; anyone else is told it does not exist
+      parameters:
+        - { in: path, name: positionId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The position, valued when it is open
+          content: { application/json: { schema: { $ref: "#/components/schemas/DerivativePosition" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/derivatives/positions/{positionId}/close:
+    post:
+      tags: [advanced]
+      summary: Reduce or close one of your own open positions (paper fill; never refused for a stale mark)
+      description: >-
+        Without quantity the whole position is closed. Closing never increases
+        risk: a stale mark does not prevent it (it is priced at the last mark
+        there is) and no margin is reserved. A refusal the service reaches is
+        recorded and answered as for opening. Only the account's owner closes;
+        anyone else is told the position does not exist.
+      parameters:
+        - { in: path, name: positionId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeCloseRequest" } } }
+      responses:
+        "200":
+          description: The position after the close (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeTradeResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/derivatives/positions/{positionId}/exercise:
+    post:
+      tags: [advanced]
+      summary: Exercise held American options before expiry (settled at the fresh index, assigned FIFO to writers)
+      description: >-
+        Without quantity every held contract is exercised. A European option is
+        exercised automatically at expiry and is refused here (UNSUPPORTED); an
+        out-of-the-money option, an expired one or a stale index is refused and
+        the refusal recorded. Only the account's owner exercises; anyone else is
+        told the position does not exist.
+      parameters:
+        - { in: path, name: positionId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeExerciseRequest" } } }
+      responses:
+        "200":
+          description: The holder's position after the exercise (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeTradeResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/derivatives/flows:
+    get:
+      tags: [advanced]
+      summary: The account's register of clearing-house flows (realized, variation margin, funding, premium, settlement), newest first
+      description: >-
+        The cash-flow register the clearing house's books reconcile against:
+        every customer <-> clearing house flow, signed from the customer's side,
+        with the journal transaction that posted it. A shortfall is an
+        obligation the customer could not pay and the clearing house absorbed.
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { in: query, name: position_id, schema: { $ref: "#/components/schemas/UUID" } }
+        - { in: query, name: kind, schema: { $ref: "#/components/schemas/DerivativeFlowKind" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of flows
+          content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeFlowPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/derivatives/funding-accruals:
+    get:
+      tags: [advanced]
+      summary: Perpetual funding accrued to the account's positions, one row per position and interval, newest first
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { in: query, name: position_id, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of funding accruals
+          content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeFundingAccrualPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/derivatives/clearing-house/funding:
+    post:
+      tags: [advanced]
+      summary: Capitalize the clearing house in a sandbox asset (operator; requires step-up)
+      description: >-
+        The clearing house is the counterparty of every paper trade, so a
+        one-sided book is paid from its capital. Exactly once per Idempotency-Key
+        and operator. Without asset_id the sandbox dollar is funded.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeClearingFundingRequest" } } }
+      responses:
+        "200":
+          description: The funding journal (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeClearingFundingResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/derivatives/clearing-house/reconciliations:
+    post:
+      tags: [advanced]
+      summary: Reconcile the clearing house's books against the flow register (operator; reconciliation kind CLEARING)
+      description: >-
+        CLEARING_RESULT must equal minus the register's net and the clearing
+        house's books must balance. A difference opens (or refreshes) a material
+        MISMATCH record, and while it is unresolved new derivative risk is
+        refused (CLEARING_UNRECONCILED). It writes only that record, which is why
+        it is a command. Without asset_id the sandbox dollar is reconciled.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeClearingReconcileRequest" } } }
+      responses:
+        "200":
+          description: The reconciliation report
+          content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeClearingReport" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
 
   # >>> advanced:equities paths (insert this subsystem's paths directly below; keep the marker)
   #
@@ -1916,6 +2650,280 @@ paths:
   # >>> advanced:bridge paths (insert this subsystem's paths directly below; keep the marker)
 
   # >>> advanced:predmarket paths (insert this subsystem's paths directly below; keep the marker)
+  # Prediction markets (internal/predmarket): complete sets of outcome shares against the sandbox dollar,
+  # resolved by a verified oracle report and settled from a segregated escrow. Trading shares on an order
+  # book belongs to the internal order book and is not served here.
+  /advanced/prediction-markets:
+    get:
+      tags: [advanced]
+      summary: Prediction markets in one lifecycle status, soonest close first
+      parameters:
+        - { in: query, name: status, required: true, schema: { $ref: "#/components/schemas/PredictionMarketStatus" } }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Markets in that status (the service does not page; the list is bounded by limit)
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionMarketList" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Define a prediction market in DRAFT, collateralised in the sandbox dollar (operator)
+      description: >-
+        Creating an existing symbol with an identical definition replays it (200); another definition under
+        the same symbol is INVALID_IDEMPOTENCY_REUSE. The creator can never resolve or void the market.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CreatePredictionMarketRequest" } } }
+      responses:
+        "201":
+          description: Market defined in DRAFT
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionMarket" } } }
+        "200":
+          description: The same definition already exists, or an idempotent replay
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionMarket" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/prediction-markets/oracle:
+    get:
+      tags: [advanced]
+      summary: The oracle this deployment resolves prediction markets from (sandbox oracle in LOCAL, TEST and DEV only)
+      responses:
+        "200":
+          description: The oracle's source name and Ed25519 public key, which a market registers at creation
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionOracle" } } }
+        "503": { $ref: "#/components/responses/Problem" }
+  /advanced/prediction-markets/{marketId}:
+    get:
+      tags: [advanced]
+      summary: One market with its outcomes, resolutions, disputes and settlement record
+      parameters: [{ $ref: "#/components/parameters/MarketId" }]
+      responses:
+        "200":
+          description: The market
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionMarketDetail" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/prediction-markets/{marketId}/books:
+    get:
+      tags: [advanced]
+      summary: The market's escrow books, one snapshot, and whether they satisfy the escrow identity
+      parameters: [{ $ref: "#/components/parameters/MarketId" }]
+      responses:
+        "200":
+          description: Escrow, collateral and every outcome's shares issued, outstanding and held by customers
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionEscrowBooks" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/prediction-markets/{marketId}/positions:
+    get:
+      tags: [advanced]
+      summary: An account's outcome shares in one market
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: Every outcome share the account holds in the market (none listed means none held)
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionPositionList" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/prediction-markets/{marketId}/issuances:
+    post:
+      tags: [advanced]
+      summary: Issue complete sets (collateral into the escrow, one share of every outcome per set)
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/PredictionSetRequest" } } }
+      responses:
+        "200":
+          description: The issuance as the economic kernel carried it out
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionSetResult" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/prediction-markets/{marketId}/redemptions:
+    post:
+      tags: [advanced]
+      summary: Redeem complete sets (one share of every outcome per set back into collateral)
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/PredictionSetRequest" } } }
+      responses:
+        "200":
+          description: The redemption as the economic kernel carried it out
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionSetResult" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/prediction-markets/{marketId}/open:
+    post:
+      tags: [advanced]
+      summary: Open a DRAFT market at or after its open time (operator)
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: The market after the step
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionMarket" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/prediction-markets/{marketId}/close:
+    post:
+      tags: [advanced]
+      summary: Close an OPEN market at or after its close time (operator)
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: The market after the step
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionMarket" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/prediction-markets/{marketId}/request-resolution:
+    post:
+      tags: [advanced]
+      summary: Move a CLOSED market to RESOLVING, awaiting an oracle report (operator)
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: The market after the step
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionMarket" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/prediction-markets/{marketId}/oracle-observations:
+    post:
+      tags: [advanced]
+      summary: Record what the sandbox oracle observed for a market (operator; sandbox oracle only)
+      description: >-
+        The sandbox oracle is the stand-in for the world a market asks about. An observation is what it will
+        sign when a resolution asks it for a report; a later observation replaces an earlier one. Observations
+        live in the API process's memory. Without a sandbox oracle this answers PROVIDER_UNAVAILABLE.
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/PredictionOracleObservationRequest" } } }
+      responses:
+        "200":
+          description: The signed report the oracle will now deliver for the market
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionOracleObservation" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /advanced/prediction-markets/{marketId}/resolve:
+    post:
+      tags: [advanced]
+      summary: Resolve from the configured oracle's report, verified against the market's oracle key (operator)
+      description: >-
+        RESOLVING: the report resolves the market. DISPUTED: a report closes the dispute (DISPUTE_OVERTURNED when
+        its outcome differs, DISPUTE_UPHELD when it does not). Replaying an accepted report changes nothing.
+        The market's creator, and for a dispute the operator who raised it, are refused. With no oracle
+        configured this answers PROVIDER_UNAVAILABLE.
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/PredictionResolveRequest" } } }
+      responses:
+        "200":
+          description: The market and the resolution now in force
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionResolutionResult" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /advanced/prediction-markets/{marketId}/dispute:
+    post:
+      tags: [advanced]
+      summary: Dispute a RESOLVED market's oracle resolution, blocking settlement (operator)
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/PredictionDisputeRequest" } } }
+      responses:
+        "200":
+          description: The dispute and the market, now DISPUTED
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionDisputeResult" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/prediction-markets/{marketId}/uphold:
+    post:
+      tags: [advanced]
+      summary: Close a dispute keeping the disputed outcome (operator; not the creator, not the disputer)
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/PredictionRulingRequest" } } }
+      responses:
+        "200":
+          description: The market and its DISPUTE_UPHELD resolution
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionResolutionResult" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/prediction-markets/{marketId}/void:
+    post:
+      tags: [advanced]
+      summary: Void a market that has not settled and refund every share (operator; not the creator)
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/PredictionVoidRequest" } } }
+      responses:
+        "200":
+          description: The refund record, with the residual it discloses
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionSettlementResult" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/prediction-markets/{marketId}/settle:
+    post:
+      tags: [advanced]
+      summary: Settle a RESOLVED market from its escrow once its dispute window has passed (operator)
+      description: >-
+        Every winning share pays exactly one collateral unit and every share is retired; the escrow is empty
+        afterwards. Settling a SETTLED market returns its record and pays nothing (replay true).
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: The settlement record and what this call paid
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionSettlementResult" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/prediction-markets/{marketId}/reconcile:
+    post:
+      tags: [advanced]
+      summary: Run the PREDICTION_ESCROW reconciliation for one market (operator; compares and records, moves nothing)
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: The reconciliation record, MATCHED or a material MISMATCH naming every violation
+          content: { application/json: { schema: { $ref: "#/components/schemas/PredictionEscrowReconciliation" } } }
+        "404": { $ref: "#/components/responses/Problem" }
 
   # >>> advanced:marketplace paths (insert this subsystem's paths directly below; keep the marker)
 
@@ -2665,7 +3673,11 @@ components:
         id: { $ref: "#/components/schemas/UUID" }
         chain: { type: string }
         mint_address: { type: string }
-        kind: { type: string, enum: [NATIVE, SPL_TOKEN, SPL_TOKEN_2022, FIAT] }
+        kind:
+          type: string
+          enum: [NATIVE, SPL_TOKEN, SPL_TOKEN_2022, FIAT, CREDIT, NATIVE_ASSET, SIMULATED]
+          # Explicit names: SIMULATED is also a value-domain constant.
+          x-enum-varnames: [AssetKindNative, AssetKindSplToken, AssetKindSplToken2022, AssetKindFiat, AssetKindCredit, AssetKindNativeAsset, AssetKindSimulated]
         symbol: { type: string }
         name: { type: string }
         decimals: { type: integer }
@@ -3379,8 +4391,1038 @@ components:
         as_of: { $ref: "#/components/schemas/Timestamp" }
 
     # >>> advanced:margin schemas (insert this subsystem's schemas directly below; keep the marker)
+    MarginMode:
+      type: string
+      enum: [CASH, ISOLATED, CROSS]
+      description: CASH takes no leverage; ISOLATED margins one risky asset; CROSS shares the collateral across positions.
+    MarginAccountStatus:
+      type: string
+      enum: [NORMAL, WARNING, MARGIN_CALL, LIQUIDATING, BANKRUPT, CLOSED]
+    MarginCallStatus:
+      type: string
+      enum: [OPEN, MET, LIQUIDATED]
+    MarginCaseStatus:
+      type: string
+      enum: [AWAITING_PRICE, AWAITING_VENUE, IN_PROGRESS, COMPLETED, BANKRUPT, MANUAL_REVIEW]
+    MarginLiquidationTarget:
+      type: string
+      enum: [INITIAL_MARGIN, MAINTENANCE_PLUS_BUFFER]
+    MarginPlanDecision:
+      type: string
+      enum: [COMPLETE, AWAIT_PRICE, AWAIT_VENUE, SELL, SELL_ALL, APPLY_COLLATERAL, BANKRUPT, MANUAL_REVIEW]
+    MarginStepAction:
+      type: string
+      enum: [SELL, APPLY_COLLATERAL]
+    MarginStressScenario:
+      type: string
+      enum: [GAP_DOWN_5, GAP_DOWN_10, GAP_DOWN_25, GAP_DOWN_50, GAP_UP_5, GAP_UP_10, GAP_UP_25, GAP_UP_50,
+             ORACLE_UNAVAILABLE, VENUE_UNAVAILABLE, PARTIAL_FILL, EXTREME_SPREAD, BRIDGE_DELAYED, COLLATERAL_DEPEG]
+    MarginPrice:
+      type: object
+      required: [mantissa, scale]
+      description: The price of one whole unit in the numeraire, exactly mantissa × 10^-scale.
+      properties:
+        mantissa: { $ref: "#/components/schemas/Quantity" }
+        scale: { type: integer }
+        source: { type: string }
+        observed_at: { $ref: "#/components/schemas/Timestamp" }
+    MarginOpenRequest:
+      type: object
+      required: [account_id, margin_mode, mode]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        margin_mode: { $ref: "#/components/schemas/MarginMode" }
+        mode: { $ref: "#/components/schemas/AdvancedMode" }
+        isolated_asset_id: { $ref: "#/components/schemas/UUID" }
+    MarginAccountRef:
+      type: object
+      required: [account_id]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+    MarginCollateralRequest:
+      type: object
+      required: [account_id, asset_id, quantity]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+    MarginAmountRequest:
+      type: object
+      required: [account_id, amount]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        amount: { $ref: "#/components/schemas/Quantity" }
+    MarginLeveragedBuyRequest:
+      type: object
+      required: [account_id, asset_id, quantity]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+    MarginSeedRequest:
+      type: object
+      required: [pool_amount, fund_amount]
+      properties:
+        pool_amount: { $ref: "#/components/schemas/Quantity" }
+        fund_amount: { $ref: "#/components/schemas/Quantity" }
+    MarginBatchRequest:
+      type: object
+      properties:
+        limit: { type: integer, minimum: 1 }
+    MarginLiquidateRequest:
+      type: object
+      required: [account_id]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        expected_step: { type: integer, minimum: 0, description: "The step meant (1 for the first); 0 or absent means whatever step is next. A step already executed is returned, not repeated." }
+    MarginAccount:
+      type: object
+      required: [value_domain, id, account_id, margin_mode, mode, status, policy_version, numeraire_asset_id, lending_pool_id,
+                 insurance_fund_id, opened_at]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        margin_mode: { $ref: "#/components/schemas/MarginMode" }
+        mode: { $ref: "#/components/schemas/AdvancedMode" }
+        status: { $ref: "#/components/schemas/MarginAccountStatus" }
+        policy_version: { type: string }
+        numeraire_asset_id: { $ref: "#/components/schemas/UUID" }
+        isolated_asset_id: { $ref: "#/components/schemas/UUID" }
+        lending_pool_id: { $ref: "#/components/schemas/UUID" }
+        insurance_fund_id: { $ref: "#/components/schemas/UUID" }
+        opened_at: { $ref: "#/components/schemas/Timestamp" }
+    MarginHaircut:
+      type: object
+      required: [volatility_bps, liquidity_bps, oracle_bps, venue_bps, concentration_bps, settlement_bps, cross_chain_bps, zero_value, total_bps]
+      properties:
+        volatility_bps: { $ref: "#/components/schemas/BPS" }
+        liquidity_bps: { $ref: "#/components/schemas/BPS" }
+        oracle_bps: { $ref: "#/components/schemas/BPS" }
+        venue_bps: { $ref: "#/components/schemas/BPS" }
+        concentration_bps: { $ref: "#/components/schemas/BPS" }
+        settlement_bps: { $ref: "#/components/schemas/BPS" }
+        cross_chain_bps: { $ref: "#/components/schemas/BPS" }
+        zero_value: { type: boolean, description: "A stale, missing or future mark (or a delayed bridge) makes the collateral worthless." }
+        total_bps: { $ref: "#/components/schemas/BPS" }
+    MarginHolding:
+      type: object
+      required: [asset_id, numeraire, quantity, market_value, priced, fresh, concentration_share_bps, haircut, collateral_value,
+                 exposure, initial_margin, maintenance_margin]
+      properties:
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        numeraire: { type: boolean }
+        quantity: { $ref: "#/components/schemas/Quantity", description: "base units of the asset" }
+        market_value: { $ref: "#/components/schemas/Quantity" }
+        priced: { type: boolean }
+        fresh: { type: boolean }
+        mark_at: { $ref: "#/components/schemas/Timestamp" }
+        mark: { $ref: "#/components/schemas/MarginPrice", description: "the mark the evaluation used; present on reads" }
+        concentration_share_bps: { $ref: "#/components/schemas/BPS" }
+        haircut: { $ref: "#/components/schemas/MarginHaircut" }
+        collateral_value: { $ref: "#/components/schemas/Quantity" }
+        exposure: { $ref: "#/components/schemas/Quantity" }
+        initial_margin: { $ref: "#/components/schemas/Quantity" }
+        maintenance_margin: { $ref: "#/components/schemas/Quantity" }
+    MarginEvaluationUSD:
+      type: object
+      description: The engine's cent rendering, rounded so the account can only look less healthy (assets and equity down, liabilities and requirements up).
+      required: [eligible_collateral, borrow_liabilities, accrued_interest, equity, market_value, gross_exposure, initial_margin,
+                 maintenance_margin, warning_threshold, margin_available, liquidation_buffer]
+      properties:
+        eligible_collateral: { $ref: "#/components/schemas/USD" }
+        borrow_liabilities: { $ref: "#/components/schemas/USD" }
+        accrued_interest: { $ref: "#/components/schemas/USD" }
+        equity: { $ref: "#/components/schemas/USD" }
+        market_value: { $ref: "#/components/schemas/USD" }
+        gross_exposure: { $ref: "#/components/schemas/USD" }
+        initial_margin: { $ref: "#/components/schemas/USD" }
+        maintenance_margin: { $ref: "#/components/schemas/USD" }
+        warning_threshold: { $ref: "#/components/schemas/USD" }
+        margin_available: { $ref: "#/components/schemas/USD" }
+        liquidation_buffer: { $ref: "#/components/schemas/USD" }
+    MarginEvaluation:
+      type: object
+      description: >-
+        The margin engine's deterministic evaluation. equity = eligible_collateral + realized_pnl + unrealized_pnl
+        − borrow_liabilities − accrued_fees − accrued_interest; liquidation_buffer = equity − maintenance_margin
+        (negative once eligible for liquidation). Quantities are numeraire base units.
+      required: [at, policy_version, policy_hash, hash, numeraire_asset_id, numeraire_decimals, health, levered, liquidation_eligible,
+                 prices_fresh, missing_marks, stale_assets, leverage_cap_bps, effective_leverage_bps, leverage_unbounded,
+                 eligible_collateral, realized_pnl, unrealized_pnl, borrow_liabilities, accrued_fees, accrued_interest, equity,
+                 market_value, net_asset_value, gross_exposure, net_exposure, initial_margin, maintenance_margin, warning_threshold,
+                 liquidation_buffer, capacity, margin_available, usd, holdings]
+      properties:
+        at: { $ref: "#/components/schemas/Timestamp" }
+        policy_version: { type: string }
+        policy_hash: { type: string }
+        hash: { type: string }
+        numeraire_asset_id: { $ref: "#/components/schemas/UUID" }
+        numeraire_decimals: { type: integer }
+        health: { $ref: "#/components/schemas/MarginAccountStatus" }
+        levered: { type: boolean }
+        liquidation_eligible: { type: boolean }
+        prices_fresh: { type: boolean }
+        missing_marks: { type: boolean }
+        stale_assets: { type: array, items: { $ref: "#/components/schemas/UUID" } }
+        oldest_mark_at: { $ref: "#/components/schemas/Timestamp" }
+        newest_mark_at: { $ref: "#/components/schemas/Timestamp" }
+        leverage_cap_bps: { type: integer, format: int64, description: "basis points of gross exposure over equity (50000 = 5x)" }
+        effective_leverage_bps: { type: integer, format: int64, description: "basis points, rounded up" }
+        leverage_unbounded: { type: boolean }
+        eligible_collateral: { $ref: "#/components/schemas/Quantity" }
+        realized_pnl: { $ref: "#/components/schemas/Quantity" }
+        unrealized_pnl: { $ref: "#/components/schemas/Quantity" }
+        borrow_liabilities: { $ref: "#/components/schemas/Quantity" }
+        accrued_fees: { $ref: "#/components/schemas/Quantity" }
+        accrued_interest: { $ref: "#/components/schemas/Quantity" }
+        equity: { $ref: "#/components/schemas/Quantity" }
+        market_value: { $ref: "#/components/schemas/Quantity" }
+        net_asset_value: { $ref: "#/components/schemas/Quantity" }
+        gross_exposure: { $ref: "#/components/schemas/Quantity" }
+        net_exposure: { $ref: "#/components/schemas/Quantity" }
+        initial_margin: { $ref: "#/components/schemas/Quantity" }
+        maintenance_margin: { $ref: "#/components/schemas/Quantity" }
+        warning_threshold: { $ref: "#/components/schemas/Quantity" }
+        liquidation_buffer: { $ref: "#/components/schemas/Quantity" }
+        capacity: { $ref: "#/components/schemas/Quantity" }
+        margin_available: { $ref: "#/components/schemas/Quantity" }
+        usd: { $ref: "#/components/schemas/MarginEvaluationUSD" }
+        holdings: { type: array, items: { $ref: "#/components/schemas/MarginHolding" } }
+    MarginLoan:
+      type: object
+      required: [lot_id, principal, interest, rate_bps, accrued_through]
+      properties:
+        lot_id: { $ref: "#/components/schemas/UUID" }
+        principal: { $ref: "#/components/schemas/Quantity", description: "outstanding principal" }
+        interest: { $ref: "#/components/schemas/Quantity", description: "interest posted (capitalized) and not yet repaid" }
+        rate_bps: { type: integer, format: int64, description: "annual simple rate" }
+        accrued_through: { $ref: "#/components/schemas/Timestamp" }
+    MarginCall:
+      type: object
+      required: [id, margin_account_id, account_id, status, issued_at, equity, maintenance_margin, deficiency, evaluation_hash,
+                 numeraire_asset_id, numeraire_decimals]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        margin_account_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        status: { $ref: "#/components/schemas/MarginCallStatus" }
+        issued_at: { $ref: "#/components/schemas/Timestamp" }
+        equity: { $ref: "#/components/schemas/Quantity" }
+        maintenance_margin: { $ref: "#/components/schemas/Quantity" }
+        deficiency: { $ref: "#/components/schemas/Quantity" }
+        evaluation_hash: { type: string }
+        resolved_at: { $ref: "#/components/schemas/Timestamp" }
+        numeraire_asset_id: { $ref: "#/components/schemas/UUID" }
+        numeraire_decimals: { type: integer }
+    MarginCase:
+      type: object
+      required: [id, margin_account_id, account_id, margin_call_id, status, policy_version, target, max_steps, steps_executed,
+                 opened_at, last_reason, numeraire_asset_id, numeraire_decimals]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        margin_account_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        margin_call_id: { $ref: "#/components/schemas/UUID" }
+        status: { $ref: "#/components/schemas/MarginCaseStatus" }
+        policy_version: { type: string }
+        target: { $ref: "#/components/schemas/MarginLiquidationTarget" }
+        max_steps: { type: integer }
+        steps_executed: { type: integer }
+        opened_at: { $ref: "#/components/schemas/Timestamp" }
+        closed_at: { $ref: "#/components/schemas/Timestamp" }
+        last_reason: { type: string }
+        deficit: { $ref: "#/components/schemas/Quantity" }
+        deficit_coverage_journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        deficit_covered_at: { $ref: "#/components/schemas/Timestamp" }
+        numeraire_asset_id: { $ref: "#/components/schemas/UUID" }
+        numeraire_decimals: { type: integer }
+    MarginLiquidationStep:
+      type: object
+      required: [id, step_no, action, asset_id, quantity, slippage_bps, slippage_cap_bps, proceeds, fee, repaid, excess,
+                 equity_before, equity_after, plan_hash, executed_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        step_no: { type: integer }
+        action: { $ref: "#/components/schemas/MarginStepAction" }
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        mark: { $ref: "#/components/schemas/MarginPrice" }
+        execution_price: { $ref: "#/components/schemas/MarginPrice" }
+        slippage_bps: { $ref: "#/components/schemas/BPS" }
+        slippage_cap_bps: { $ref: "#/components/schemas/BPS" }
+        proceeds: { $ref: "#/components/schemas/Quantity" }
+        fee: { $ref: "#/components/schemas/Quantity" }
+        repaid: { $ref: "#/components/schemas/Quantity" }
+        excess: { $ref: "#/components/schemas/Quantity" }
+        trade_journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        release_journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        repay_journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        excess_journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        equity_before: { $ref: "#/components/schemas/Quantity" }
+        equity_after: { $ref: "#/components/schemas/Quantity" }
+        plan_hash: { type: string }
+        executed_at: { $ref: "#/components/schemas/Timestamp" }
+    MarginAccountDetail:
+      allOf:
+        - { $ref: "#/components/schemas/MarginAccount" }
+        - type: object
+          required: [evaluation, loans]
+          properties:
+            evaluation: { $ref: "#/components/schemas/MarginEvaluation" }
+            loans: { type: array, items: { $ref: "#/components/schemas/MarginLoan" } }
+            open_call: { $ref: "#/components/schemas/MarginCall" }
+            latest_case: { $ref: "#/components/schemas/MarginCase" }
+    MarginCaseDetail:
+      allOf:
+        - { $ref: "#/components/schemas/MarginCase" }
+        - type: object
+          required: [value_domain, steps]
+          properties:
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+            steps: { type: array, items: { $ref: "#/components/schemas/MarginLiquidationStep" } }
+    MarginCallPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [value_domain, items]
+          properties:
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+            items: { type: array, items: { $ref: "#/components/schemas/MarginCall" } }
+    MarginCasePage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [value_domain, items]
+          properties:
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+            items: { type: array, items: { $ref: "#/components/schemas/MarginCase" } }
+    MarginStressResult:
+      type: object
+      required: [scenario, shock_bps, equity_after, maintenance_after, initial_after, equity_after_usd, maintenance_after_usd,
+                 would_liquidate, executable, outcome, steps_simulated, deficit, deficit_usd, insurance_fund_draw, insurance_fund_draw_usd]
+      properties:
+        scenario: { $ref: "#/components/schemas/MarginStressScenario" }
+        shock_bps: { $ref: "#/components/schemas/BPS" }
+        equity_after: { $ref: "#/components/schemas/Quantity" }
+        maintenance_after: { $ref: "#/components/schemas/Quantity" }
+        initial_after: { $ref: "#/components/schemas/Quantity" }
+        equity_after_usd: { $ref: "#/components/schemas/USD" }
+        maintenance_after_usd: { $ref: "#/components/schemas/USD" }
+        would_liquidate: { type: boolean }
+        executable: { type: boolean }
+        outcome: { $ref: "#/components/schemas/MarginPlanDecision" }
+        steps_simulated: { type: integer }
+        deficit: { $ref: "#/components/schemas/Quantity" }
+        deficit_usd: { $ref: "#/components/schemas/USD" }
+        insurance_fund_draw: { $ref: "#/components/schemas/Quantity" }
+        insurance_fund_draw_usd: { $ref: "#/components/schemas/USD" }
+    MarginStressRunSummary:
+      type: object
+      required: [id, margin_account_id, account_id, run_at, policy_version, policy_hash, input_hash, report_hash,
+                 numeraire_asset_id, numeraire_decimals]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        margin_account_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        run_at: { $ref: "#/components/schemas/Timestamp" }
+        policy_version: { type: string }
+        policy_hash: { type: string }
+        input_hash: { type: string }
+        report_hash: { type: string }
+        numeraire_asset_id: { $ref: "#/components/schemas/UUID" }
+        numeraire_decimals: { type: integer }
+    MarginStressRun:
+      allOf:
+        - { $ref: "#/components/schemas/MarginStressRunSummary" }
+        - type: object
+          required: [value_domain, results]
+          properties:
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+            results: { type: array, items: { $ref: "#/components/schemas/MarginStressResult" } }
+    MarginStressRunPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [value_domain, items]
+          properties:
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+            items: { type: array, items: { $ref: "#/components/schemas/MarginStressRunSummary" } }
+    MarginCollateralResult:
+      type: object
+      required: [value_domain, margin_account_id, move_id, journal_transaction_id, effect_id, replayed, status]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        margin_account_id: { $ref: "#/components/schemas/UUID" }
+        move_id: { $ref: "#/components/schemas/UUID" }
+        intent_id: { $ref: "#/components/schemas/UUID" }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        effect_id: { $ref: "#/components/schemas/UUID" }
+        reservation_id: { $ref: "#/components/schemas/UUID" }
+        replayed: { type: boolean, description: "the service found this operation already applied and posted nothing; no evaluation is reported" }
+        status: { $ref: "#/components/schemas/MarginAccountStatus" }
+        evaluation: { $ref: "#/components/schemas/MarginEvaluation" }
+    MarginLoanAllocation:
+      type: object
+      required: [lot_id, interest, principal]
+      properties:
+        lot_id: { $ref: "#/components/schemas/UUID" }
+        interest: { $ref: "#/components/schemas/Quantity" }
+        principal: { $ref: "#/components/schemas/Quantity" }
+    MarginLoanResult:
+      type: object
+      required: [value_domain, margin_account_id, intent_id, journal_transaction_id, effect_id, allocations, replayed, status]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        margin_account_id: { $ref: "#/components/schemas/UUID" }
+        intent_id: { $ref: "#/components/schemas/UUID" }
+        lot_id: { $ref: "#/components/schemas/UUID" }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        effect_id: { $ref: "#/components/schemas/UUID" }
+        allocations: { type: array, items: { $ref: "#/components/schemas/MarginLoanAllocation" } }
+        replayed: { type: boolean }
+        status: { $ref: "#/components/schemas/MarginAccountStatus" }
+        evaluation: { $ref: "#/components/schemas/MarginEvaluation" }
+    MarginLeveragedBuyResult:
+      type: object
+      required: [value_domain, margin_account_id, intent_id, cost, borrow_journal_transaction_id, trade_journal_transaction_id,
+                 collateral_journal_transaction_id, replayed, status]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        margin_account_id: { $ref: "#/components/schemas/UUID" }
+        intent_id: { $ref: "#/components/schemas/UUID" }
+        lot_id: { $ref: "#/components/schemas/UUID" }
+        mark: { $ref: "#/components/schemas/MarginPrice" }
+        execution_price: { $ref: "#/components/schemas/MarginPrice", description: "mark × (1 + slippage_bps)" }
+        slippage_bps: { $ref: "#/components/schemas/BPS" }
+        cost: { $ref: "#/components/schemas/Quantity", description: "numeraire base units borrowed: quantity × execution price, rounded up" }
+        borrow_journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        trade_journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        collateral_journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        reservation_id: { $ref: "#/components/schemas/UUID" }
+        replayed: { type: boolean }
+        status: { $ref: "#/components/schemas/MarginAccountStatus" }
+        evaluation: { $ref: "#/components/schemas/MarginEvaluation" }
+    MarginFacility:
+      type: object
+      required: [id, kind, name, status, available]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        kind: { type: string }
+        name: { type: string }
+        status: { type: string }
+        available: { $ref: "#/components/schemas/Quantity", description: "sandbox-dollar base units the facility holds unlent (lending pool) or undrawn (insurance fund)" }
+    MarginFacilities:
+      type: object
+      required: [value_domain, asset_id, asset_decimals, lending_pool, insurance_fund]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        asset_decimals: { type: integer }
+        lending_pool: { $ref: "#/components/schemas/MarginFacility" }
+        insurance_fund: { $ref: "#/components/schemas/MarginFacility" }
+    MarginFailure:
+      type: object
+      required: [code, detail]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        code: { type: string }
+        detail: { type: string }
+    MarginEvaluated:
+      type: object
+      required: [margin_account_id, account_id, previous_status, status, evaluation]
+      properties:
+        margin_account_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        previous_status: { $ref: "#/components/schemas/MarginAccountStatus" }
+        status: { $ref: "#/components/schemas/MarginAccountStatus" }
+        evaluation: { $ref: "#/components/schemas/MarginEvaluation" }
+        call: { $ref: "#/components/schemas/MarginCall" }
+    MarginMarkToMarketResult:
+      type: object
+      required: [value_domain, evaluated, failures]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        evaluated: { type: array, items: { $ref: "#/components/schemas/MarginEvaluated" } }
+        failures: { type: array, items: { $ref: "#/components/schemas/MarginFailure" } }
+    MarginQueueEntry:
+      type: object
+      required: [account, numeraire_decimals]
+      properties:
+        account: { $ref: "#/components/schemas/MarginAccount" }
+        numeraire_decimals: { type: integer }
+        evaluation: { $ref: "#/components/schemas/MarginEvaluation" }
+        evaluation_error: { $ref: "#/components/schemas/MarginFailure" }
+        open_call: { $ref: "#/components/schemas/MarginCall" }
+        latest_case: { $ref: "#/components/schemas/MarginCase" }
+    MarginQueue:
+      type: object
+      required: [value_domain, items]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        items: { type: array, items: { $ref: "#/components/schemas/MarginQueueEntry" } }
+    MarginLiquidationOrder:
+      type: object
+      required: [action, asset_id, quantity, slippage_bps, proceeds, fee, repay, excess]
+      properties:
+        action: { $ref: "#/components/schemas/MarginStepAction" }
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        mark: { $ref: "#/components/schemas/MarginPrice" }
+        execution_price: { $ref: "#/components/schemas/MarginPrice" }
+        slippage_bps: { $ref: "#/components/schemas/BPS" }
+        proceeds: { $ref: "#/components/schemas/Quantity" }
+        fee: { $ref: "#/components/schemas/Quantity" }
+        repay: { $ref: "#/components/schemas/Quantity" }
+        excess: { $ref: "#/components/schemas/Quantity" }
+    MarginPlan:
+      type: object
+      required: [decision, reason, target, steps_taken, target_units, deficit_units, hash, orders]
+      properties:
+        decision: { $ref: "#/components/schemas/MarginPlanDecision" }
+        reason: { type: string }
+        target: { $ref: "#/components/schemas/MarginLiquidationTarget" }
+        steps_taken: { type: integer }
+        target_units: { $ref: "#/components/schemas/Quantity" }
+        deficit_units: { $ref: "#/components/schemas/Quantity" }
+        hash: { type: string }
+        orders: { type: array, items: { $ref: "#/components/schemas/MarginLiquidationOrder" } }
+    MarginLiquidationResult:
+      type: object
+      required: [value_domain, margin_account_id, account_id, eligible, decision, reason, account_status, numeraire_decimals, replayed]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        margin_account_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        eligible: { type: boolean, description: "false when the account needed no liquidation and no case was opened" }
+        decision: { $ref: "#/components/schemas/MarginPlanDecision" }
+        reason: { type: string }
+        account_status: { $ref: "#/components/schemas/MarginAccountStatus" }
+        numeraire_decimals: { type: integer }
+        case: { $ref: "#/components/schemas/MarginCase" }
+        step: { $ref: "#/components/schemas/MarginLiquidationStep" }
+        plan: { $ref: "#/components/schemas/MarginPlan" }
+        replayed: { type: boolean }
+    MarginQueueRunResult:
+      type: object
+      required: [value_domain, results, failures]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        results: { type: array, items: { $ref: "#/components/schemas/MarginLiquidationResult" } }
+        failures: { type: array, items: { $ref: "#/components/schemas/MarginFailure" } }
+    MarginDeficitResult:
+      type: object
+      required: [value_domain, case_id, deficit, journal_transaction_id, replayed, case]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        case_id: { $ref: "#/components/schemas/UUID" }
+        deficit: { $ref: "#/components/schemas/Quantity" }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        replayed: { type: boolean }
+        case: { $ref: "#/components/schemas/MarginCase" }
 
     # >>> advanced:derivatives schemas (insert this subsystem's schemas directly below; keep the marker)
+    #
+    # Futures, perpetuals and options (internal/derivatives). The enums carry
+    # x-enum-varnames so their Go constants never collide with another
+    # schema's (OPEN, PAPER, CALL and BUY already exist unprefixed).
+    DerivativeKind:
+      type: string
+      enum: [FUTURE, PERPETUAL, OPTION]
+      x-enum-varnames: [DerivativeKindFuture, DerivativeKindPerpetual, DerivativeKindOption]
+    DerivativeSide:
+      type: string
+      enum: [LONG, SHORT]
+      x-enum-varnames: [DerivativeSideLong, DerivativeSideShort]
+    DerivativePositionStatus:
+      type: string
+      enum: [OPEN, CLOSED, SETTLED]
+      x-enum-varnames: [DerivativePositionOpen, DerivativePositionClosed, DerivativePositionSettled]
+    DerivativeFlowKind:
+      type: string
+      enum: [REALIZED, VARIATION_MARGIN, FUNDING, FUTURE_SETTLEMENT, OPTION_PREMIUM, OPTION_EXERCISE, OPTION_ASSIGNMENT]
+      x-enum-varnames: [DerivativeFlowRealized, DerivativeFlowVariationMargin, DerivativeFlowFunding, DerivativeFlowFutureSettlement,
+                        DerivativeFlowOptionPremium, DerivativeFlowOptionExercise, DerivativeFlowOptionAssignment]
+    DerivativeFundingDirection:
+      type: string
+      enum: [PAY, RECEIVE]
+      x-enum-varnames: [DerivativeFundingPay, DerivativeFundingReceive]
+    DerivativeFillSide:
+      type: string
+      enum: [BUY, SELL]
+      x-enum-varnames: [DerivativeFillBuy, DerivativeFillSell]
+    DerivativeFillSource:
+      type: string
+      enum: [PAPER, BOOK, EXERCISE, ASSIGNMENT, EXPIRY]
+      x-enum-varnames: [DerivativeFillSourcePaper, DerivativeFillSourceBook, DerivativeFillSourceExercise,
+                        DerivativeFillSourceAssignment, DerivativeFillSourceExpiry]
+    DerivativeSettlementKind:
+      type: string
+      enum: [FUTURE, OPTION]
+      x-enum-varnames: [DerivativeSettlementFuture, DerivativeSettlementOption]
+    DerivativeValuationStatus:
+      type: string
+      description: >-
+        VALUED: valuation is present. REFUSED: the service could not value the
+        account's open book and valuation_refusal says why; no figure is given
+        in its place. NOT_APPLICABLE: the position is not open. NOT_COMPUTED:
+        this answer (a trade result) does not value the position; read it to.
+      enum: [VALUED, REFUSED, NOT_APPLICABLE, NOT_COMPUTED]
+      x-enum-varnames: [DerivativeValuationValued, DerivativeValuationRefused, DerivativeValuationNotApplicable,
+                        DerivativeValuationNotComputed]
+    DerivativeBookStatus:
+      type: string
+      enum: [VALUED, REFUSED]
+      x-enum-varnames: [DerivativeBookValued, DerivativeBookRefused]
+    DerivativeRunKind:
+      type: string
+      enum: [VARIATION_MARGIN, FUNDING]
+      x-enum-varnames: [DerivativeRunVariationMargin, DerivativeRunFunding]
+    DerivativeDecimal:
+      type: string
+      pattern: '^[0-9]+(\.[0-9]+)?$'
+      description: A non-negative decimal written out exactly. It is never rounded; one that is not exact where it is used is refused.
+      examples: ["2500.50"]
+    DerivativeModelDecimal:
+      type: string
+      pattern: '^-?[0-9]+(\.[0-9]+)?$'
+      description: A model value as an exact decimal string (rounded half-even to 18 places by the model where it says so)
+    DerivativeAsset:
+      type: object
+      description: The asset amounts are counted in, so base units can be read as the decimal they denote.
+      required: [id, symbol, decimals]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        decimals: { type: integer }
+    DerivativeRefusal:
+      type: object
+      required: [code, detail]
+      properties:
+        code: { type: string, description: The stable code the service refused with }
+        detail: { type: string }
+    DerivativeClassRates:
+      type: object
+      required: [risk_class, initial_bps, maintenance_bps]
+      properties:
+        risk_class: { type: string }
+        initial_bps: { type: integer, format: int64 }
+        maintenance_bps: { type: integer, format: int64 }
+    DerivativePolicy:
+      type: object
+      required: [version, hash, linear, funding_buffer_intervals, max_funding_rate_e8, funding_rate_scale, option_shocks_bps,
+                 option_min_margin_bps, option_maintenance_ratio_bps, expiry_gap_window_ms, expiry_gap_shock_bps,
+                 paper_slippage_bps, variation_margin_interval_ms]
+      properties:
+        version: { type: string }
+        hash: { type: string, description: hex sha256 of the policy's canonical JSON }
+        linear:
+          type: array
+          description: Initial and maintenance rates of futures and perpetuals by the underlying's risk class; an unlisted class cannot be traded
+          items: { $ref: "#/components/schemas/DerivativeClassRates" }
+        funding_buffer_intervals: { type: integer, format: int64 }
+        max_funding_rate_e8: { type: integer, format: int64, description: Funding is clamped to plus or minus this many 10^-8 per interval }
+        funding_rate_scale: { type: integer, format: int64, description: "The denominator of every *_e8 rate (10^8)" }
+        option_shocks_bps:
+          type: array
+          description: The scenario grid a written option's worst loss is computed over
+          items: { type: integer, format: int64 }
+        option_min_margin_bps: { type: integer, format: int64 }
+        option_maintenance_ratio_bps: { type: integer, format: int64 }
+        expiry_gap_window_ms: { type: integer, format: int64 }
+        expiry_gap_shock_bps: { type: integer, format: int64 }
+        paper_slippage_bps: { type: integer, format: int64, description: A paper buy fills this far above the mark and a sell this far below, then onto the tick grid against the customer }
+        variation_margin_interval_ms: { type: integer, format: int64 }
+    DerivativeMark:
+      type: object
+      required: [value_domain, id, instrument_id, mark_mantissa, price_scale, has_index, source, observed_at, recorded_at]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        mark_mantissa: { $ref: "#/components/schemas/Quantity" }
+        price_scale: { type: integer, description: The mark is mark_mantissa at this many decimal places (the contract's price scale) }
+        has_index: { type: boolean, description: False when the mark was recorded without an index (the underlying's spot) }
+        index_mantissa: { $ref: "#/components/schemas/Quantity" }
+        index_scale: { type: integer }
+        index_source: { type: string }
+        source: { type: string }
+        observed_at: { $ref: "#/components/schemas/Timestamp" }
+        recorded_at: { $ref: "#/components/schemas/Timestamp" }
+    DerivativeMarkPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items, value_domain]
+          properties:
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+            items: { type: array, items: { $ref: "#/components/schemas/DerivativeMark" } }
+    DerivativeMarkRequest:
+      type: object
+      required: [mark, source]
+      properties:
+        mark: { $ref: "#/components/schemas/DerivativeDecimal" }
+        index: { $ref: "#/components/schemas/DerivativeDecimal" }
+        source: { type: string, minLength: 1, maxLength: 100 }
+        observed_at: { $ref: "#/components/schemas/Timestamp" }
+    DerivativeSettlement:
+      type: object
+      required: [id, kind, price_mantissa, price_scale, price_source, positions, settled_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        kind: { $ref: "#/components/schemas/DerivativeSettlementKind" }
+        price_mantissa: { $ref: "#/components/schemas/Quantity", description: "A future's final price, or the underlying's price an option settled at" }
+        price_scale: { type: integer }
+        price_source: { type: string }
+        positions: { type: integer }
+        settled_at: { $ref: "#/components/schemas/Timestamp" }
+    DerivativeContract:
+      type: object
+      required: [value_domain, id, kind, canonical_name, status, risk_class, terms_version, terms_hash, terms, settlement_asset, marked, settled]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        id: { $ref: "#/components/schemas/UUID" }
+        kind: { $ref: "#/components/schemas/DerivativeKind" }
+        canonical_name: { type: string }
+        status: { type: string }
+        risk_class: { type: string }
+        terms_version: { type: integer }
+        terms_hash: { type: string, description: hex sha256 of the canonical terms in force }
+        terms: { $ref: "#/components/schemas/InstrumentTerms" }
+        settlement_asset: { $ref: "#/components/schemas/DerivativeAsset" }
+        marked: { type: boolean, description: False when the contract has never been marked; latest_mark is then absent }
+        latest_mark: { $ref: "#/components/schemas/DerivativeMark" }
+        settled: { type: boolean, description: True once the contract has been finally settled; settlement is then present }
+        settlement: { $ref: "#/components/schemas/DerivativeSettlement" }
+    DerivativeContractList:
+      type: object
+      required: [value_domain, items]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        items: { type: array, items: { $ref: "#/components/schemas/DerivativeContract" } }
+    DerivativeRequirement:
+      type: object
+      description: The margin requirement at the mark, in base units of the settlement asset (every rounding up)
+      required: [notional, initial, maintenance, scenario_loss, funding_buffer]
+      properties:
+        notional: { $ref: "#/components/schemas/Quantity" }
+        initial: { $ref: "#/components/schemas/Quantity" }
+        maintenance: { $ref: "#/components/schemas/Quantity" }
+        scenario_loss: { $ref: "#/components/schemas/Quantity" }
+        funding_buffer: { $ref: "#/components/schemas/Quantity" }
+    DerivativePositionValuation:
+      type: object
+      required: [mark_id, mark_mantissa, mark_observed_at, average_entry_price_mantissa, unrealized_pnl, equity_adjustment, requirement]
+      properties:
+        mark_id: { $ref: "#/components/schemas/UUID" }
+        mark_mantissa: { $ref: "#/components/schemas/Quantity" }
+        mark_observed_at: { $ref: "#/components/schemas/Timestamp" }
+        average_entry_price_mantissa: { $ref: "#/components/schemas/Quantity", description: "Exact cost over quantity at the price scale, rounded half-even once (display only)" }
+        unrealized_pnl: { $ref: "#/components/schemas/Quantity", description: "Quantity times the contract value at the mark, less the cost value" }
+        equity_adjustment: { $ref: "#/components/schemas/Quantity", description: What the position adds to equity beyond the ledger balances buying power counts }
+        requirement: { $ref: "#/components/schemas/DerivativeRequirement" }
+    DerivativePosition:
+      type: object
+      required: [id, account_id, instrument_id, symbol, kind, status, quantity, price_scale, settlement_asset, cost_value, settled_value,
+                 realized_pnl, funding_pnl, margin_posted, shortfall, version, opened_at, valuation_status]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        kind: { $ref: "#/components/schemas/DerivativeKind" }
+        status: { $ref: "#/components/schemas/DerivativePositionStatus" }
+        side: { $ref: "#/components/schemas/DerivativeSide", description: Absent once the position is flat }
+        quantity: { $ref: "#/components/schemas/Quantity", description: "Signed contracts: long > 0, short < 0" }
+        price_scale: { type: integer }
+        settlement_asset: { $ref: "#/components/schemas/DerivativeAsset" }
+        cost_value: { $ref: "#/components/schemas/Quantity" }
+        settled_value: { $ref: "#/components/schemas/Quantity" }
+        realized_pnl: { $ref: "#/components/schemas/Quantity" }
+        funding_pnl: { $ref: "#/components/schemas/Quantity", description: "Funding received (> 0) or paid (< 0) over the position's life" }
+        margin_posted: { $ref: "#/components/schemas/Quantity" }
+        shortfall: { $ref: "#/components/schemas/Quantity" }
+        version: { type: integer, format: int64 }
+        opened_at: { $ref: "#/components/schemas/Timestamp" }
+        closed_at: { $ref: "#/components/schemas/Timestamp" }
+        valuation_status: { $ref: "#/components/schemas/DerivativeValuationStatus" }
+        valuation: { $ref: "#/components/schemas/DerivativePositionValuation" }
+        valuation_refusal: { $ref: "#/components/schemas/DerivativeRefusal" }
+    DerivativeBook:
+      type: object
+      description: The account's open derivative book as the service values it, in USD of the valuation asset with conservative rounding
+      required: [as_of, policy_version, policy_hash, quote_asset, gross_notional, initial_margin, maintenance_margin, unrealized_pnl,
+                 equity_adjustment, max_initial_bps, positions]
+      properties:
+        as_of: { $ref: "#/components/schemas/Timestamp" }
+        policy_version: { type: string }
+        policy_hash: { type: string }
+        quote_asset: { $ref: "#/components/schemas/DerivativeAsset" }
+        gross_notional: { $ref: "#/components/schemas/USD" }
+        initial_margin: { $ref: "#/components/schemas/USD" }
+        maintenance_margin: { $ref: "#/components/schemas/USD" }
+        unrealized_pnl: { $ref: "#/components/schemas/USD" }
+        equity_adjustment: { $ref: "#/components/schemas/USD" }
+        max_initial_bps: { type: integer, format: int64 }
+        positions: { type: integer, description: Open positions valued }
+    DerivativePositionPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items, value_domain, book_status]
+          properties:
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+            items: { type: array, items: { $ref: "#/components/schemas/DerivativePosition" } }
+            book_status: { $ref: "#/components/schemas/DerivativeBookStatus" }
+            book: { $ref: "#/components/schemas/DerivativeBook" }
+            book_refusal: { $ref: "#/components/schemas/DerivativeRefusal" }
+    DerivativeOpenRequest:
+      type: object
+      required: [account_id, instrument_id, side, quantity, mode]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        side: { $ref: "#/components/schemas/DerivativeSide" }
+        quantity: { $ref: "#/components/schemas/Quantity", description: Contracts; positive and a whole number of lots }
+        mode: { $ref: "#/components/schemas/AdvancedMode" }
+    DerivativeCloseRequest:
+      type: object
+      required: [mode]
+      properties:
+        quantity: { $ref: "#/components/schemas/Quantity", description: Contracts to close; absent closes the position }
+        mode: { $ref: "#/components/schemas/AdvancedMode" }
+    DerivativeExerciseRequest:
+      type: object
+      required: [mode]
+      properties:
+        quantity: { $ref: "#/components/schemas/Quantity", description: Contracts to exercise; absent exercises every one held }
+        mode: { $ref: "#/components/schemas/AdvancedMode" }
+    DerivativeFill:
+      type: object
+      required: [id, position_id, account_id, instrument_id, source, side, quantity, price_mantissa, price_scale, value, realized_pnl,
+                 amount_settled, slippage_bps, occurred_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        position_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        source: { $ref: "#/components/schemas/DerivativeFillSource" }
+        side: { $ref: "#/components/schemas/DerivativeFillSide" }
+        quantity: { $ref: "#/components/schemas/Quantity", description: Signed contracts the fill moved the position by }
+        price_mantissa: { $ref: "#/components/schemas/Quantity" }
+        price_scale: { type: integer }
+        value: { $ref: "#/components/schemas/Quantity" }
+        realized_pnl: { $ref: "#/components/schemas/Quantity" }
+        amount_settled: { $ref: "#/components/schemas/Quantity", description: "What the customer received (> 0) or paid (< 0) the clearing house for this fill" }
+        mark_id: { $ref: "#/components/schemas/UUID" }
+        slippage_bps: { type: integer, format: int64 }
+        intent_id: { $ref: "#/components/schemas/UUID" }
+        risk_decision_id: { $ref: "#/components/schemas/UUID" }
+        occurred_at: { $ref: "#/components/schemas/Timestamp" }
+    DerivativeTradeResult:
+      type: object
+      required: [value_domain, intent, replay, journal_transaction_ids]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        intent: { $ref: "#/components/schemas/EconomicIntent" }
+        replay: { type: boolean, description: True when the service had already carried out this idempotency key; nothing was written this time }
+        risk_decision_id: { $ref: "#/components/schemas/UUID" }
+        fill: { $ref: "#/components/schemas/DerivativeFill" }
+        position: { $ref: "#/components/schemas/DerivativePosition" }
+        exercise_id: { $ref: "#/components/schemas/UUID" }
+        journal_transaction_ids: { type: array, items: { $ref: "#/components/schemas/UUID" } }
+    DerivativeFlow:
+      type: object
+      required: [id, position_id, account_id, instrument_id, symbol, kind, amount, shortfall, settlement_asset, reference_type, reference_id, occurred_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        position_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        kind: { $ref: "#/components/schemas/DerivativeFlowKind" }
+        amount: { $ref: "#/components/schemas/Quantity", description: "Signed from the customer's side: > 0 received from the clearing house, < 0 paid to it" }
+        shortfall: { $ref: "#/components/schemas/Quantity", description: What the customer owed and could not pay; the clearing house absorbed it }
+        settlement_asset: { $ref: "#/components/schemas/DerivativeAsset" }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        reference_type: { type: string }
+        reference_id: { type: string }
+        occurred_at: { $ref: "#/components/schemas/Timestamp" }
+    DerivativeFlowPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items, value_domain]
+          properties:
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+            items: { type: array, items: { $ref: "#/components/schemas/DerivativeFlow" } }
+    DerivativeFundingAccrual:
+      type: object
+      required: [id, funding_rate_id, position_id, instrument_id, symbol, interval_start, interval_end, quantity, direction, amount,
+                 rate_e8, premium_index_e8, clamped, per_contract_amount, mark_mantissa, price_scale, settlement_asset]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        funding_rate_id: { $ref: "#/components/schemas/UUID" }
+        position_id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        interval_start: { $ref: "#/components/schemas/Timestamp" }
+        interval_end: { $ref: "#/components/schemas/Timestamp" }
+        quantity: { $ref: "#/components/schemas/Quantity", description: The position's signed contracts at the funding time (the interval end) }
+        direction: { $ref: "#/components/schemas/DerivativeFundingDirection" }
+        amount: { $ref: "#/components/schemas/Quantity", description: What the position paid or received for the interval (never negative; direction says which) }
+        rate_e8: { type: integer, format: int64, description: The clamped funding rate in 10^-8 per interval }
+        premium_index_e8: { type: integer, format: int64 }
+        clamped: { type: boolean }
+        per_contract_amount: { $ref: "#/components/schemas/Quantity" }
+        mark_mantissa: { $ref: "#/components/schemas/Quantity", description: The last mark of the interval, which priced one contract's funding }
+        price_scale: { type: integer }
+        flow_id: { $ref: "#/components/schemas/UUID" }
+        settlement_asset: { $ref: "#/components/schemas/DerivativeAsset" }
+    DerivativeFundingAccrualPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items, value_domain]
+          properties:
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+            items: { type: array, items: { $ref: "#/components/schemas/DerivativeFundingAccrual" } }
+    DerivativeAnalyticsInputs:
+      type: object
+      required: [vol_bps, rate_bps, dividend_yield_bps]
+      properties:
+        vol_bps: { type: integer, format: int64 }
+        rate_bps: { type: integer, format: int64 }
+        dividend_yield_bps: { type: integer, format: int64 }
+    DerivativeOptionAnalytics:
+      type: object
+      description: >-
+        Reference values of a model, labelled as such by the service. Not a
+        quote, not a settlement price, never posted, and not advice.
+      required: [value_domain, label, model, instrument_id, right, style, regime, spot, strike, time_years, vol, price, delta, gamma,
+                 theta_per_year, theta_per_day, vega, vega_per_vol_point, intrinsic, as_of, inputs, mark]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        label: { type: string, description: "The service's own label: a reference model value, not a quote" }
+        model: { type: string }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        right: { type: string }
+        style: { type: string }
+        regime: { type: string }
+        spot: { $ref: "#/components/schemas/DerivativeModelDecimal" }
+        strike: { $ref: "#/components/schemas/DerivativeModelDecimal" }
+        time_years: { $ref: "#/components/schemas/DerivativeModelDecimal" }
+        vol: { $ref: "#/components/schemas/DerivativeModelDecimal" }
+        price: { $ref: "#/components/schemas/DerivativeModelDecimal" }
+        delta: { $ref: "#/components/schemas/DerivativeModelDecimal" }
+        gamma: { $ref: "#/components/schemas/DerivativeModelDecimal" }
+        theta_per_year: { $ref: "#/components/schemas/DerivativeModelDecimal" }
+        theta_per_day: { $ref: "#/components/schemas/DerivativeModelDecimal" }
+        vega: { $ref: "#/components/schemas/DerivativeModelDecimal" }
+        vega_per_vol_point: { $ref: "#/components/schemas/DerivativeModelDecimal" }
+        intrinsic: { $ref: "#/components/schemas/DerivativeModelDecimal" }
+        time_value: { $ref: "#/components/schemas/DerivativeModelDecimal" }
+        implied_vol: { $ref: "#/components/schemas/DerivativeModelDecimal" }
+        implied_vol_reason: { type: string, description: Why no implied volatility could be solved from the mark (a stable reason code) }
+        as_of: { $ref: "#/components/schemas/Timestamp" }
+        inputs: { $ref: "#/components/schemas/DerivativeAnalyticsInputs" }
+        mark: { $ref: "#/components/schemas/DerivativeMark" }
+    DerivativeRunRequest:
+      type: object
+      required: [interval_start]
+      properties:
+        interval_start: { $ref: "#/components/schemas/Timestamp", description: "On the interval grid: a whole number of intervals since the Unix epoch" }
+    DerivativeRunResult:
+      type: object
+      required: [value_domain, kind, run_id, instrument_id, replay, interval_start, interval_end, settlement_asset, journal_transaction_ids]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        kind: { $ref: "#/components/schemas/DerivativeRunKind" }
+        run_id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        replay: { type: boolean, description: True when the interval had already been run; nothing was written and its flows are in the register }
+        interval_start: { $ref: "#/components/schemas/Timestamp" }
+        interval_end: { $ref: "#/components/schemas/Timestamp" }
+        positions: { type: integer, description: Positions the run covered, when the service reported it }
+        mark_id: { $ref: "#/components/schemas/UUID" }
+        paid: { $ref: "#/components/schemas/Quantity", description: "Collected from payers; absent on a replay" }
+        received: { $ref: "#/components/schemas/Quantity", description: "Paid to receivers; absent on a replay" }
+        shortfall: { $ref: "#/components/schemas/Quantity", description: "What payers could not pay; absent on a replay" }
+        premium_index_e8: { type: integer, format: int64 }
+        rate_e8: { type: integer, format: int64 }
+        clamped: { type: boolean }
+        per_contract_amount: { $ref: "#/components/schemas/Quantity" }
+        settlement_asset: { $ref: "#/components/schemas/DerivativeAsset" }
+        journal_transaction_ids: { type: array, items: { $ref: "#/components/schemas/UUID" } }
+    DerivativeSettleRequest:
+      type: object
+      properties:
+        price: { $ref: "#/components/schemas/DerivativeDecimal" }
+        price_source: { type: string, description: Required with price }
+    DerivativeSettlementResult:
+      type: object
+      required: [value_domain, settlement_id, instrument_id, kind, replay, price_mantissa, price_scale, positions, exercise_ids,
+                 settlement_asset, journal_transaction_ids]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        settlement_id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        kind: { $ref: "#/components/schemas/DerivativeSettlementKind" }
+        replay: { type: boolean }
+        price_mantissa: { $ref: "#/components/schemas/Quantity" }
+        price_scale: { type: integer }
+        positions: { type: integer }
+        paid: { $ref: "#/components/schemas/Quantity", description: "Absent on a replay" }
+        received: { $ref: "#/components/schemas/Quantity", description: "Absent on a replay" }
+        shortfall: { $ref: "#/components/schemas/Quantity", description: "Absent on a replay" }
+        intrinsic_per_contract: { $ref: "#/components/schemas/Quantity", description: "Options only; absent on a replay" }
+        exercise_ids: { type: array, items: { $ref: "#/components/schemas/UUID" } }
+        settlement_asset: { $ref: "#/components/schemas/DerivativeAsset" }
+        journal_transaction_ids: { type: array, items: { $ref: "#/components/schemas/UUID" } }
+    DerivativeClearingFundingRequest:
+      type: object
+      required: [quantity]
+      properties:
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        quantity: { $ref: "#/components/schemas/Quantity", description: Base units of the asset; positive }
+    DerivativeClearingFundingResult:
+      type: object
+      required: [value_domain, asset, quantity, journal_transaction_ids]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        asset: { $ref: "#/components/schemas/DerivativeAsset" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        journal_transaction_ids: { type: array, items: { $ref: "#/components/schemas/UUID" } }
+    DerivativeClearingReconcileRequest:
+      type: object
+      properties:
+        asset_id: { $ref: "#/components/schemas/UUID" }
+    DerivativeOpenInterest:
+      type: object
+      required: [instrument_id, quantity]
+      properties:
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+    DerivativeClearingReport:
+      type: object
+      required: [value_domain, clearing_house_id, asset, holdings, capital, result, register_net, register_shortfall, flows,
+                 expected_result, difference, net_open_interest, internally_matched, matched]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        clearing_house_id: { $ref: "#/components/schemas/UUID" }
+        asset: { $ref: "#/components/schemas/DerivativeAsset" }
+        holdings: { $ref: "#/components/schemas/Quantity", description: "The clearing house's CLEARING_CASH ledger balance" }
+        capital: { $ref: "#/components/schemas/Quantity", description: "The clearing house's CLEARING_CAPITAL ledger balance" }
+        result: { $ref: "#/components/schemas/Quantity", description: "The clearing house's CLEARING_RESULT ledger balance" }
+        register_net: { $ref: "#/components/schemas/Quantity", description: "The sum of the register's customer-side amounts" }
+        register_shortfall: { $ref: "#/components/schemas/Quantity" }
+        flows: { type: integer, format: int64 }
+        expected_result: { $ref: "#/components/schemas/Quantity", description: "Minus register_net: what CLEARING_RESULT must be" }
+        difference: { $ref: "#/components/schemas/Quantity", description: "result minus expected_result" }
+        net_open_interest: { type: array, items: { $ref: "#/components/schemas/DerivativeOpenInterest" } }
+        internally_matched: { type: boolean }
+        matched: { type: boolean, description: The books agree with the register and balance }
+        record_id: { $ref: "#/components/schemas/UUID", description: The CLEARING reconciliation record opened or refreshed for a mismatch, or still unresolved }
 
     # >>> advanced:equities schemas (insert this subsystem's schemas directly below; keep the marker)
     #
@@ -4549,6 +6591,331 @@ components:
     # >>> advanced:bridge schemas (insert this subsystem's schemas directly below; keep the marker)
 
     # >>> advanced:predmarket schemas (insert this subsystem's schemas directly below; keep the marker)
+    PredictionMarketStatus:
+      type: string
+      description: >-
+        One of DRAFT, OPEN, CLOSED, RESOLVING, RESOLVED, DISPUTED, SETTLED, VOIDED. DRAFT → OPEN → CLOSED →
+        RESOLVING → RESOLVED → SETTLED; RESOLVED → DISPUTED → RESOLVED or VOIDED; any state but SETTLED and
+        VOIDED → VOIDED. Declared without an enum on purpose: its values are shared with other schemas' enums,
+        and a shared enum value renames the generated constants of every schema that holds it.
+    PredictionMarketMode:
+      type: string
+      enum: [PAPER, SANDBOX]
+    PredictionActor:
+      type: object
+      required: [actor_type, actor_id]
+      properties:
+        actor_type: { type: string }
+        actor_id: { type: string }
+    PredictionOutcome:
+      type: object
+      required: [index, symbol, share_asset_id, instrument_id]
+      properties:
+        index: { type: integer }
+        symbol: { type: string }
+        share_asset_id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID", description: The outcome's EVENT_OUTCOME instrument for the internal order book }
+    PredictionMarket:
+      type: object
+      required: [value_domain, id, symbol, question, mode, status, facility_id, instrument_id, collateral_asset_id, collateral_symbol,
+                 collateral_decimals, unit_quantity, share_decimals, outcomes, open_at, close_at, dispute_window_ms, oracle_source,
+                 oracle_public_key, definition_hash, created_by, created_at, updated_at]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        question: { type: string }
+        mode: { $ref: "#/components/schemas/PredictionMarketMode" }
+        status: { $ref: "#/components/schemas/PredictionMarketStatus" }
+        facility_id: { $ref: "#/components/schemas/UUID", description: The PREDICTION_MARKET facility whose books are the market's escrow }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        collateral_asset_id: { $ref: "#/components/schemas/UUID" }
+        collateral_symbol: { type: string }
+        collateral_decimals: { type: integer }
+        unit_quantity: { $ref: "#/components/schemas/Quantity", description: Collateral base units one complete set costs and one winning share pays }
+        share_decimals: { type: integer }
+        outcomes: { type: array, items: { $ref: "#/components/schemas/PredictionOutcome" } }
+        open_at: { $ref: "#/components/schemas/Timestamp" }
+        close_at: { $ref: "#/components/schemas/Timestamp" }
+        dispute_window_ms: { type: integer, format: int64 }
+        oracle_source: { type: string }
+        oracle_public_key: { type: string, description: hex Ed25519 public key the market accepts reports from }
+        definition_hash: { type: string, description: hex sha256 of the canonical definition }
+        current_resolution_id: { $ref: "#/components/schemas/UUID" }
+        created_by: { $ref: "#/components/schemas/PredictionActor" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+    PredictionMarketList:
+      type: object
+      required: [value_domain, status, items]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        status: { $ref: "#/components/schemas/PredictionMarketStatus" }
+        items: { type: array, items: { $ref: "#/components/schemas/PredictionMarket" } }
+    PredictionResolutionKind:
+      type: string
+      enum: [ORACLE, DISPUTE_UPHELD, DISPUTE_OVERTURNED]
+    PredictionResolution:
+      type: object
+      required: [id, market_id, kind, outcome_index, outcome_symbol, evidence_ref, evidence_sha256, accepted_by, reason, accepted_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        market_id: { $ref: "#/components/schemas/UUID" }
+        kind: { $ref: "#/components/schemas/PredictionResolutionKind" }
+        outcome_index: { type: integer }
+        outcome_symbol: { type: string }
+        supersedes_id: { $ref: "#/components/schemas/UUID" }
+        dispute_id: { $ref: "#/components/schemas/UUID" }
+        report_hash: { type: string, description: hex sha256 of the verified report's signed bytes and signature }
+        report_source: { type: string }
+        report_observed_at: { $ref: "#/components/schemas/Timestamp" }
+        evidence_ref: { type: string }
+        evidence_sha256: { type: string }
+        accepted_by: { $ref: "#/components/schemas/PredictionActor" }
+        reason: { type: string }
+        accepted_at: { $ref: "#/components/schemas/Timestamp" }
+    PredictionDispute:
+      type: object
+      required: [id, market_id, resolution_id, raised_by, reason, evidence_ref, evidence_sha256, raised_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        market_id: { $ref: "#/components/schemas/UUID" }
+        resolution_id: { $ref: "#/components/schemas/UUID" }
+        raised_by: { $ref: "#/components/schemas/PredictionActor" }
+        reason: { type: string }
+        evidence_ref: { type: string }
+        evidence_sha256: { type: string }
+        raised_at: { $ref: "#/components/schemas/Timestamp" }
+    PredictionSettlementKind:
+      type: string
+      description: PAYOUT (a resolved market paid its winners) or REFUND (a void refunded every share); no enum, see PredictionMarketStatus
+    PredictionRoundingPolicy:
+      type: string
+      enum: [EXACT, FLOOR_PER_HOLDER]
+    PredictionSettlement:
+      type: object
+      required: [id, market_id, kind, outcome_count, unit_quantity, rounding_policy, escrow_before, total_paid, residual, holder_count,
+                 evidence_ref, evidence_sha256, settled_by, settled_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        market_id: { $ref: "#/components/schemas/UUID" }
+        kind: { $ref: "#/components/schemas/PredictionSettlementKind" }
+        resolution_id: { $ref: "#/components/schemas/UUID" }
+        winning_outcome_index: { type: integer }
+        winning_outcome_symbol: { type: string }
+        outcome_count: { type: integer }
+        unit_quantity: { $ref: "#/components/schemas/Quantity" }
+        refund_rate_per_share: { $ref: "#/components/schemas/Quantity" }
+        rounding_policy: { $ref: "#/components/schemas/PredictionRoundingPolicy" }
+        escrow_before: { $ref: "#/components/schemas/Quantity" }
+        total_paid: { $ref: "#/components/schemas/Quantity" }
+        residual: { $ref: "#/components/schemas/Quantity", description: "What the escrow keeps; zero after a payout, disclosed after a refund" }
+        holder_count: { type: integer }
+        evidence_ref: { type: string }
+        evidence_sha256: { type: string }
+        settled_by: { $ref: "#/components/schemas/PredictionActor" }
+        settled_at: { $ref: "#/components/schemas/Timestamp" }
+    PredictionMarketDetail:
+      type: object
+      required: [value_domain, market, resolutions, disputes]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        market: { $ref: "#/components/schemas/PredictionMarket" }
+        resolutions: { type: array, items: { $ref: "#/components/schemas/PredictionResolution" }, description: Oldest first }
+        disputes: { type: array, items: { $ref: "#/components/schemas/PredictionDispute" }, description: Oldest first }
+        settlement: { $ref: "#/components/schemas/PredictionSettlement", description: Absent until the market settles or is voided }
+    PredictionBookOutcome:
+      type: object
+      required: [index, symbol, share_asset_id, shares_issued, shares_outstanding, held_by_customers]
+      properties:
+        index: { type: integer }
+        symbol: { type: string }
+        share_asset_id: { $ref: "#/components/schemas/UUID" }
+        shares_issued: { $ref: "#/components/schemas/Quantity" }
+        shares_outstanding: { $ref: "#/components/schemas/Quantity" }
+        held_by_customers: { $ref: "#/components/schemas/Quantity" }
+    PredictionEscrowBooks:
+      type: object
+      required: [value_domain, market_id, market_status, collateral_asset_id, collateral_symbol, collateral_decimals, share_decimals,
+                 escrow, collateral, residual, outcomes, reconciles, violations]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        market_id: { $ref: "#/components/schemas/UUID" }
+        market_status: { $ref: "#/components/schemas/PredictionMarketStatus" }
+        collateral_asset_id: { $ref: "#/components/schemas/UUID" }
+        collateral_symbol: { type: string }
+        collateral_decimals: { type: integer }
+        share_decimals: { type: integer }
+        escrow: { $ref: "#/components/schemas/Quantity" }
+        collateral: { $ref: "#/components/schemas/Quantity" }
+        residual: { $ref: "#/components/schemas/Quantity", description: The residual the market's settlement record discloses; zero without one }
+        outcomes: { type: array, items: { $ref: "#/components/schemas/PredictionBookOutcome" } }
+        reconciles: { type: boolean, description: True when the books satisfy escrow = collateral = outstanding(i) + residual and issued(i) = outstanding(i) = held(i) }
+        violations: { type: array, items: { type: string } }
+    PredictionPosition:
+      type: object
+      required: [outcome_index, outcome_symbol, share_asset_id, quantity, as_of]
+      properties:
+        outcome_index: { type: integer }
+        outcome_symbol: { type: string }
+        share_asset_id: { $ref: "#/components/schemas/UUID" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        as_of: { $ref: "#/components/schemas/Timestamp" }
+    PredictionPositionList:
+      type: object
+      required: [value_domain, market_id, account_id, share_decimals, items]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        market_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        share_decimals: { type: integer }
+        items: { type: array, items: { $ref: "#/components/schemas/PredictionPosition" } }
+    PredictionSetRequest:
+      type: object
+      required: [account_id, quantity]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        quantity: { $ref: "#/components/schemas/Quantity", description: "Complete sets in share base units, a positive multiple of the market's unit_quantity" }
+    PredictionSetAction:
+      type: string
+      enum: [ISSUE, REDEEM]
+    PredictionSetResult:
+      type: object
+      required: [value_domain, market_id, account_id, action, quantity, replay, intent]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        market_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        action: { $ref: "#/components/schemas/PredictionSetAction" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        replay: { type: boolean, description: True when the economic intent already existed; nothing new happened }
+        intent: { $ref: "#/components/schemas/EconomicIntent" }
+        effect: { $ref: "#/components/schemas/EconomicEffect" }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        risk_decision_hash: { type: string }
+    CreatePredictionMarketRequest:
+      type: object
+      required: [symbol, question, outcomes, mode, open_at, close_at, dispute_window_ms, oracle_source, oracle_public_key]
+      properties:
+        symbol: { type: string, description: "1..32 of A-Z 0-9 _ -, starting alphanumeric" }
+        question: { type: string }
+        outcomes: { type: array, items: { type: string }, description: "2..64 distinct symbols of 1..24 of A-Z 0-9 _ -" }
+        mode: { $ref: "#/components/schemas/PredictionMarketMode" }
+        open_at: { $ref: "#/components/schemas/Timestamp" }
+        close_at: { $ref: "#/components/schemas/Timestamp" }
+        dispute_window_ms: { type: integer, format: int64, description: Whole milliseconds within 0..30 days }
+        oracle_source: { type: string }
+        oracle_public_key: { type: string, description: hex Ed25519 public key (64 hex characters) }
+    PredictionOracle:
+      type: object
+      required: [kind, source, public_key]
+      properties:
+        kind: { type: string, enum: [SANDBOX] }
+        source: { type: string }
+        public_key: { type: string, description: hex Ed25519 public key }
+    PredictionOracleObservationRequest:
+      type: object
+      required: [outcome, observed_at, evidence]
+      properties:
+        outcome: { type: string }
+        observed_at: { $ref: "#/components/schemas/Timestamp" }
+        evidence: { type: string, description: The source document the oracle saw (1..16384 bytes); its sha256 is signed }
+    PredictionOracleReport:
+      type: object
+      required: [market_id, outcome, source, observed_at, evidence, signature]
+      properties:
+        market_id: { type: string }
+        outcome: { type: string }
+        source: { type: string }
+        observed_at: { type: string, description: RFC 3339 in UTC }
+        evidence: { type: string, description: standard base64 }
+        signature: { type: string, description: standard base64 Ed25519 signature }
+    PredictionOracleObservation:
+      type: object
+      required: [value_domain, report, report_hash]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        report: { $ref: "#/components/schemas/PredictionOracleReport" }
+        report_hash: { type: string }
+    PredictionResolveRequest:
+      type: object
+      properties:
+        reason: { type: string }
+    PredictionResolutionResult:
+      type: object
+      required: [value_domain, market, resolution, replay]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        market: { $ref: "#/components/schemas/PredictionMarket" }
+        resolution: { $ref: "#/components/schemas/PredictionResolution" }
+        replay: { type: boolean, description: True when the report had already been accepted; nothing changed }
+    PredictionDisputeRequest:
+      type: object
+      required: [reason, evidence]
+      properties:
+        reason: { type: string, description: 8..2000 characters }
+        evidence: { type: object, additionalProperties: true }
+    PredictionDisputeResult:
+      type: object
+      required: [value_domain, market, dispute]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        market: { $ref: "#/components/schemas/PredictionMarket" }
+        dispute: { $ref: "#/components/schemas/PredictionDispute" }
+    PredictionRulingRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, description: 8..2000 characters }
+        evidence: { type: object, additionalProperties: true }
+    PredictionVoidRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, description: 8..2000 characters }
+        evidence: { type: object, additionalProperties: true }
+    PredictionShareCount:
+      type: object
+      required: [outcome_symbol, quantity]
+      properties:
+        outcome_symbol: { type: string }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+    PredictionPayoutLine:
+      type: object
+      required: [account_id, amount, shares, intent_id]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        amount: { $ref: "#/components/schemas/Quantity" }
+        shares: { type: array, items: { $ref: "#/components/schemas/PredictionShareCount" } }
+        intent_id: { $ref: "#/components/schemas/UUID" }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+    PredictionSettlementResult:
+      type: object
+      required: [value_domain, market, settlement, lines, replay]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        market: { $ref: "#/components/schemas/PredictionMarket" }
+        settlement: { $ref: "#/components/schemas/PredictionSettlement" }
+        lines: { type: array, items: { $ref: "#/components/schemas/PredictionPayoutLine" }, description: "What this call paid, one line per holder; empty on a replay" }
+        replay: { type: boolean, description: True when the market had already settled (or been voided); nothing was paid }
+    PredictionEscrowReconciliation:
+      type: object
+      required: [value_domain, id, kind, mode, scope_type, scope_id, status, material, blocks_new_risk, expected, observed, difference, opened_at]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        id: { $ref: "#/components/schemas/UUID" }
+        kind: { type: string, description: PREDICTION_ESCROW }
+        mode: { type: string, description: "EVENT_DRIVEN, PERIODIC or FULL" }
+        scope_type: { type: string }
+        scope_id: { type: string }
+        status: { type: string, description: "OPEN, MATCHED, MISMATCH, INVESTIGATING, RESOLVED_AUTOMATIC, RESOLVED_MANUAL or ESCALATED" }
+        material: { type: boolean }
+        blocks_new_risk: { type: boolean }
+        expected: { type: object, additionalProperties: true }
+        observed: { type: object, additionalProperties: true }
+        difference: { type: object, additionalProperties: true }
+        opened_at: { $ref: "#/components/schemas/Timestamp" }
+        matched_at: { $ref: "#/components/schemas/Timestamp" }
 
     # >>> advanced:marketplace schemas (insert this subsystem's schemas directly below; keep the marker)
 

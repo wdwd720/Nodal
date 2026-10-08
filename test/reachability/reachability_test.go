@@ -67,6 +67,7 @@ var financialPackages = []string{
 	// HTTP adapter in cmd/api).
 	"internal/transfers",
 	"internal/sandboxfund",
+	"internal/predmarket",
 }
 
 // reachableFrom are the trees a deployment can actually run. A caller in

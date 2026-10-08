@@ -39,8 +39,15 @@ type AdvancedDeps struct {
 	Extra buyingpower.ExtraReservationReader
 
 	// >>> advanced:margin deps
+	// MarginService runs margin accounts (internal/margin). Nil leaves the
+	// margin routes UNSUPPORTED. It needs the ledger of WireDeps as well, to
+	// report the facilities' balances after a seeding.
+	MarginService *MarginService
 
 	// >>> advanced:derivatives deps
+	// Derivatives serves /advanced/derivatives (see DerivativesDeps); a nil
+	// service leaves those routes UNSUPPORTED.
+	Derivatives DerivativesDeps
 
 	// >>> advanced:equities deps
 	// Equities holds the equities service; nil leaves its routes UNSUPPORTED.
@@ -63,6 +70,14 @@ type AdvancedDeps struct {
 	// >>> advanced:bridge deps
 
 	// >>> advanced:predmarket deps
+	// PredictionMarkets runs prediction markets. Nil leaves their routes
+	// UNSUPPORTED.
+	PredictionMarkets *PredictionMarketService
+	// PredictionOracle is the sandbox oracle the service resolves from, the
+	// same instance its configuration holds. Nil (every deployment outside
+	// LOCAL, TEST and DEV) answers PROVIDER_UNAVAILABLE wherever an oracle is
+	// needed.
+	PredictionOracle *PredictionSandboxOracle
 
 	// >>> advanced:marketplace deps
 
@@ -84,8 +99,12 @@ func wireAdvanced(p *Ports, d WireDeps) {
 	}
 
 	// >>> advanced:margin wire
+	if d.Advanced.MarginService != nil && d.Ledger != nil {
+		p.Margin = marginAdapter{svc: d.Advanced.MarginService, ledger: d.Ledger, db: d.DB}
+	}
 
 	// >>> advanced:derivatives wire
+	wireDerivatives(p, d)
 
 	// >>> advanced:equities wire
 	wireEquities(p, d)
@@ -103,6 +122,9 @@ func wireAdvanced(p *Ports, d WireDeps) {
 	// >>> advanced:bridge wire
 
 	// >>> advanced:predmarket wire
+	if d.Advanced.PredictionMarkets != nil {
+		p.PredictionMarkets = newPredmarketAdapter(d)
+	}
 
 	// >>> advanced:marketplace wire
 

@@ -169,8 +169,11 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		"{productId}":    testOrderID.String(),
 
 		// >>> advanced:margin path parameters
+		"{marginCaseId}":      testOrderID.String(),
+		"{marginStressRunId}": testDepositID.String(),
 
 		// >>> advanced:derivatives path parameters
+		"{positionId}": testSessionID,
 
 		// >>> advanced:equities path parameters
 
@@ -187,6 +190,7 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		// >>> advanced:bridge path parameters
 
 		// >>> advanced:predmarket path parameters
+		// {marketId} is mapped above (the native markets declared it first).
 
 		// >>> advanced:marketplace path parameters
 
@@ -209,8 +213,16 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		"/v1/advanced/buying-power":   "account_id=" + testAccountID.String(),
 
 		// >>> advanced:margin required query
+		"/v1/advanced/margin/account":     "account_id=" + testAccountID.String(),
+		"/v1/advanced/margin/calls":       "account_id=" + testAccountID.String(),
+		"/v1/advanced/margin/cases":       "account_id=" + testAccountID.String(),
+		"/v1/advanced/margin/stress-runs": "account_id=" + testAccountID.String(),
 
 		// >>> advanced:derivatives required query
+		"/v1/advanced/derivatives/positions":                          "account_id=" + testAccountID.String(),
+		"/v1/advanced/derivatives/flows":                              "account_id=" + testAccountID.String(),
+		"/v1/advanced/derivatives/funding-accruals":                   "account_id=" + testAccountID.String(),
+		"/v1/advanced/derivatives/contracts/{instrumentId}/analytics": "vol_bps=5000",
 
 		// >>> advanced:equities required query
 		"/v1/advanced/equities/orders":                        "account_id=" + testAccountID.String(),
@@ -233,6 +245,8 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		// >>> advanced:bridge required query
 
 		// >>> advanced:predmarket required query
+		"/v1/advanced/prediction-markets":                      "status=OPEN",
+		"/v1/advanced/prediction-markets/{marketId}/positions": "account_id=" + testAccountID.String(),
 
 		// >>> advanced:marketplace required query
 

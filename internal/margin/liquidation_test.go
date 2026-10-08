@@ -136,6 +136,78 @@ func TestPlan_StepBudgetEndsInManualReview(t *testing.T) {
 	assert.Equal(t, DecisionManualReview, pl.Decision)
 }
 
+// TestPlan_TerminalAccountingIsDecidedBeforeTheStepBudget (F1): a case that
+// has spent its trading budget but has nothing left to sell still applies its
+// numeraire collateral and still reaches BANKRUPT. It never lands in
+// MANUAL_REVIEW for a budget that bounds trading, not the accounting that
+// ends a case; with something left to sell, the spent budget still stops it.
+func TestPlan_TerminalAccountingIsDecidedBeforeTheStepBudget(t *testing.T) {
+	p := DefaultPolicy()
+	s := atPrice(t, fixedAccount(t), "50")
+	pl := plan(t, p, PlanInput{State: s, VenueAvailable: true})
+	require.Equal(t, DecisionSellAll, pl.Decision)
+	s1, _, err := ExecuteFirst(p, s, pl, 10_000)
+	require.NoError(t, err)
+
+	spent := p.MaxLiquidationSteps
+	pl2 := plan(t, p, PlanInput{State: s1, StepsTaken: spent, VenueAvailable: true})
+	require.Equal(t, DecisionApplyCollateral, pl2.Decision, "applying collateral is not a trading step")
+	s2, _, err := ExecuteFirst(p, s1, pl2, 10_000)
+	require.NoError(t, err)
+	pl3 := plan(t, p, PlanInput{State: s2, StepsTaken: spent + 7, VenueAvailable: true})
+	require.Equal(t, DecisionBankrupt, pl3.Decision, "bankruptcy is decided whatever the budget")
+	requireQ(t, units(t, "12.475"), pl3.DeficitUnits, "deficit")
+
+	stuck := plan(t, p, PlanInput{State: atPrice(t, fixedAccount(t), "75"), StepsTaken: spent, VenueAvailable: true})
+	assert.Equal(t, DecisionManualReview, stuck.Decision, "with something left to sell, the spent budget stops the case")
+	_, err = PlanLiquidation(p, PlanInput{State: s2, StepsTaken: -1})
+	require.Error(t, err)
+}
+
+// TestPlan_FreeWalletCashRepaysTheLoansBeforeBankruptcy (F2): with nothing left
+// in the account, loans remaining and free numeraire cash in the customer's
+// wallet, the plan sweeps min(free cash, loans) into the loans -- a recorded
+// step, at any budget -- and only once nothing is left anywhere is the account
+// bankrupt. Enough free cash restores the account outright.
+func TestPlan_FreeWalletCashRepaysTheLoansBeforeBankruptcy(t *testing.T) {
+	p := DefaultPolicy()
+	s := atPrice(t, fixedAccount(t), "50")
+	pl := plan(t, p, PlanInput{State: s, VenueAvailable: true})
+	s1, _, err := ExecuteFirst(p, s, pl, 10_000)
+	require.NoError(t, err)
+	pl2 := plan(t, p, PlanInput{State: s1, VenueAvailable: true, FreeNumeraire: usd(5)})
+	require.Equal(t, DecisionApplyCollateral, pl2.Decision, "collateral in the account is applied first")
+	s2, _, err := ExecuteFirst(p, s1, pl2, 10_000)
+	require.NoError(t, err)
+
+	partial := plan(t, p, PlanInput{State: s2, StepsTaken: p.MaxLiquidationSteps, VenueAvailable: false, FreeNumeraire: usd(5)})
+	require.Equal(t, DecisionSweepWallet, partial.Decision, "a sweep needs neither a venue nor budget")
+	require.Len(t, partial.Orders, 1)
+	o := partial.Orders[0]
+	assert.Equal(t, ActionSweepWallet, o.Action)
+	requireQ(t, usd(5), o.Quantity, "all the free cash, less than the loans")
+	requireQ(t, usd(5), o.Repay, "it all repays")
+	requireQ(t, money.Quantity{}, o.Fee, "no fee on a sweep")
+	s3, done, err := ExecuteFirst(p, s2, partial, 1)
+	require.NoError(t, err)
+	requireQ(t, usd(5), done.Quantity, "a sweep is bookkeeping, never a partial fill")
+	requireQ(t, units(t, "7.475"), s3.LoanTotal(), "12.475 owed less 5 swept")
+	requireQ(t, sol(0), s3.Holdings[1].Quantity, "the account's holdings are untouched by a sweep")
+
+	broke := plan(t, p, PlanInput{State: s3, VenueAvailable: true})
+	require.Equal(t, DecisionBankrupt, broke.Decision, "nothing left anywhere")
+	requireQ(t, units(t, "7.475"), broke.DeficitUnits, "the deficit is what the sweep could not repay")
+
+	rich := plan(t, p, PlanInput{State: s2, VenueAvailable: true, FreeNumeraire: usd(1_000)})
+	require.Equal(t, DecisionSweepWallet, rich.Decision)
+	requireQ(t, units(t, "12.475"), rich.Orders[0].Quantity, "never more than is owed")
+	require.NotNil(t, rich.After)
+	assert.True(t, rich.After.Restored(p), "the loans are repaid in full")
+
+	_, err = PlanLiquidation(p, PlanInput{State: s2, FreeNumeraire: money.QuantityFromInt64(-1)})
+	require.Error(t, err)
+}
+
 func TestPlan_SlippageIsCapped(t *testing.T) {
 	p := DefaultPolicy()
 	p.LiquidationSlippageCapBPS = 300

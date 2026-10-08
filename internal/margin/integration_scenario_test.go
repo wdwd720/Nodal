@@ -131,7 +131,7 @@ func TestIntegration_ScenarioB_FromFundingToACoveredDeficit(t *testing.T) {
 	assert.Equal(t, CaseInProgress, step1.Case.Status)
 	requireQ(t, sol(20), step1.Step.Quantity, "every SOL is sold")
 	assert.LessOrEqual(t, step1.Step.SlippageBPS, step1.Step.SlippageCapBPS)
-	// 20 × 40 × 0.9975 = 798 of proceeds and a 1% fee of 7.98 to the fund.
+	// 20 × 40 × 0.9975 = 798 of proceeds and a 1% fee of 7.98, platform fee revenue.
 	requireQ(t, usd(798), step1.Step.Proceeds, "proceeds")
 	requireQ(t, units(t, "7.98"), step1.Step.Fee, "fee")
 	requireQ(t, units(t, "790.02"), step1.Step.Repaid, "repaid")
@@ -180,11 +180,13 @@ func TestIntegration_ScenarioB_FromFundingToACoveredDeficit(t *testing.T) {
 	requireQ(t, usd(1_000_000).Add(interest), f.balance(pool.Account(ledger.CodePoolCash, f.usd)), "pool cash")
 	requireQ(t, f.customer(acct, ledger.CodeInterestExpense, f.usd), interest, "interest paid = interest earned")
 
-	// The fund paid the deficit, kept the fee and holds the claim.
-	requireQ(t, usd(100_000).Add(step1.Step.Fee), f.balance(fund.Account(ledger.CodeInsuranceFundCapital, f.usd)), "fund capital")
+	// The fund paid the deficit and holds the claim; the liquidation fee is
+	// the platform's fee revenue, never the fund's capital.
+	requireQ(t, usd(100_000), f.balance(fund.Account(ledger.CodeInsuranceFundCapital, f.usd)), "fund capital")
 	requireQ(t, deficit, f.balance(fund.Account(ledger.CodeDeficitReceivable, f.usd)), "fund claim = customer deficit")
-	requireQ(t, usd(100_000).Add(step1.Step.Fee).Sub(deficit), f.balance(fund.Account(ledger.CodeInsuranceFundCash, f.usd)), "fund cash")
-	requireQ(t, step1.Step.Fee, f.customer(acct, ledger.CodeFeesPlatform, f.usd), "fee paid = fee received")
+	requireQ(t, usd(100_000).Sub(deficit), f.balance(fund.Account(ledger.CodeInsuranceFundCash, f.usd)), "fund cash")
+	requireQ(t, step1.Step.Fee, f.customer(acct, ledger.CodeFeesPlatform, f.usd), "fee paid")
+	requireQ(t, step1.Step.Fee, f.balance(ledger.PlatformAccount(ledger.CodePlatformFeeRevenue, f.usd)), "fee paid = fee revenue")
 
 	requirePartiesBalance(t, f, acct.String(), pool.ID.String(), fund.ID.String())
 
@@ -255,18 +257,22 @@ func TestIntegration_PartialLiquidationRestoresTheAccount(t *testing.T) {
 	interest := f.customer(acct, ledger.CodeInterestExpense, f.usd)
 	assert.True(t, interest.IsPositive())
 	requireQ(t, usd(2_000).Add(interest).Sub(res.Step.Repaid), f.customer(acct, ledger.CodeMarginLoan, f.usd), "proceeds net of the fee repaid the loan")
-	requireQ(t, usd(100_000).Add(res.Step.Fee), f.balance(facs.Fund.Account(ledger.CodeInsuranceFundCash, f.usd)), "the fee reached the fund")
+	requireQ(t, res.Step.Fee, f.balance(ledger.PlatformAccount(ledger.CodePlatformFeeReceivable, f.usd)), "the fee is the platform's")
+	requireQ(t, usd(100_000), f.balance(facs.Fund.Account(ledger.CodeInsuranceFundCash, f.usd)), "the fund is not a fee account")
 
 	after := f.evaluate(acct)
 	assert.Equal(t, StatusNormal, after.Status)
 	assert.True(t, after.Evaluation.Equity.Cmp(after.Evaluation.WarningThreshold) >= 0)
 
-	// Replaying step 1 returns the recorded step and posts nothing.
+	// Retrying step 1 once the case has completed posts nothing: a step number
+	// names a step of the open case, there is none, and the account needs no
+	// liquidation (TestIntegration_AStepNumberReplaysOnlyWithinTheOpenCase
+	// covers the replay inside an open case).
 	trades := f.countJournals(acct, ledger.KindLiquidation)
-	replay, err := f.liquidate(acct, 1)
+	retry, err := f.liquidate(acct, 1)
 	require.NoError(t, err)
-	assert.True(t, replay.Replayed)
-	assert.Equal(t, res.Step.ID, replay.Step.ID)
+	assert.False(t, retry.Eligible)
+	assert.Nil(t, retry.Step)
 	assert.Equal(t, trades, f.countJournals(acct, ledger.KindLiquidation))
 	requirePartiesBalance(t, f, acct.String(), facs.Pool.ID.String(), facs.Fund.ID.String())
 	_ = a
@@ -362,12 +368,8 @@ func TestIntegration_LiquidationQueueTakesTheMostUnderMarginedFirst(t *testing.T
 		require.NotNil(t, m.Call)
 	}
 	run := func() QueueResult {
-		var q QueueResult
-		require.NoError(t, f.inTx(func(ctx context.Context, tx pgx.Tx) error {
-			var err error
-			q, err = f.svc.ProcessLiquidationQueue(ctx, tx, 1)
-			return err
-		}))
+		q, err := f.svc.ProcessLiquidationQueue(f.ctx, testDB, 1)
+		require.NoError(t, err)
 		return q
 	}
 	first := run()

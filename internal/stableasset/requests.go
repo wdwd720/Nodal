@@ -313,6 +313,16 @@ func openBurns(ctx context.Context, q db.Querier, sid StableAssetID) ([]BurnReco
 	return listBurns(ctx, q, `stable_asset_id = $1 AND status IN ('SUBMITTING','SUBMITTED','SUBMISSION_UNKNOWN','REDEMPTION_QUEUED') ORDER BY created_at, id`, sid)
 }
 
+// requestTransitionColumns and requestStatusChange are the parts of a request
+// transition's two statements that do not name the table.
+const (
+	requestTransitionColumns = `(id, request_id, from_status, to_status, actor_type, actor_id, reason)
+		VALUES ($1,$2,$3,$4,$5,$6,$7)`
+	requestStatusChange = `SET status = $2, failure_code = coalesce(NULLIF($3, ''), failure_code),
+		journal_transaction_id = coalesce($4, journal_transaction_id), final_slot = coalesce($5, final_slot)
+		WHERE id = $1 AND status = $6`
+)
+
 // transition is one bound status change of a request row.
 type transition struct {
 	table, transitions, id, from, to, reason, failureCode string
@@ -328,13 +338,23 @@ func (t transition) apply(ctx context.Context, tx pgx.Tx) error {
 	if strings.TrimSpace(t.reason) == "" {
 		t.reason = t.to
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO `+t.transitions+` (id, request_id, from_status, to_status, actor_type, actor_id, reason)
-		VALUES ($1,$2,$3,$4,$5,$6,$7)`, id.New[id.Any](), t.id, t.from, t.to, t.actor.Type, t.actor.ID, t.reason); err != nil {
+	// Each table's statements are spelled out in full so that every one is a
+	// compile-time constant (test/security/sqlsource_test.go).
+	var insert, update string
+	switch {
+	case t.table == "stable_mint_requests" && t.transitions == "stable_mint_request_transitions":
+		insert = `INSERT INTO stable_mint_request_transitions ` + requestTransitionColumns
+		update = `UPDATE stable_mint_requests ` + requestStatusChange
+	case t.table == "stable_burn_requests" && t.transitions == "stable_burn_request_transitions":
+		insert = `INSERT INTO stable_burn_request_transitions ` + requestTransitionColumns
+		update = `UPDATE stable_burn_requests ` + requestStatusChange
+	default:
+		return errs.Newf(errs.CodeInternal, "stableasset: no request table %q", t.table)
+	}
+	if _, err := tx.Exec(ctx, insert, id.New[id.Any](), t.id, t.from, t.to, t.actor.Type, t.actor.ID, t.reason); err != nil {
 		return dbErr("record request transition", err)
 	}
-	tag, err := tx.Exec(ctx, `UPDATE `+t.table+` SET status = $2, failure_code = coalesce(NULLIF($3, ''), failure_code),
-		journal_transaction_id = coalesce($4, journal_transaction_id), final_slot = coalesce($5, final_slot)
-		WHERE id = $1 AND status = $6`, t.id, t.to, t.failureCode, t.journal, t.finalSlot, t.from)
+	tag, err := tx.Exec(ctx, update, t.id, t.to, t.failureCode, t.journal, t.finalSlot, t.from)
 	if err != nil {
 		return dbErr("update request status", err)
 	}

@@ -72,14 +72,18 @@ type Call struct {
 
 // Case is a margin_liquidation_cases row.
 type Case struct {
-	ID                CaseID
-	MarginAccountID   AccountID
-	MarginCallID      CallID
-	Status            CaseStatus
-	PolicyVersion     string
-	Target            LiquidationTarget
-	MaxSteps          int
-	StepsExecuted     int
+	ID              CaseID
+	MarginAccountID AccountID
+	MarginCallID    CallID
+	Status          CaseStatus
+	PolicyVersion   string
+	Target          LiquidationTarget
+	MaxSteps        int
+	StepsExecuted   int
+	// BudgetFromStep is where the current budget window began: the trading
+	// steps after it count against MaxSteps. A resumed case starts a fresh
+	// window at the steps it had already taken.
+	BudgetFromStep    int
 	OpenedAt          time.Time
 	ClosedAt          *time.Time
 	LastReason        string
@@ -136,10 +140,16 @@ func dbErr(op string, err error) error {
 		}
 	}
 	switch db.SQLState(err) {
-	case "MG001", "MG002", "MG003", "MG004", "MG005":
+	case "MG001", "MG002", "MG003", "MG004", "MG005", "MG007", "MG010", "MG011":
 		return errs.Wrap(err, errs.CodeInvalidStateTransition, "margin: "+op)
 	case "MG006":
 		return errs.Wrap(err, errs.CodeValidationFailed, "margin: "+op)
+	case "MG009":
+		return errs.Wrap(err, errs.CodeForbidden, "margin: "+op)
+	case "MG008":
+		// An effect naming a journal its key did not post is a defect, never
+		// a request to refuse politely.
+		return errs.Wrap(err, errs.CodeInternal, "margin: "+op)
 	}
 	if db.IsUniqueViolation(err) {
 		return errs.Wrap(err, errs.CodeConflict, "margin: "+op)
@@ -412,13 +422,32 @@ func (st *store) moveByEffect(ctx context.Context, q db.Querier, eid econ.Effect
 	return mv, dbErr("load collateral move", err)
 }
 
-// releaseVelocity counts releases and their value since a time.
-func (st *store) releaseVelocity(ctx context.Context, q db.Querier, mid AccountID, since time.Time) (int, money.USD, error) {
+// moveVelocity counts the collateral moves in one direction and their value
+// since a time.
+func (st *store) moveVelocity(ctx context.Context, q db.Querier, mid AccountID, dir MoveDirection, since time.Time) (int, money.USD, error) {
 	var n int
 	var sum int64
 	err := q.QueryRow(ctx, `SELECT count(*), coalesce(sum(value_minor), 0) FROM margin_collateral_moves
-		WHERE margin_account_id = $1 AND direction = 'RELEASE' AND occurred_at > $2`, mid, since).Scan(&n, &sum)
-	return n, money.USDFromMinor(sum), dbErr("read release velocity", err)
+		WHERE margin_account_id = $1 AND direction = $2 AND occurred_at > $3`, mid, dir, since).Scan(&n, &sum)
+	return n, money.USDFromMinor(sum), dbErr("read collateral move velocity", err)
+}
+
+// inReview reports whether the account's case is held for a person in
+// MANUAL_REVIEW (at most one case of an account is unresolved).
+func (st *store) inReview(ctx context.Context, q db.Querier, mid AccountID) (bool, error) {
+	var open bool
+	err := q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM margin_liquidation_cases
+		WHERE margin_account_id = $1 AND status = 'MANUAL_REVIEW')`, mid).Scan(&open)
+	return open, dbErr("read review status", err)
+}
+
+// tradingSteps counts the case's sales in its current budget window: the
+// steps the budget bounds.
+func (st *store) tradingSteps(ctx context.Context, q db.Querier, c Case) (int, error) {
+	var n int
+	err := q.QueryRow(ctx, `SELECT count(*) FROM margin_liquidation_steps WHERE case_id = $1 AND action = 'SELL' AND step_no > $2`,
+		c.ID, c.BudgetFromStep).Scan(&n)
+	return n, dbErr("count trading steps", err)
 }
 
 const callColumns = `id, margin_account_id, status, issued_at, equity_units::text, maintenance_units::text, deficiency_units::text,
@@ -491,14 +520,15 @@ func (st *store) resolveCall(ctx context.Context, tx pgx.Tx, a Account, c *Call,
 	return nil
 }
 
-const caseColumns = `id, margin_account_id, margin_call_id, status, policy_version, target, max_steps, steps_executed, opened_at,
-	closed_at, last_reason, deficit_units::text, deficit_coverage_journal_transaction_id, deficit_covered_at`
+const caseColumns = `id, margin_account_id, margin_call_id, status, policy_version, target, max_steps, steps_executed,
+	budget_from_step, opened_at, closed_at, last_reason, deficit_units::text, deficit_coverage_journal_transaction_id, deficit_covered_at`
 
 func scanCase(row pgx.Row) (Case, error) {
 	var c Case
 	var deficit *string
 	if err := row.Scan(&c.ID, &c.MarginAccountID, &c.MarginCallID, &c.Status, &c.PolicyVersion, &c.Target, &c.MaxSteps,
-		&c.StepsExecuted, &c.OpenedAt, &c.ClosedAt, &c.LastReason, &deficit, &c.CoverageJournalID, &c.CoveredAt); err != nil {
+		&c.StepsExecuted, &c.BudgetFromStep, &c.OpenedAt, &c.ClosedAt, &c.LastReason, &deficit, &c.CoverageJournalID,
+		&c.CoveredAt); err != nil {
 		return Case{}, err
 	}
 	if deficit != nil {
@@ -557,7 +587,9 @@ func (st *store) openCase(ctx context.Context, tx pgx.Tx, a Account, call Call, 
 	return c, nil
 }
 
-// setCaseStatus moves a case; a terminal status closes it.
+// setCaseStatus moves a case; a terminal status, or MANUAL_REVIEW, closes it
+// for automation. Leaving MANUAL_REVIEW is not a status change this function
+// makes: only an approved resolution does (resolveCase).
 func (st *store) setCaseStatus(ctx context.Context, tx pgx.Tx, a Account, c *Case, to CaseStatus, reason string, deficit *money.Quantity, actor econ.Actor, at time.Time) error {
 	if c.Status == to {
 		if c.LastReason != reason {
@@ -568,6 +600,10 @@ func (st *store) setCaseStatus(ctx context.Context, tx pgx.Tx, a Account, c *Cas
 		}
 		return nil
 	}
+	if ResolutionRequired(c.Status) {
+		return errs.Newf(errs.CodeInvalidStateTransition, "liquidation case %s is in %s; only an approved resolution moves it", c.ID, c.Status).
+			WithField("case_id", c.ID.String())
+	}
 	if !CanTransitionCase(c.Status, to) {
 		return errs.Newf(errs.CodeInvalidStateTransition, "liquidation case %s cannot move %s -> %s", c.ID, c.Status, to)
 	}
@@ -576,7 +612,7 @@ func (st *store) setCaseStatus(ctx context.Context, tx pgx.Tx, a Account, c *Cas
 		return dbErr("record liquidation case transition", err)
 	}
 	var closed any
-	if to.Terminal() {
+	if to.Closed() {
 		closed = at
 	}
 	var deficitText any
@@ -591,7 +627,7 @@ func (st *store) setCaseStatus(ctx context.Context, tx pgx.Tx, a Account, c *Cas
 		return err
 	}
 	c.Status, c.LastReason = to, reason
-	if to.Terminal() {
+	if to.Closed() {
 		c.ClosedAt = &at
 	}
 	if deficit != nil {
