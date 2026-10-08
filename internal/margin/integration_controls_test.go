@@ -666,3 +666,37 @@ func TestIntegration_SQLAndGoAgreeOnTransitionTables(t *testing.T) {
 	check("cp_margin_case_transition_legal", cases, func(a, b string) bool { return CanTransitionCase(CaseStatus(a), CaseStatus(b)) })
 	check("cp_margin_call_transition_legal", calls, func(a, b string) bool { return CanTransitionCall(CallStatus(a), CallStatus(b)) })
 }
+
+// TestIntegration_BuyingPowerV2SeesTheMarginEngine: the universal buying power
+// reads an account's margin through BuyingPowerReader, so its liabilities and
+// requirements are exactly the engine's (converted conservatively), and a
+// customer with no margin account is a cash account.
+func TestIntegration_BuyingPowerV2SeesTheMarginEngine(t *testing.T) {
+	f := newFixture(t)
+	f.seed(usd(1_000_000), usd(100_000))
+	acct, _ := f.fixedAccountOnBooks()
+
+	reader := f.svc.BuyingPowerReader()
+	st, ok, err := reader.MarginState(f.ctx, testDB, "CUSTOMER", acct.String())
+	require.NoError(t, err)
+	require.True(t, ok, "a margin account reports its state")
+	assert.Equal(t, "CROSS", st.Mode)
+	assert.Equal(t, "2000.00", st.BorrowLiabilities.String(), "the 2,000 borrowed")
+	assert.True(t, st.MaintenanceMargin.IsPositive())
+	assert.True(t, st.InitialMarginUsed.IsPositive())
+
+	state, err := f.svc.State(f.ctx, testDB, acct)
+	require.NoError(t, err)
+	e, err := Evaluate(f.svc.Policy(), state)
+	require.NoError(t, err)
+	want, _, err := v2State(e)
+	require.NoError(t, err)
+	assert.Equal(t, want, st, "buying power sees exactly the engine's evaluation")
+
+	_, ok, err = reader.MarginState(f.ctx, testDB, "CUSTOMER", f.account().String())
+	require.NoError(t, err)
+	assert.False(t, ok, "no margin account: a cash account")
+	_, ok, err = reader.MarginState(f.ctx, testDB, "HOUSE", acct.String())
+	require.NoError(t, err)
+	assert.False(t, ok, "only customers have margin accounts")
+}
