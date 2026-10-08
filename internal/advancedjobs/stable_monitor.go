@@ -24,7 +24,7 @@ type StableMonitor struct {
 
 // NewStableMonitor wires the job for the stable assets of one devnet network.
 func NewStableMonitor(d *db.DB, svc *stableasset.Service, network string, s Settings) (*StableMonitor, error) {
-	if err := requireNetwork(network); err != nil {
+	if err := requireStableNetwork(svc, network); err != nil {
 		return nil, err
 	}
 	return &StableMonitor{db: d, svc: svc, network: network, spec: spec(NameStableMonitor, s)}, nil

@@ -16,8 +16,10 @@ import (
 // one instant (locked = outstanding + in flight; the source escrow and the
 // destination supply against what the books and the landed-but-unposted
 // transactions explain). A mismatch opens or refreshes a material record that
-// blocks new risk and pauses the route; a match is recorded (one MATCHED
-// record per matched pass, which is why the default interval is an hour).
+// blocks new risk and pauses the route; a match converges on the route's
+// standing MATCHED record -- the first matched pass records it and later ones
+// write nothing while it is the route's newest record -- so the table does not
+// grow with the schedule.
 type BridgeRoutes struct {
 	db      *db.DB
 	svc     *bridge.Service
@@ -27,7 +29,7 @@ type BridgeRoutes struct {
 
 // NewBridgeRoutes wires the job for the routes of one devnet network.
 func NewBridgeRoutes(d *db.DB, svc *bridge.Service, network string, s Settings) (*BridgeRoutes, error) {
-	if err := requireNetwork(network); err != nil {
+	if err := requireBridgeNetwork(svc, network); err != nil {
 		return nil, err
 	}
 	return &BridgeRoutes{db: d, svc: svc, network: network, spec: spec(NameBridgeRoutes, s)}, nil

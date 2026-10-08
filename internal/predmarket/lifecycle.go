@@ -438,49 +438,108 @@ func (s *Service) cancelResting(ctx context.Context, tx pgx.Tx, m Market, by eco
 	return n, nil
 }
 
-// CloseDue closes up to limit OPEN markets whose close time has passed, for
-// the scheduler. Markets another closer holds are skipped, not waited on.
+// CloseFailure is a due market CloseDueBatch could not close.
+type CloseFailure struct {
+	MarketID MarketID
+	// Attempts counts its consecutive failures; it is not taken again before
+	// RetryAfter.
+	Attempts   int
+	RetryAfter time.Time
+	Err        error
+}
+
+// CloseBatch is what one CloseDueBatch call did.
+type CloseBatch struct {
+	Closed   []MarketID
+	Failures []CloseFailure
+}
+
+// closeDueSQL takes OPEN markets whose close time has passed, earliest first,
+// leaving out one whose last close failed and whose backoff is still running
+// (unless the clock has gone back past that failure); never-failed markets
+// come first. Markets another closer holds are skipped (SKIP LOCKED).
+const closeDueSQL = `SELECT pm.id FROM prediction_markets pm
+	WHERE pm.status = 'OPEN' AND pm.close_at <= $1
+	  AND NOT EXISTS (SELECT 1 FROM upkeep_failures uf WHERE uf.operation = $3 AND uf.item_id = pm.id
+	                    AND uf.cleared_at IS NULL AND uf.retry_after > $1 AND uf.last_failed_at <= $1)
+	ORDER BY EXISTS (SELECT 1 FROM upkeep_failures uf WHERE uf.operation = $3 AND uf.item_id = pm.id AND uf.cleared_at IS NULL),
+	         pm.close_at, pm.id
+	LIMIT $2 FOR UPDATE OF pm SKIP LOCKED`
+
+// CloseDue is CloseDueBatch, returning the markets it closed. A market it
+// could not close is recorded in the upkeep failure ledger and backed off --
+// CloseDueBatch reports it -- and never stops the rest.
 func (s *Service) CloseDue(ctx context.Context, tx pgx.Tx, by econ.Actor, limit int) ([]MarketID, error) {
-	by, err := canonicalLifecycleActor(by)
+	b, err := s.CloseDueBatch(ctx, tx, by, limit)
 	if err != nil {
 		return nil, err
+	}
+	return b.Closed, nil
+}
+
+// CloseDueBatch closes up to limit OPEN markets whose close time has passed,
+// for the scheduler. Markets another closer holds are skipped, not waited on.
+// Each market is closed in its own savepoint of tx, all or nothing: one that
+// cannot be closed, including one the database would only refuse at COMMIT,
+// is rolled back alone, recorded with a backoff and reported in Failures, and
+// the others are closed. An error means the batch as a whole could not
+// proceed.
+func (s *Service) CloseDueBatch(ctx context.Context, tx pgx.Tx, by econ.Actor, limit int) (CloseBatch, error) {
+	by, err := canonicalLifecycleActor(by)
+	if err != nil {
+		return CloseBatch{}, err
 	}
 	if limit <= 0 || limit > 1000 {
 		limit = 100
 	}
-	var closed []MarketID
+	checkDeferred, err := deferredChecksPass(ctx, tx)
+	if err != nil {
+		return CloseBatch{}, err
+	}
+	now := s.now()
+	var due []MarketID
 	err = atomically(ctx, tx, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `SELECT id FROM prediction_markets WHERE status = 'OPEN' AND close_at <= $1
-			ORDER BY close_at, id LIMIT $2 FOR UPDATE SKIP LOCKED`, s.now(), limit)
+		rows, err := tx.Query(ctx, closeDueSQL, now, limit, UpkeepCloseDue)
 		if err != nil {
 			return dbErr("select due markets", err)
 		}
-		var due []MarketID
+		defer rows.Close()
 		for rows.Next() {
 			var mid MarketID
 			if err := rows.Scan(&mid); err != nil {
-				rows.Close()
 				return dbErr("scan due market", err)
 			}
 			due = append(due, mid)
 		}
-		rows.Close()
 		if err := rows.Err(); err != nil {
 			return dbErr("select due markets", err)
 		}
-		for _, mid := range due {
-			m, err := s.lockMarket(ctx, tx, mid, lockUpdate)
+		return nil
+	})
+	if err != nil {
+		return CloseBatch{}, err
+	}
+	out := CloseBatch{Closed: make([]MarketID, 0, len(due))}
+	for _, mid := range due {
+		failed, err := upkeepItem(ctx, tx, UpkeepCloseDue, mid, now, checkDeferred, func(sp pgx.Tx) error {
+			m, err := s.lockMarket(ctx, sp, mid, lockUpdate)
 			if err != nil {
 				return err
 			}
-			if _, err := s.closeLocked(ctx, tx, m, by); err != nil {
-				return err
-			}
-			closed = append(closed, mid)
+			_, err = s.closeLocked(ctx, sp, m, by)
+			return err
+		})
+		if err != nil {
+			return CloseBatch{}, err
 		}
-		return nil
-	})
-	return closed, err
+		if failed != nil {
+			out.Failures = append(out.Failures, CloseFailure{MarketID: mid, Attempts: failed.attempts,
+				RetryAfter: failed.retryAfter, Err: failed.err})
+			continue
+		}
+		out.Closed = append(out.Closed, mid)
+	}
+	return out, nil
 }
 
 // RequestResolution moves a CLOSED market to RESOLVING: an oracle report is

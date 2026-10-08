@@ -83,7 +83,7 @@ const maxBatch = 10_000
 func Catalog() []Descriptor {
 	return []Descriptor{
 		{Name: NameCapitalExpiry, Default: Settings{Interval: 30 * time.Second, Batch: 500},
-			Calls:      "capital.Service.ExpireDue, one reservation per transaction",
+			Calls:      "capital.Service.ExpireDueBatch, one reservation per transaction; one that cannot be expired is backed off and reported",
 			KillSwitch: ksNone},
 		{Name: NameMarginInterest, Default: Settings{Interval: time.Hour, Batch: 500},
 			Calls:      "margin.Service.AccrueInterest per margin account holding an open loan lot",
@@ -107,19 +107,19 @@ func Catalog() []Descriptor {
 			Calls:      "derivatives.Service.ReconcileClearing per settlement asset of the clearing house",
 			KillSwitch: ksNone},
 		{Name: NamePredictionClose, Default: Settings{Interval: 30 * time.Second, Batch: 200},
-			Calls:      "predmarket.Service.CloseDue, one market per transaction",
+			Calls:      "predmarket.Service.CloseDueBatch, one market per transaction; one that cannot be closed is backed off and reported",
 			KillSwitch: ksPredictionClose},
 		{Name: NamePredictionEscrow, Default: Settings{Interval: time.Hour, Batch: 200},
 			Calls:      "predmarket.Service.ReconcileEscrow per market between OPEN and RESOLVED or DISPUTED",
 			KillSwitch: ksNone},
 		{Name: NameOrdersCompleteTerminal, Default: Settings{Interval: time.Minute, Batch: 500},
-			Calls:      "orders.Service.CompleteTerminal, one intent per transaction",
+			Calls:      "orders.Service.CompleteTerminal, one intent per transaction; one that cannot be completed is backed off and reported",
 			KillSwitch: ksNone},
 		{Name: NameOrdersBookProof, Default: Settings{Interval: 15 * time.Minute, Batch: 50},
 			Calls:      "orders.Service.VerifyJournal per OPEN or HALTED book; a journal that does not replay opens a reconciliation record",
 			KillSwitch: ksNone},
 		{Name: NameEquitiesSettlement, Default: Settings{Interval: 5 * time.Minute, Batch: 100},
-			Calls:      "equities.Service.SettleDue, one account per transaction, until nothing is due",
+			Calls:      "equities.Service.SettleDueBatch, one account per transaction, until nothing is due; a settlement that cannot settle is backed off and reported",
 			KillSwitch: ksNone},
 		{Name: NameEquitiesCorporate, Default: Settings{Interval: 15 * time.Minute, Batch: 100},
 			Calls:      "equities.Service.ApplyCorporateAction per ANNOUNCED or APPLYING action whose date has come",
@@ -139,14 +139,14 @@ func Catalog() []Descriptor {
 			Calls:      "stableasset.Service.ReconcileSupply (PERIODIC) per stable asset on the configured network",
 			KillSwitch: ksNone, Needs: NeedsDevnet},
 		{Name: NameStableUnknown, Default: Settings{Interval: time.Minute, Batch: 100}, MaxBatch: 500,
-			Calls:      "stableasset.Service.ReconcileUnknown, each request in its own transaction",
+			Calls:      "stableasset.Service.ReconcileUnknown (the service's network only), each request in its own transaction; one that cannot be settled is backed off and reported",
 			KillSwitch: ksNone, Needs: NeedsDevnet},
 		{Name: NameStableRedemptions, Default: Settings{Interval: time.Minute, Batch: 100}, MaxBatch: 500,
-			Calls:      "stableasset.Service.ProcessRedemptions per stable asset with queued redemptions",
+			Calls:      "stableasset.Service.ProcessRedemptions per stable asset with queued redemptions; a payout that cannot be made is backed off and reported",
 			KillSwitch: ksNone, Needs: NeedsDevnet},
-		{Name: NameBridgeLegs, Default: Settings{Interval: time.Minute, Batch: 100},
-			Calls: "bridge.Service.ReconcileLeg per DESTINATION_FINALIZED leg; bridge.Service.Observe per earlier in-flight leg " +
-				"(ObservePending's sweep, restricted to the configured network and isolated per leg)",
+		{Name: NameBridgeLegs, Default: Settings{Interval: time.Minute, Batch: 100}, MaxBatch: 500,
+			Calls: "bridge.Service.ObservePending over the configured network's in-flight legs, each driven on its own " +
+				"(ReconcileLeg for a DESTINATION_FINALIZED leg, Observe's drive for an earlier one); one that cannot be advanced is backed off and reported",
 			KillSwitch: ksBridge, Needs: NeedsDevnet},
 		{Name: NameBridgeRoutes, Default: Settings{Interval: time.Hour, Batch: 50},
 			Calls:      "bridge.Service.ReconcileRoute (PERIODIC) per route on the configured network",
@@ -155,9 +155,9 @@ func Catalog() []Descriptor {
 			Calls:      "transfers.Service.Reconcile in a snapshot; a discrepancy opens a reconciliation record",
 			KillSwitch: ksNone},
 		{Name: NameDelegationUpkeep, Default: Settings{Interval: 30 * time.Second, Batch: 100}, MaxBatch: 500,
-			Calls: "delegation.Service.ExpireStaleSwap / ExpireStaleWithdrawal per pending subject past its deadline or no " +
-				"longer standing, one per transaction; then delegation.Service.ReconcilePending (observe by transaction id, " +
-				"produce SANDBOX blocks, never resubmit)",
+			Calls: "delegation.Service.ExpireStale over the network's pending subjects past their deadline or no longer standing, " +
+				"one per transaction; then delegation.Service.ObserveInFlight (observe by transaction id, produce SANDBOX blocks, " +
+				"never resubmit); a subject that cannot be handled is backed off and reported",
 			KillSwitch: ksDelegation, Needs: NeedsDevnet},
 	}
 }

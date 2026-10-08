@@ -153,6 +153,9 @@ func (s *Service) PrepareMint(ctx context.Context, tx pgx.Tx, req MintRequest) (
 	if err != nil {
 		return MintTicket{}, err
 	}
+	if err := s.onHost(a); err != nil {
+		return MintTicket{}, err
+	}
 	// The chain is read through this transaction: the tip is the blockhash
 	// the plan will reference, and a failed read is an unhealthy chain.
 	tip, tipErr := s.chainTip(ctx, tx, a.Chain)
@@ -441,6 +444,9 @@ func (s *Service) lockMint(ctx context.Context, tx pgx.Tx, rid MintRequestID) (P
 	}
 	a, err := s.get(ctx, tx, peek.StableAssetID, true)
 	if err != nil {
+		return PlatformStableAsset{}, MintRecord{}, err
+	}
+	if err := s.onHost(a); err != nil {
 		return PlatformStableAsset{}, MintRecord{}, err
 	}
 	rec, err := getMint(ctx, tx, rid, true)

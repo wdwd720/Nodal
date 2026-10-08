@@ -127,6 +127,9 @@ func (s *Service) PrepareBurn(ctx context.Context, tx pgx.Tx, req BurnRequest) (
 	if err != nil {
 		return BurnTicket{}, err
 	}
+	if err := s.onHost(a); err != nil {
+		return BurnTicket{}, err
+	}
 	holder := s.custody.HolderAddress(req.AccountID)
 	// One read of the chain through this transaction: the tip the plan will
 	// reference and the holder's balance, at the same instant.
@@ -402,6 +405,9 @@ func (s *Service) lockBurn(ctx context.Context, tx pgx.Tx, rid BurnRequestID) (P
 	}
 	a, err := s.get(ctx, tx, peek.StableAssetID, true)
 	if err != nil {
+		return PlatformStableAsset{}, BurnRecord{}, err
+	}
+	if err := s.onHost(a); err != nil {
 		return PlatformStableAsset{}, BurnRecord{}, err
 	}
 	rec, err := getBurn(ctx, tx, rid, true)

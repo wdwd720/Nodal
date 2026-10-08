@@ -11,8 +11,9 @@ import (
 	"github.com/nodal/controlplane/internal/security"
 )
 
-// Kind is what a record compares. The set matches the CHECK constraint of
-// reconciliation_records (migration 00301).
+// Kind is what a record compares. AllKinds is exactly the set the CHECK
+// constraint reconciliation_records_kind_check allows (migration 00301,
+// widened by 00731 and 00760); test/integration/enums pairs the two.
 type Kind string
 
 // Kinds.
@@ -57,11 +58,23 @@ const (
 	// KindDevnetChain compares ledger balances with balances observed on a
 	// simulated chain.
 	KindDevnetChain Kind = "DEVNET_CHAIN"
+
+	// --- upkeep robustness (migration 00760) ---
+
+	// KindBookJournal is an order book whose journal does not replay to the
+	// recorded book (orders.Service.VerifyJournal): replaying every journalled
+	// command from the empty book, and the latest snapshot plus the tail, must
+	// reproduce the recorded events, state hashes and orders.
+	KindBookJournal Kind = "BOOK_JOURNAL"
+	// KindTransfers is a customer transfer register that disagrees with its
+	// economic effects or the ledger (transfers.Service.Reconcile).
+	KindTransfers Kind = "TRANSFERS"
 )
 
 var allKinds = []Kind{
 	KindExecution, KindWalletBalance, KindFunding, KindLedgerInternal, KindPositionLedger, KindSubmissionUnknown,
 	KindEconomicEffect, KindStableReserve, KindBridge, KindPredictionEscrow, KindClearing, KindDevnetChain,
+	KindBookJournal, KindTransfers,
 }
 
 // AllKinds returns every kind in declaration order.
@@ -87,7 +100,10 @@ func (k Kind) AlwaysMaterial() bool {
 		// is unknown, supply beyond reserve, value counted on both sides of a
 		// bridge, escrow that cannot pay its shares, a clearing house that does
 		// not net to zero. None of those is ever small.
-		KindEconomicEffect, KindStableReserve, KindBridge, KindPredictionEscrow, KindClearing, KindDevnetChain:
+		KindEconomicEffect, KindStableReserve, KindBridge, KindPredictionEscrow, KindClearing, KindDevnetChain,
+		// A book that does not replay and a transfer register that disagrees
+		// with the ledger are internal books disagreeing with themselves.
+		KindBookJournal, KindTransfers:
 		return true
 	}
 	return false

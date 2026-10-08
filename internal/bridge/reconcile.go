@@ -61,14 +61,20 @@ func (r RouteReconciliation) Matched() bool {
 // ReconcileRoute runs the BRIDGE reconciliation of a route in the caller's
 // transaction. A mismatch opens (or refreshes) a material BRIDGE record that
 // blocks new risk and trips the route's circuit breaker (ACTIVE -> PAUSED);
-// legs already in flight still complete. A periodic or full run that matches
-// records the match.
+// legs already in flight still complete. A full run that matches records the
+// match; a periodic one converges instead of accumulating -- while the
+// route's newest BRIDGE record is MATCHED it stands for every later matched
+// pass (reconciliation.Repository.RecordMatch). A route of another network
+// is refused: this host cannot see its chains.
 func (s *Service) ReconcileRoute(ctx context.Context, tx pgx.Tx, rid RouteID, mode reconciliation.Mode, actor econ.Actor) (RouteReconciliation, error) {
 	if err := requireActor(actor); err != nil {
 		return RouteReconciliation{}, err
 	}
 	r, err := s.getRoute(ctx, tx, rid, true)
 	if err != nil {
+		return RouteReconciliation{}, err
+	}
+	if err := s.onHost(r); err != nil {
 		return RouteReconciliation{}, err
 	}
 	return s.reconcileRouteLocked(ctx, tx, r, mode, actor)
@@ -178,7 +184,7 @@ func (s *Service) reconcileRouteLocked(ctx context.Context, tx pgx.Tx, r Route, 
 		if _, open, err := s.recon.FindUnresolvedByScope(ctx, tx, reconciliation.KindBridge, ScopeBridgeRoute, r.ID.String()); err != nil || open {
 			return out, err
 		}
-		rec, err := s.recon.Open(ctx, tx, s.reconRequest(r, out, mode, actor, reconciliation.StatusMatched))
+		rec, _, err := s.recon.RecordMatch(ctx, tx, s.reconRequest(r, out, mode, actor, reconciliation.StatusMatched))
 		if err != nil {
 			return RouteReconciliation{}, err
 		}

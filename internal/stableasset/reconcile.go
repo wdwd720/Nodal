@@ -61,6 +61,9 @@ func (s *Service) ReconcileSupply(ctx context.Context, tx pgx.Tx, sid StableAsse
 	if err != nil {
 		return SupplyReconciliation{}, err
 	}
+	if err := s.onHost(a); err != nil {
+		return SupplyReconciliation{}, err
+	}
 	return s.reconcileLocked(ctx, tx, &a, mode, actor)
 }
 
@@ -150,7 +153,7 @@ func (s *Service) reconcileLocked(ctx context.Context, tx pgx.Tx, a *PlatformSta
 		if _, open, err := s.recon.FindUnresolvedByScope(ctx, tx, reconciliation.KindStableReserve, ScopeStableAsset, a.ID.String()); err != nil || open {
 			return out, err
 		}
-		rec, err := s.recon.Open(ctx, tx, s.reconRequest(*a, out, mode, actor, reconciliation.StatusMatched))
+		rec, _, err := s.recon.RecordMatch(ctx, tx, s.reconRequest(*a, out, mode, actor, reconciliation.StatusMatched))
 		if err != nil {
 			return SupplyReconciliation{}, err
 		}

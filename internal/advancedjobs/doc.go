@@ -32,13 +32,37 @@
 // rolls back another's. Where a subsystem's operation is itself a driver that
 // owns its transactions (margin.Service.ProcessLiquidationQueue,
 // stableasset.Service.ReconcileUnknown and ProcessRedemptions,
-// bridge.Service.Observe), the job hands it the database and lets it. Where
-// a subsystem exports only a batch operation over a queue it selects itself
-// (capital.Service.ExpireDue, predmarket.Service.CloseDue,
-// orders.Service.CompleteTerminal, equities.Service.SettleDue), the job
-// drains it one unit per transaction until it reports nothing left or the
-// batch bound is reached, and stops the drain at the first failure: the
-// failing unit would be selected first again.
+// bridge.Service.ObservePending, delegation.Service.ExpireStale and
+// ObserveInFlight), the job hands it the database and lets it. Where a
+// subsystem exports a batch operation over a queue it selects itself in the
+// caller's transaction (capital.Service.ExpireDueBatch,
+// predmarket.Service.CloseDueBatch, orders.Service.CompleteTerminal,
+// equities.Service.SettleDueBatch), the job drains it one unit per
+// transaction until it reports nothing left or the batch bound is reached.
+//
+// # Items that keep failing
+//
+// Every batch operation the jobs drive isolates its items (migration 00760):
+// an item it cannot process -- including one whose change the database would
+// only refuse at COMMIT -- is rolled back alone (its own savepoint or its own
+// transaction), recorded in upkeep_failures with its error code and a
+// backoff, and returned as a typed per-item failure, and the others are
+// processed. The operation leaves an item out while its backoff runs and
+// takes never-failed items first, so an item that always fails can neither
+// stop a run nor fill one, and a second run still reaches the items behind
+// it. A job reports each such item as a Failure of its own unit. Only a
+// transaction that fails as a whole -- the queue cannot be read, the retry
+// budget is spent -- ends a drain, since nothing was recorded for its item.
+//
+// # Networks
+//
+// A job that reads a devnet chain works on the network its service's host
+// carries, and a job configured for another network than its service is a
+// failed start. The subsystems filter by that network themselves (a stable
+// asset and a bridge route record their network, and so do delegated swaps
+// and withdrawals), so a request, a leg or a subject of another network is
+// never observed or settled here: this host would read its transaction as
+// never seen and could fail it while it stands final on its own chain.
 //
 // Which units are due is read through the subsystem's own exported reader
 // where one exists (instruments.Repository.ListWithTerms,
