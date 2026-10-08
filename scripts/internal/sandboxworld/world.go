@@ -16,6 +16,7 @@ package sandboxworld
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"time"
@@ -222,29 +223,23 @@ type Customer struct {
 	P       security.Principal
 }
 
-// Customer creates a user with one ACTIVE customer account and a VERIFIED,
-// sanctions-clear compliance profile, plus a principal that authenticated
-// with MFA at the world's current time. The label is recorded in the user's
-// subject so demo data says what it is.
+// Customer creates a user with one ACTIVE customer account and a verified
+// email address -- NODAL_IDENTITY, what a signed-in customer of a deployment
+// has, and what the advanced capabilities require of simulated activity
+// (D-055) -- plus a principal that authenticated with MFA at the world's
+// current time. No KYC profile is created: a deployment has no provider to
+// produce one (B-06). The label is recorded in the user's subject so demo
+// data says what it is.
 func (w *World) Customer(ctx context.Context, label string) (Customer, error) {
 	repo := accounts.NewRepository()
-	u, err := repo.CreateUser(ctx, w.DB, w.component, "synthetic-"+label+"-"+uuid.NewString(), nil)
+	email := sha256.Sum256([]byte("synthetic-" + label + "@sandbox.invalid"))
+	u, err := repo.CreateUser(ctx, w.DB, w.component, "synthetic-"+label+"-"+uuid.NewString(), email[:])
 	if err != nil {
 		return Customer{}, fmt.Errorf("sandboxworld: create user: %w", err)
 	}
 	a, err := repo.CreateAccount(ctx, w.DB, u.ID, accounts.KindCustomer)
 	if err != nil {
 		return Customer{}, fmt.Errorf("sandboxworld: create account: %w", err)
-	}
-	verifiedAt := w.Clock.Now().Add(-24 * time.Hour)
-	if err := w.InTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		_, err := compliance.NewRepository(w.Audit).Upsert(ctx, tx, compliance.Profile{
-			UserID: u.ID, IdentityState: compliance.IdentityVerified, SanctionsState: compliance.SanctionsClear,
-			VerifiedAt: &verifiedAt,
-		}, compliance.Change{ActorType: security.ActorSystem, ActorID: w.component, Reason: "synthetic demo customer"})
-		return err
-	}); err != nil {
-		return Customer{}, fmt.Errorf("sandboxworld: compliance profile: %w", err)
 	}
 	return Customer{Label: label, User: u.ID, Account: a.ID, P: security.Principal{
 		SubjectID: u.ID.String(), ActorType: security.ActorUser, Roles: []security.Role{security.RoleCustomer},

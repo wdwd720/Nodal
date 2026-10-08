@@ -4,6 +4,7 @@ package compliance_test
 
 import (
 	"context"
+	"crypto/sha256"
 	"os"
 	"testing"
 	"time"
@@ -96,8 +97,8 @@ func TestIntegration_Compliance_UpsertAuditsAndRejectsSelfAttestation(t *testing
 	assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(bad.Validate()))
 }
 
-// AccountVerification fails closed: only a VERIFIED, unexpired profile of the
-// account's owner reads as verified.
+// AccountVerification fails closed: an owner with neither a verified email
+// (NODAL_IDENTITY) nor a VERIFIED, unexpired profile reads as unverified.
 func TestIntegration_AccountVerificationFailsClosed(t *testing.T) {
 	d := openDB(t)
 	ctx := context.Background()
@@ -141,4 +142,20 @@ func TestIntegration_AccountVerificationFailsClosed(t *testing.T) {
 	ok, err = v.IdentityVerified(ctx, d.Pool(), verified)
 	require.NoError(t, err)
 	assert.False(t, ok, "verification expired: unverified")
+}
+
+// A verified email address is NODAL_IDENTITY, which is enough for simulated
+// activity (D-055).
+func TestIntegration_AVerifiedEmailIsEnoughForSimulatedActivity(t *testing.T) {
+	d := openDB(t)
+	ctx := context.Background()
+	v := compliance.NewAccountVerification(clock.NewFake(time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC)))
+	hash := sha256.Sum256([]byte("verified@example.test"))
+	u, err := accounts.NewRepository().CreateUser(ctx, d.Pool(), "https://idp.test", "sub-"+id.New[id.Any]().String(), hash[:])
+	require.NoError(t, err)
+	a, err := accounts.NewRepository().CreateAccount(ctx, d.Pool(), u.ID, accounts.KindCustomer)
+	require.NoError(t, err)
+	ok, err := v.IdentityVerified(ctx, d.Pool(), a.ID)
+	require.NoError(t, err)
+	assert.True(t, ok, "a verified email is NODAL_IDENTITY")
 }

@@ -572,11 +572,11 @@ func (s *Service) evaluate(ctx context.Context, tx pgx.Tx, st *sendState, req Se
 	if err != nil {
 		return nil, err
 	}
-	verified := false
-	if prof, err := s.profiles.Get(ctx, tx, st.userID); err == nil {
-		verified = prof.IdentityState == compliance.IdentityVerified && (prof.ExpiresAt == nil || now.Before(*prof.ExpiresAt))
-	} else if errs.CodeOf(err) != errs.CodeNotFound {
-		return nil, dbErr("read compliance profile", err)
+	// The advanced capabilities' one identity rule (D-055): NODAL_IDENTITY
+	// or a verified, unexpired compliance profile, read in this transaction.
+	verified, err := compliance.NewAccountVerification(s.clk).IdentityVerified(ctx, tx, st.sender.ID)
+	if err != nil {
+		return nil, err
 	}
 	snap, err := s.kills.Snapshot(ctx, tx)
 	if err != nil {

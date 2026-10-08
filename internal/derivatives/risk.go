@@ -9,6 +9,7 @@ import (
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/db"
+	"github.com/nodal/controlplane/internal/compliance"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/gates"
@@ -139,12 +140,13 @@ type tradeRisk struct {
 // compliance_profiles), never taken from the request.
 func (s *Service) evaluate(ctx context.Context, tx pgx.Tx, ch econ.Facility, in econ.Intent, r IntentRequest, tr tradeRisk, now time.Time) (risk.AdvancedDecision, risk.DecisionID, error) {
 	var status string
-	var verified bool
-	if err := tx.QueryRow(ctx, `SELECT a.status,
-			coalesce(c.identity_state = 'VERIFIED' AND (c.expires_at IS NULL OR c.expires_at > $2), false)
-		FROM accounts a LEFT JOIN compliance_profiles c ON c.user_id = a.owner_user_id WHERE a.id = $1`,
-		r.AccountID, now).Scan(&status, &verified); err != nil {
-		return risk.AdvancedDecision{}, risk.DecisionID{}, dbErr("read account status and identity", err)
+	if err := tx.QueryRow(ctx, `SELECT status FROM accounts WHERE id = $1`, r.AccountID).Scan(&status); err != nil {
+		return risk.AdvancedDecision{}, risk.DecisionID{}, dbErr("read account status", err)
+	}
+	// The advanced capabilities' one identity rule (D-055), read in tx.
+	verified, err := compliance.NewAccountVerification(s.clk).IdentityVerified(ctx, tx, r.AccountID)
+	if err != nil {
+		return risk.AdvancedDecision{}, risk.DecisionID{}, err
 	}
 	notionalUSD, err := s.newValuer(tx, now).value(ctx, tr.spec.SettlementAssetID, tr.notional, money.RoundCeil)
 	switch {
