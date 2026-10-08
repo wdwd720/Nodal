@@ -22,10 +22,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/stretchr/testify/require"
 
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/assets"
@@ -198,6 +200,64 @@ func RegisterTwin(ctx context.Context, tx pgx.Tx, source assets.Asset) (Twin, er
 // controller's: a route's source asset.
 func SourceAsset(ctx context.Context, tx pgx.Tx) (assets.Asset, error) {
 	return simulatedAsset(ctx, tx, "sbx-solana", "SRC")
+}
+
+// Supply is the usual pair of supply-controlled assets of a test: a platform
+// stable asset reserved in the sandbox dollar, and a bridged twin of a plain
+// source asset.
+type Supply struct {
+	Dollar assets.Asset
+	Stable Stable
+	Twin   Twin
+}
+
+// Controlled is a supply-controlled asset and its controller.
+type Controlled struct {
+	Asset      assets.AssetID
+	Controller string
+}
+
+// RegisterSupply ensures the sandbox dollar and registers a stable asset
+// reserved in it and a twin.
+func RegisterSupply(ctx context.Context, tx pgx.Tx) (Supply, error) {
+	var s Supply
+	var err error
+	if s.Dollar, err = econ.EnsureSandboxDollar(ctx, tx); err != nil {
+		return Supply{}, err
+	}
+	if s.Stable, err = RegisterStable(ctx, tx, s.Dollar.ID); err != nil {
+		return Supply{}, err
+	}
+	source, err := SourceAsset(ctx, tx)
+	if err != nil {
+		return Supply{}, err
+	}
+	if s.Twin, err = RegisterTwin(ctx, tx, source); err != nil {
+		return Supply{}, err
+	}
+	return s, nil
+}
+
+// Controlled lists the stable asset and the twin, each with its controller.
+func (s Supply) Controlled() []Controlled {
+	return []Controlled{
+		{Asset: s.Stable.Asset.ID, Controller: econ.ControllerStableIssuer},
+		{Asset: s.Twin.Asset.ID, Controller: econ.ControllerBridge},
+	}
+}
+
+// RequireRefusal fails the test unless err is the shared check's refusal of
+// asset under controller: ASSET_RESTRICTED, with the fields refusal
+// (econ.RefusalSupplyControlled), controller and asset_id.
+func RequireRefusal(t testing.TB, err error, asset assets.AssetID, controller string) {
+	t.Helper()
+	require.Error(t, err, "a supply-controlled asset (%s) must be refused", asset)
+	e, ok := errs.As(err)
+	require.True(t, ok, "not a coded error: %v", err)
+	require.Equal(t, errs.CodeAssetRestricted, e.Code, "%v", err)
+	require.Equal(t, econ.RefusalSupplyControlled, e.Fields["refusal"], "%v", err)
+	require.Equal(t, controller, e.Fields["controller"], "%v", err)
+	require.Equal(t, asset.String(), e.Fields["asset_id"], "%v", err)
 }
 
 // Holdings is what a supply reconciliation counts as an asset's units in
