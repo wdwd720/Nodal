@@ -271,8 +271,64 @@ var operationPolicies = map[string]operationPolicy{
 	// >>> advanced:treasury operations
 
 	// >>> advanced:stable operations
+	//
+	// The sandbox stable asset (internal/stableasset), simulated value only.
+	// Its registry, reserve ledger and signed reserve snapshots are reference
+	// data, read under the catalogue's permissions (snapshots are published
+	// for anyone to verify). An account's holdings and requests are
+	// tenant-scoped per request; a request read by its own id is scoped by its
+	// own account and answers NOT_FOUND otherwise. Issuing and redeeming are
+	// the owner's sandbox:stable, ownership-only. Operator actions need
+	// sandbox:operate; registering, pausing, resuming, paying queued
+	// redemptions and settling unknown submissions (which post) need a recent
+	// step-up. The peg monitor, the supply reconciliation and a snapshot move
+	// no value; the first two may trip the asset's circuit breaker, which is
+	// the service's decision, not the operator's.
+	"GetAdvancedStableAssets":                                 {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedStableAssetsStableAssetId":                    {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedStableAssetsStableAssetIdReserve":             {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedStableAssetsStableAssetIdSnapshots":           {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedStableAssetsHoldings":                         {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedStableAssetsIssuances":                        {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedStableAssetsIssuancesStableIssuanceId":        {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedStableAssetsRedemptions":                      {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedStableAssetsRedemptionsStableRedemptionId":    {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"PostAdvancedStableAssetsStableAssetIdIssuances":          {AnyOf: perms(security.PermSandboxStable), Mutating: true},
+	"PostAdvancedStableAssetsStableAssetIdRedemptions":        {AnyOf: perms(security.PermSandboxStable), Mutating: true},
+	"PostAdvancedStableAssets":                                {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedStableAssetsStableAssetIdPause":              {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedStableAssetsStableAssetIdResume":             {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedStableAssetsStableAssetIdMonitorRuns":        {AnyOf: perms(security.PermSandboxOperate), Mutating: true},
+	"PostAdvancedStableAssetsStableAssetIdReconciliations":    {AnyOf: perms(security.PermSandboxOperate), Mutating: true},
+	"PostAdvancedStableAssetsStableAssetIdSnapshots":          {AnyOf: perms(security.PermSandboxOperate), Mutating: true},
+	"PostAdvancedStableAssetsStableAssetIdRedemptionQueueRun": {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedStableAssetsOpsResolveUnknown":               {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
 
 	// >>> advanced:bridge operations
+	//
+	// Cross-chain capital (internal/bridge) and the simulated chain host.
+	// Routes and the chains' status are reference data. An account's legs and
+	// its holdings by chain are tenant-scoped per request; a leg read by its
+	// own id is scoped by its own account and answers NOT_FOUND otherwise.
+	// Bridging is the owner's sandbox:bridge, ownership-only. Operator actions
+	// need sandbox:operate; opening, pausing and resuming a route, driving a
+	// leg (it may post, relay and produce blocks), producing blocks and
+	// injecting a fault (LOCAL, TEST and DEV only) need a recent step-up. The
+	// route reconciliation moves no value.
+	"GetAdvancedBridgeRoutes":                              {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedBridgeRoutesBridgeRouteId":                 {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedBridgeChains":                              {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedBridgeLegs":                                {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedBridgeLegsBridgeLegId":                     {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedBridgeHoldings":                            {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"PostAdvancedBridgeLegs":                               {AnyOf: perms(security.PermSandboxBridge), Mutating: true},
+	"PostAdvancedBridgeRoutes":                             {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedBridgeRoutesBridgeRouteIdPause":           {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedBridgeRoutesBridgeRouteIdResume":          {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedBridgeRoutesBridgeRouteIdReconciliations": {AnyOf: perms(security.PermSandboxOperate), Mutating: true},
+	"PostAdvancedBridgeLegsBridgeLegIdReconcile":           {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedBridgeChainsBridgeChainIdBlocks":          {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedBridgeChainsBridgeChainIdFaults":          {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
 
 	// >>> advanced:predmarket operations
 	//

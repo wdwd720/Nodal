@@ -804,6 +804,628 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/advanced/bridge/chains": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The simulated chains' tips, finality and parameters, for display */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Both chains of the host */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BridgeChains"];
+                    };
+                };
+                422: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/bridge/chains/{bridgeChainId}/blocks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Operator — produce blocks on a simulated chain (step-up)
+         * @description The platform is the block producer of SANDBOX mode: producing blocks lets submitted transactions be included and finalize. It never submits or settles anything itself.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    bridgeChainId: components["schemas"]["BridgeChainId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["BridgeBlocksRequest"];
+                };
+            };
+            responses: {
+                /** @description The chain after the blocks */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BridgeBlocksResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/bridge/chains/{bridgeChainId}/faults": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Operator — inject a submission fault on a simulated chain (LOCAL, TEST and DEV only; step-up)
+         * @description Arms the chain to answer the next submission with a timeout that lands (TIMEOUT_BUT_LAND) or does not (TIMEOUT_AND_DROP), to drop the next `count` submissions (DROP_NEXT), to hold every accepted transaction for `count` blocks (DELAY_INCLUSION), or disarms every fault (CLEAR_FAULTS). Refused with FORBIDDEN (reason FAULT_INJECTION_FORBIDDEN) outside LOCAL, TEST and DEV.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    bridgeChainId: components["schemas"]["BridgeChainId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["BridgeFaultRequest"];
+                };
+            };
+            responses: {
+                /** @description The fault armed, and the chain */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BridgeFaultResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/bridge/holdings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * An account's simulated holdings by chain, its value in flight between chains, and the haircut it counts at
+         * @description Holdings are the account's ledger WALLET balances of SIMULATED assets, grouped by each asset's chain. In flight is the bridge's part of buying power under the deployment's haircut policy: each open leg, where its value is held, and the factor it counts at with the reason. Refused with RECONCILIATION_REQUIRED when the legs and the ledger disagree.
+         */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Holdings by chain and value in flight (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BridgeHoldings"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/bridge/legs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** An account's bridge legs, newest first */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of legs (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BridgeLegPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /**
+         * Bridge units of a route's source asset from your sandbox wallet on its chain to your wallet on the destination chain
+         * @description The service checks the route, the holder's balance on the source chain, Risk Kernel V2 and the units' reservation, has the holder's custodied key sign the planned BRIDGE_LOCK, and submits it exactly once. 200 when the leg is final (RECONCILED, or FAILED with its failure code); 202 when it is recorded and not final: in flight, in manual review, awaiting the chain in DEVNET mode, or with a submission whose outcome is unknown (reconciliation state AWAITING), which is reconciled from the chain by transaction id and never resubmitted.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["BridgeLegRequest"];
+                };
+            };
+            responses: {
+                /** @description The leg, final */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BridgeLegResult"];
+                    };
+                };
+                /** @description The leg, recorded and not final */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BridgeLegResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/bridge/legs/{bridgeLegId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One leg with its lock and release transactions on the chains and every state it passed through */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    bridgeLegId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The leg (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BridgeLegDetail"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/bridge/legs/{bridgeLegId}/reconcile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Operator — settle a leg from both chains by transaction id and reconcile it (step-up)
+         * @description Drives the leg as far as the chains allow now — never resubmitting a lock and never racing a release that can still land; a SANDBOX leg is driven by producing blocks — and, once its destination is final, checks the lock, the release and both postings against the chains.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    bridgeLegId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The leg, final */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BridgeLegResult"];
+                    };
+                };
+                /** @description The leg, not final yet */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BridgeLegResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/bridge/routes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The bridge routes between the simulated chains */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Routes, oldest first (the service does not page; the list is bounded by limit) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BridgeRouteList"];
+                    };
+                };
+                422: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /**
+         * Operator — open a route from a SIMULATED asset on its simulated chain to a bridged twin on another (step-up)
+         * @description Creates the destination mint (whose authority no key holds, so only an attested release mints it), the destination asset and the route's BRIDGE facility. Creating an identical route again returns it; another route under the same name is CONFLICT.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["BridgeRouteDefinition"];
+                };
+            };
+            responses: {
+                /** @description The route */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BridgeRoute"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/bridge/routes/{bridgeRouteId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One bridge route */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    bridgeRouteId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The route (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BridgeRoute"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/bridge/routes/{bridgeRouteId}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Operator — pause a route, with a reason; legs already in flight still complete (step-up) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    bridgeRouteId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["BridgeReasonRequest"];
+                };
+            };
+            responses: {
+                /** @description The route after the change */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BridgeRoute"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/bridge/routes/{bridgeRouteId}/reconciliations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Operator — reconcile a route's books with both chains (moves no value)
+         * @description A mismatch opens a material BRIDGE reconciliation record that blocks new risk and pauses the route (its circuit breaker); a match is recorded.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    bridgeRouteId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The route reconciliation */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BridgeRouteReconciliation"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/bridge/routes/{bridgeRouteId}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Operator — resume a paused route, with a reason (step-up; the circuit breaker never resumes) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    bridgeRouteId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["BridgeReasonRequest"];
+                };
+            };
+            responses: {
+                /** @description The route after the change */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BridgeRoute"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/advanced/buying-power": {
         parameters: {
             query?: never;
@@ -3713,6 +4335,853 @@ export interface paths {
                     };
                 };
                 403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/stable-assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The registered sandbox stable assets with their status, peg, issuance cap and reserve policy */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Stable assets, oldest first (the service does not page; the list is bounded by limit) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StableAssetList"];
+                    };
+                };
+                422: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /**
+         * Operator — register a sandbox stable asset pegged in the sandbox dollar (step-up)
+         * @description Creates the devnet mint (its authority is the platform issuer signer alone), the SIMULATED asset, the STABLE_ISSUER facility and the reserve policy. The peg is quoted in the sandbox dollar, which is not the caller's choice. Registering an identical definition again returns the existing asset; a different definition under the same name is CONFLICT.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StableAssetDefinition"];
+                };
+            };
+            responses: {
+                /** @description The registered stable asset */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StableAssetDetail"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/stable-assets/{stableAssetId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One stable asset with its status history and recent peg-monitor alerts */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    stableAssetId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The stable asset (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StableAssetDetail"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/stable-assets/{stableAssetId}/issuances": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Issue (mint) stable units into your sandbox wallet, paid in an eligible cash-equivalent reserve asset at the peg
+         * @description The service admits the issuance against the cap and the reserve, evaluates Risk Kernel V2, reserves the payment, signs the planned TOKEN_MINT_TO and submits it exactly once. 200 when the request is final (ISSUED, or FAILED with its failure code); 202 when it is recorded and not final: awaiting the chain in DEVNET mode, or SUBMISSION_UNKNOWN when the submission's outcome is unknown, in which case it is reconciled from the chain by transaction id and never resubmitted.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    stableAssetId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StableIssueRequest"];
+                };
+            };
+            responses: {
+                /** @description The issuance request, final */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StableIssuanceResult"];
+                    };
+                };
+                /** @description The issuance request, recorded and not final (see reconciliation for an unknown outcome) */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StableIssuanceResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/stable-assets/{stableAssetId}/monitor-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Operator — run the peg monitor (market price against the peg, reserve coverage, supply against the chain)
+         * @description Moves no value. A deviation above the threshold, coverage under 100% or a supply mismatch trips the circuit breaker, which pauses the asset; it never resumes it.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    stableAssetId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The monitor's findings */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StableMonitorReport"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/stable-assets/{stableAssetId}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Operator — pause issuance and redemption of a stable asset, with a reason (step-up) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    stableAssetId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StableReasonRequest"];
+                };
+            };
+            responses: {
+                /** @description The stable asset after the change */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StableAssetDetail"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/stable-assets/{stableAssetId}/reconciliations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Operator — reconcile the stable asset's supply (ledger, every holding, the chain, the reserve)
+         * @description Moves no value. A mismatch opens a material STABLE_RESERVE reconciliation record that blocks new risk and trips the circuit breaker; a match is recorded.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    stableAssetId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The supply reconciliation */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StableSupplyReconciliation"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/stable-assets/{stableAssetId}/redemption-queue/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Operator — pay out the queued redemptions of a stable asset, oldest first (step-up) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    stableAssetId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["StableBatchRequest"];
+                };
+            };
+            responses: {
+                /** @description What the run examined and paid */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StableSettleReport"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/stable-assets/{stableAssetId}/redemptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Redeem (burn) stable units from your sandbox wallet for the policy's cash-equivalent reserve asset at par
+         * @description The holder's units are reserved, the custodied key signs the planned TOKEN_BURN, it is submitted exactly once, and the redemption posts only after the burn is FINALIZED (or is queued in redemption mode QUEUED). 200 when final; 202 when recorded and not final, including SUBMISSION_UNKNOWN.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    stableAssetId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StableRedeemRequest"];
+                };
+            };
+            responses: {
+                /** @description The redemption request, final */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StableRedemptionResult"];
+                    };
+                };
+                /** @description The redemption request, recorded and not final (see reconciliation for an unknown outcome) */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StableRedemptionResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/stable-assets/{stableAssetId}/reserve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The issuer's reserve ledger for one stable asset and its coverage of issued supply at the peg
+         * @description Issued supply and the reserve are the STABLE_ISSUER facility's ledger balances; pending figures are derived from request states and never booked. Each reserve asset is counted at its verified price (a cash equivalent at most par) times its eligibility factor; one with no fresh price counts zero and is listed as unverified.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    stableAssetId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The reserve position (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StableReserve"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/stable-assets/{stableAssetId}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Operator — resume a paused stable asset, with a reason (step-up; the circuit breaker never resumes) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    stableAssetId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StableReasonRequest"];
+                };
+            };
+            responses: {
+                /** @description The stable asset after the change */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StableAssetDetail"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/stable-assets/{stableAssetId}/snapshots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The signed reserve snapshot chain and its verification against the snapshot signer's public key
+         * @description The whole chain is verified from the snapshots and the snapshot signer's public key alone: each body re-encodes to exactly its canonical bytes, hashes to its hash, carries a valid Ed25519 signature by that key, names the previous snapshot's hash and carries the disclaimer. The newest `limit` snapshots are returned, oldest first; `verified` on each says whether it and every snapshot before it verify.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path: {
+                    stableAssetId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The snapshot chain and its verification (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StableSnapshotChain"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /** Operator — record the next signed reserve and supply snapshot (moves no value) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    stableAssetId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The snapshot as recorded, and the chain's verification after it */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StableSnapshotResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/stable-assets/holdings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** An account's holdings of every stable asset, on the books and on the simulated chain, and what it can pay a mint with */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The account's stable asset holdings (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StableHoldings"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/stable-assets/issuances": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** An account's issuance (mint) requests, newest first */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                    stable_asset_id?: components["schemas"]["UUID"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of issuance requests (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StableIssuancePage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/stable-assets/issuances/{stableIssuanceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One issuance request with its chain transaction and reconciliation state */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    stableIssuanceId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The issuance request (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StableIssuance"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/stable-assets/ops/resolve-unknown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Operator — settle every issuance and redemption whose submission outcome is unknown, from the chain by transaction id (step-up)
+         * @description Requests in SUBMISSION_UNKNOWN, and requests still SUBMITTING past the grace period, are settled from the simulated chain's status of their own transaction: FINALIZED posts and applies, FAILED or expired fails and releases, anything else waits. Nothing is ever resubmitted. In SANDBOX mode the platform produces the blocks, so a landed transaction finalizes only after blocks are produced.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["StableBatchRequest"];
+                };
+            };
+            responses: {
+                /** @description What the pass examined and how each request ended */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StableSettleReport"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/stable-assets/redemptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** An account's redemption (burn) requests, newest first */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                    stable_asset_id?: components["schemas"]["UUID"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of redemption requests (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StableRedemptionPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/stable-assets/redemptions/{stableRedemptionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One redemption request with its chain transaction and reconciliation state */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    stableRedemptionId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The redemption request (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StableRedemption"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
             };
         };
         put?: never;
@@ -7566,6 +9035,325 @@ export interface components {
         };
         /** @description Basis points; 10000 == 100% */
         BPS: number;
+        /** @enum {string} */
+        BridgeAttemptKind: "RELEASE" | "REFUND";
+        BridgeBlocksRequest: {
+            count: number;
+        };
+        BridgeBlocksResult: {
+            chain: components["schemas"]["BridgeChain"];
+            /** @description How many blocks were produced */
+            produced: number;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        BridgeChain: {
+            /** Format: int64 */
+            blockhash_window: number;
+            /** @description The attester the chain's bridge programs accept */
+            bridge_authority?: string;
+            /** @description Native units each transaction pays */
+            fee_per_tx: components["schemas"]["Quantity"];
+            /** Format: int64 */
+            finality_depth: number;
+            /**
+             * Format: int64
+             * @description A transaction at or below it is final
+             */
+            finalized_height: number;
+            id: components["schemas"]["BridgeChainId"];
+            tip_hash: string;
+            /** Format: int64 */
+            tip_height: number;
+            /** Format: int64 */
+            tip_slot: number;
+        };
+        BridgeChainHoldings: {
+            /** @description The chain the assets live on */
+            chain: string;
+            holdings: components["schemas"]["BridgeHolding"][];
+        };
+        /** @enum {string} */
+        BridgeChainId: "sbx-solana" | "sbx-ethereum";
+        BridgeChains: {
+            chains: components["schemas"]["BridgeChain"][];
+            /** @description True in LOCAL, TEST and DEV only */
+            fault_injection_allowed: boolean;
+            network: string;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @description What the simulated chain says of one transaction at the instant of the read. */
+        BridgeChainTx: {
+            chain: string;
+            /** @description The chain's error code of a failed transaction */
+            error?: string;
+            /** @description The block that included it is finalized, so this status can never change */
+            final: boolean;
+            /**
+             * Format: int64
+             * @description The block height it was included at, when included
+             */
+            height?: number;
+            state: components["schemas"]["BridgeTxState"];
+            tx_id: string;
+        };
+        /** @description A non-negative decimal written out exactly; it is never rounded. */
+        BridgeDecimal: string;
+        /** @enum {string} */
+        BridgeEffectStatus: "PENDING" | "APPLIED" | "UNKNOWN" | "FAILED" | "COMPENSATED";
+        /** @enum {string} */
+        BridgeFaultKind: "TIMEOUT_BUT_LAND" | "TIMEOUT_AND_DROP" | "DROP_NEXT" | "DELAY_INCLUSION" | "CLEAR_FAULTS";
+        BridgeFaultRequest: {
+            /** @description DROP_NEXT: submissions to drop; DELAY_INCLUSION: blocks to hold each transaction (0 restores immediate inclusion) */
+            count?: number;
+            kind: components["schemas"]["BridgeFaultKind"];
+        };
+        BridgeFaultResult: {
+            chain: components["schemas"]["BridgeChain"];
+            count?: number;
+            kind: components["schemas"]["BridgeFaultKind"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        BridgeHaircutPolicy: {
+            /** @description The factor of value whose lock is final and whose release is not observed */
+            in_flight_bps: components["schemas"]["BPS"];
+            /** @description The factor once a release is confirmed, not final, on the destination */
+            observed_bps: components["schemas"]["BPS"];
+            version: string;
+        };
+        BridgeHolding: {
+            asset_id: components["schemas"]["UUID"];
+            decimals: number;
+            /** @description The account's WALLET balance on the books */
+            quantity: components["schemas"]["Quantity"];
+            symbol: string;
+        };
+        BridgeHoldings: {
+            account_id: components["schemas"]["UUID"];
+            as_of: components["schemas"]["Timestamp"];
+            /** @description WALLET balances of SIMULATED assets, by chain */
+            chains: components["schemas"]["BridgeChainHoldings"][];
+            /** @description Value in BRIDGE_IN_FLIGHT, by asset and factor */
+            in_flight: components["schemas"]["BridgeInFlightHolding"][];
+            /** @description Every open leg, where its value is held, and the factor it counts at */
+            legs: components["schemas"]["BridgeInFlightLeg"][];
+            /** @description Units still in a source wallet under a reservation whose lock is not final, at the route's unit price */
+            pending_locks_usd: components["schemas"]["USD"];
+            policy: components["schemas"]["BridgeHaircutPolicy"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        BridgeInFlightHolding: {
+            asset_id: components["schemas"]["UUID"];
+            decimals: number;
+            /** @description The share of it that counts toward buying power */
+            factor_bps: components["schemas"]["BPS"];
+            /** @description The quantity at the route's unit price, rounded down */
+            marked_usd: components["schemas"]["USD"];
+            quantity: components["schemas"]["Quantity"];
+            reason: string;
+            symbol: string;
+        };
+        BridgeInFlightLeg: {
+            asset_id: components["schemas"]["UUID"];
+            decimals: number;
+            factor_bps: components["schemas"]["BPS"];
+            holding: components["schemas"]["BridgeLegHolding"];
+            leg_id: components["schemas"]["UUID"];
+            quantity: components["schemas"]["Quantity"];
+            reason: string;
+            route_id: components["schemas"]["UUID"];
+            status: components["schemas"]["BridgeLegStatus"];
+            symbol: string;
+        };
+        BridgeLeg: {
+            account_id: components["schemas"]["UUID"];
+            created_at: components["schemas"]["Timestamp"];
+            decimals: number;
+            destination_asset_id: components["schemas"]["UUID"];
+            destination_chain: string;
+            destination_effect_status?: components["schemas"]["BridgeEffectStatus"];
+            destination_journal_transaction_id?: components["schemas"]["UUID"];
+            destination_owner: string;
+            destination_symbol: string;
+            failure_code?: string;
+            holding: components["schemas"]["BridgeLegHolding"];
+            id: components["schemas"]["UUID"];
+            intent_id: components["schemas"]["UUID"];
+            lock_tx_id?: string;
+            mode: components["schemas"]["BridgeLegMode"];
+            /** @description The lock's single-use nonce, a decimal string */
+            nonce: string;
+            /** @description hex hash of the bridge plan the lock's memo binds */
+            plan_hash: string;
+            quantity: components["schemas"]["Quantity"];
+            reconciliation: components["schemas"]["BridgeReconciliation"];
+            refund_effect_status?: components["schemas"]["BridgeEffectStatus"];
+            refund_journal_transaction_id?: components["schemas"]["UUID"];
+            route_id: components["schemas"]["UUID"];
+            source_asset_id: components["schemas"]["UUID"];
+            source_chain: string;
+            source_effect_status?: components["schemas"]["BridgeEffectStatus"];
+            source_journal_transaction_id?: components["schemas"]["UUID"];
+            source_owner: string;
+            source_symbol: string;
+            status: components["schemas"]["BridgeLegStatus"];
+            updated_at: components["schemas"]["Timestamp"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        BridgeLegAttempt: {
+            /** Format: int64 */
+            blockhash_height: number;
+            chain: string;
+            created_at: components["schemas"]["Timestamp"];
+            kind: components["schemas"]["BridgeAttemptKind"];
+            number: number;
+            on_chain: components["schemas"]["BridgeChainTx"];
+            tx_id: string;
+        };
+        BridgeLegDetail: {
+            /** @description Release and refund attempts, in order */
+            attempts: components["schemas"]["BridgeLegAttempt"][];
+            leg: components["schemas"]["BridgeLeg"];
+            /** @description The lock on the source chain; absent before it is signed */
+            lock?: components["schemas"]["BridgeChainTx"];
+            /** @description Every state the leg passed through, oldest first */
+            transitions: components["schemas"]["BridgeLegTransition"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /**
+         * @description Which ledger account holds the leg's value now: still in the source wallet under a reservation, in BRIDGE_IN_FLIGHT, in the destination wallet, or nowhere (it moved nothing, or was refunded).
+         * @enum {string}
+         */
+        BridgeLegHolding: "WALLET_SOURCE_RESERVED" | "BRIDGE_IN_FLIGHT" | "WALLET_DESTINATION" | "NONE";
+        /** @enum {string} */
+        BridgeLegMode: "SANDBOX" | "DEVNET";
+        BridgeLegPage: {
+            items: components["schemas"]["BridgeLeg"][];
+            next_cursor: string | null;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        BridgeLegRequest: {
+            account_id: components["schemas"]["UUID"];
+            mode: components["schemas"]["BridgeLegMode"];
+            /** @description Units of the route's source asset, in base units */
+            quantity: components["schemas"]["Quantity"];
+            route_id: components["schemas"]["UUID"];
+        };
+        BridgeLegResult: {
+            leg: components["schemas"]["BridgeLeg"];
+            /** @description The key named a leg the service already recorded; nothing was submitted again */
+            replay: boolean;
+            /** @description The leg is final (RECONCILED or FAILED) */
+            settled: boolean;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @enum {string} */
+        BridgeLegStatus: "AVAILABLE" | "RESERVED" | "BRIDGE_REQUESTED" | "SOURCE_FINALIZED" | "MESSAGE_IN_FLIGHT" | "DESTINATION_OBSERVED" | "DESTINATION_FINALIZED" | "RECONCILED" | "FAILED" | "MANUAL_REVIEW";
+        BridgeLegTransition: {
+            actor_id: string;
+            actor_type: string;
+            /** @description The state before, NONE for the leg's birth */
+            from_status: string;
+            occurred_at: components["schemas"]["Timestamp"];
+            reason: string;
+            to_status: components["schemas"]["BridgeLegStatus"];
+        };
+        /** @description The value of one whole unit, exactly mantissa × 10^-scale of the quote. */
+        BridgePrice: {
+            decimal: components["schemas"]["BridgeDecimal"];
+            mantissa: components["schemas"]["Quantity"];
+            quote: string;
+            scale: number;
+        };
+        BridgeReasonRequest: {
+            reason: string;
+        };
+        BridgeReconciliation: {
+            resolved_at?: components["schemas"]["Timestamp"];
+            state: components["schemas"]["BridgeReconciliationState"];
+            unknown_since?: components["schemas"]["Timestamp"];
+        };
+        /**
+         * @description NOT_REQUIRED: no submission of the leg had an unknown outcome. AWAITING: one does now, and the leg waits to be settled from the chains by transaction id. RESOLVED: one did, and it has been settled from the chains.
+         * @enum {string}
+         */
+        BridgeReconciliationState: "NOT_REQUIRED" | "AWAITING" | "RESOLVED";
+        BridgeRoute: {
+            /** @description The bridge authority whose signature a release needs */
+            attester: string;
+            created_at: components["schemas"]["Timestamp"];
+            decimals: number;
+            destination_asset_id: components["schemas"]["UUID"];
+            destination_chain: string;
+            /** @description A mint whose authority no key holds; only an attested release mints it */
+            destination_mint: string;
+            destination_symbol: string;
+            /** @description The route's BRIDGE facility */
+            facility_id: components["schemas"]["UUID"];
+            id: components["schemas"]["UUID"];
+            max_release_attempts: number;
+            name: string;
+            network: string;
+            source_asset_id: components["schemas"]["UUID"];
+            source_chain: string;
+            source_mint: string;
+            source_symbol: string;
+            status: components["schemas"]["BridgeRouteStatus"];
+            /** @description The route's value of one whole unit, for the risk notional and buying power */
+            unit_price: components["schemas"]["BridgePrice"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        BridgeRouteDefinition: {
+            destination_chain: components["schemas"]["BridgeChainId"];
+            destination_symbol: string;
+            max_release_attempts: number;
+            /** @description 1..63 bytes of [a-z0-9-]; generic, never a public brand */
+            name: string;
+            /** @description A SIMULATED asset on a simulated chain whose devnet mint exists */
+            source_asset_id: components["schemas"]["UUID"];
+            /** @description The value of one whole unit in USD (a paper dollar is 1) */
+            unit_price: components["schemas"]["BridgeDecimal"];
+        };
+        BridgeRouteList: {
+            items: components["schemas"]["BridgeRoute"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        BridgeRouteReconciliation: {
+            /** @description locked = outstanding + in_flight */
+            books_conserve: boolean;
+            /** @description This run paused the route */
+            breaker_tripped: boolean;
+            /** @description The destination mint's supply */
+            destination_supply: components["schemas"]["Quantity"];
+            /** @description The source chain's escrow balance of the source mint */
+            escrow: components["schemas"]["Quantity"];
+            escrow_matches: boolean;
+            /** @description locked + refunded + landed_unposted_locks */
+            expected_escrow: components["schemas"]["Quantity"];
+            /** @description outstanding + landed_unposted_releases */
+            expected_supply: components["schemas"]["Quantity"];
+            /** @description Every customer's BRIDGE_IN_FLIGHT of the source asset */
+            in_flight: components["schemas"]["Quantity"];
+            landed_unposted_locks: components["schemas"]["Quantity"];
+            landed_unposted_releases: components["schemas"]["Quantity"];
+            /** @description The facility's BRIDGE_LOCKED of the source asset */
+            locked: components["schemas"]["Quantity"];
+            matched: boolean;
+            /** @description The facility's BRIDGE_OUTSTANDING of the destination asset */
+            outstanding: components["schemas"]["Quantity"];
+            /** @description The BRIDGE reconciliation record this run opened or refreshed */
+            record_id?: components["schemas"]["UUID"];
+            refunded: components["schemas"]["Quantity"];
+            route_id: components["schemas"]["UUID"];
+            supply_matches: boolean;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /**
+         * @description ACTIVE takes new legs; PAUSED (by an operator or the reconciliation breaker) takes none while legs in flight complete.
+         * @enum {string}
+         */
+        BridgeRouteStatus: "ACTIVE" | "PAUSED" | "CLOSED";
+        /** @enum {string} */
+        BridgeTxState: "NOT_FOUND" | "PENDING" | "CONFIRMED" | "FINALIZED" | "FAILED";
         BuyingPower: {
             as_of: components["schemas"]["Timestamp"];
             available_now: components["schemas"]["USD"];
@@ -9620,6 +11408,512 @@ export interface components {
         SetInternalProductStatusRequest: {
             status: components["schemas"]["InternalProductStatus"];
         };
+        StableActor: {
+            actor_id: string;
+            actor_type: string;
+        };
+        StableAlert: {
+            /** @description This finding paused the asset */
+            breaker_tripped: boolean;
+            id: components["schemas"]["UUID"];
+            kind: components["schemas"]["StableAlertKind"];
+            /** @description What the monitor observed, as it recorded it */
+            observed: {
+                [key: string]: unknown;
+            };
+            observed_at: components["schemas"]["Timestamp"];
+            severity: components["schemas"]["StableAlertSeverity"];
+        };
+        /** @enum {string} */
+        StableAlertKind: "PRICE_DEVIATION" | "PRICE_STALE" | "RESERVE_SHORTFALL" | "RESERVE_PRICE_STALE" | "SUPPLY_MISMATCH";
+        /** @enum {string} */
+        StableAlertSeverity: "WARNING" | "CRITICAL";
+        StableAsset: {
+            /** @description The SIMULATED asset customers hold */
+            asset_id: components["schemas"]["UUID"];
+            /** @description The asset publishes signed reserve snapshots */
+            attestable: boolean;
+            burn_authority_mode: string;
+            chain: string;
+            created_at: components["schemas"]["Timestamp"];
+            created_by: components["schemas"]["StableActor"];
+            decimals: number;
+            /** @description The STABLE_ISSUER facility whose books are the reserve */
+            facility_id: components["schemas"]["UUID"];
+            id: components["schemas"]["UUID"];
+            issuance_cap: components["schemas"]["Quantity"];
+            /** Format: int64 */
+            max_price_age_ms: number;
+            /** @description The devnet mint address */
+            mint: string;
+            /** @description The issuer signer's public address; no other key can mint */
+            mint_authority: string;
+            mint_authority_mode: string;
+            name: string;
+            network: string;
+            oracle_source: string;
+            peg: components["schemas"]["StablePrice"];
+            peg_currency: string;
+            peg_deviation_threshold_bps: components["schemas"]["BPS"];
+            redemption_mode: components["schemas"]["StableRedemptionMode"];
+            reserves: components["schemas"]["StableReserveAsset"][];
+            status: components["schemas"]["StableAssetStatus"];
+            symbol: string;
+            updated_at: components["schemas"]["Timestamp"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        StableAssetDefinition: {
+            attestable: boolean;
+            decimals: number;
+            issuance_cap: components["schemas"]["Quantity"];
+            /** Format: int64 */
+            max_price_age_ms: number;
+            /** @description 1..63 bytes of [a-z0-9-]; generic, never a public brand */
+            name: string;
+            oracle_source: string;
+            /** @description The target price of one whole unit in the sandbox dollar */
+            peg: components["schemas"]["StableDecimal"];
+            peg_currency: string;
+            peg_deviation_threshold_bps: number;
+            redemption_mode: components["schemas"]["StableRedemptionMode"];
+            reserves: components["schemas"]["StableReserveSpec"][];
+            symbol: string;
+        };
+        StableAssetDetail: {
+            /** @description The newest peg-monitor alerts, newest first */
+            alerts: components["schemas"]["StableAlert"][];
+            asset: components["schemas"]["StableAsset"];
+            /** @description Every status change, oldest first */
+            transitions: components["schemas"]["StableAssetTransition"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        StableAssetList: {
+            items: components["schemas"]["StableAsset"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /**
+         * @description ACTIVE issues and redeems; PAUSED (by an operator or the circuit breaker) does neither; RETIRED issues nothing and keeps redeeming.
+         * @enum {string}
+         */
+        StableAssetStatus: "ACTIVE" | "PAUSED" | "RETIRED";
+        StableAssetTransition: {
+            actor: components["schemas"]["StableActor"];
+            /** @description The status before, NONE for the registration */
+            from_status: string;
+            occurred_at: components["schemas"]["Timestamp"];
+            reason: string;
+            to_status: components["schemas"]["StableAssetStatus"];
+        };
+        StableBatchRequest: {
+            /** @description At most this many requests; 100 when absent */
+            limit?: number;
+        };
+        /** @description A non-negative decimal written out exactly; it is never rounded, and one that is not exact where it is used is refused. */
+        StableDecimal: string;
+        /** @enum {string} */
+        StableEffectStatus: "PENDING" | "APPLIED" | "UNKNOWN" | "FAILED" | "COMPENSATED";
+        StableHolding: {
+            asset_id: components["schemas"]["UUID"];
+            /** @description wallet − reserved − held, never below zero (the capital service's arithmetic) */
+            available: components["schemas"]["Quantity"];
+            chain: string;
+            /** @description The custodied wallet's balance on the simulated chain, which the books are reconciled against */
+            chain_balance: components["schemas"]["Quantity"];
+            decimals: number;
+            /** @description Under active withdrawal holds */
+            held: components["schemas"]["Quantity"];
+            /** @description Held by capital reservations, for instance a redemption in flight */
+            reserved: components["schemas"]["Quantity"];
+            stable_asset_id: components["schemas"]["UUID"];
+            status: components["schemas"]["StableAssetStatus"];
+            symbol: string;
+            /** @description The account's WALLET balance on the books */
+            wallet: components["schemas"]["Quantity"];
+        };
+        StableHoldings: {
+            account_id: components["schemas"]["UUID"];
+            as_of: components["schemas"]["Timestamp"];
+            /** @description The account's custodied wallet address on the simulated chains */
+            holder_address: string;
+            /** @description One line per registered stable asset */
+            items: components["schemas"]["StableHolding"][];
+            /** @description Every reserve asset an issuance may be paid in */
+            payment_assets: components["schemas"]["StablePaymentAsset"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        StableIssuance: {
+            account_id: components["schemas"]["UUID"];
+            chain: string;
+            created_at: components["schemas"]["Timestamp"];
+            decimals: number;
+            effect_id: components["schemas"]["UUID"];
+            failure_code?: string;
+            /** Format: int64 */
+            final_slot?: number;
+            id: components["schemas"]["UUID"];
+            intent_id: components["schemas"]["UUID"];
+            journal_transaction_id?: components["schemas"]["UUID"];
+            mode: components["schemas"]["StableRequestMode"];
+            /** @description hex hash of the canonical mint plan the transaction's memo binds */
+            plan_hash: string;
+            /** @description Stable units issued */
+            quantity: components["schemas"]["Quantity"];
+            /** @description The account's custodied wallet address on the chain */
+            recipient: string;
+            reconciliation: components["schemas"]["StableReconciliation"];
+            reserve_asset_id: components["schemas"]["UUID"];
+            reserve_decimals: number;
+            /** @description The verified price the plan priced the payment at */
+            reserve_price: components["schemas"]["StablePrice"];
+            /** @description The payment, in the reserve asset's base units */
+            reserve_quantity: components["schemas"]["Quantity"];
+            reserve_symbol: string;
+            stable_asset_id: components["schemas"]["UUID"];
+            status: components["schemas"]["StableIssuanceStatus"];
+            symbol: string;
+            tx_id: string;
+            updated_at: components["schemas"]["Timestamp"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        StableIssuancePage: {
+            items: components["schemas"]["StableIssuance"][];
+            next_cursor: string | null;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        StableIssuanceResult: {
+            issuance: components["schemas"]["StableIssuance"];
+            /** @description The key named a request the service already recorded; nothing was submitted again */
+            replay: boolean;
+            /** @description The request is final (ISSUED or FAILED) */
+            settled: boolean;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /**
+         * @description SUBMITTING: signed and recorded, about to be (or being) submitted. SUBMITTED: the chain accepted it. SUBMISSION_UNKNOWN: the submission's outcome is unknown; only reconciliation by transaction id settles it. ISSUED: final on chain and STABLE_ISSUANCE posted. FAILED: failed on chain, expired or refused; the payment's reservation was released and nothing was posted.
+         * @enum {string}
+         */
+        StableIssuanceStatus: "SUBMITTING" | "SUBMITTED" | "SUBMISSION_UNKNOWN" | "ISSUED" | "FAILED";
+        StableIssueRequest: {
+            account_id: components["schemas"]["UUID"];
+            mode: components["schemas"]["StableRequestMode"];
+            /** @description Stable units to issue, in base units */
+            quantity: components["schemas"]["Quantity"];
+            /** @description The cash-equivalent reserve asset that pays */
+            reserve_asset_id: components["schemas"]["UUID"];
+        };
+        StableMonitorReport: {
+            alerts: components["schemas"]["StableAlertKind"][];
+            /** @description This run paused the asset */
+            breaker_tripped: boolean;
+            /**
+             * Format: int64
+             * @description ceil(|price − peg| / peg × 10000)
+             */
+            deviation_bps: number;
+            /** @description The asset's own oracle price; absent when none is fresh */
+            market_price?: components["schemas"]["StablePrice"];
+            observed_at: components["schemas"]["Timestamp"];
+            price_stale: boolean;
+            reserve: components["schemas"]["StableReserve"];
+            stable_asset_id: components["schemas"]["UUID"];
+            status: components["schemas"]["StableAssetStatus"];
+            supply: components["schemas"]["StableSupplyReconciliation"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        StablePaymentAsset: {
+            asset_id: components["schemas"]["UUID"];
+            available: components["schemas"]["Quantity"];
+            decimals: number;
+            held: components["schemas"]["Quantity"];
+            reserved: components["schemas"]["Quantity"];
+            symbol: string;
+            wallet: components["schemas"]["Quantity"];
+        };
+        /** @description The price of one whole unit, exactly mantissa × 10^-scale of the quote asset. */
+        StablePrice: {
+            decimal: components["schemas"]["StableDecimal"];
+            mantissa: components["schemas"]["Quantity"];
+            observed_at: components["schemas"]["Timestamp"];
+            /** @description The quote asset's id */
+            quote: string;
+            scale: number;
+            /** @description The price's source: the asset's oracle source, PAR for the peg's own quote asset, TARGET_PEG for the peg */
+            source: string;
+        };
+        StableReasonRequest: {
+            reason: string;
+        };
+        StableReconciliation: {
+            effect_status: components["schemas"]["StableEffectStatus"];
+            resolved_at?: components["schemas"]["Timestamp"];
+            state: components["schemas"]["StableReconciliationState"];
+            unknown_since?: components["schemas"]["Timestamp"];
+        };
+        /**
+         * @description NOT_REQUIRED: the submission's outcome was never unknown. AWAITING: it is unknown now, and the request waits to be settled from the chain by transaction id. RESOLVED: it was unknown and has been settled from the chain.
+         * @enum {string}
+         */
+        StableReconciliationState: "NOT_REQUIRED" | "AWAITING" | "RESOLVED";
+        StableRedeemRequest: {
+            account_id: components["schemas"]["UUID"];
+            mode: components["schemas"]["StableRequestMode"];
+            /** @description Stable units to redeem, in base units */
+            quantity: components["schemas"]["Quantity"];
+        };
+        StableRedemption: {
+            account_id: components["schemas"]["UUID"];
+            chain: string;
+            created_at: components["schemas"]["Timestamp"];
+            decimals: number;
+            effect_id: components["schemas"]["UUID"];
+            failure_code?: string;
+            /** Format: int64 */
+            final_slot?: number;
+            /** @description The account's custodied wallet address on the chain */
+            holder: string;
+            id: components["schemas"]["UUID"];
+            intent_id: components["schemas"]["UUID"];
+            journal_transaction_id?: components["schemas"]["UUID"];
+            mode: components["schemas"]["StableRequestMode"];
+            payout_asset_id: components["schemas"]["UUID"];
+            payout_decimals: number;
+            /** @description What the redemption pays, at the peg, rounded down */
+            payout_quantity: components["schemas"]["Quantity"];
+            payout_symbol: string;
+            plan_hash: string;
+            /** @description Stable units burned */
+            quantity: components["schemas"]["Quantity"];
+            reconciliation: components["schemas"]["StableReconciliation"];
+            redemption_mode: components["schemas"]["StableRedemptionMode"];
+            stable_asset_id: components["schemas"]["UUID"];
+            status: components["schemas"]["StableRedemptionStatus"];
+            symbol: string;
+            tx_id: string;
+            updated_at: components["schemas"]["Timestamp"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @enum {string} */
+        StableRedemptionMode: "INSTANT" | "QUEUED";
+        StableRedemptionPage: {
+            items: components["schemas"]["StableRedemption"][];
+            next_cursor: string | null;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        StableRedemptionResult: {
+            redemption: components["schemas"]["StableRedemption"];
+            replay: boolean;
+            /** @description The request is final (REDEEMED or FAILED) */
+            settled: boolean;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /**
+         * @description As an issuance; REDEMPTION_QUEUED: the burn is final on chain and its payout waits for the operator's queue run (redemption mode QUEUED); REDEEMED: STABLE_REDEMPTION posted.
+         * @enum {string}
+         */
+        StableRedemptionStatus: "SUBMITTING" | "SUBMITTED" | "SUBMISSION_UNKNOWN" | "REDEMPTION_QUEUED" | "REDEEMED" | "FAILED";
+        /**
+         * @description SANDBOX: the platform produces the simulated chain's blocks and drives the request to a final state. DEVNET: the request is only observed, and finalizes as the chain's blocks arrive.
+         * @enum {string}
+         */
+        StableRequestMode: "SANDBOX" | "DEVNET";
+        StableReserve: {
+            as_of: components["schemas"]["Timestamp"];
+            /** @description The issuer's STABLE_RESERVE in each cash equivalent (ledger) */
+            cash_equivalent_reserve: components["schemas"]["StableReserveHolding"][];
+            /**
+             * Format: int64
+             * @description floor(eligible_reserve / supply_value × 10000); 10000 when nothing is issued
+             */
+            coverage_bps: number;
+            /** @description The eligible reserve covers issued supply at the peg */
+            covered: boolean;
+            decimals: number;
+            /** @description The eligible value of both reserve lines */
+            eligible_reserve: components["schemas"]["StableValue"];
+            /** @description The issuer's STABLE_OUTSTANDING (ledger) */
+            issued_supply: components["schemas"]["Quantity"];
+            peg: components["schemas"]["StablePrice"];
+            /** @description Units of redemptions not yet final on chain */
+            pending_burn: components["schemas"]["Quantity"];
+            /** @description Supply reserved by issuances not yet final (request states, never booked) */
+            pending_mint: components["schemas"]["Quantity"];
+            /** @description Payouts of redemptions not yet posted */
+            pending_redemption: components["schemas"]["StableReserveHolding"][];
+            /** @description Customers' payments held by reservations for those issuances */
+            receivable: components["schemas"]["StableReserveHolding"][];
+            stable_asset_id: components["schemas"]["UUID"];
+            /** @description Issued supply at the peg */
+            supply_value: components["schemas"]["StableValue"];
+            symbol: string;
+            /** @description The issuer's STABLE_RESERVE in each tokenized asset (ledger) */
+            tokenized_reserve: components["schemas"]["StableReserveHolding"][];
+            /** @description Reserve assets holding a balance with no fresh price */
+            unverified_reserve_asset_ids: components["schemas"]["UUID"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        StableReserveAsset: {
+            /** @description An issuance may be paid in it (cash equivalents only) */
+            accepted_for_mint: boolean;
+            asset_id: components["schemas"]["UUID"];
+            decimals: number;
+            factor_bps: components["schemas"]["BPS"];
+            kind: components["schemas"]["StableReserveKind"];
+            symbol: string;
+        };
+        StableReserveHolding: {
+            asset_id: components["schemas"]["UUID"];
+            decimals: number;
+            /** @description quantity × price × factor, exact */
+            eligible: components["schemas"]["StableValue"];
+            factor_bps: components["schemas"]["BPS"];
+            kind: components["schemas"]["StableReserveKind"];
+            /** @description The verified price it is counted at; absent: no fresh price, so it counts zero */
+            price?: components["schemas"]["StablePrice"];
+            quantity: components["schemas"]["Quantity"];
+            symbol: string;
+        };
+        /** @enum {string} */
+        StableReserveKind: "CASH_EQUIVALENT" | "TOKENIZED";
+        StableReserveSpec: {
+            accepted_for_mint: boolean;
+            asset_id: components["schemas"]["UUID"];
+            factor_bps: components["schemas"]["BPS"];
+            kind: components["schemas"]["StableReserveKind"];
+        };
+        StableSettleReport: {
+            examined: number;
+            failed: number;
+            issued: number;
+            queued: number;
+            redeemed: number;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            /** @description Requests whose transaction is not final yet */
+            waiting: number;
+        };
+        StableSnapshot: {
+            body: components["schemas"]["StableSnapshotBody"];
+            /** @description The exact canonical JSON the hash covers */
+            canonical_body: string;
+            evidence_ref: string;
+            /** @description hex SHA-256 of canonical_body */
+            hash: string;
+            /** @description hex hash of the snapshot before; empty for the first */
+            prev_hash: string;
+            /** Format: int64 */
+            seq: number;
+            /** @description hex Ed25519 signature over the domain-separated hash */
+            signature: string;
+            /** @description hex Ed25519 public key stored with the snapshot */
+            signer_public_key: string;
+            taken_at: components["schemas"]["Timestamp"];
+            /** @description This snapshot and every snapshot before it verify against the snapshot signer's public key */
+            verified: boolean;
+        };
+        /** @description The snapshot's body, field for field as its canonical JSON states it; every number is a string. */
+        StableSnapshotBody: {
+            asset_id: string;
+            chain: string;
+            chain_supply: string;
+            composition: components["schemas"]["StableSnapshotComposition"][];
+            coverage_bps: string;
+            disclaimer: string;
+            eligible_reserve: string;
+            ledger_supply: string;
+            mint: string;
+            peg: components["schemas"]["StableSnapshotPrice"];
+            pending_burn: string;
+            pending_mint: string;
+            prev_hash: string;
+            reserves: components["schemas"]["StableSnapshotReserve"][];
+            seq: string;
+            stable_asset_id: string;
+            supply_value: string;
+            taken_at: components["schemas"]["Timestamp"];
+            version: string;
+        };
+        StableSnapshotChain: {
+            /** @description The newest snapshots up to limit, oldest first */
+            items: components["schemas"]["StableSnapshot"][];
+            stable_asset_id: components["schemas"]["UUID"];
+            total: number;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            verification: components["schemas"]["StableSnapshotVerification"];
+        };
+        StableSnapshotComposition: {
+            eligible: string;
+            kind: string;
+            share_bps: string;
+        };
+        /** @enum {string} */
+        StableSnapshotFailure: "SNAPSHOT_BODY_NOT_CANONICAL" | "SNAPSHOT_HASH_MISMATCH" | "SNAPSHOT_SIGNATURE_INVALID" | "SNAPSHOT_CHAIN_BROKEN" | "SNAPSHOT_KEY_MISMATCH" | "SNAPSHOT_DISCLAIMER_MISSING";
+        StableSnapshotPrice: {
+            at: components["schemas"]["Timestamp"];
+            mantissa: string;
+            quote: string;
+            scale: number;
+            source: string;
+        };
+        StableSnapshotReserve: {
+            asset_id: string;
+            balance: string;
+            decimals: string;
+            eligible: string;
+            factor_bps: string;
+            kind: string;
+            /** @description Absent where the canonical body has null (no fresh price) */
+            price?: components["schemas"]["StableSnapshotPrice"];
+        };
+        StableSnapshotResult: {
+            snapshot: components["schemas"]["StableSnapshot"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            verification: components["schemas"]["StableSnapshotVerification"];
+        };
+        StableSnapshotVerification: {
+            /** @description How many snapshots the chain holds, all of them checked */
+            checked: number;
+            /** @description What a snapshot is and is not, as every snapshot body states it */
+            disclaimer: string;
+            /** @description Position (from 0, oldest first) of the first snapshot that does not verify */
+            failed_index?: number;
+            /** @description hex Ed25519 public key of the snapshot signer the chain is verified against */
+            public_key: string;
+            reason?: components["schemas"]["StableSnapshotFailure"];
+            /** @description Every snapshot of the chain verifies */
+            verified: boolean;
+        };
+        StableSupplyReconciliation: {
+            /** @description This run paused the asset */
+            breaker_tripped: boolean;
+            /** @description The devnet mint's supply */
+            chain_supply: components["schemas"]["Quantity"];
+            /** Format: int64 */
+            coverage_bps: number;
+            covered: boolean;
+            /** @description Every customer WALLET balance of the asset */
+            customer_wallet_sum: components["schemas"]["Quantity"];
+            eligible_reserve: components["schemas"]["StableValue"];
+            /** @description ledger_outstanding + landed_unposted_mints − landed_unposted_burns */
+            expected_chain_supply: components["schemas"]["Quantity"];
+            /** @description Every other holding of the asset on the ledger: a bridge escrow, collateral, a house inventory, collected fees */
+            held_elsewhere: components["schemas"]["Quantity"];
+            landed_unposted_burns: components["schemas"]["Quantity"];
+            landed_unposted_mints: components["schemas"]["Quantity"];
+            /** @description The issuer's STABLE_OUTSTANDING */
+            ledger_outstanding: components["schemas"]["Quantity"];
+            /** @description Books, holdings, chain and reserve all agree */
+            matched: boolean;
+            /** @description The STABLE_RESERVE reconciliation record this run opened or refreshed */
+            record_id?: components["schemas"]["UUID"];
+            stable_asset_id: components["schemas"]["UUID"];
+            /** @description chain_supply = expected_chain_supply */
+            supply_matches: boolean;
+            supply_value: components["schemas"]["StableValue"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            /** @description customer_wallet_sum + held_elsewhere = ledger_outstanding */
+            wallets_match: boolean;
+        };
+        /** @description An exact amount of the peg's quote unit (whole sandbox dollars), written out in full: base units times a price times a factor, never rounded. */
+        StableValue: string;
         StartDepositRequest: {
             account_id: components["schemas"]["UUID"];
             fiat_amount: string;
