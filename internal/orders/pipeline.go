@@ -22,14 +22,21 @@ const PipelineMaxRetries = 5
 type Pipeline struct {
 	svc *Service
 	db  *db.DB
+	// observer, when set, is told how long each Submit and Cancel took
+	// (observe.go).
+	observer Observer
 }
 
 // NewPipeline returns a Pipeline over svc and d.
-func NewPipeline(svc *Service, d *db.DB) (*Pipeline, error) {
+func NewPipeline(svc *Service, d *db.DB, opts ...PipelineOption) (*Pipeline, error) {
 	if svc == nil || d == nil {
 		return nil, errs.New(errs.CodeValidationFailed, "orders: a pipeline needs the service and the database")
 	}
-	return &Pipeline{svc: svc, db: d}, nil
+	p := &Pipeline{svc: svc, db: d}
+	for _, o := range opts {
+		o(p)
+	}
+	return p, nil
 }
 
 // Service returns the service the pipeline drives.
@@ -41,7 +48,15 @@ func (p *Pipeline) inTx(ctx context.Context, fn func(ctx context.Context, tx pgx
 
 // Submit runs Accept, Approve, Reserve, Execute and Complete. It returns the
 // order as the last stage left it and, if a stage refused it, that refusal.
+// The observer, if any, is told how long it took.
 func (p *Pipeline) Submit(ctx context.Context, r OrderRequest) (StageOutcome, error) {
+	stop := p.startTiming()
+	out, err := p.submit(ctx, r)
+	p.observe(ctx, CommandNewOrder, stop, err)
+	return out, err
+}
+
+func (p *Pipeline) submit(ctx context.Context, r OrderRequest) (StageOutcome, error) {
 	var out StageOutcome
 	if err := p.inTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		o, err := p.svc.Accept(ctx, tx, r)
@@ -82,9 +97,13 @@ func (p *Pipeline) Resume(ctx context.Context, oid OrderID) (StageOutcome, error
 	return out, nil
 }
 
-// Cancel cancels a customer order in its own transaction.
+// Cancel cancels a customer order in its own transaction. The observer, if
+// any, is told how long it took.
 func (p *Pipeline) Cancel(ctx context.Context, r CancelRequest) (CommandOutcome, error) {
-	return p.command(ctx, func(ctx context.Context, tx pgx.Tx) (CommandOutcome, error) { return p.svc.Cancel(ctx, tx, r) })
+	stop := p.startTiming()
+	out, err := p.command(ctx, func(ctx context.Context, tx pgx.Tx) (CommandOutcome, error) { return p.svc.Cancel(ctx, tx, r) })
+	p.observe(ctx, CommandCancel, stop, err)
+	return out, err
 }
 
 // Replace replaces a customer order in its own transaction.
