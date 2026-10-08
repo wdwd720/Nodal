@@ -27,12 +27,14 @@ import (
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/audit"
+	"github.com/nodal/controlplane/internal/bridge"
 	"github.com/nodal/controlplane/internal/capital"
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/compliance"
 	"github.com/nodal/controlplane/internal/config"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/derivatives"
+	"github.com/nodal/controlplane/internal/devnethost"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/event"
 	"github.com/nodal/controlplane/internal/gates"
@@ -49,6 +51,7 @@ import (
 	"github.com/nodal/controlplane/internal/risk"
 	"github.com/nodal/controlplane/internal/sandboxfund"
 	"github.com/nodal/controlplane/internal/security"
+	"github.com/nodal/controlplane/internal/stableasset"
 	"github.com/nodal/controlplane/internal/transfers"
 	"github.com/nodal/controlplane/internal/valuation"
 	"github.com/nodal/controlplane/internal/valuedomain"
@@ -101,6 +104,19 @@ type World struct {
 	// reports alone can resolve them.
 	Predictions *predmarket.Service
 	Oracle      *predmarket.SandboxOracle
+
+	// Host is the persistent simulated chain host (sbx-solana and
+	// sbx-ethereum, journaled in the database). Custody holds the
+	// customers' sandbox wallet keys; Issuer, Snapshots and Attester are the
+	// platform's keys. Every key is derived from the component name, so a
+	// run is reproducible; none of them can sign anything outside the host.
+	Host      *devnethost.Host
+	Custody   *stableasset.CustodialWalletSigner
+	Issuer    *stableasset.IssuerSigner
+	Snapshots *stableasset.SnapshotSigner
+	Attester  *bridge.Attester
+	Stable    *stableasset.Service
+	Bridge    *bridge.Service
 	// Identity is the production identity reader (compliance profiles).
 	Identity compliance.AccountVerification
 
@@ -129,6 +145,10 @@ func Open(ctx context.Context, o Options) (*World, error) {
 	}
 	w, err := wire(d, o)
 	if err != nil {
+		d.Close()
+		return nil, err
+	}
+	if err := w.wireChains(ctx, d, o.Component); err != nil {
 		d.Close()
 		return nil, err
 	}
@@ -243,6 +263,40 @@ func wire(d *db.DB, o Options) (*World, error) {
 		return nil, fmt.Errorf("sandboxworld: prediction markets: %w", err)
 	}
 	return w, nil
+}
+
+// wireChains opens the devnet host and the services that use it.
+func (w *World) wireChains(ctx context.Context, d *db.DB, component string) error {
+	seed := func(purpose string) [32]byte { return sha256.Sum256([]byte(component + "-" + purpose)) }
+	w.Custody = stableasset.NewCustodialWalletSigner(seed("custody"))
+	w.Issuer = stableasset.NewIssuerSigner(seed("issuer"))
+	w.Snapshots = stableasset.NewSnapshotSigner(seed("snapshots"))
+	w.Attester = bridge.NewAttester(seed("bridge-attester"))
+	var err error
+	w.Host, err = devnethost.Open(ctx, devnethost.NewPgStore(d), devnethost.DefaultConfig(component, w.Env, w.Attester.PublicKey()), w.Clock)
+	if err != nil {
+		return fmt.Errorf("sandboxworld: devnet host: %w", err)
+	}
+	recon := reconciliation.NewRepository(w.Clock, w.Outbox, w.Audit)
+	w.Stable, err = stableasset.New(stableasset.Deps{
+		DB: d, Clock: w.Clock, Host: w.Host, Intents: w.Intents, Effects: w.Effects, Authorizer: w.Authorizer,
+		Facilities: w.Registry, Ledger: w.Ledger, Capital: w.Capital, Risk: w.Risk, RiskPolicy: risk.DefaultAdvancedPolicy(),
+		Router: w.Router, Prices: w.Prices, Kills: w.Kills, Reconciliation: recon, Audit: w.Audit,
+		Accounts: accounts.NewRepository(), Assets: w.Assets, Issuer: w.Issuer, Custody: w.Custody, Snapshots: w.Snapshots,
+	})
+	if err != nil {
+		return fmt.Errorf("sandboxworld: stable assets: %w", err)
+	}
+	w.Bridge, err = bridge.New(bridge.Deps{
+		DB: d, Clock: w.Clock, Host: w.Host, Intents: w.Intents, Effects: w.Effects, Authorizer: w.Authorizer,
+		Facilities: w.Registry, Ledger: w.Ledger, Capital: w.Capital, Risk: w.Risk, RiskPolicy: risk.DefaultAdvancedPolicy(),
+		Router: w.Router, Kills: w.Kills, Reconciliation: recon, Audit: w.Audit, Accounts: accounts.NewRepository(),
+		Assets: w.Assets, Holder: w.Custody, Attester: w.Attester,
+	})
+	if err != nil {
+		return fmt.Errorf("sandboxworld: bridge: %w", err)
+	}
+	return nil
 }
 
 // Close releases the pool.
