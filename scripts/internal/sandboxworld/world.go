@@ -1,6 +1,8 @@
 // Package sandboxworld wires the advanced services over one database for the
 // commands that drive them outside the HTTP API: the end-to-end demo
-// (scripts/advanceddemo) and the performance report (scripts/advperf).
+// (scripts/advanceddemo), the performance report (scripts/advperf) and the
+// restore drill, which seeds its advanced books through it
+// (scripts/restoredrill).
 //
 // The construction is the one cmd/api performs -- the same constructors and
 // the same real dependencies, nothing doubled -- with two differences that
