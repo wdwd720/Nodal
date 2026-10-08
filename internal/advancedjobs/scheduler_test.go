@@ -204,12 +204,17 @@ func TestScheduler_ATimeoutIsAFailureAndTheSlotIsHeldUntilTheRunReturns(t *testi
 	assert.Equal(t, CodeTimeout, outs["test.honours"].Err.Code)
 	require.NotNil(t, outs["test.ignores"].Err)
 	assert.Equal(t, CodeTimeout, outs["test.ignores"].Err.Code, "an overrun fails when the deadline passes")
+	// The run that honours its context returns just after its deadline; its
+	// slot is free once it has (a real tick is a second later).
+	settled := func() bool { return !healthOf(t, s, "test.honours").Running }
+	require.Eventually(t, settled, 5*time.Second, time.Millisecond)
 
 	clk.Advance(time.Minute)
 	outs = byJob(s.Step(context.Background()))
 	assert.True(t, outs["test.ignores"].Skipped, "the overrunning run still holds its slot")
 	assert.False(t, outs["test.honours"].Skipped)
 
+	require.Eventually(t, settled, 5*time.Second, time.Millisecond)
 	close(release)
 	s.Wait()
 	clk.Advance(time.Minute)

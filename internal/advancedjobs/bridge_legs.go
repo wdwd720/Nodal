@@ -21,8 +21,18 @@ import (
 //     (bridge.Service.Observe, a driver that owns its transactions): its
 //     outcome is read from the chains by transaction id, a release is relayed
 //     only once no earlier one can still land, and nothing is resubmitted and
-//     no block is produced. This is how a DEVNET leg -- and any leg whose
-//     driving process stopped -- reaches its end.
+//     no block is produced. This is how a DEVNET leg, whose chain is produced
+//     externally, reaches its end, and how any leg whose driving process
+//     stopped does once blocks are produced.
+//
+// This is bridge.Service.ObservePending's sweep, leg by leg: ObservePending
+// drives each open leg with exactly Observe's drive. The job does not call
+// ObservePending itself because ObservePending takes the open legs of every
+// network and drives them through this worker's host -- where another
+// network's lock reads NOT_FOUND and could be settled as expired while it
+// stands final on its own chain -- and stops at the first leg it cannot
+// handle. The job takes only the configured network's legs, and one leg's
+// failure is that leg's.
 type BridgeLegs struct {
 	db      *db.DB
 	svc     *bridge.Service

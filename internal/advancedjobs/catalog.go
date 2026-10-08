@@ -2,6 +2,7 @@ package advancedjobs
 
 import (
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/nodal/controlplane/internal/errs"
@@ -144,7 +145,8 @@ func Catalog() []Descriptor {
 			Calls:      "stableasset.Service.ProcessRedemptions per stable asset with queued redemptions",
 			KillSwitch: ksNone, Needs: NeedsDevnet},
 		{Name: NameBridgeLegs, Default: Settings{Interval: time.Minute, Batch: 100},
-			Calls:      "bridge.Service.ReconcileLeg per DESTINATION_FINALIZED leg; bridge.Service.Observe per earlier in-flight leg",
+			Calls: "bridge.Service.ReconcileLeg per DESTINATION_FINALIZED leg; bridge.Service.Observe per earlier in-flight leg " +
+				"(ObservePending's sweep, restricted to the configured network and isolated per leg)",
 			KillSwitch: ksBridge, Needs: NeedsDevnet},
 		{Name: NameBridgeRoutes, Default: Settings{Interval: time.Hour, Batch: 50},
 			Calls:      "bridge.Service.ReconcileRoute (PERIODIC) per route on the configured network",
@@ -216,7 +218,8 @@ func ValidateOverrides(intervals map[string]time.Duration, batches map[string]in
 	}
 	if len(unknown) > 0 {
 		sort.Strings(unknown)
-		return errs.New(errs.CodeValidationFailed, "advancedjobs: an override names a job the worker does not run").
+		return errs.Newf(errs.CodeValidationFailed, "advancedjobs: an override names a job the worker does not run: %s",
+			strings.Join(unknown, ", ")).
 			WithField("jobs", unknown)
 	}
 	return nil
