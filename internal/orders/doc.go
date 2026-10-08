@@ -35,7 +35,16 @@
 // taker per §5, each party balanced on its own books, with the explicit maker
 // and taker fees of the book's fees.Schedule booked to PLATFORM_FEE_REVENUE and
 // no spread (the price is the counterparty's); it consumes both reservations,
-// and every cancellation releases what is left. House books (SubmitHouseOrder)
+// and every cancellation releases what is left.
+//
+// Every fee is booked through the fee ledger (internal/feeledger) in the
+// fill's own transaction (feebooking.go): the book's maker and taker schedules
+// are published there when it opens and must still be the versions in force
+// whenever an order is approved, executed or filled; each paying party's fee
+// is disclosed to it (RecordQuote), posted inside the trade's journal as
+// exactly the disclosure's entries, and registered against that journal and
+// the trade's effect (RecordEmbedded). An order on a fee-charging book needs
+// SPREAD_ENGINE as well as INTERNAL_MATCHING. House books (SubmitHouseOrder)
 // reserve their own HOUSE_INVENTORY and by default never trade with a
 // customer: the crossing policy decides exactly with a dry run on a copy of
 // the book, and only a versioned crossing rule can allow it.
@@ -43,10 +52,12 @@
 // # The paper venue
 //
 // PaperVenue fills a market order at once against a fresh reference mark
-// through the instrument's fees.Schedule, with the spread and every fee
+// through the instrument's fees.Schedule -- the fee-ledger version in force
+// under its key at the fill instant -- with the spread and every fee
 // disclosed, verified (fees.VerifyQuote, fees.VerifyDisclosure) before it is
-// posted, booked to its own revenue account, and stored with the fill. It
-// implements IntentExecutor for callers that own their intent's lifecycle.
+// posted, booked to its own revenue account, recorded and booked in the fee
+// ledger, and stored with the fill. It implements IntentExecutor for callers
+// that own their intent's lifecycle.
 //
 // # What this package must never do
 //
@@ -61,6 +72,10 @@
 //   - Round a price, a quantity or a notional, or charge anything that is not
 //     an itemized, disclosed component of a schedule; the internal book
 //     charges no spread at all.
+//   - Charge a fee or a spread the fee ledger has not disclosed to its payer
+//     and booked against the journal that charges it, or under a schedule
+//     that is not the fee-ledger version in force (the database refuses an
+//     unbooked fee too: FW001).
 //   - Post without a claimed effect, apply an effect without its journal, or
 //     retry an effect whose outcome is unknown.
 //   - Let an agent apply an effect, write a transition row, open a book, set

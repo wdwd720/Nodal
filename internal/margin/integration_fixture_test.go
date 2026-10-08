@@ -24,6 +24,7 @@ import (
 	"github.com/nodal/controlplane/internal/db/migrate"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/event"
+	"github.com/nodal/controlplane/internal/feeledger"
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/killswitch"
 	"github.com/nodal/controlplane/internal/ledger"
@@ -161,13 +162,19 @@ func (f *fixture) dependencies(kills econ.KillSwitchReader) Dependencies {
 	require.NoError(f.t, err)
 	router, err := legalrouter.New(legalrouter.ConservativePolicy())
 	require.NoError(f.t, err)
-	return Dependencies{
+	d := Dependencies{
 		Clock: f.clk, Ledger: ledger.NewService(f.clk, "margin-itest"),
 		Effects: econ.NewEffectStore(f.clk, out, aw), Intents: econ.NewIntentStore(f.clk, out, aw),
 		Authorizer: econ.NewAuthorizer(checker, kills), Registry: econ.NewRegistry(), Risk: risk.NewStore(),
 		Capital: capital.NewService(f.clk, capitalEmitter{outbox: out, clk: f.clk}), Prices: valuation.NewPriceStore(f.clk),
 		Router: router, Identity: identity{verified: true}, KillSwitch: kills, Venue: f.venue, Audit: aw,
 	}
+	d.FeeLedger, err = feeledger.NewService(feeledger.Config{
+		Clock: f.clk, Ledger: d.Ledger, Capital: d.Capital, Effects: d.Effects, Authorizer: d.Authorizer,
+		Assets: assets.NewRepository(), Audit: aw,
+	})
+	require.NoError(f.t, err)
+	return d
 }
 
 func (f *fixture) inTx(fn func(ctx context.Context, tx pgx.Tx) error) error {

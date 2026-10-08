@@ -18,6 +18,7 @@ import (
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
+	"github.com/nodal/controlplane/internal/feeledger"
 	"github.com/nodal/controlplane/internal/fees"
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/instruments"
@@ -37,12 +38,35 @@ func paperSchedule(m spotMarket) fees.Schedule {
 	return s
 }
 
+// paperOperator publishes the paper venue's schedules in these tests, as an
+// operator does through the fee ledger.
+var paperOperator = econ.Actor{Type: security.ActorOperator, ID: "orders-itest-operator"}
+
+// publishPaper publishes an instrument's paper-venue schedule in the fee
+// ledger, effective now (or from a later instant).
+func (f *fixture) publishPaper(inst instruments.InstrumentID, s fees.Schedule, from time.Time) feeledger.PublishedSchedule {
+	f.t.Helper()
+	var p feeledger.PublishedSchedule
+	require.NoError(f.t, f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+		var err error
+		p, err = f.fees.PublishSchedule(ctx, tx, feeledger.PublishRequest{Key: PaperScheduleKey(PaperScheduleKeyPrefix, inst),
+			Schedule: s, EffectiveFrom: from, Reason: "orders itest paper schedule", Actor: paperOperator})
+		return err
+	}))
+	return p
+}
+
+// paperVenue publishes each schedule as its instrument's paper schedule in
+// force and returns the venue.
 func (f *fixture) paperVenue(schedules map[instruments.InstrumentID]fees.Schedule) *PaperVenue {
 	f.t.Helper()
+	for inst, s := range schedules {
+		f.publishPaper(inst, s, time.Time{})
+	}
 	v, err := NewPaperVenue(PaperConfig{
 		Clock: f.clk, Ledger: f.ledger, Capital: f.capital, Intents: f.intents, Effects: f.effects, Authorizer: f.auth,
 		Risk: f.risk, RiskPolicy: risk.DefaultAdvancedPolicy(), Router: f.router, Instruments: f.instr, Assets: f.assets,
-		Prices: f.prices, KillSwitches: f.kills, Schedules: schedules,
+		Prices: f.prices, KillSwitches: f.kills, FeeLedger: f.fees,
 	})
 	require.NoError(f.t, err)
 	return v

@@ -30,6 +30,7 @@ import (
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/event"
+	"github.com/nodal/controlplane/internal/feeledger"
 	"github.com/nodal/controlplane/internal/fees"
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/instruments"
@@ -124,19 +125,23 @@ func newFixture(t *testing.T) *fixture {
 		f.usd, err = econ.EnsureSandboxDollar(ctx, tx)
 		return err
 	}))
+	feeLedger, err := feeledger.NewService(feeledger.Config{
+		Clock: clk, Ledger: f.ledger, Capital: f.capital, Effects: f.effects, Authorizer: authz, Assets: f.assets, Audit: aw,
+	})
+	require.NoError(t, err)
 	f.margin, err = margin.NewService(margin.Config{
 		Policy: margin.DefaultPolicy(), RiskPolicy: risk.DefaultAdvancedPolicy(),
 		LendingPoolName: "Margin lending pool (sandbox)", InsuranceFundName: "Margin insurance fund (sandbox)",
 	}, margin.Dependencies{
 		Clock: clk, Ledger: f.ledger, Effects: f.effects, Intents: intents, Authorizer: authz, Registry: f.registry,
 		Risk: risk.NewStore(), Capital: f.capital, Prices: f.prices, Router: router, Identity: compliance.NewAccountVerification(clk),
-		KillSwitch: kills, Venue: margin.PaperVenue{}, Audit: aw,
+		KillSwitch: kills, Venue: margin.PaperVenue{}, Audit: aw, FeeLedger: feeLedger,
 	})
 	require.NoError(t, err)
 	f.orders, err = orders.NewService(orders.Config{
 		Clock: clk, Ledger: f.ledger, Capital: f.capital, Intents: intents, Effects: f.effects, Authorizer: authz,
 		Registry: f.registry, Risk: risk.NewStore(), RiskPolicy: risk.DefaultAdvancedPolicy(), Router: router,
-		Instruments: f.instr, Assets: f.assets, Prices: f.prices, KillSwitches: kills,
+		Instruments: f.instr, Assets: f.assets, Prices: f.prices, KillSwitches: kills, FeeLedger: feeLedger,
 	})
 	require.NoError(t, err)
 	f.pipeline, err = orders.NewPipeline(f.orders, testDB)

@@ -40,6 +40,29 @@
 // fee_quote_disclosures are the audit record: SpreadAudit lists every charged
 // spread with its disclosure, schedule and journal.
 //
+// # How other subsystems call the fee ledger
+//
+// Every fee and spread a subsystem charges goes through here, in the
+// subsystem's own transaction, exactly once per charge:
+//
+//  1. The schedule. A subsystem whose charges are fixed by its own frozen
+//     configuration (an internal book's maker and taker schedules, the margin
+//     policy's liquidation fee) calls EnsureSchedule: that exact schedule is
+//     the version in force under its key, or nothing is charged. A subsystem
+//     whose prices an operator manages (the paper venue) charges whatever
+//     version is in force at the fill instant (EffectiveSchedule).
+//  2. The disclosure. RecordQuote, once per payer, under a deterministic
+//     idempotency key, bound to the payer.
+//  3. The charge. Inside the subsystem's own journal (ChargeEntries, the
+//     disclosure's charges, every component on its own pair) applied by its
+//     own effect, then RecordEmbedded, which proves the journal carries
+//     exactly the disclosure; or, for a charge posted on its own, Book.
+//
+// A charge of nothing is not booked (ReasonNothingToBook). A replay returns
+// the stored disclosure and booking. A charge of a risk-reducing operation (a
+// liquidation's fee) says so (RiskReducing): a kill switch never stops risk
+// reduction, so it does not stop that charge either.
+//
 // # Performance fees (sandbox accounting, never charged live)
 //
 // A performance fee period belongs to an (account, strategy) pair and chains

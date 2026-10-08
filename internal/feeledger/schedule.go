@@ -153,6 +153,66 @@ func (s *Service) PublishSchedule(ctx context.Context, tx pgx.Tx, r PublishReque
 	return p, nil
 }
 
+// EnsureSchedule makes a schedule the version of its key in force, and
+// returns that version: the version already in force when it is exactly this
+// schedule (the same hash), or the next version, published by PublishSchedule
+// effective now, when no version is in force. Any other version in force is
+// refused (CONFLICT, ReasonScheduleNotInForce) -- and so is a label already
+// published for a version that is no longer in force, which PublishSchedule
+// alone would return without saying so. It is how a subsystem whose charges
+// are fixed by its own frozen configuration (an internal book's maker and
+// taker schedules, the margin policy's liquidation fee) makes that exact
+// schedule the published version its quotes are priced under, or refuses to
+// charge at all. A person or a service ensures; an agent never does.
+func (s *Service) EnsureSchedule(ctx context.Context, tx pgx.Tx, r PublishRequest) (PublishedSchedule, error) {
+	if err := requireActor(r.Actor); err != nil {
+		return PublishedSchedule{}, err
+	}
+	if !r.EffectiveFrom.IsZero() {
+		return PublishedSchedule{}, errs.New(errs.CodeValidationFailed, "feeledger: an ensured schedule takes effect now; publish a dated version instead")
+	}
+	hash, err := r.Schedule.Hash()
+	if err != nil {
+		return PublishedSchedule{}, err
+	}
+	// The instant is read afresh each time: a concurrent first publication
+	// of the same schedule commits a version effective at its own instant,
+	// which this transaction's earlier instant could precede.
+	inForce := func() (PublishedSchedule, bool, error) {
+		p, err := s.EffectiveSchedule(ctx, tx, r.Key, s.clk.Now())
+		if ReasonOf(err) == ReasonScheduleNotFound {
+			return PublishedSchedule{}, false, nil
+		}
+		return p, err == nil, err
+	}
+	notInForce := func(p PublishedSchedule) error {
+		return rejection(errs.CodeConflict, ReasonScheduleNotInForce,
+			"another version of this schedule key is in force; it is not the schedule this charge is fixed to").
+			WithField("schedule_key", r.Key).WithField("in_force_version", p.Version).WithField("in_force_hash", p.Hash).
+			WithField("wanted_hash", hash)
+	}
+	p, found, err := inForce()
+	if err != nil {
+		return PublishedSchedule{}, err
+	}
+	if found {
+		if p.Hash != hash {
+			return PublishedSchedule{}, notInForce(p)
+		}
+		return p, nil
+	}
+	if _, err := s.PublishSchedule(ctx, tx, r); err != nil {
+		return PublishedSchedule{}, err
+	}
+	if p, found, err = inForce(); err != nil {
+		return PublishedSchedule{}, err
+	}
+	if !found || p.Hash != hash {
+		return PublishedSchedule{}, notInForce(p)
+	}
+	return p, nil
+}
+
 const scheduleColumns = `id, schedule_key, version, label, quote_asset_id, schedule, schedule_hash, effective_from, published_at,
 	created_by_actor_type, created_by_actor_id, reason`
 

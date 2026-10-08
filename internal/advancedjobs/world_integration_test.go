@@ -29,6 +29,7 @@ import (
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/equities"
 	"github.com/nodal/controlplane/internal/event"
+	"github.com/nodal/controlplane/internal/feeledger"
 	"github.com/nodal/controlplane/internal/fees"
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/httpapi"
@@ -150,6 +151,12 @@ func newWorld(t *testing.T) *world {
 		return err
 	}))
 
+	// The fee ledger every charging service books through, as cmd/api builds it.
+	feeLedger, err := feeledger.NewService(feeledger.Config{
+		Clock: clk, Ledger: w.ledger, Capital: w.capital, Effects: w.effects, Authorizer: w.authz, Assets: w.assets, Audit: aw,
+	})
+	require.NoError(t, err)
+
 	// The margin service exactly as cmd/api builds it.
 	w.margin, err = margin.NewService(margin.Config{
 		Policy: margin.DefaultPolicy(), RiskPolicy: risk.DefaultAdvancedPolicy(),
@@ -158,6 +165,7 @@ func newWorld(t *testing.T) *world {
 		Clock: clk, Ledger: w.ledger, Effects: w.effects, Intents: w.intents, Authorizer: w.authz,
 		Registry: w.registry, Risk: w.risk, Capital: w.capital, Prices: w.prices, Router: router,
 		Identity: compliance.NewAccountVerification(clk), KillSwitch: kills, Venue: margin.PaperVenue{}, Audit: aw,
+		FeeLedger: feeLedger,
 	})
 	require.NoError(t, err)
 
@@ -174,7 +182,7 @@ func newWorld(t *testing.T) *world {
 	w.orders, err = orders.NewService(orders.Config{
 		Clock: clk, Ledger: w.ledger, Capital: w.capital, Intents: w.intents, Effects: w.effects, Authorizer: w.authz,
 		Registry: w.registry, Risk: w.risk, RiskPolicy: risk.DefaultAdvancedPolicy(), Router: router,
-		Instruments: w.instr, Assets: w.assets, Prices: w.prices, KillSwitches: kills,
+		Instruments: w.instr, Assets: w.assets, Prices: w.prices, KillSwitches: kills, FeeLedger: feeLedger,
 	})
 	require.NoError(t, err)
 	w.pipeline, err = orders.NewPipeline(w.orders, testDB)

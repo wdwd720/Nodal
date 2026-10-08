@@ -140,6 +140,7 @@ const (
 	ReasonJournalMismatch     = "FEES_JOURNAL_DOES_NOT_CARRY_THE_CHARGES"
 	ReasonKindNotFeeBearing   = "FEES_KIND_NOT_FEE_BEARING"
 	ReasonScheduleNotFound    = "FEES_NO_EFFECTIVE_SCHEDULE"
+	ReasonScheduleNotInForce  = "FEES_SCHEDULE_NOT_IN_FORCE"
 	ReasonBackdated           = "FEES_SCHEDULE_BACKDATED"
 	ReasonPeriodNotEnded      = "FEES_PERIOD_NOT_ENDED"
 	ReasonPeriodContinued     = "FEES_PERIOD_ALREADY_CONTINUED"

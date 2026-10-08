@@ -24,6 +24,7 @@ import (
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/event"
+	"github.com/nodal/controlplane/internal/feeledger"
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/gen/api"
 	"github.com/nodal/controlplane/internal/instruments"
@@ -99,14 +100,20 @@ func newMarginWorldWith(t *testing.T, adjust func(*margin.Policy)) *marginWorld 
 	w.prices = valuation.NewPriceStore(w.clk)
 	intents, effects := econ.NewIntentStore(w.clk, outbox, aw), econ.NewEffectStore(w.clk, outbox, aw)
 	authorizer, riskStore := econ.NewAuthorizer(checker, kills), risk.NewStore()
+	capitalSvc := capital.NewService(w.clk, capital.OutboxEmitter{Outbox: outbox, Clock: w.clk})
+	feeLedger, err := feeledger.NewService(feeledger.Config{
+		Clock: w.clk, Ledger: w.ledger, Capital: capitalSvc, Effects: effects, Authorizer: authorizer,
+		Assets: assets.NewRepository(), Audit: aw,
+	})
+	require.NoError(t, err)
 	w.svc, err = margin.NewService(margin.Config{
 		Policy: pol, RiskPolicy: risk.DefaultAdvancedPolicy(),
 		LendingPoolName: "itest pool " + uuid.NewString(), InsuranceFundName: "itest fund " + uuid.NewString(),
 	}, margin.Dependencies{
 		Clock: w.clk, Ledger: w.ledger, Effects: effects, Intents: intents, Authorizer: authorizer, Registry: econ.NewRegistry(),
-		Risk: riskStore, Capital: capital.NewService(w.clk, capital.OutboxEmitter{Outbox: outbox, Clock: w.clk}),
+		Risk: riskStore, Capital: capitalSvc,
 		Prices: w.prices, Router: router, Identity: compliance.NewAccountVerification(w.clk), KillSwitch: kills,
-		Venue: margin.PaperVenue{}, Audit: aw,
+		Venue: margin.PaperVenue{}, Audit: aw, FeeLedger: feeLedger,
 	})
 	require.NoError(t, err)
 

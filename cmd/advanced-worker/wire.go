@@ -26,6 +26,7 @@ import (
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/equities"
 	"github.com/nodal/controlplane/internal/event"
+	"github.com/nodal/controlplane/internal/feeledger"
 	"github.com/nodal/controlplane/internal/fees"
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/httpapi"
@@ -139,6 +140,17 @@ func build(ctx context.Context, in buildInput) (_ *worker, err error) {
 		}
 	}
 
+	// As cmd/api: one fee ledger, built before the services that charge fees
+	// (margin's liquidation fee, the internal book's fees, the paper venue's
+	// strategy fills), each of which refuses to start without it.
+	feeLedgerSvc, err := feeledger.NewService(feeledger.Config{
+		Clock: clk, Ledger: ledgerSvc, Capital: capitalSvc, Effects: effects(), Authorizer: authorizer(), Assets: assetRepo,
+		Audit: auditWriter,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("fee ledger: %w", err)
+	}
+
 	add := func(j advancedjobs.Job) { w.jobs = append(w.jobs, j) }
 	add(advancedjobs.NewCapitalExpiry(database, capitalSvc, clk, settings(advancedjobs.NameCapitalExpiry)))
 
@@ -150,6 +162,7 @@ func build(ctx context.Context, in buildInput) (_ *worker, err error) {
 		Clock: clk, Ledger: ledgerSvc, Effects: effects(), Intents: intents(), Authorizer: authorizer(),
 		Registry: econ.NewRegistry(), Risk: risk.NewStore(), Capital: capitalSvc, Prices: priceStore, Router: router,
 		Identity: compliance.NewAccountVerification(clk), KillSwitch: killChecker, Venue: margin.PaperVenue{}, Audit: auditWriter,
+		FeeLedger: feeLedgerSvc,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("margin service: %w", err)
@@ -178,7 +191,7 @@ func build(ctx context.Context, in buildInput) (_ *worker, err error) {
 		Clock: clk, Ledger: ledgerSvc, Capital: capitalSvc, Intents: intents(), Effects: effects(), Authorizer: authorizer(),
 		Registry: econ.NewRegistry(), Risk: risk.NewStore(), RiskPolicy: risk.DefaultAdvancedPolicy(), Router: router,
 		Instruments: instrumentRepo, Assets: assetRepo, Prices: priceStore, KillSwitches: killChecker,
-		Verification: httpapi.AdvancedVerificationLevels{Rule: compliance.NewAccountVerification(clk)},
+		Verification: httpapi.AdvancedVerificationLevels{Rule: compliance.NewAccountVerification(clk)}, FeeLedger: feeLedgerSvc,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("orders service: %w", err)
@@ -242,7 +255,8 @@ func build(ctx context.Context, in buildInput) (_ *worker, err error) {
 	// As cmd/api: a scheduled follow's allowed paper intent fills on the order
 	// book's paper venue at the reference mark, priced through the one
 	// published schedule (httpapi.MarketplacePaperSchedule), its spread and
-	// fees itemized on the fill and paid from the account's wallet.
+	// fees itemized on the fill, paid from the account's wallet and booked
+	// through the fee ledger.
 	strategyIntents := intents()
 	strategyExecutor, err := httpapi.NewMarketplacePaperExecutor(httpapi.MarketplacePaperExecutorConfig{
 		Venue: orders.PaperConfig{
@@ -250,6 +264,7 @@ func build(ctx context.Context, in buildInput) (_ *worker, err error) {
 			Authorizer: strategyAuth, Risk: risk.NewStore(), RiskPolicy: risk.DefaultAdvancedPolicy(), Router: router,
 			Instruments: instrumentRepo, Assets: assetRepo, Prices: priceStore, KillSwitches: killChecker, MaxMarkAge: maxMarkAge,
 			Verification: httpapi.AdvancedVerificationLevels{Rule: compliance.NewAccountVerification(clk)},
+			FeeLedger:    feeLedgerSvc,
 		},
 		Schedule: httpapi.MarketplacePaperSchedule(),
 		Intents:  strategyIntents,

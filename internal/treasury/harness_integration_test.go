@@ -26,6 +26,7 @@ import (
 	"github.com/nodal/controlplane/internal/db/migrate"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/event"
+	"github.com/nodal/controlplane/internal/feeledger"
 	"github.com/nodal/controlplane/internal/fees"
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/instruments"
@@ -112,6 +113,7 @@ type fixture struct {
 	prices  *valuation.PriceStore
 	instr   *instruments.Repository
 	assets  *assets.Repository
+	fees    *feeledger.Service
 	orders  *orders.Service
 	pipe    *orders.Pipeline
 	svc     *Service
@@ -135,10 +137,14 @@ func newFixture(t *testing.T) *fixture {
 		instr: instruments.NewRepository(), assets: assets.NewRepository(),
 	}
 	f.auth = econ.NewAuthorizer(checker, f.kills)
+	f.fees, err = feeledger.NewService(feeledger.Config{
+		Clock: clk, Ledger: f.ledger, Capital: f.capital, Effects: f.effects, Authorizer: f.auth, Assets: f.assets, Audit: aw,
+	})
+	require.NoError(t, err)
 	f.orders, err = orders.NewService(orders.Config{
 		Clock: clk, Ledger: f.ledger, Capital: f.capital, Intents: econ.NewIntentStore(clk, out, aw), Effects: f.effects,
 		Authorizer: f.auth, Registry: econ.NewRegistry(), Risk: risk.NewStore(), RiskPolicy: risk.DefaultAdvancedPolicy(),
-		Router: router, Instruments: f.instr, Assets: f.assets, Prices: f.prices, KillSwitches: f.kills,
+		Router: router, Instruments: f.instr, Assets: f.assets, Prices: f.prices, KillSwitches: f.kills, FeeLedger: f.fees,
 	})
 	require.NoError(t, err)
 	f.pipe, err = orders.NewPipeline(f.orders, testDB)

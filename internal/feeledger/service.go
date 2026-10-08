@@ -102,6 +102,31 @@ func (s *Service) requireMode(ctx context.Context, tx pgx.Tx, c gates.Capability
 	return s.auth.Require(ctx, tx, c, m)
 }
 
+// requireCharge authorizes SPREAD_ENGINE for a disclosed charge. A charge
+// that accompanies a risk-reducing operation (a liquidation's fee) is not
+// stopped by a kill switch or by an inactive gate: those stop new activity,
+// and refusing the charge would stop the risk reduction it belongs to, which
+// the subsystem itself never stops for them. An unsupported mode, LIVE or an
+// unknown environment refuses it as it refuses everything.
+func (s *Service) requireCharge(ctx context.Context, tx pgx.Tx, m gates.Mode, riskReducing bool) error {
+	if !riskReducing {
+		return s.requireMode(ctx, tx, gates.SpreadEngine, m)
+	}
+	if !supportedMode(m) {
+		return errs.Newf(errs.CodeValidationFailed, "feeledger: %s runs in PAPER or SANDBOX here, not %q", gates.SpreadEngine, m)
+	}
+	d, err := s.auth.Decide(ctx, tx, gates.SpreadEngine, m)
+	if err != nil {
+		return err
+	}
+	for _, r := range d.Reasons {
+		if r != gates.ReasonCapabilityKillSwitched && r != gates.ReasonGateNotActive {
+			return s.auth.Require(ctx, tx, gates.SpreadEngine, m)
+		}
+	}
+	return nil
+}
+
 // postingContext attributes a posting to the fee ledger's applying service.
 func (s *Service) postingContext(ctx context.Context) context.Context {
 	return security.WithPrincipal(ctx, security.Principal{SubjectID: s.actor.ID, ActorType: s.actor.Type})

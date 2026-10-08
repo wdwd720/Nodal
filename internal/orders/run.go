@@ -9,11 +9,11 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/capital"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
+	"github.com/nodal/controlplane/internal/feeledger"
 	"github.com/nodal/controlplane/internal/id"
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/matching"
@@ -287,7 +287,8 @@ func (s *Service) persistOrders(ctx context.Context, tx pgx.Tx, spec commandSpec
 
 // settleTrade makes one TRADE event an economic fact: the SIM_TRADE posting
 // between the two parties (each balanced on its own books, explicit fees to
-// PLATFORM_FEE_REVENUE, no spread), the consumption of both reservations, the
+// PLATFORM_FEE_REVENUE, no spread), each customer party's fee disclosed and
+// booked through the fee ledger, the consumption of both reservations, the
 // effect that names the journal, the evidence, and the trade row.
 func (s *Service) settleTrade(ctx context.Context, tx pgx.Tx, spec commandSpec, e matching.Event, orders map[string]orderRow, fullFills map[string]bool) (Trade, error) {
 	maker, mok := orders[e.MakerOrderID]
@@ -331,12 +332,35 @@ func (s *Service) settleTrade(ctx context.Context, tx pgx.Tx, spec commandSpec, 
 			return Trade{}, err
 		}
 	}
-	buyerFee, sellerFee := trade.TakerFee, trade.MakerFee
+	// The buyer pays its fee from its reservation; the seller's comes out of
+	// the proceeds the same journal credits it.
+	buyerFee := trade.TakerFee
 	if buyer.ID == maker.ID {
-		buyerFee, sellerFee = trade.MakerFee, trade.TakerFee
+		buyerFee = trade.MakerFee
+	}
+	// Every fee a customer party pays is disclosed in the fee ledger before
+	// anything is posted, posted inside this trade's journal as exactly the
+	// disclosure's charges, and booked against the journal once the effect
+	// has applied it.
+	var charged []feeCharge
+	disclosed := map[OrderID]feeledger.StoredQuote{}
+	for _, p := range []struct {
+		o    orderRow
+		role FeeRole
+		fee  money.Quantity
+	}{{maker, FeeMaker, trade.MakerFee}, {taker, FeeTaker, trade.TakerFee}} {
+		if p.o.OwnerType != OwnerCustomer || !p.fee.IsPositive() {
+			continue
+		}
+		q, err := s.quoteFill(ctx, tx, spec.cfg, p.role, p.o, e.TradeSeq, lots, trade.Price, p.fee)
+		if err != nil {
+			return Trade{}, err
+		}
+		charged = append(charged, feeCharge{order: p.o, quote: q})
+		disclosed[p.o.ID] = q
 	}
 
-	key := "orders:trade:" + spec.cfg.ID.String() + ":" + strconv.FormatInt(e.TradeSeq, 10)
+	key := tradeKey(spec.cfg.ID, e.TradeSeq)
 	request := map[string]any{
 		"book_id": spec.cfg.ID.String(), "trade_seq": e.TradeSeq, "command_seq": e.CommandSeq,
 		"price_ticks": ticks, "qty_lots": lots, "maker_order_id": maker.ID.String(), "taker_order_id": taker.ID.String(),
@@ -358,7 +382,8 @@ func (s *Service) settleTrade(ctx context.Context, tx pgx.Tx, spec commandSpec, 
 		Kind: ledger.KindSimTrade, IdempotencyKey: key,
 		Reference:   ledger.FinancialEventReference{Type: "book_trade", ID: trade.ID.String()},
 		EffectiveAt: spec.now, Description: "simulated internal-book trade",
-		Entries: tradeEntries(buyer, seller, t.BaseAsset, t.QuoteAsset, trade.BaseQuantity, trade.QuoteNotional, buyerFee, sellerFee),
+		Entries: tradeEntries(buyer, seller, t.BaseAsset, t.QuoteAsset, trade.BaseQuantity, trade.QuoteNotional,
+			disclosed[buyer.ID].Charges, disclosed[seller.ID].Charges),
 		Metadata: map[string]any{
 			"venue_label": VenueLabelInternalBook, "book_id": spec.cfg.ID.String(), "trade_seq": e.TradeSeq,
 			"maker_order_id": maker.ID.String(), "taker_order_id": taker.ID.String(),
@@ -371,6 +396,14 @@ func (s *Service) settleTrade(ctx context.Context, tx pgx.Tx, spec commandSpec, 
 		return Trade{}, err
 	}
 	trade.JournalTransactionID = posted.TransactionID
+	party := func(o orderRow, fee money.Quantity, scheduleHash string) map[string]any {
+		doc := map[string]any{"order_id": o.ID.String(), "owner_type": string(o.OwnerType), "owner_id": o.OwnerID,
+			"side": string(o.Side), "fee": fee.String(), "schedule_hash": scheduleHash}
+		if q, ok := disclosed[o.ID]; ok {
+			doc["fee_disclosure_id"], doc["fee_disclosure_hash"] = q.ID.String(), q.DisclosureHash
+		}
+		return doc
+	}
 	ev, err := econ.RecordEvidence(ctx, tx, econ.Evidence{
 		Key: "orders/book/" + spec.cfg.ID.String() + "/trade/" + strconv.FormatInt(e.TradeSeq, 10),
 		Document: map[string]any{
@@ -379,10 +412,8 @@ func (s *Service) settleTrade(ctx context.Context, tx pgx.Tx, spec commandSpec, 
 			"event_seq": e.Seq, "price": t.PriceString(ticks), "price_ticks": ticks, "qty_lots": lots,
 			"base_asset_id": t.BaseAsset.String(), "quote_asset_id": t.QuoteAsset.String(),
 			"base_quantity": trade.BaseQuantity.String(), "quote_notional": trade.QuoteNotional.String(),
-			"maker": map[string]any{"order_id": maker.ID.String(), "owner_type": string(maker.OwnerType), "owner_id": maker.OwnerID,
-				"side": string(maker.Side), "fee": trade.MakerFee.String(), "schedule_hash": spec.cfg.MakerScheduleHash},
-			"taker": map[string]any{"order_id": taker.ID.String(), "owner_type": string(taker.OwnerType), "owner_id": taker.OwnerID,
-				"side": string(taker.Side), "fee": trade.TakerFee.String(), "schedule_hash": spec.cfg.TakerScheduleHash},
+			"maker":  party(maker, trade.MakerFee, spec.cfg.MakerScheduleHash),
+			"taker":  party(taker, trade.TakerFee, spec.cfg.TakerScheduleHash),
 			"spread": "0", "crossing_rule_version": crossRule,
 			"journal_transaction_id": posted.TransactionID.String(),
 		},
@@ -398,6 +429,9 @@ func (s *Service) settleTrade(ctx context.Context, tx pgx.Tx, spec commandSpec, 
 		return Trade{}, err
 	}
 	trade.EffectID = applied.ID
+	if err := s.bookFills(ctx, tx, spec.cfg, charged, posted.TransactionID, applied.ID); err != nil {
+		return Trade{}, err
+	}
 
 	// The buyer pays the notional and its own fee from its reservation; the
 	// seller delivers the base quantity from its own.
@@ -482,10 +516,14 @@ func inflowRef(o orderRow, asset assets.AssetID) ledger.AccountRef {
 //	seller: Cr WALLET(base) / Dr TRADING_OUTFLOW(base), Dr WALLET(quote) / Cr TRADING_INFLOW(quote)
 //	explicit fee of a customer party: C: Dr FEES_PLATFORM / Cr WALLET; P: Dr PLATFORM_FEE_RECEIVABLE / Cr PLATFORM_FEE_REVENUE
 //
-// Every party balances on its own books per asset, and a house party uses the
-// HOUSE_* codes. A house book pays no platform fee: it is the platform's own
-// book, and a fee from it to the platform would be revenue from itself.
-func tradeEntries(buyer, seller orderRow, base, quote assets.AssetID, qty, notional, buyerFee, sellerFee money.Quantity) []ledger.Entry {
+// A party's fee entries are exactly its fee-ledger disclosure's
+// (feeledger.ChargeEntries: the platform fee and a strategy fee each on its
+// own pair), which is what lets the fee ledger register them against this
+// journal. Every party balances on its own books per asset, and a house party
+// uses the HOUSE_* codes. A house book pays no platform fee: it is the
+// platform's own book, and a fee from it to the platform would be revenue
+// from itself.
+func tradeEntries(buyer, seller orderRow, base, quote assets.AssetID, qty, notional money.Quantity, buyerFee, sellerFee feeledger.Charges) []ledger.Entry {
 	out := []ledger.Entry{
 		{Account: walletRef(buyer, quote), Side: ledger.Credit, Quantity: notional},
 		{Account: outflowRef(buyer, quote), Side: ledger.Debit, Quantity: notional},
@@ -498,25 +536,14 @@ func tradeEntries(buyer, seller orderRow, base, quote assets.AssetID, qty, notio
 	}
 	for _, p := range []struct {
 		o   orderRow
-		fee money.Quantity
+		fee feeledger.Charges
 	}{{buyer, buyerFee}, {seller, sellerFee}} {
-		if p.o.OwnerType != OwnerCustomer || !p.fee.IsPositive() {
+		if p.o.OwnerType != OwnerCustomer || p.fee.IsZero() {
 			continue
 		}
-		out = append(out, feeEntries(*p.o.AccountID, quote, ledger.CodeFeesPlatform, ledger.CodePlatformFeeRevenue, p.fee)...)
+		out = append(out, feeledger.ChargeEntries(*p.o.AccountID, p.fee)...)
 	}
 	return out
-}
-
-// feeEntries is one disclosed charge: the customer's expense against its
-// wallet, and the platform's receivable against the revenue code.
-func feeEntries(account accounts.AccountID, asset assets.AssetID, expense, revenue ledger.Code, amount money.Quantity) []ledger.Entry {
-	return []ledger.Entry{
-		{Account: ledger.CustomerAccount(account, expense, asset), Side: ledger.Debit, Quantity: amount},
-		{Account: ledger.CustomerAccount(account, ledger.CodeWallet, asset), Side: ledger.Credit, Quantity: amount},
-		{Account: ledger.PlatformAccount(ledger.CodePlatformFeeReceivable, asset), Side: ledger.Debit, Quantity: amount},
-		{Account: ledger.PlatformAccount(revenue, asset), Side: ledger.Credit, Quantity: amount},
-	}
 }
 
 // consume records that an order used amount of its reservation; final closes

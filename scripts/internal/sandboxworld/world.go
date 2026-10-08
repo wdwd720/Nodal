@@ -37,6 +37,7 @@ import (
 	"github.com/nodal/controlplane/internal/devnethost"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/event"
+	"github.com/nodal/controlplane/internal/feeledger"
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/instruments"
 	"github.com/nodal/controlplane/internal/killswitch"
@@ -90,6 +91,10 @@ type World struct {
 	Prices     *valuation.PriceStore
 	Capital    *capital.Service
 
+	// FeeLedger books every fee and spread the services charge: the internal
+	// book's maker and taker fees and margin's liquidation fee are disclosed
+	// and booked through it in the charging transaction.
+	FeeLedger   *feeledger.Service
 	Transfers   *transfers.Service
 	Faucet      *sandboxfund.Faucet
 	Margin      *margin.Service
@@ -214,6 +219,13 @@ func wire(d *db.DB, o Options) (*World, error) {
 		return nil, fmt.Errorf("sandboxworld: faucet: %w", err)
 	}
 	w.Identity = compliance.NewAccountVerification(clk)
+	w.Assets = assets.NewRepository()
+	w.FeeLedger, err = feeledger.NewService(feeledger.Config{
+		Clock: clk, Ledger: led, Capital: w.Capital, Effects: w.Effects, Authorizer: w.Authorizer, Assets: w.Assets, Audit: aw,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("sandboxworld: fee ledger: %w", err)
+	}
 	w.Margin, err = margin.NewService(margin.Config{
 		Policy: margin.DefaultPolicy(), RiskPolicy: risk.DefaultAdvancedPolicy(),
 		LendingPoolName: "Sandbox lending pool", InsuranceFundName: "Sandbox insurance fund",
@@ -221,7 +233,7 @@ func wire(d *db.DB, o Options) (*World, error) {
 	}, margin.Dependencies{
 		Clock: clk, Ledger: led, Effects: w.Effects, Intents: w.Intents, Authorizer: w.Authorizer,
 		Registry: w.Registry, Risk: w.Risk, Capital: w.Capital, Prices: w.Prices, Router: router,
-		Identity: w.Identity, KillSwitch: kills, Venue: margin.PaperVenue{}, Audit: aw,
+		Identity: w.Identity, KillSwitch: kills, Venue: margin.PaperVenue{}, Audit: aw, FeeLedger: w.FeeLedger,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("sandboxworld: margin: %w", err)
@@ -237,11 +249,10 @@ func wire(d *db.DB, o Options) (*World, error) {
 	if err != nil {
 		return nil, fmt.Errorf("sandboxworld: derivatives: %w", err)
 	}
-	w.Assets = assets.NewRepository()
 	w.Orders, err = orders.NewService(orders.Config{
 		Clock: clk, Ledger: led, Capital: w.Capital, Intents: w.Intents, Effects: w.Effects, Authorizer: w.Authorizer,
 		Registry: w.Registry, Risk: w.Risk, RiskPolicy: risk.DefaultAdvancedPolicy(), Router: router,
-		Instruments: w.Instruments, Assets: w.Assets, Prices: w.Prices, KillSwitches: kills,
+		Instruments: w.Instruments, Assets: w.Assets, Prices: w.Prices, KillSwitches: kills, FeeLedger: w.FeeLedger,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("sandboxworld: orders: %w", err)

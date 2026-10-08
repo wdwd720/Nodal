@@ -315,6 +315,13 @@ type EmbeddedRequest struct {
 	Mode          gates.Mode
 	CorrelationID string
 	Actor         econ.Actor
+	// RiskReducing says the charge belongs to a risk-reducing operation (a
+	// liquidation's fee, posted inside its LIQUIDATION journal). A
+	// SPREAD_ENGINE kill switch or an inactive gate stops new activity, never
+	// risk reduction, so it does not refuse such a charge; an unsupported mode
+	// or LIVE still does. The caller states it; only a deterministic,
+	// non-agent service calls the fee ledger at all.
+	RiskReducing bool
 }
 
 // RecordEmbedded registers a disclosure whose charges the caller posted in
@@ -327,7 +334,7 @@ func (s *Service) RecordEmbedded(ctx context.Context, tx pgx.Tx, r EmbeddedReque
 	if err := requireActor(r.Actor); err != nil {
 		return Booking{}, err
 	}
-	if err := s.requireMode(ctx, tx, gates.SpreadEngine, r.Mode); err != nil {
+	if err := s.requireCharge(ctx, tx, r.Mode, r.RiskReducing); err != nil {
 		return Booking{}, err
 	}
 	if prior, found, err := s.bookingWhere(ctx, tx, `disclosure_id = $1`, r.DisclosureID); err != nil {
