@@ -16,16 +16,24 @@
  *   - another account's legs are refused, a leg nobody recorded is NOT_FOUND,
  *     and a transfer on a route that does not exist is refused.
  *
- * A seeded database usually holds no route and no leg, and a customer cannot
- * open one, so those checks take the stated-absence branch there; that is the
- * honest outcome, not a skipped test.
+ * A seeded database holds no route, and a customer cannot open one, so where
+ * the bridge is served this spec first has the operator ("admin", signed in
+ * with a strong sign-in in a context of its own) open a route of its own:
+ * from a sandbox stable asset it registers on sbx-solana to a bridged twin on
+ * sbx-ethereum. The routes page is then checked against a real route; a leg
+ * is the customer's to start, so the leg checks still take their
+ * stated-absence branch, which is the honest outcome, not a skipped test.
  */
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type BrowserContext, type Locator, type Page } from "@playwright/test";
+
+import { signIn } from "./sign-in.ts";
 
 const NOTICE = "Simulated value — sandbox only";
 const BASE = "/advanced/bridge";
+/** The deployment's one sandbox dollar (econ.SandboxDollarID): the reserve of the route's source asset. */
+const SANDBOX_DOLLAR = "01920000-0000-7000-8000-5342582d5553";
 
 interface Problem {
   readonly code: string;
@@ -81,6 +89,51 @@ async function served(page: Page): Promise<boolean> {
   expect(response.status(), "the chains are served").toBe(200);
   return true;
 }
+
+test.beforeAll(async ({ browser }) => {
+  const customer = await browser.newContext({ storageState: ".playwright/state.json" });
+  let operator: BrowserContext | undefined;
+  try {
+    const page = await customer.newPage();
+    if (!(await served(page))) return;
+    // The faucet creates the sandbox dollar the source asset is reserved in.
+    const grant = await post(page, "/v1/advanced/transfers/faucet/grants", { account_id: await accountId(page), amount: "1" });
+    expect([201, 429], `the faucet runs in this deployment: ${JSON.stringify(grant.body)}`).toContain(grant.status);
+
+    const signedIn = await signIn(browser, "admin", true);
+    operator = signedIn.context;
+    const op = signedIn.page;
+
+    const suffix = randomBytes(3).toString("hex");
+    const source = await post(op, "/v1/advanced/stable-assets", {
+      name: `e2e-bridge-src-${suffix}`,
+      symbol: `E2E-B${suffix.toUpperCase()}`,
+      peg_currency: "USD",
+      decimals: 6,
+      issuance_cap: "1000000000000",
+      redemption_mode: "INSTANT",
+      peg: "1",
+      oracle_source: "e2e-bridge",
+      max_price_age_ms: 3_600_000,
+      peg_deviation_threshold_bps: 50,
+      attestable: true,
+      reserves: [{ asset_id: SANDBOX_DOLLAR, kind: "CASH_EQUIVALENT", factor_bps: 10_000, accepted_for_mint: true }],
+    });
+    expect(source.status, `the operator registers the route's source asset: ${JSON.stringify(source.body)}`).toBe(200);
+    const route = await post(op, "/v1/advanced/bridge/routes", {
+      name: `e2e-route-${suffix}`,
+      source_asset_id: (source.body as { asset: { asset_id: string } }).asset.asset_id,
+      destination_chain: "sbx-ethereum",
+      destination_symbol: `E2E-B${suffix.toUpperCase()}-ETH`,
+      unit_price: "1",
+      max_release_attempts: 3,
+    });
+    expect(route.status, `the operator opens a route: ${JSON.stringify(route.body)}`).toBe(200);
+  } finally {
+    await operator?.close();
+    await customer.close();
+  }
+});
 
 test.describe("bridge (sandbox)", () => {
   test("the section renders under the simulated-value notice and is reachable from the area", async ({ page }) => {

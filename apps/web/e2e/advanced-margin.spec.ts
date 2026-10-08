@@ -21,6 +21,8 @@ import { randomUUID } from "node:crypto";
 
 import { expect, test, type Browser, type BrowserContext, type Page, type Request, type Response } from "@playwright/test";
 
+import { signIn } from "./sign-in.ts";
+
 const NOTICE = "Simulated value — sandbox only";
 
 const MARGIN_PAGES: ReadonlyArray<{ readonly path: string; readonly heading: string }> = [
@@ -474,18 +476,6 @@ async function command(page: Page, path: string, body: unknown): Promise<{ reado
 async function ensureSandboxDollar(page: Page): Promise<void> {
   const grant = await command(page, "/v1/advanced/transfers/faucet/grants", { account_id: await accountId(page), amount: "1" });
   expect([201, 429], `the faucet runs in this deployment: ${JSON.stringify(grant.body)}`).toContain(grant.status);
-}
-
-/** Signs a development identity in, in a fresh context, through the real OIDC flow. */
-async function signIn(browser: Browser, identity: string, mfa: boolean): Promise<{ context: BrowserContext; page: Page }> {
-  const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
-  const page = await context.newPage();
-  await page.goto("/v1/auth/login");
-  await expect(page.getByRole("heading", { name: "Choose an identity" })).toBeVisible();
-  const row = page.locator("li", { has: page.locator("code", { hasText: new RegExp(`^${identity}$`) }) });
-  await row.getByRole("link", { name: mfa ? "sign in with MFA" : "sign in", exact: true }).first().click();
-  await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
-  return { context, page };
 }
 
 interface DeficitBody {

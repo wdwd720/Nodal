@@ -18,6 +18,8 @@ import { randomBytes, randomUUID } from "node:crypto";
 
 import { expect, test, type Browser, type BrowserContext, type Locator, type Page, type Response } from "@playwright/test";
 
+import { signIn } from "./sign-in.ts";
+
 /** The accessible name of the notice every page of the area opens with. */
 const NOTICE = "Simulated value — sandbox only";
 const SECTION = "/advanced/transfers";
@@ -77,17 +79,23 @@ async function ownAccount(page: Page): Promise<string> {
   return id as string;
 }
 
-/** Signs a development identity in, in a fresh context, through the real OIDC flow. */
-async function signIn(browser: Browser, identity: string, mfa: boolean): Promise<{ context: BrowserContext; page: Page }> {
-  const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
-  const page = await context.newPage();
-  await page.goto("/v1/auth/login");
-  await expect(page.getByRole("heading", { name: "Choose an identity" })).toBeVisible();
-  const row = page.locator("li", { has: page.locator("code", { hasText: new RegExp(`^${identity}$`) }) });
-  await row.getByRole("link", { name: mfa ? "sign in with MFA" : "sign in", exact: true }).first().click();
-  await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
-  return { context, page };
+/**
+ * Customer-b's session, which this file's tests share. Signing in is rate
+ * limited -- CP_API_RATE_LIMIT_AUTH allows 30 requests a minute from one
+ * address by default, and a sign-in is four of them -- and the suite signs in
+ * far more often than a person would, so customer-b signs in once for the file.
+ */
+let recipientSession: { context: BrowserContext; page: Page } | undefined;
+
+async function customerB(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
+  recipientSession ??= await signIn(browser, "customer-b", false);
+  return recipientSession;
 }
+
+test.afterAll(async () => {
+  await recipientSession?.context.close();
+  recipientSession = undefined;
+});
 
 /** The response to the POST an action makes, observed as the page received it. */
 async function answerTo(page: Page, path: string, act: () => Promise<void>): Promise<Response> {
@@ -145,7 +153,7 @@ interface Recipient {
 }
 
 async function prepareRecipient(browser: Browser): Promise<{ recipient: Recipient; context: BrowserContext; page: Page }> {
-  const b = await signIn(browser, "customer-b", false);
+  const b = await customerB(browser);
   const accountId = await ownAccount(b.page);
   await b.page.goto(SECTION);
   await settle(b.page);
@@ -391,7 +399,6 @@ test.describe("the transfers section", () => {
       };
       expect(bList.items.some((item) => item.id === transfer.id)).toBe(false);
     }
-    await b.context.close();
   });
 
   test("a reversal takes two operators: one proposes, the proposer can never approve, and the backend decides", async ({
@@ -399,7 +406,6 @@ test.describe("the transfers section", () => {
     browser,
   }) => {
     const b = await prepareRecipient(browser);
-    await b.context.close();
     await fundThroughTheFaucet(page, "3");
     const send = page.getByRole("region", { name: "Send", exact: true });
     await reviewSend(send, b.recipient, "1", `e2e reversal ${hex(6)}`);

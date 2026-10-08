@@ -27,7 +27,9 @@
  */
 import { randomBytes, randomUUID } from "node:crypto";
 
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type BrowserContext, type Locator, type Page } from "@playwright/test";
+
+import { signIn } from "./sign-in.ts";
 
 const NOTICE = "Simulated value — sandbox only";
 const LIST = "/advanced/prediction-markets";
@@ -97,18 +99,15 @@ test.beforeAll(async ({ browser }) => {
   const now = Date.now();
   // The customer's faucet grant creates the sandbox dollar, the market's collateral.
   const customer = await browser.newContext({ storageState: ".playwright/state.json" });
-  const operator = await browser.newContext({ storageState: { cookies: [], origins: [] } });
+  let operator: BrowserContext | undefined;
   try {
     const page = await customer.newPage();
     const grant = await post(page, "/v1/advanced/transfers/faucet/grants", { account_id: await accountId(page), amount: "1" });
     expect([201, 429], `the faucet runs in this deployment: ${JSON.stringify(grant.body)}`).toContain(grant.status);
 
-    const op = await operator.newPage();
-    await op.goto("/v1/auth/login");
-    await expect(op.getByRole("heading", { name: "Choose an identity" })).toBeVisible();
-    const row = op.locator("li", { has: op.locator("code", { hasText: /^admin$/ }) });
-    await row.getByRole("link", { name: "sign in with MFA", exact: true }).first().click();
-    await expect(op.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
+    const signedIn = await signIn(browser, "admin", true);
+    operator = signedIn.context;
+    const op = signedIn.page;
 
     const created = await post(op, "/v1/advanced/prediction-markets", {
       symbol: `E2E-PM-${randomBytes(3).toString("hex").toUpperCase()}`,
@@ -128,7 +127,7 @@ test.beforeAll(async ({ browser }) => {
     ownMarket = (await listed(page, "OPEN")).find((market) => market.id === id);
     expect(ownMarket, "the market the operator opened is listed OPEN").toBeTruthy();
   } finally {
-    await operator.close();
+    await operator?.close();
     await customer.close();
   }
 });

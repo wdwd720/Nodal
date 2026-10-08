@@ -17,16 +17,25 @@
  *   - another account's requests are refused, a request read by an id nobody
  *     recorded is NOT_FOUND, and a malformed quantity is VALIDATION_FAILED.
  *
- * A seeded database usually holds no stable asset, and a customer cannot
- * register one, so the asset-level checks take the stated-absence branch
- * there; that is the honest outcome, not a skipped test.
+ * A seeded database holds no stable asset, and a customer cannot register one,
+ * so where the deployment serves the stable asset this spec first has the
+ * operator ("admin", signed in with a strong sign-in in a context of its own)
+ * register one of its own, fully reserved in the sandbox dollar, and record
+ * one signed reserve snapshot. The asset-level checks -- the list's rows, the
+ * asset's pages, the reserve ledger and the snapshot chain -- then run against
+ * a real asset; the stated-absence branches remain for a deployment where
+ * registering one is refused.
  */
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type BrowserContext, type Locator, type Page } from "@playwright/test";
+
+import { signIn } from "./sign-in.ts";
 
 const NOTICE = "Simulated value — sandbox only";
 const BASE = "/advanced/stable-assets";
+/** The deployment's one sandbox dollar (econ.SandboxDollarID): the reserve this spec's asset is backed by. */
+const SANDBOX_DOLLAR = "01920000-0000-7000-8000-5342582d5553";
 
 interface Problem {
   readonly code: string;
@@ -103,6 +112,54 @@ async function served(page: Page): Promise<{ readonly wired: boolean; readonly a
   expect(list.value_domain).toBe("SIMULATED");
   return { wired: true, assets: list.items };
 }
+
+/** The stable asset this spec registered for itself, when the deployment serves them. */
+let ownAssetId: string | undefined;
+
+/** This spec's own asset when it has one, else the first the backend lists. */
+function pick(assets: readonly AssetRow[]): AssetRow | undefined {
+  return assets.find((asset) => asset.id === ownAssetId) ?? assets[0];
+}
+
+test.beforeAll(async ({ browser }) => {
+  const customer = await browser.newContext({ storageState: ".playwright/state.json" });
+  let operator: BrowserContext | undefined;
+  try {
+    const page = await customer.newPage();
+    if (!(await served(page)).wired) return;
+    // The faucet creates the sandbox dollar the asset is reserved in.
+    const grant = await post(page, "/v1/advanced/transfers/faucet/grants", { account_id: await accountId(page), amount: "1" });
+    expect([201, 429], `the faucet runs in this deployment: ${JSON.stringify(grant.body)}`).toContain(grant.status);
+
+    const signedIn = await signIn(browser, "admin", true);
+    operator = signedIn.context;
+    const op = signedIn.page;
+
+    const suffix = randomBytes(3).toString("hex");
+    const registered = await post(op, "/v1/advanced/stable-assets", {
+      name: `e2e-stable-${suffix}`,
+      symbol: `E2E-S${suffix.toUpperCase()}`,
+      peg_currency: "USD",
+      decimals: 6,
+      issuance_cap: "1000000000000",
+      redemption_mode: "INSTANT",
+      peg: "1",
+      oracle_source: "e2e-stable",
+      max_price_age_ms: 3_600_000,
+      peg_deviation_threshold_bps: 50,
+      attestable: true,
+      reserves: [{ asset_id: SANDBOX_DOLLAR, kind: "CASH_EQUIVALENT", factor_bps: 10_000, accepted_for_mint: true }],
+    });
+    expect(registered.status, `the operator registers a stable asset: ${JSON.stringify(registered.body)}`).toBe(200);
+    const id = (registered.body as { asset: { id: string } }).asset.id;
+    const snapshot = await post(op, `/v1/advanced/stable-assets/${id}/snapshots`, {});
+    expect(snapshot.status, `the operator records a reserve snapshot: ${JSON.stringify(snapshot.body)}`).toBe(200);
+    ownAssetId = id;
+  } finally {
+    await operator?.close();
+    await customer.close();
+  }
+});
 
 test.describe("stable assets (sandbox)", () => {
   test("the section renders under the simulated-value notice and is reachable from the area", async ({ page }) => {
@@ -259,7 +316,7 @@ test.describe("stable assets (sandbox)", () => {
       await expectRefusal(page.getByRole("region", { name: "Snapshot chain", exact: true }), "UNSUPPORTED");
       return;
     }
-    const asset = assets[0];
+    const asset = pick(assets);
     if (asset === undefined) {
       await page.goto(`${BASE}/${unknownId()}/reserve`);
       await settle(page);
@@ -296,7 +353,7 @@ test.describe("stable assets (sandbox)", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     const { assets } = await served(page);
     const paths = [BASE, `${BASE}/issuances`, `${BASE}/redemptions`, `${BASE}/operator`];
-    const first = assets[0];
+    const first = pick(assets);
     if (first !== undefined) paths.push(`${BASE}/${first.id}`, `${BASE}/${first.id}/reserve`);
     for (const path of paths) {
       await page.goto(path);
@@ -309,7 +366,7 @@ test.describe("stable assets (sandbox)", () => {
   test("no dead controls in the section", async ({ page }) => {
     const { assets } = await served(page);
     const paths = [BASE, `${BASE}/operator`];
-    const first = assets[0];
+    const first = pick(assets);
     if (first !== undefined) paths.push(`${BASE}/${first.id}`);
     for (const path of paths) {
       await page.goto(path);

@@ -23,6 +23,8 @@ import { randomBytes, randomUUID } from "node:crypto";
 
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
 
+import { signIn } from "./sign-in.ts";
+
 const NOTICE = "Simulated value — sandbox only";
 const SECTION = "/advanced/fees";
 /** The deployment's one sandbox dollar (econ.SandboxDollarID): six decimals, USD-pegged, simulated. */
@@ -100,16 +102,24 @@ async function ownAccount(page: Page): Promise<string> {
   return id as string;
 }
 
-async function signIn(browser: Browser, identity: string, mfa: boolean): Promise<{ context: BrowserContext; page: Page }> {
-  const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
-  const page = await context.newPage();
-  await page.goto("/v1/auth/login");
-  await expect(page.getByRole("heading", { name: "Choose an identity" })).toBeVisible();
-  const row = page.locator("li", { has: page.locator("code", { hasText: new RegExp(`^${identity}$`) }) });
-  await row.getByRole("link", { name: mfa ? "sign in with MFA" : "sign in", exact: true }).first().click();
-  await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
-  return { context, page };
+/**
+ * The operator's strong session this file's tests share. Signing in is rate
+ * limited -- CP_API_RATE_LIMIT_AUTH allows 30 requests a minute from one
+ * address by default, and a sign-in is four of them -- and the suite signs in
+ * far more often than a person would, so the operator signs in with MFA once
+ * for the file. A strong sign-in stays recent far longer than this file takes.
+ */
+let operatorSession: { context: BrowserContext; page: Page } | undefined;
+
+async function strongOperator(browser: Browser): Promise<Page> {
+  operatorSession ??= await signIn(browser, "admin", true);
+  return operatorSession.page;
 }
+
+test.afterAll(async () => {
+  await operatorSession?.context.close();
+  operatorSession = undefined;
+});
 
 async function post(page: Page, path: string, body: unknown, key: string = randomUUID()): Promise<{ status: number; body: unknown }> {
   const response = await page.request.post(path, {
@@ -272,21 +282,16 @@ test.describe("an operator's fee schedule and performance period", () => {
       await stale.context.close();
     }
 
-    const operator = await signIn(browser, "admin", true);
-    let version: ScheduleVersion;
-    try {
-      const published = await post(operator.page, "/v1/advanced/fees/schedules", scheduleBody(key, "e2e-v1"));
-      expect(published.status, JSON.stringify(published.body)).toBe(200);
-      version = published.body as ScheduleVersion;
-      expect(version.version).toBe(1);
-      expect(version.in_force).toBe(true);
-      // The same label and content again return the stored version, whatever the key.
-      const again = await post(operator.page, "/v1/advanced/fees/schedules", scheduleBody(key, "e2e-v1"));
-      expect(again.status).toBe(200);
-      expect((again.body as ScheduleVersion).id).toBe(version.id);
-    } finally {
-      await operator.context.close();
-    }
+    const operator = await strongOperator(browser);
+    const published = await post(operator, "/v1/advanced/fees/schedules", scheduleBody(key, "e2e-v1"));
+    expect(published.status, JSON.stringify(published.body)).toBe(200);
+    const version = published.body as ScheduleVersion;
+    expect(version.version).toBe(1);
+    expect(version.in_force).toBe(true);
+    // The same label and content again return the stored version, whatever the key.
+    const again = await post(operator, "/v1/advanced/fees/schedules", scheduleBody(key, "e2e-v1"));
+    expect(again.status).toBe(200);
+    expect((again.body as ScheduleVersion).id).toBe(version.id);
 
     const history = (await (await page.request.get(`/v1/advanced/fees/schedules/history?key=${encodeURIComponent(key)}`)).json()) as {
       effective_version?: number;
@@ -328,55 +333,50 @@ test.describe("an operator's fee schedule and performance period", () => {
     await ensureSandboxDollar(page);
     const own = await ownAccount(page);
     const strategy = `e2e-${hex(4)}`;
-    const operator = await signIn(browser, "admin", true);
-    try {
-      const op = operator.page;
-      const opened = await post(op, "/v1/advanced/fees/periods", {
-        account_id: own,
-        strategy_ref: strategy,
-        terms_version: "e2e-terms-v1",
-        period_start: minutesFromNow(-120),
-        period_end: minutesFromNow(120),
-        opening_nav: "10000.00",
-        hurdle_annual_bps: 0,
-        fee_rate_bps: 2000,
-      });
-      if (opened.status === 422 && isProblem(opened.body) && opened.body.code === "CAPABILITY_NOT_APPROVED") {
-        return;
-      }
-      expect(opened.status, JSON.stringify(opened.body)).toBe(200);
-      const period = opened.body as Period;
-      expect(period.status).toBe("OPEN");
-      expect(period.terms.prior_hwm).toBe("10000.00");
-
-      const below = await post(op, `/v1/advanced/fees/periods/${period.id}/accruals`, { at: minutesFromNow(-60), nav: "9500.00" });
-      expect(below.status, JSON.stringify(below.body)).toBe(200);
-      const belowLine = (below.body as { line: Line }).line;
-      expect(belowLine.fee_base, "nothing is above the high-water mark").toBe("0.00");
-      expect(belowLine.accrual_after).toBe("0.00");
-
-      const above = await post(op, `/v1/advanced/fees/periods/${period.id}/accruals`, { at: minutesFromNow(-30), nav: "11000.00" });
-      expect(above.status, JSON.stringify(above.body)).toBe(200);
-      const aboveLine = (above.body as { line: Line }).line;
-      expect(aboveLine.kind).toBe("ACCRUAL");
-      expect(aboveLine.fee_base).not.toBe("0.00");
-      expect(aboveLine.accrual_after).not.toBe("0.00");
-
-      const read = (await (await page.request.get(`/v1/advanced/fees/periods/${period.id}`)).json()) as Period;
-      expect(read.lines.map((line) => line.kind)).toEqual([belowLine.kind, "ACCRUAL"]);
-
-      await page.goto(`${SECTION}/periods/${period.id}`);
-      await settle(page);
-      await expect(page.getByRole("note", { name: NOTICE, exact: true })).toBeVisible();
-      await expect(page.locator('[data-field="period_status"]')).toContainText("OPEN");
-      await expect(page.locator("[data-line-kind]")).toHaveCount(2);
-      await expect(page.locator('[data-line-kind="ACCRUAL"]')).toHaveCount(1);
-
-      const cancelled = await post(op, `/v1/advanced/fees/periods/${period.id}/cancel`, { reason: "e2e: done" });
-      expect(cancelled.status, JSON.stringify(cancelled.body)).toBe(200);
-      expect((cancelled.body as Period).status).toBe("CANCELLED");
-    } finally {
-      await operator.context.close();
+    const op = await strongOperator(browser);
+    const opened = await post(op, "/v1/advanced/fees/periods", {
+      account_id: own,
+      strategy_ref: strategy,
+      terms_version: "e2e-terms-v1",
+      period_start: minutesFromNow(-120),
+      period_end: minutesFromNow(120),
+      opening_nav: "10000.00",
+      hurdle_annual_bps: 0,
+      fee_rate_bps: 2000,
+    });
+    if (opened.status === 422 && isProblem(opened.body) && opened.body.code === "CAPABILITY_NOT_APPROVED") {
+      return;
     }
+    expect(opened.status, JSON.stringify(opened.body)).toBe(200);
+    const period = opened.body as Period;
+    expect(period.status).toBe("OPEN");
+    expect(period.terms.prior_hwm).toBe("10000.00");
+
+    const below = await post(op, `/v1/advanced/fees/periods/${period.id}/accruals`, { at: minutesFromNow(-60), nav: "9500.00" });
+    expect(below.status, JSON.stringify(below.body)).toBe(200);
+    const belowLine = (below.body as { line: Line }).line;
+    expect(belowLine.fee_base, "nothing is above the high-water mark").toBe("0.00");
+    expect(belowLine.accrual_after).toBe("0.00");
+
+    const above = await post(op, `/v1/advanced/fees/periods/${period.id}/accruals`, { at: minutesFromNow(-30), nav: "11000.00" });
+    expect(above.status, JSON.stringify(above.body)).toBe(200);
+    const aboveLine = (above.body as { line: Line }).line;
+    expect(aboveLine.kind).toBe("ACCRUAL");
+    expect(aboveLine.fee_base).not.toBe("0.00");
+    expect(aboveLine.accrual_after).not.toBe("0.00");
+
+    const read = (await (await page.request.get(`/v1/advanced/fees/periods/${period.id}`)).json()) as Period;
+    expect(read.lines.map((line) => line.kind)).toEqual([belowLine.kind, "ACCRUAL"]);
+
+    await page.goto(`${SECTION}/periods/${period.id}`);
+    await settle(page);
+    await expect(page.getByRole("note", { name: NOTICE, exact: true })).toBeVisible();
+    await expect(page.locator('[data-field="period_status"]')).toContainText("OPEN");
+    await expect(page.locator("[data-line-kind]")).toHaveCount(2);
+    await expect(page.locator('[data-line-kind="ACCRUAL"]')).toHaveCount(1);
+
+    const cancelled = await post(op, `/v1/advanced/fees/periods/${period.id}/cancel`, { reason: "e2e: done" });
+    expect(cancelled.status, JSON.stringify(cancelled.body)).toBe(200);
+    expect((cancelled.body as Period).status).toBe("CANCELLED");
   });
 });

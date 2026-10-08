@@ -28,6 +28,8 @@ import { randomBytes, randomUUID } from "node:crypto";
 
 import { expect, test, type Browser, type BrowserContext, type Page, type Response } from "@playwright/test";
 
+import { signIn } from "./sign-in.ts";
+
 const NOTICE = "Simulated value — sandbox only";
 
 const PAGES: ReadonlyArray<{ readonly path: string; readonly heading: string }> = [
@@ -144,17 +146,24 @@ async function listBooks(page: Page): Promise<BookRow[]> {
   return body.items;
 }
 
-/** Signs a development identity in, in a fresh context, through the real OIDC flow. */
-async function signIn(browser: Browser, identity: string, mfa: boolean): Promise<{ context: BrowserContext; page: Page }> {
-  const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
-  const page = await context.newPage();
-  await page.goto("/v1/auth/login");
-  await expect(page.getByRole("heading", { name: "Choose an identity" })).toBeVisible();
-  const row = page.locator("li", { has: page.locator("code", { hasText: new RegExp(`^${identity}$`) }) });
-  await row.getByRole("link", { name: mfa ? "sign in with MFA" : "sign in", exact: true }).first().click();
-  await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
-  return { context, page };
+/**
+ * The operator session this file's tests share. Signing in is rate limited --
+ * CP_API_RATE_LIMIT_AUTH allows 30 requests a minute from one address by
+ * default, and a sign-in is four of them -- and the suite signs in far more
+ * often than a person would, so the operator signs in once for the file. A
+ * strong sign-in stays recent far longer than this file takes to run.
+ */
+let operatorSession: { context: BrowserContext; page: Page } | undefined;
+
+async function operator(browser: Browser): Promise<Page> {
+  operatorSession ??= await signIn(browser, "admin", true);
+  return operatorSession.page;
 }
+
+test.afterAll(async () => {
+  await operatorSession?.context.close();
+  operatorSession = undefined;
+});
 
 /** A setup command through the API, same-origin, with its own idempotency key. */
 async function setup(page: Page, path: string, body: unknown): Promise<{ readonly status: number; readonly body: unknown }> {
@@ -177,55 +186,50 @@ async function setup(page: Page, path: string, body: unknown): Promise<{ readonl
 async function openABook(page: Page, browser: Browser): Promise<BookRow> {
   const grant = await setup(page, "/advanced/transfers/faucet/grants", { account_id: await accountId(page), amount: "100" });
   expect([201, 429], `the faucet runs in this deployment: ${JSON.stringify(grant.body)}`).toContain(grant.status);
-  const operator = await signIn(browser, "admin", true);
-  let instrument: string;
-  try {
-    const now = Date.now();
-    const created = await setup(operator.page, "/advanced/prediction-markets", {
-      symbol: `E2E-BOOK-${randomBytes(3).toString("hex").toUpperCase()}`,
-      question: "Does the order-book suite place an order on a book an operator opened?",
-      outcomes: ["YES", "NO"],
-      mode: "SANDBOX",
-      open_at: new Date(now - 60_000).toISOString(),
-      close_at: new Date(now + 24 * 60 * 60_000).toISOString(),
-      dispute_window_ms: 0,
-      oracle_source: "e2e",
-      oracle_public_key: "ab".repeat(32),
-    });
-    expect(created.status, `the operator defines a market: ${JSON.stringify(created.body)}`).toBe(201);
-    const market = created.body as {
-      id: string;
-      collateral_asset_id: string;
-      collateral_decimals: number;
-      outcomes: Array<{ instrument_id: string; share_asset_id: string }>;
-    };
-    const opened = await setup(operator.page, `/advanced/prediction-markets/${market.id}/open`, {});
-    expect(opened.status, `the operator opens it: ${JSON.stringify(opened.body)}`).toBe(200);
-    instrument = market.outcomes[0]?.instrument_id ?? "";
-    // Risk Kernel V2 values an order at the share's reference mark and refuses
-    // one it cannot value (RISK_ORACLE_UNAVAILABLE); the operator records it.
-    const mark = await setup(operator.page, "/advanced/ops/marks", {
-      asset_id: market.outcomes[0]?.share_asset_id ?? "",
-      price: "0.5",
-      source: "e2e-order-book",
-    });
-    expect(mark.status, `the operator marks the share: ${JSON.stringify(mark.body)}`).toBe(201);
-    const schedule = (side: string, bps: number): unknown => ({
-      version: `e2e-${side}-${randomBytes(3).toString("hex")}`,
-      quote_asset_id: market.collateral_asset_id,
-      quote_decimals: market.collateral_decimals,
-      percentage_fee_bps: bps,
-    });
-    const book = await setup(operator.page, "/advanced/books", {
-      instrument_id: instrument,
-      mode: "SANDBOX",
-      maker_fee: schedule("maker", 10),
-      taker_fee: schedule("taker", 20),
-    });
-    expect(book.status, `the operator opens the outcome's book: ${JSON.stringify(book.body)}`).toBe(201);
-  } finally {
-    await operator.context.close();
-  }
+  const op = await operator(browser);
+  const now = Date.now();
+  const created = await setup(op, "/advanced/prediction-markets", {
+    symbol: `E2E-BOOK-${randomBytes(3).toString("hex").toUpperCase()}`,
+    question: "Does the order-book suite place an order on a book an operator opened?",
+    outcomes: ["YES", "NO"],
+    mode: "SANDBOX",
+    open_at: new Date(now - 60_000).toISOString(),
+    close_at: new Date(now + 24 * 60 * 60_000).toISOString(),
+    dispute_window_ms: 0,
+    oracle_source: "e2e",
+    oracle_public_key: "ab".repeat(32),
+  });
+  expect(created.status, `the operator defines a market: ${JSON.stringify(created.body)}`).toBe(201);
+  const market = created.body as {
+    id: string;
+    collateral_asset_id: string;
+    collateral_decimals: number;
+    outcomes: Array<{ instrument_id: string; share_asset_id: string }>;
+  };
+  const opened = await setup(op, `/advanced/prediction-markets/${market.id}/open`, {});
+  expect(opened.status, `the operator opens it: ${JSON.stringify(opened.body)}`).toBe(200);
+  const instrument = market.outcomes[0]?.instrument_id ?? "";
+  // Risk Kernel V2 values an order at the share's reference mark and refuses
+  // one it cannot value (RISK_ORACLE_UNAVAILABLE); the operator records it.
+  const mark = await setup(op, "/advanced/ops/marks", {
+    asset_id: market.outcomes[0]?.share_asset_id ?? "",
+    price: "0.5",
+    source: "e2e-order-book",
+  });
+  expect(mark.status, `the operator marks the share: ${JSON.stringify(mark.body)}`).toBe(201);
+  const schedule = (side: string, bps: number): unknown => ({
+    version: `e2e-${side}-${randomBytes(3).toString("hex")}`,
+    quote_asset_id: market.collateral_asset_id,
+    quote_decimals: market.collateral_decimals,
+    percentage_fee_bps: bps,
+  });
+  const book = await setup(op, "/advanced/books", {
+    instrument_id: instrument,
+    mode: "SANDBOX",
+    maker_fee: schedule("maker", 10),
+    taker_fee: schedule("taker", 20),
+  });
+  expect(book.status, `the operator opens the outcome's book: ${JSON.stringify(book.body)}`).toBe(201);
   const listed = (await listBooks(page)).find((row) => row.instrument_id === instrument);
   expect(listed?.status, "the book the operator opened is listed, OPEN").toBe("OPEN");
   return listed as BookRow;

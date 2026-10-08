@@ -28,6 +28,8 @@ import { randomBytes, randomUUID } from "node:crypto";
 
 import { expect, test, type Browser, type BrowserContext, type Page, type Response } from "@playwright/test";
 
+import { signIn } from "./sign-in.ts";
+
 const NOTICE = "Simulated value — sandbox only";
 
 const PAGES: ReadonlyArray<{ readonly path: string; readonly heading: string }> = [
@@ -146,17 +148,24 @@ async function listings(page: Page): Promise<{ readonly items: Listing[]; readon
   return list;
 }
 
-/** Signs a development identity in, in a fresh context, through the real OIDC flow. */
-async function signIn(browser: Browser, identity: string, mfa: boolean): Promise<{ context: BrowserContext; page: Page }> {
-  const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
-  const page = await context.newPage();
-  await page.goto("/v1/auth/login");
-  await expect(page.getByRole("heading", { name: "Choose an identity" })).toBeVisible();
-  const row = page.locator("li", { has: page.locator("code", { hasText: new RegExp(`^${identity}$`) }) });
-  await row.getByRole("link", { name: mfa ? "sign in with MFA" : "sign in", exact: true }).first().click();
-  await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
-  return { context, page };
+/**
+ * The operator session this file's tests share. Signing in is rate limited --
+ * CP_API_RATE_LIMIT_AUTH allows 30 requests a minute from one address by
+ * default, and a sign-in is four of them -- and the suite signs in far more
+ * often than a person would, so the operator signs in once for the file. A
+ * strong sign-in stays recent far longer than this file takes to run.
+ */
+let operatorSession: { context: BrowserContext; page: Page } | undefined;
+
+async function operator(browser: Browser): Promise<Page> {
+  operatorSession ??= await signIn(browser, "admin", true);
+  return operatorSession.page;
 }
+
+test.afterAll(async () => {
+  await operatorSession?.context.close();
+  operatorSession = undefined;
+});
 
 /** A setup command through the API, same-origin, with its own idempotency key. */
 async function setup(page: Page, path: string, body: unknown): Promise<{ readonly status: number; readonly body: unknown }> {
@@ -176,35 +185,31 @@ async function setup(page: Page, path: string, body: unknown): Promise<{ readonl
 async function listAnEquity(page: Page, browser: Browser): Promise<string> {
   const grant = await setup(page, "/advanced/transfers/faucet/grants", { account_id: await accountId(page), amount: "100" });
   expect([201, 429], `the faucet runs in this deployment: ${JSON.stringify(grant.body)}`).toContain(grant.status);
-  const operator = await signIn(browser, "admin", true);
-  try {
-    const symbol = `E2E${randomBytes(2).toString("hex").toUpperCase()}`;
-    const listed = await setup(operator.page, "/advanced/equities/listings", {
-      kind: "EQUITY",
-      symbol,
-      name: `${symbol} end-to-end equity`,
-      exchange_mic: "XNYS",
-      share_decimals: 3,
-      price_scale: 2,
-      tick_size: "1",
-      lot_size: "1",
-      min_quantity: "1000",
-      oracle_max_age_ms: 300_000,
-      oracle_sources: ["e2e-equities"],
-      risk_class: "STANDARD",
-    });
-    expect(listed.status, `the operator lists an equity: ${JSON.stringify(listed.body)}`).toBe(201);
-    const listing = listed.body as { instrument_id: string; share_asset_id: string };
-    const mark = await setup(operator.page, "/advanced/ops/marks", {
-      asset_id: listing.share_asset_id,
-      price: "25.5",
-      source: "e2e-equities",
-    });
-    expect(mark.status, `the operator marks the share: ${JSON.stringify(mark.body)}`).toBe(201);
-    return listing.instrument_id;
-  } finally {
-    await operator.context.close();
-  }
+  const op = await operator(browser);
+  const symbol = `E2E${randomBytes(2).toString("hex").toUpperCase()}`;
+  const listed = await setup(op, "/advanced/equities/listings", {
+    kind: "EQUITY",
+    symbol,
+    name: `${symbol} end-to-end equity`,
+    exchange_mic: "XNYS",
+    share_decimals: 3,
+    price_scale: 2,
+    tick_size: "1",
+    lot_size: "1",
+    min_quantity: "1000",
+    oracle_max_age_ms: 300_000,
+    oracle_sources: ["e2e-equities"],
+    risk_class: "STANDARD",
+  });
+  expect(listed.status, `the operator lists an equity: ${JSON.stringify(listed.body)}`).toBe(201);
+  const listing = listed.body as { instrument_id: string; share_asset_id: string };
+  const mark = await setup(op, "/advanced/ops/marks", {
+    asset_id: listing.share_asset_id,
+    price: "25.5",
+    source: "e2e-equities",
+  });
+  expect(mark.status, `the operator marks the share: ${JSON.stringify(mark.body)}`).toBe(201);
+  return listing.instrument_id;
 }
 
 test.describe("the equities section", () => {
