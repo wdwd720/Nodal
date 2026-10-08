@@ -37,6 +37,13 @@
 //   - Grant a prediction-market outcome share: a share exists only as its
 //     market issues it. Fund refuses it by name (RefusalPredictionShare), and
 //     the ledger refuses any SANDBOX_FUNDING journal on a share (PM008).
+//   - Grant an asset whose supply a controller owns: a platform stable asset
+//     exists only as its issuer mints it against reserve, a bridged twin only
+//     as its bridge releases it against a lock. Fund refuses both by name
+//     (RefusalSupplyControlled, with the controller), and the ledger refuses
+//     any journal of a kind their controllers and customer movements do not
+//     use, and any that creates or destroys a unit outside an issuance
+//     (SU001, SU002, migration 00763).
 //   - Grant beyond the policy cap, or grant twice for one idempotency key.
 //   - Accept an agent or an operator as the requester, or let a customer
 //     fund an account they do not own.

@@ -133,6 +133,10 @@ type World struct {
 	System econ.Actor
 
 	component string
+	// chainSeed is the seed wireChains opened the sandbox chain with; every
+	// other key of the world (the delegated signer, the venues' co-signers)
+	// derives from it through internal/sandboxchain.
+	chainSeed sandboxchain.Seed
 }
 
 // Open wires the world and provisions the sandbox dollar.
@@ -284,7 +288,8 @@ func wire(d *db.DB, o Options) (*World, error) {
 // internal/sandboxchain -- the derivation every binary uses -- so a run is
 // reproducible and the keys are the kind a deployment would have.
 func (w *World) wireChains(ctx context.Context, d *db.DB, component string) error {
-	chain, err := sandboxchain.Open(ctx, d, w.Clock, w.Env, component, sandboxchain.Seed(sha256.Sum256([]byte(component+"-sandbox-chain"))))
+	w.chainSeed = sandboxchain.Seed(sha256.Sum256([]byte(component + "-sandbox-chain")))
+	chain, err := sandboxchain.Open(ctx, d, w.Clock, w.Env, component, w.chainSeed)
 	if err != nil {
 		return fmt.Errorf("sandboxworld: sandbox chain: %w", err)
 	}

@@ -160,7 +160,7 @@ func scenarioStable(ctx context.Context, w *sandboxworld.World, rec *recorder) e
 	if err != nil {
 		return fmt.Errorf("redeem: %w", err)
 	}
-	rec.step("Vera redeems 200 SBX-PUSD: her custodied key burns them on chain, and after finality STABLE_REDEMPTION pays 200 SBX-USD from the reserve",
+	rec.step("Vera redeems 200 SBX-PUSD: Vera's custodied key burns them on chain, and after finality STABLE_REDEMPTION pays 200 SBX-USD from the reserve",
 		"burn_request", burned.Request.ID.String(), "status", string(burned.Request.Status), "journal", ptrString(burned.Request.JournalTransactionID))
 	cash, _ = w.Wallet(ctx, vera, w.USD.ID)
 	held, _ = w.Wallet(ctx, vera, a.AssetID)

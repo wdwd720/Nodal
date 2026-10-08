@@ -60,6 +60,7 @@ var inScope = []string{
 	"docs/threat-model/ADVANCED_THREAT_MODEL.md",
 	"docs/build/ADVANCED_CAPABILITIES_MATRIX.md",
 	"docs/reviews/ADVANCED_SYSTEMS_REVIEW.md",
+	"docs/reviews/SECURITY_RED_TEAM.md",
 }
 
 var (
@@ -86,14 +87,8 @@ func TestDocs_EveryTestTheyNameExists(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read %s: %v", rel, err)
 		}
-		for _, para := range paragraphs(string(body)) {
-			declaresAbsence := absencePhrase.MatchString(para)
-			for _, name := range distinct(refPattern.FindAllStringSubmatch(para, -1)) {
-				if satisfied(name, declared) || declaresAbsence {
-					continue
-				}
-				problems = append(problems, rel+" names "+name+", which is not declared anywhere")
-			}
+		for _, name := range undeclaredCitations(string(body), declared) {
+			problems = append(problems, rel+" names "+name+", which is not declared anywhere")
 		}
 	}
 	sort.Strings(problems)
@@ -103,16 +98,65 @@ func TestDocs_EveryTestTheyNameExists(t *testing.T) {
 	}
 }
 
+// undeclaredCitations returns the test names a document cites that are not
+// declared anywhere, leaving out a name whose unit (units) states its absence.
+func undeclaredCitations(body string, declared map[string]bool) []string {
+	var out []string
+	for _, unit := range units(body) {
+		declaresAbsence := absencePhrase.MatchString(unit)
+		for _, name := range distinct(refPattern.FindAllStringSubmatch(unit, -1)) {
+			if satisfied(name, declared) || declaresAbsence {
+				continue
+			}
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+// An absence statement in one row of a table exempts that row only: a name in
+// another row of the same table still has to exist. Before units split tables
+// into rows, the second row's fiction passed.
+func TestDocs_AnAbsenceStatementCoversOnlyItsOwnTableRow(t *testing.T) {
+	declared := map[string]bool{"TestDeclared": true}
+	body := "| ID | Claim | Tests |\n|---|---|---|\n" +
+		"| A-1 | a finding about a citation | TestNamedButGone, which does not exist |\n" +
+		"| A-2 | a silent fiction | TestNeverWritten |\n" +
+		"| A-3 | a real citation | TestDeclared |\n\n" +
+		"Prose naming TestAlsoGone, which does not exist, is exempt as a paragraph.\n"
+	got := undeclaredCitations(body, declared)
+	require(t, len(got) == 1 && got[0] == "TestNeverWritten",
+		"expected only the silent fiction in row A-2 to be reported, got %v", got)
+}
+
 // absencePhrase matches a paragraph that states, in words, that what it names
 // is missing. Kept deliberately small: each phrase is one a person would write
 // on purpose, not one that appears by accident near a test name.
 var absencePhrase = regexp.MustCompile(`(?i)does not exist|do not exist|no such function|lists as absent|is absent|are absent`)
 
-// paragraphs splits markdown on blank lines. A markdown table row is its own
-// line but not its own paragraph, which is what makes a table cell able to say
-// "which does not exist" about the name in the same cell.
-func paragraphs(body string) []string {
-	return blankLine.Split(body, -1)
+// units splits markdown into the spans an absence statement covers: every
+// table row (a line beginning with "|") on its own, and the rest of each
+// paragraph (text between blank lines) whole. A row can therefore say "which
+// does not exist" about a name in the same row and nowhere else. A table is a
+// single paragraph, so splitting by paragraph alone let one row's statement of
+// absence exempt every name in every row of the table, which is how the
+// traceability matrix's PART 4 rows went unchecked.
+func units(body string) []string {
+	var out []string
+	for _, para := range blankLine.Split(body, -1) {
+		var prose []string
+		for _, line := range strings.Split(para, "\n") {
+			if strings.HasPrefix(strings.TrimSpace(line), "|") {
+				out = append(out, line)
+				continue
+			}
+			prose = append(prose, line)
+		}
+		if len(prose) > 0 {
+			out = append(out, strings.Join(prose, "\n"))
+		}
+	}
+	return out
 }
 
 var blankLine = regexp.MustCompile("\n[ \t]*\n")

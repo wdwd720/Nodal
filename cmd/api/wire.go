@@ -793,10 +793,12 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	strategyAuth := econ.NewAuthorizer(gateChecker, killChecker)
 	strategySandbox := sandboxrt.NewService(clk, strategyAuth, strategyRunner, auditWriter)
 	// The builder is found, not configured: the go command on PATH, made
-	// absolute as sandboxrt.Builder requires. Its builds share one cache in
-	// this user's cache directory (content-addressed, so sharing cannot change
-	// an artifact) so only the first build on a machine is cold. Without a
-	// toolchain, validation answers UNSUPPORTED and records nothing.
+	// absolute as sandboxrt.Builder requires. This user's cache directory
+	// holds only its read-only seed -- the standard library compiled once --
+	// which every build copies into a directory of its own, bounded on disk
+	// (MaxDiskBytes) and removed when the build ends; at most
+	// MaxConcurrentBuilds run at once. Without a toolchain, validation answers
+	// UNSUPPORTED and records nothing.
 	var strategyBuilder marketplace.ArtifactBuilder = httpapi.UnavailableStrategyBuilder{
 		Reason: "no go command was found on PATH when this process started",
 	}
