@@ -44,6 +44,7 @@ import (
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/notification"
 	"github.com/nodal/controlplane/internal/orders"
+	"github.com/nodal/controlplane/internal/predmarket"
 	"github.com/nodal/controlplane/internal/reconciliation"
 	"github.com/nodal/controlplane/internal/risk"
 	"github.com/nodal/controlplane/internal/sandboxfund"
@@ -95,6 +96,11 @@ type World struct {
 	// every stage, each in its own transaction, as the API does.
 	Orders        *orders.Service
 	OrderPipeline *orders.Pipeline
+	// Predictions runs prediction markets; Oracle is the deterministic
+	// sandbox oracle (a signing key derived from the component name) whose
+	// reports alone can resolve them.
+	Predictions *predmarket.Service
+	Oracle      *predmarket.SandboxOracle
 	// Identity is the production identity reader (compliance profiles).
 	Identity compliance.AccountVerification
 
@@ -222,6 +228,20 @@ func wire(d *db.DB, o Options) (*World, error) {
 	if err != nil {
 		return nil, fmt.Errorf("sandboxworld: order pipeline: %w", err)
 	}
+	seed := sha256.Sum256([]byte(o.Component + "-sandbox-oracle"))
+	w.Oracle, err = predmarket.NewSandboxOracle("sandbox-event-board", seed[:])
+	if err != nil {
+		return nil, fmt.Errorf("sandboxworld: sandbox oracle: %w", err)
+	}
+	w.Predictions, err = predmarket.NewService(predmarket.Config{
+		Clock: clk, Intents: w.Intents, Effects: w.Effects, Authorizer: w.Authorizer, Registry: w.Registry,
+		KillSwitches: kills, Ledger: led, Capital: w.Capital, Risk: w.Risk, RiskPolicy: risk.DefaultAdvancedPolicy(),
+		Router: router, Instruments: w.Instruments, Assets: w.Assets,
+		Reconciliation: reconciliation.NewRepository(clk, out, aw), Audit: aw, Oracle: w.Oracle,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("sandboxworld: prediction markets: %w", err)
+	}
 	return w, nil
 }
 
@@ -273,6 +293,19 @@ func (w *World) Operator(role security.Role) security.Principal {
 		SubjectID: "synthetic-operator-" + string(role), ActorType: security.ActorOperator,
 		Roles: []security.Role{role}, AuthTime: w.Clock.Now(), AMR: []string{"pwd", "mfa"},
 	}
+}
+
+// OperatorActor creates a synthetic operator -- a user row with a verified
+// email address, as an operator of a deployment has -- and returns it as the
+// actor operator-only actions name. Distinct labels are distinct people, which
+// is what dual control compares.
+func (w *World) OperatorActor(ctx context.Context, label string) (econ.Actor, error) {
+	email := sha256.Sum256([]byte("synthetic-operator-" + label + "@sandbox.invalid"))
+	u, err := accounts.NewRepository().CreateUser(ctx, w.DB, w.component, "synthetic-operator-"+label+"-"+uuid.NewString(), email[:])
+	if err != nil {
+		return econ.Actor{}, fmt.Errorf("sandboxworld: create operator: %w", err)
+	}
+	return econ.Actor{Type: security.ActorOperator, ID: u.ID.String()}, nil
 }
 
 // Mark records a sandbox price observation for asset, quoted in the sandbox
