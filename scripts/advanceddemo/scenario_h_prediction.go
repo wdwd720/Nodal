@@ -181,7 +181,7 @@ func scenarioPrediction(ctx context.Context, w *sandboxworld.World, rec *recorde
 	if err != nil {
 		return err
 	}
-	rec.step("Paula sells her 10 NO shares at 0.35 on the book; Rosa's crossing buy takes them for 3.50 SBX-USD",
+	rec.step("Paula sells 10 NO shares at 0.35 on the book; Rosa's crossing buy takes them for 3.50 SBX-USD",
 		"trade_seq", fmt.Sprint(t1.TradeSeq), "journal", t1.JournalTransactionID.String(), "effect", t1.EffectID.String())
 	t2, err := trade(quinn, paula, yes, "0.62", 5, "demo-h-yes")
 	if err != nil {

@@ -88,7 +88,7 @@ func scenarioBridge(ctx context.Context, w *sandboxworld.World, rec *recorder) e
 		return fmt.Errorf("bridge: %w", err)
 	}
 	leg := res.Leg
-	rec.step("Wes bridges 100 SBX-PUSD: his custodied key locks them in the source escrow, the lock finalizes, the attester signs the release and the twin is minted on sbx-ethereum",
+	rec.step("Wes bridges 100 SBX-PUSD: Wes's custodied key locks them in the source escrow, the lock finalizes, the attester signs the release and the twin is minted on sbx-ethereum",
 		"leg", leg.ID.String(), "status", string(leg.Status), "lock_tx", string(leg.LockTxID),
 		"source_effect", leg.SourceEffectID.String(), "destination_effect", leg.DestinationEffectID.String())
 	rec.check("the leg ran to RECONCILED", leg.Status == bridge.StateReconciled, "status %s %s", leg.Status, leg.FailureCode)
@@ -121,7 +121,7 @@ func scenarioBridge(ctx context.Context, w *sandboxworld.World, rec *recorder) e
 	if err != nil {
 		return err
 	}
-	rec.check("the ledger moved 100 from Wes's source wallet into the bridge and 100 twins into his destination wallet",
+	rec.check("the ledger moved 100 from Wes's source wallet into the bridge and 100 twins into Wes's destination wallet",
 		src.Equal(usd(200)) && dst.Equal(usd(100)) && locked.Equal(usd(100)) && outstanding.Equal(usd(100)),
 		"source wallet %s, destination wallet %s, locked %s, outstanding %s", show(src), show(dst), show(locked), show(outstanding))
 
