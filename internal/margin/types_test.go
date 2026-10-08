@@ -34,6 +34,35 @@ func TestTransitions_TablesAreStrict(t *testing.T) {
 	assert.False(t, CanTransitionCall(CallLiquidated, CallMet))
 }
 
+// TestTransitions_ManualReviewLeavesOnlyThroughAResolution (F1): MANUAL_REVIEW
+// is not a dead end. It leaves for IN_PROGRESS (resumed) or BANKRUPT
+// (declared) and for nothing else, and every exit needs a resolution;
+// automation never moves it, and it carries closed_at like a finished case.
+func TestTransitions_ManualReviewLeavesOnlyThroughAResolution(t *testing.T) {
+	for _, to := range AllCaseStatuses() {
+		want := to == CaseInProgress || to == CaseBankrupt
+		assert.Equal(t, want, CanTransitionCase(CaseManualReview, to), "MANUAL_REVIEW -> %s", to)
+	}
+	for _, s := range AllCaseStatuses() {
+		assert.Equal(t, s == CaseManualReview, ResolutionRequired(s), "%s", s)
+	}
+	assert.False(t, CaseManualReview.Terminal())
+	assert.False(t, CaseManualReview.Automated())
+	assert.True(t, CaseManualReview.Closed())
+	for _, s := range []CaseStatus{CaseAwaitingPrice, CaseAwaitingVenue, CaseInProgress} {
+		assert.True(t, s.Automated())
+		assert.False(t, s.Closed())
+	}
+	for _, o := range AllResolutionOutcomes() {
+		assert.True(t, CanTransitionCase(CaseManualReview, o.CaseStatus()), "%s", o)
+	}
+	assert.Equal(t, CaseInProgress, ResolveResume.CaseStatus())
+	assert.Equal(t, CaseBankrupt, ResolveDeclareBankrupt.CaseStatus())
+	assert.True(t, ActionSell.Trading())
+	assert.False(t, ActionApplyCollateral.Trading(), "applying collateral is terminal accounting")
+	assert.False(t, ActionSweepWallet.Trading(), "sweeping the wallet is terminal accounting")
+}
+
 func TestStatuses_RiskPermissions(t *testing.T) {
 	assert.True(t, StatusNormal.AllowsNewRisk())
 	assert.True(t, StatusWarning.AllowsNewRisk())

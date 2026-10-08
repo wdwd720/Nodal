@@ -14,10 +14,12 @@ import (
 // LiquidateRequest asks for one step of an account's liquidation.
 type LiquidateRequest struct {
 	AccountID accounts.AccountID
-	// ExpectedStep is the step the caller means to execute (1 for the
-	// first). When the case has already executed it, the recorded step is
-	// returned and nothing is posted: a replayed step is exactly once. Zero
-	// means "whatever step is next".
+	// ExpectedStep is the step of the account's OPEN case the caller means to
+	// execute (1 for the first). When that case has already executed it, the
+	// recorded step is returned and nothing is posted: a replayed step is
+	// exactly once. A finished case's steps are history, never replayed: with
+	// no case open, a new shortfall opens a new case whose step 1 is new.
+	// Zero means "whatever step is next".
 	ExpectedStep int
 }
 
@@ -45,14 +47,16 @@ type LiquidationResult struct {
 //     exact;
 //   - PlanLiquidation decides. On a stale or missing mark the case waits in
 //     AWAITING_PRICE and nothing is posted; with no venue it waits in
-//     AWAITING_VENUE; with its step budget spent it goes to MANUAL_REVIEW;
-//     with nothing left and liabilities remaining it is BANKRUPT with the
-//     deficit recorded;
+//     AWAITING_VENUE; with its trading budget spent and something left to
+//     sell it goes to MANUAL_REVIEW, where only two operators' resolution
+//     moves it again; with nothing left to sell, apply or sweep and
+//     liabilities remaining it is BANKRUPT with the deficit recorded;
 //   - otherwise the first order executes: a reduce-only paper sale posted as
-//     LIQUIDATION (the fee goes to the insurance fund), MARGIN_REPAY of the
-//     net proceeds, and MARGIN_COLLATERAL_MOVE of any excess -- or, with
-//     nothing risky left, numeraire collateral applied to the loans. Each
-//     posting is its own exactly-once effect keyed on the case and step.
+//     LIQUIDATION (the fee is platform fee revenue), MARGIN_REPAY of the net
+//     proceeds, and MARGIN_COLLATERAL_MOVE of any excess -- or, with nothing
+//     risky left, numeraire collateral applied to the loans, or the
+//     customer's free wallet cash swept into them. Each posting is its own
+//     exactly-once effect keyed on the case and step.
 //
 // Liquidation reduces risk: a kill switch never stops it.
 func (s *Service) Liquidate(ctx context.Context, tx pgx.Tx, r LiquidateRequest) (LiquidationResult, error) {
@@ -68,34 +72,35 @@ func (s *Service) Liquidate(ctx context.Context, tx pgx.Tx, r LiquidateRequest) 
 	if err != nil {
 		return LiquidationResult{}, err
 	}
-	if found && r.ExpectedStep > 0 && c.StepsExecuted >= r.ExpectedStep {
+	// A step number names a step of the account's open case and of no other.
+	open := found && !c.Status.Terminal()
+	if open && r.ExpectedStep > 0 && c.StepsExecuted >= r.ExpectedStep {
 		step, err := s.st.step(ctx, tx, c.ID, r.ExpectedStep)
 		if err != nil {
 			return LiquidationResult{}, err
 		}
 		cc := c
-		decision := DecisionSell
-		if step.Action == ActionApplyCollateral {
-			decision = DecisionApplyCollateral
-		}
-		return LiquidationResult{MarginAccountID: a.ID, Eligible: true, Case: &cc, AccountStatus: a.Status, Decision: decision,
-			Reason: "step already executed", Step: &step, Replayed: true}, nil
+		return LiquidationResult{MarginAccountID: a.ID, Eligible: true, Case: &cc, AccountStatus: a.Status,
+			Decision: step.Action.decision(), Reason: "step already executed", Step: &step, Replayed: true}, nil
 	}
-	if err := s.authorize(ctx, tx, a.Mode, true, gates.Margin); err != nil {
-		return LiquidationResult{}, err
-	}
-	pool, fund, err := s.accountFacilities(ctx, tx, a)
-	if err != nil {
-		return LiquidationResult{}, err
-	}
-	now := s.now()
-	active := found && !c.Status.Terminal()
-	if found && c.Status == CaseManualReview {
+	if open && c.Status == CaseManualReview {
+		// A person holds the case; automation never moves it.
 		cc := c
 		return LiquidationResult{MarginAccountID: a.ID, Eligible: true, Case: &cc, AccountStatus: a.Status,
 			Decision: DecisionManualReview, Reason: c.LastReason}, nil
 	}
-	if !active {
+	if err := s.authorize(ctx, tx, a.Mode, true, gates.Margin); err != nil {
+		return LiquidationResult{}, err
+	}
+	pool, _, err := s.accountFacilities(ctx, tx, a)
+	if err != nil {
+		return LiquidationResult{}, err
+	}
+	if err := s.lockFacilities(ctx, tx, a, poolBooks); err != nil {
+		return LiquidationResult{}, err
+	}
+	now := s.now()
+	if !open {
 		switch a.Status {
 		case StatusNormal, StatusWarning, StatusMarginCall:
 		default:
@@ -170,8 +175,8 @@ func (s *Service) Liquidate(ctx context.Context, tx pgx.Tx, r LiquidateRequest) 
 		if err := s.st.setAccountStatus(ctx, tx, &a, StatusBankrupt, s.actor, "liquidated to a deficit", plan.Before.Hash, now); err != nil {
 			return LiquidationResult{}, err
 		}
-	case DecisionSell, DecisionSellAll, DecisionApplyCollateral:
-		step, err := s.executeStep(ctx, tx, a, &c, pool, fund, state, lots, plan, now)
+	case DecisionSell, DecisionSellAll, DecisionApplyCollateral, DecisionSweepWallet:
+		step, err := s.executeStep(ctx, tx, a, &c, pool, state, lots, plan, now)
 		if err != nil {
 			return LiquidationResult{}, err
 		}
