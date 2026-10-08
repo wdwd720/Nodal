@@ -71,5 +71,5 @@ Nothing in this table can enable live money by itself: a capability gate needs a
 ## Post-incident
 
 - Archive the rotation log (who, when, which stores), provider usage export, gitleaks output and the log search results.
-- Security review: THREAT_MODEL.md §3.8 rows; implement the `provider_credential_change` emitter (R-130-1); connect the git remote so the `security-scans` job runs (SB-004).
-- Update `docs/build/BLOCKERS.md` (EB-012 for the `aws-sm://` resolver) and `docs/build/REQUIREMENTS_TRACEABILITY.md` R-099-1, R-104-1.
+- Security review: THREAT_MODEL.md §3.8 rows; implement the `provider_credential_change` emitter (R-130-1); record whether the CI `security-scans` job's gitleaks scan caught the exposure (it runs, since SB-004 is closed).
+- Update `docs/build/BLOCKERS.md` (B-12, EB-012's successor, for the `aws-sm://` resolver; the EB- rows under "Earlier ids" are a frozen record and are not updated) and `docs/build/REQUIREMENTS_TRACEABILITY.md` R-099-1, R-104-1.

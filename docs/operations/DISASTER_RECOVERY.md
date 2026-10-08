@@ -1,6 +1,6 @@
 # DISASTER RECOVERY
 
-Status: design and local evidence only (2026-09-06). No production or staging environment exists (BLOCKERS EB-012), so every RTO/RPO figure below is a **design objective**, not a measurement (PART 205). Measured values are recorded here only after a staging drill.
+Status: design and local evidence only (2026-09-06). No production or staging environment exists (BLOCKERS EB-012), so every RTO/RPO figure below is a **design objective**, not a measurement (PART 205). **Superseded 2026-09-10 for staging:** `PROVIDER_ACTIVATION_CHECKPOINT.md` records a `STAGING` environment, a rehearsal of the $0 launch tier on Render and Neon rather than the AWS architecture this document describes; no drill has been recorded against it, so the figures below are still design objectives. Measured values are recorded here only after a staging drill.
 
 ## 1. Failure model and objectives
 

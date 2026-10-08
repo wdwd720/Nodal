@@ -672,6 +672,13 @@ So Stage 22 is not blocked on work. It is blocked on eight external items that
 are already enumerated in `BLOCKERS.md`, and writing more adapter code against
 guessed endpoints would make the blockers less visible rather than more.
 
+**Correction, 2026-10-08.** When this was written `BLOCKERS.md` no longer
+listed EB- ids; commit `088f8e6` had dropped them the same day, so EB-003,
+EB-005, EB-010 and EB-011 were not enumerated there as live blockers. Its
+"Earlier ids" section now records where each stands: only EB-005 has a current
+entry, and only in part (B-18, for `AGENT_SIGNING` and `AGENT_WITHDRAWALS`);
+none has been re-assessed since 2026-09-06.
+
 ### Stage 21 finished, and the two P1s it found
 
 The committed write path could not be load tested because MARKETPLACE is high
@@ -1752,7 +1759,7 @@ Platform status: **NOT_READY**. Capital authority: **DISABLED**.
 | security | `make security` (`test/security`: authority-boundary import rules, closed agent permission set, PROD refuses fakes/seed/debug auth) | green 2026-09-06; API-level IDOR/CSRF/SSRF/webhook-forgery cases join once `cmd/api` exists |
 | load | `make load` (`test/load/*.js`, k6) | scripts valid (`k6 inspect`); **unmeasured** — no API binary yet |
 | e2e / chaos tiers | `make e2e`, `make chaos` | pending: directories not yet created (Stages 7, 14, 18) |
-| CI | `.github/workflows/ci.yml` | authored; never executed (no remote, SB-004) |
+| CI | `.github/workflows/ci.yml` | authored; never executed (no remote, SB-004). **Superseded 2026-09-06:** SB-004 is resolved and CI has run since, first fully green in run 34062522222 (`BLOCKERS.md`, Earlier ids) |
 
 ## 13. Session log
 

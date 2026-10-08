@@ -288,14 +288,30 @@ observability and the GitHub OIDC deploy role.
 not root — the configured identity is `arn:aws:iam::049286562577:root`, and running Terraform as
 root is not something to do once, let alone routinely. The state bucket and its KMS key, which are
 bootstrapped by hand because Terraform cannot create the bucket that holds its own state. A
-hostname and an ACM certificate. A GitHub repository, which does not exist and which the deploy
-role's OIDC trust names.
+hostname and an ACM certificate. The deploy role's GitHub OIDC trust, which names the repository.
+(This entry said the GitHub repository did not exist. It already did: `origin` is
+`https://github.com/wdwd720/Nodal.git`, pushed since 2026-09-06 — SB-004 under "Earlier ids" below —
+and it answered `git ls-remote` on 2026-10-08.)
 
 **Evidence required to close.** A named IAM role with a Terraform policy, a bootstrapped state
 bucket, and `backend.hcl` written from the example.
 
 **Capabilities currently disabled.** None directly. Everything, indirectly: nothing can serve a
 webhook, so no Credit purchase can complete outside a local run.
+
+**What changed on 2026-09-09 and 2026-09-10.** By the two records below, a deployed environment
+exists outside AWS, and most of what this entry called missing on AWS exists too.
+`docs/operations/PATH_B_STATUS.md` (2026-09-09) records a non-root deployment identity,
+`nodal-terraform`, assumed with MFA; the state bucket `nodal-terraform-state-049286562577-us-east-2`;
+an initialised backend, with `terraform plan` succeeding against real credentials (283 resources to
+add); and an ACM certificate issued for `api-nodal.actorvia.xyz`. No apply is recorded; §4 and §5 of
+that file list what one still waits on: a sizing decision, a TLS OTLP collector, a paging endpoint
+and an alert address. `docs/operations/PROVIDER_ACTIVATION_CHECKPOINT.md` (2026-09-10) records a
+`STAGING` deployment on Render, the $0 launch tier of `docs/operations/LAUNCH_TIER.md`, serving that
+hostname against Stripe's sandbox with its webhook endpoint verified. So on that date a webhook
+could be served, and what stopped a Credit purchase outside a local run was the `CREDIT_PURCHASE`
+gate, which had no row in that deployment, and, for real money, B-04 and B-09. Neither record has
+been re-checked against AWS or Render since.
 
 ---
 
@@ -332,6 +348,16 @@ Secrets Manager. The tenant's discovery document should be checked first: `oidc.
 issuer that publishes a PKCE method list without S256, or an `acr_values_supported` list sharing
 nothing with the configured step-up value.
 
+**What changed on 2026-09-09 and 2026-09-10.** Auth0 was replaced the same day: its free plan does
+not include MFA, and an issuer that stops emitting a strong `amr` when the trial ends makes
+`CREDIT_PURCHASE` impossible to activate (`docs/operations/LAUNCH_TIER.md` §4). Zitadel was chosen
+instead. `docs/operations/PROVIDER_ACTIVATION_CHECKPOINT.md` (2026-09-10) records the `STAGING`
+deployment configured against the Zitadel issuer `https://nodal-az1hxe.us1.zitadel.cloud`, and
+verifies that `/v1/auth/login` redirects to it with `code_challenge_method=S256`, a state, a nonce
+and `response_type=code`. The issuer and client id are in `render.yaml`; the client secret is a
+Render secret, not a Secrets Manager entry. No completed sign-in is recorded, so requirements 3, 5
+and 9 of `IDENTITY_PROVIDER.md`, which only a real login proves, are not verified.
+
 ---
 
 ## B-14 — Hostname and TLS certificate · BLOCKED_EXTERNAL
@@ -351,6 +377,14 @@ the Vercel site and the existing Stripe webhook are unaffected. See
 **What it blocks.** The Stripe webhook endpoint, which is
 `https://<hostname>/v1/webhooks/stripe_credit`, and with it every Credit purchase that is not run
 locally.
+
+**What changed on 2026-09-09 and 2026-09-10.** Both exist. The recommended name was taken: ACM
+issued a certificate for `api-nodal.actorvia.xyz` on 2026-09-09, kept for the AWS load balancer
+(`docs/operations/DNS_RECORDS.md`), and on 2026-09-10 the name served the `STAGING` deployment on
+Render with a valid certificate, TLS 1.2 or better and HSTS
+(`docs/operations/PROVIDER_ACTIVATION_CHECKPOINT.md` item 9). Stripe's sandbox webhook endpoint
+delivers to `https://api-nodal.actorvia.xyz/v1/webhooks/stripe_credit` (item 1), so this entry no
+longer blocks the webhook; B-12 says what stopped a Credit purchase there instead.
 
 ---
 

@@ -157,7 +157,7 @@ Last updated: 2026-09-08
 ## D-026 — Signing replay returns stored signed bytes; the provider is called once per attempt
 
 - `signing_decisions` is immutable, so a replayed `Sign` for the same attempt cannot re-sign; migration 00616 adds `signing_results` holding the signed transaction bytes per decision. Concurrent replays serialize on the attempt row lock; exactly one provider call is proven by the integration test. `SignTransaction` is treated as UNKNOWN_EFFECT_WRITE regardless of the provider's idempotency-key claim.
-- Token program instruction layouts are hand-written and checked against SPL specification vectors because `solana-go/programs/token` does not build with the pinned module set; the Jupiter v6 layout is UNVERIFIED (SB-007).
+- Token program instruction layouts are hand-written and checked against SPL specification vectors because `solana-go/programs/token` does not build with the pinned module set; the Jupiter v6 layout is UNVERIFIED (SB-007). **Superseded 2026-09-07:** the Jupiter v6 layout is verified against the published IDL (committed as `internal/signing/inspect/testdata/jupiter_v6_idl.json` and checked by `jupiter_idl_test.go`); confirming that the deployed program matches the IDL is still open (`BLOCKERS.md`, Earlier ids).
 
 ## D-032 — Every producer's outbox topic must be in the registry, proven by parsing the source
 
