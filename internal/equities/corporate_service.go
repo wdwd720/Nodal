@@ -98,10 +98,10 @@ func (c *CorporateActionSpec) validate(cal *Calendar, currentSymbol string) erro
 		p = append(p, "a split or reverse split, and only one, has a ratio")
 	}
 	if (c.Type == ActionCashDividend) != (c.CashPerShare != nil) {
-		p = append(p, "a cash dividend, and only one, has a cash amount per share")
+		p = append(p, "a dividend, and only one, has an amount per share")
 	}
 	if c.CashInLieuPrice != nil && !split {
-		p = append(p, "only a split pays cash in lieu")
+		p = append(p, "only a split pays for fractional shares")
 	}
 	if (c.Type == ActionSymbolChange) != (c.NewSymbol != "") {
 		p = append(p, "a symbol change, and only one, has a new symbol")
@@ -119,11 +119,11 @@ func (c *CorporateActionSpec) validate(cal *Calendar, currentSymbol string) erro
 				return err
 			}
 			if c.Ratio.Denominator > 1 && c.CashInLieuPrice == nil {
-				p = append(p, "this ratio can leave fractional shares, so it needs a cash-in-lieu price")
+				p = append(p, "this ratio can leave fractional shares, so it needs a fractional-share price")
 			}
 		}
 		if c.CashInLieuPrice != nil {
-			if err := c.CashInLieuPrice.validate("a cash-in-lieu price"); err != nil {
+			if err := c.CashInLieuPrice.validate("a fractional-share price"); err != nil {
 				return err
 			}
 		}
