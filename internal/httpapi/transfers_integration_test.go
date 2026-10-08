@@ -77,7 +77,7 @@ func TestIntegration_TransfersThroughHTTPOverTheRealServices(t *testing.T) {
 	require.NoError(t, err)
 	faucet, err := sandboxfund.New(sandboxfund.Deps{
 		Clock: clk, Ledger: led, Effects: econ.NewEffectStore(clk, outbox, aw),
-		Environment: config.EnvTest, Policy: sandboxfund.DefaultPolicy(),
+		Environment: config.EnvTest, Policy: sandboxfund.DefaultPolicy(), KillSwitches: kills,
 	})
 	require.NoError(t, err)
 	ports, err := Wire(WireDeps{DB: d, Clock: clk, Env: config.EnvTest, Advanced: AdvancedDeps{

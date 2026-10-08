@@ -367,11 +367,13 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	}
 	// The faucet always runs in LOCAL, TEST and DEV. No configuration setting
 	// enables it in STAGING or PROD, so it stays off there: handing play money
-	// to the users of a deployed system is a decision someone has to own.
+	// to the users of a deployed system is a decision someone has to own. The
+	// global new-risk kill switch stops it too: minting play money is new value.
 	const sandboxFaucetEnabled = false
 	sandboxFaucet, err := sandboxfund.New(sandboxfund.Deps{
 		Clock: clk, Ledger: ledgerSvc, Effects: econ.NewEffectStore(clk, outbox, auditWriter),
 		Environment: cfg.Env, Enabled: sandboxFaucetEnabled, Policy: sandboxfund.DefaultPolicy(),
+		KillSwitches: killChecker,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("sandbox faucet: %w", err)
