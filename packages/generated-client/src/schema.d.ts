@@ -8351,8 +8351,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Paper-follow one of your installs on one market snapshot
-         * @description The installed version runs in the sandbox on the snapshot you supply. Every proposal its manifest permits becomes an economic intent (PAPER, STRATEGY_MARKETPLACE) that faces routing and Risk Kernel V2 with sections read from the database, never from the snapshot; only an ALLOW reaches paper execution, exactly once. The snapshot must be no older than five minutes and not in the future, and the manifest's execution frequency bounds how often an install runs. The same snapshot time with the same snapshot returns the recorded run; with a different snapshot it is INVALID_IDEMPOTENCY_REUSE. Equity and turnover come from the snapshot you supplied and are paper figures.
+         * Paper-follow one of your installs, now
+         * @description The installed version runs in the sandbox on an input the service builds itself: the install's paper book (its paper capital moved by its own earlier fills) and, for every instrument the version names, the freshest reference price in the price store no older than five minutes with its recent history. No snapshot is accepted from the caller. Every proposal the manifest permits -- valued at the reference price, never at a limit price the strategy chose -- becomes an economic intent (PAPER, STRATEGY_MARKETPLACE) that faces routing and Risk Kernel V2, whose balance section is the paper book's uninvested balance; only an ALLOW reaches paper execution, exactly once, and an executed dispatch is a fill of the paper book at its reference price. The manifest's execution frequency bounds how often an install runs, and the run is charged to the account's sandbox budget. A book holding an instrument with no fresh reference price cannot be valued and is refused (STALE_MARKET_DATA). The book's uninvested balance (paper_cash), equity and turnover are paper figures, before the venue's disclosed charges.
          */
         post: {
             parameters: {
@@ -8368,7 +8368,7 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/json": components["schemas"]["StrategyFollowRequest"];
+                    "application/json": components["schemas"]["StrategyAccountRequest"];
                 };
             };
             responses: {
@@ -8413,7 +8413,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Compute and record the paper performance of one of your installs from its follow history */
+        /**
+         * Compute and record the paper performance of one of your installs from its follow history
+         * @description Computed exactly from the follow runs valued from the install's paper book (runs recorded before the book existed are not counted); the database refuses a snapshot over anything else. VALIDATION_FAILED until one such run exists.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -8604,7 +8607,7 @@ export interface paths {
         };
         /**
          * One listing with its versions, validations, reviews, provenance, evaluations and paper performance
-         * @description The creator's account and operators see every version; anyone else sees only the public versions, and a listing with none is NOT_FOUND. Evaluations and performance snapshots are simulated and PAPER results: computed from snapshots supplied by whoever ran them, never from real capital.
+         * @description The creator's account and operators see every version; anyone else sees only the public versions, and a listing with none is NOT_FOUND. Evaluations are simulated results over the snapshot set their runner supplied. Performance snapshots are PAPER results computed from each install's paper book -- its paper capital moved by its own fills, valued at reference prices the service read from the price store -- never from a caller's figures, and never a record of real capital.
          */
         get: {
             parameters: {
@@ -9094,7 +9097,7 @@ export interface paths {
         put?: never;
         /**
          * Run one of your built versions against a fixed set of snapshots and record the evaluation
-         * @description A simulation proposes nothing: every run's proposals are counted and kept in the run log, never submitted. At most 20 snapshots per request; the evaluation is reproducible from the dataset version and digests.
+         * @description A simulation proposes nothing: every run's proposals are counted and kept in the run log, never submitted. At most 20 snapshots per request; the evaluation is reproducible from the dataset version and digests. Every run is charged to the creator's account under the sandbox budget: a request beyond the runs or CPU one call may be granted, or beyond what the account's window has left, is refused before anything runs (429 RATE_LIMITED, the budget's reason in the problem's fields, and a Retry-After when the window will have room).
          */
         post: {
             parameters: {
@@ -9137,6 +9140,7 @@ export interface paths {
                 404: components["responses"]["Problem"];
                 409: components["responses"]["Problem"];
                 422: components["responses"]["Problem"];
+                429: components["responses"]["Problem"];
             };
         };
         delete?: never;
@@ -9205,7 +9209,7 @@ export interface paths {
         put?: never;
         /**
          * Scan and build a SUBMITTED version (operator; requires step-up)
-         * @description A clean scan and a successful build record the artifact and move the version to VALIDATED; a refused scan, a compile error or a build timeout moves it to REJECTED with the reason. The build holds the version's lock and is bounded by the request's time limit: one that does not finish in time records nothing and leaves the version SUBMITTED. A deployment with no Go toolchain answers UNSUPPORTED.
+         * @description The version is claimed in one transaction, built between transactions and its outcome recorded in another; no transaction is open while it builds. A clean scan and a successful build record the artifact and move the version to VALIDATED; a refused scan, a compile error or a build past one of the builder's bounds -- its time, the size of the module it produces, the memory its compiler and linker hold -- moves it to REJECTED with the reason, and the compiler's bounded output is kept with the validation for the creator to read. A version another build holds a live claim on answers CONFLICT and nothing is built twice; a build that could not run at all (a deployment with no Go toolchain answers UNSUPPORTED) records nothing and frees the version at once.
          */
         post: {
             parameters: {
@@ -17999,7 +18003,7 @@ export interface components {
             account_id: components["schemas"]["UUID"];
         };
         /** @enum {string} */
-        StrategyBuildFailure: "SCAN_REJECTED" | "COMPILE_FAILED" | "BUILD_TIMEOUT";
+        StrategyBuildFailure: "SCAN_REJECTED" | "COMPILE_FAILED" | "BUILD_TIMEOUT" | "BUILD_OUTPUT_LIMIT" | "BUILD_MEMORY_LIMIT";
         /**
          * @description An exact decimal string with as many fraction digits as its scale (a price or an amount in simulated dollars). Never a JSON number, never rounded.
          * @example 150.25
@@ -18054,22 +18058,29 @@ export interface components {
             external_ref?: string;
             intent_id: components["schemas"]["UUID"];
             kind: string;
+            /** @description The proposal's quantity at reference_price -- what the manifest's cap and Risk Kernel V2 judged. */
             notional: components["schemas"]["StrategyDecimal"];
             outcome: components["schemas"]["StrategyFollowOutcome"];
             proposal_seq: number;
+            /** @description The price the service read itself that the notional was computed at, never the strategy's limit price. */
+            reference_price?: components["schemas"]["StrategyDecimal"];
             risk_decision?: components["schemas"]["AdvancedRiskDecision"];
+        };
+        /** @description A reference price a follow run valued its paper book and its proposals at, by the price store's observation. */
+        StrategyFollowMark: {
+            instrument_id: components["schemas"]["UUID"];
+            mark: components["schemas"]["StrategyDecimal"];
+            observed_at: components["schemas"]["Timestamp"];
+            price_id: components["schemas"]["UUID"];
         };
         /** @enum {string} */
         StrategyFollowOutcome: "DISPATCHED" | "RISK_REJECTED" | "ROUTE_REFUSED" | "DISPATCH_FAILED" | "DISPATCH_UNKNOWN";
-        StrategyFollowRequest: {
-            account_id: components["schemas"]["UUID"];
-            snapshot: components["schemas"]["StrategySnapshot"];
-        };
         StrategyFollowRun: {
             accepted_count: number;
             account_id: components["schemas"]["UUID"];
             as_of: components["schemas"]["Timestamp"];
             created_at: components["schemas"]["Timestamp"];
+            /** @description The paper book -- its uninvested balance plus every position at its reference price -- when the run started. */
             equity: components["schemas"]["StrategyDecimal"];
             evidence_ref: string;
             evidence_sha256: string;
@@ -18081,13 +18092,17 @@ export interface components {
             intents_failed: number;
             intents_risk_rejected: number;
             intents_submitted: number;
+            marks: components["schemas"]["StrategyFollowMark"][];
+            /** @description The paper book's uninvested balance when the run started. Absent for a run recorded before paper books, whose equity came from a caller's snapshot and counts for no performance. */
+            paper_cash?: components["schemas"]["StrategyDecimal"];
             proposals_count: number;
-            /** @description True when this snapshot time was already followed: nothing ran again */
+            /** @description True when the install was already followed at this instant: nothing ran again */
             replayed?: boolean;
             run_digest: string;
             sandbox_run_id: components["schemas"]["UUID"];
             termination: components["schemas"]["StrategyRunTermination"];
             trigger: components["schemas"]["StrategyFollowTrigger"];
+            /** @description The exact notional the run dispatched. */
             turnover: components["schemas"]["StrategyDecimal"];
             value_domain: components["schemas"]["ValueDomainSimulated"];
             version_id: components["schemas"]["UUID"];
@@ -18120,6 +18135,8 @@ export interface components {
             listing_id: components["schemas"]["UUID"];
             listing_title: string;
             mode: components["schemas"]["AdvancedMode"];
+            /** @description What the install's paper book started with, in simulated dollars; it never changes. */
+            paper_capital: components["schemas"]["StrategyDecimal"];
             status: components["schemas"]["StrategyInstallStatus"];
             strategy_ref: string;
             value_domain: components["schemas"]["ValueDomainSimulated"];
@@ -18202,7 +18219,7 @@ export interface components {
             reason: string;
             to: components["schemas"]["StrategyModeration"];
         };
-        /** @description Paper performance computed exactly from a follow history, in basis points. A paper result from caller-supplied snapshots, never a record of money earned or lost. */
+        /** @description Paper performance computed exactly from an install's paper book, in basis points: each follow run's equity is the install's paper capital moved by its own fills, valued at reference prices the service read, before the venue's disclosed charges. A paper result, never a record of money earned or lost. */
         StrategyPerformanceSnapshot: {
             computed_at: components["schemas"]["Timestamp"];
             first_as_of: components["schemas"]["Timestamp"];
@@ -18334,6 +18351,8 @@ export interface components {
         };
         StrategyValidation: {
             artifact_digest?: string;
+            /** @description What the compiler said, at most 64 KiB, with the build directory replaced by $BUILD: why a COMPILE_FAILED version did not build. Shown to the creator's account and to operators only. */
+            build_log?: string;
             failure_reason?: components["schemas"]["StrategyBuildFailure"];
             outcome: components["schemas"]["StrategyValidationOutcome"];
             runtime_version: string;

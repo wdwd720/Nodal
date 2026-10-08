@@ -4645,9 +4645,11 @@ paths:
       description: >-
         The creator's account and operators see every version; anyone else
         sees only the public versions, and a listing with none is NOT_FOUND.
-        Evaluations and performance snapshots are simulated and PAPER results:
-        computed from snapshots supplied by whoever ran them, never from real
-        capital.
+        Evaluations are simulated results over the snapshot set their runner
+        supplied. Performance snapshots are PAPER results computed from each
+        install's paper book -- its paper capital moved by its own fills, valued
+        at reference prices the service read from the price store -- never from
+        a caller's figures, and never a record of real capital.
       parameters:
         - { in: path, name: listingId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
       responses:
@@ -4729,6 +4731,11 @@ paths:
         A simulation proposes nothing: every run's proposals are counted and
         kept in the run log, never submitted. At most 20 snapshots per request;
         the evaluation is reproducible from the dataset version and digests.
+        Every run is charged to the creator's account under the sandbox budget:
+        a request beyond the runs or CPU one call may be granted, or beyond what
+        the account's window has left, is refused before anything runs (429
+        RATE_LIMITED, the budget's reason in the problem's fields, and a
+        Retry-After when the window will have room).
       parameters:
         - { in: path, name: versionId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -4747,17 +4754,23 @@ paths:
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
   /advanced/strategies/versions/{versionId}/validate:
     post:
       tags: [advanced]
       summary: Scan and build a SUBMITTED version (operator; requires step-up)
       description: >-
-        A clean scan and a successful build record the artifact and move the
-        version to VALIDATED; a refused scan, a compile error or a build
-        timeout moves it to REJECTED with the reason. The build holds the
-        version's lock and is bounded by the request's time limit: one that
-        does not finish in time records nothing and leaves the version
-        SUBMITTED. A deployment with no Go toolchain answers UNSUPPORTED.
+        The version is claimed in one transaction, built between transactions
+        and its outcome recorded in another; no transaction is open while it
+        builds. A clean scan and a successful build record the artifact and
+        move the version to VALIDATED; a refused scan, a compile error or a
+        build past one of the builder's bounds -- its time, the size of the
+        module it produces, the memory its compiler and linker hold -- moves it
+        to REJECTED with the reason, and the compiler's bounded output is kept
+        with the validation for the creator to read. A version another build
+        holds a live claim on answers CONFLICT and nothing is built twice; a
+        build that could not run at all (a deployment with no Go toolchain
+        answers UNSUPPORTED) records nothing and frees the version at once.
       parameters:
         - { in: path, name: versionId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -4932,24 +4945,30 @@ paths:
   /advanced/strategies/installs/{installId}/follows:
     post:
       tags: [advanced]
-      summary: Paper-follow one of your installs on one market snapshot
+      summary: Paper-follow one of your installs, now
       description: >-
-        The installed version runs in the sandbox on the snapshot you supply.
-        Every proposal its manifest permits becomes an economic intent (PAPER,
-        STRATEGY_MARKETPLACE) that faces routing and Risk Kernel V2 with
-        sections read from the database, never from the snapshot; only an
-        ALLOW reaches paper execution, exactly once. The snapshot must be no
-        older than five minutes and not in the future, and the manifest's
-        execution frequency bounds how often an install runs. The same snapshot
-        time with the same snapshot returns the recorded run; with a different
-        snapshot it is INVALID_IDEMPOTENCY_REUSE. Equity and turnover come from
-        the snapshot you supplied and are paper figures.
+        The installed version runs in the sandbox on an input the service
+        builds itself: the install's paper book (its paper capital moved by its
+        own earlier fills) and, for every instrument the version names, the
+        freshest reference price in the price store no older than five minutes
+        with its recent history. No snapshot is accepted from the caller. Every
+        proposal the manifest permits -- valued at the reference price, never
+        at a limit price the strategy chose -- becomes an economic intent
+        (PAPER, STRATEGY_MARKETPLACE) that faces routing and Risk Kernel V2,
+        whose balance section is the paper book's uninvested balance; only an ALLOW reaches
+        paper execution, exactly once, and an executed dispatch is a fill of
+        the paper book at its reference price. The manifest's execution
+        frequency bounds how often an install runs, and the run is charged to
+        the account's sandbox budget. A book holding an instrument with no
+        fresh reference price cannot be valued and is refused
+        (STALE_MARKET_DATA). The book's uninvested balance (paper_cash), equity
+        and turnover are paper figures, before the venue's disclosed charges.
       parameters:
         - { in: path, name: installId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
         - { $ref: "#/components/parameters/IdempotencyKey" }
       requestBody:
         required: true
-        content: { application/json: { schema: { $ref: "#/components/schemas/StrategyFollowRequest" } } }
+        content: { application/json: { schema: { $ref: "#/components/schemas/StrategyAccountRequest" } } }
       responses:
         "201":
           description: The follow run with what became of every intent (value domain SIMULATED)
@@ -4967,6 +4986,11 @@ paths:
     post:
       tags: [advanced]
       summary: Compute and record the paper performance of one of your installs from its follow history
+      description: >-
+        Computed exactly from the follow runs valued from the install's paper
+        book (runs recorded before the book existed are not counted); the
+        database refuses a snapshot over anything else. VALIDATION_FAILED until
+        one such run exists.
       parameters:
         - { in: path, name: installId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -11667,8 +11691,9 @@ components:
       x-enum-varnames: [StrategyValidationPassed, StrategyValidationFailed]
     StrategyBuildFailure:
       type: string
-      enum: [SCAN_REJECTED, COMPILE_FAILED, BUILD_TIMEOUT]
-      x-enum-varnames: [StrategyBuildScanRejected, StrategyBuildCompileFailed, StrategyBuildTimeout]
+      enum: [SCAN_REJECTED, COMPILE_FAILED, BUILD_TIMEOUT, BUILD_OUTPUT_LIMIT, BUILD_MEMORY_LIMIT]
+      x-enum-varnames: [StrategyBuildScanRejected, StrategyBuildCompileFailed, StrategyBuildTimeout, StrategyBuildOutputLimit,
+                        StrategyBuildMemoryLimit]
     StrategyReviewDecision:
       type: string
       enum: [APPROVE, REJECT]
@@ -11853,12 +11878,6 @@ components:
       properties:
         account_id: { $ref: "#/components/schemas/UUID" }
         reason: { type: string, maxLength: 1000 }
-    StrategyFollowRequest:
-      type: object
-      required: [account_id, snapshot]
-      properties:
-        account_id: { $ref: "#/components/schemas/UUID" }
-        snapshot: { $ref: "#/components/schemas/StrategySnapshot" }
 
     # --- responses --------------------------------------------------------
     StrategyVersionSummary:
@@ -11946,6 +11965,13 @@ components:
         toolchain_version: { type: string }
         sdk_version: { type: string }
         runtime_version: { type: string }
+        build_log:
+          type: string
+          maxLength: 65536
+          description: >-
+            What the compiler said, at most 64 KiB, with the build directory
+            replaced by $BUILD: why a COMPILE_FAILED version did not build.
+            Shown to the creator's account and to operators only.
     StrategyReview:
       type: object
       required: [decision, reason_code, note, reviewer_actor_type, reviewed_at]
@@ -12021,9 +12047,11 @@ components:
     StrategyPerformanceSnapshot:
       type: object
       description: >-
-        Paper performance computed exactly from a follow history, in basis
-        points. A paper result from caller-supplied snapshots, never a record
-        of money earned or lost.
+        Paper performance computed exactly from an install's paper book, in
+        basis points: each follow run's equity is the install's paper capital
+        moved by its own fills, valued at reference prices the service read,
+        before the venue's disclosed charges. A paper result, never a record of
+        money earned or lost.
       required: [value_domain, version_id, follow_runs_count, first_as_of, last_as_of, history_digest, return_bps,
                  max_drawdown_bps, volatility_bps, turnover_bps, computed_at]
       properties:
@@ -12090,7 +12118,7 @@ components:
     StrategyInstall:
       type: object
       required: [value_domain, id, account_id, version_id, listing_id, listing_title, strategy_ref, version_number, version_status,
-                 version_moderation, mode, status, installed_by_actor_type, created_at]
+                 version_moderation, mode, status, installed_by_actor_type, paper_capital, created_at]
       properties:
         value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
         id: { $ref: "#/components/schemas/UUID" }
@@ -12105,6 +12133,9 @@ components:
         mode: { $ref: "#/components/schemas/AdvancedMode" }
         status: { $ref: "#/components/schemas/StrategyInstallStatus" }
         installed_by_actor_type: { type: string }
+        paper_capital:
+          $ref: "#/components/schemas/StrategyDecimal"
+          description: What the install's paper book started with, in simulated dollars; it never changes.
         created_at: { $ref: "#/components/schemas/Timestamp" }
         latest_performance: { $ref: "#/components/schemas/StrategyPerformanceSnapshot" }
     StrategyInstallPage:
@@ -12123,18 +12154,32 @@ components:
         intent_id: { $ref: "#/components/schemas/UUID" }
         kind: { type: string }
         outcome: { $ref: "#/components/schemas/StrategyFollowOutcome" }
-        notional: { $ref: "#/components/schemas/StrategyDecimal" }
+        notional:
+          $ref: "#/components/schemas/StrategyDecimal"
+          description: The proposal's quantity at reference_price -- what the manifest's cap and Risk Kernel V2 judged.
+        reference_price:
+          $ref: "#/components/schemas/StrategyDecimal"
+          description: The price the service read itself that the notional was computed at, never the strategy's limit price.
         decision_hash: { type: string }
         risk_decision: { $ref: "#/components/schemas/AdvancedRiskDecision" }
         effect_id: { $ref: "#/components/schemas/UUID" }
         effect_status: { type: string }
         effect_failure_code: { type: string }
         external_ref: { type: string }
+    StrategyFollowMark:
+      type: object
+      description: A reference price a follow run valued its paper book and its proposals at, by the price store's observation.
+      required: [instrument_id, price_id, mark, observed_at]
+      properties:
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        price_id: { $ref: "#/components/schemas/UUID" }
+        mark: { $ref: "#/components/schemas/StrategyDecimal" }
+        observed_at: { $ref: "#/components/schemas/Timestamp" }
     StrategyFollowRun:
       type: object
       required: [value_domain, id, install_id, version_id, account_id, sandbox_run_id, trigger, as_of, input_digest, run_digest,
                  termination, proposals_count, accepted_count, violations_count, intents_submitted, intents_dispatched,
-                 intents_risk_rejected, intents_failed, equity, turnover, evidence_ref, evidence_sha256, created_at, intents]
+                 intents_risk_rejected, intents_failed, equity, turnover, evidence_ref, evidence_sha256, created_at, intents, marks]
       properties:
         value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
         id: { $ref: "#/components/schemas/UUID" }
@@ -12154,12 +12199,23 @@ components:
         intents_dispatched: { type: integer }
         intents_risk_rejected: { type: integer }
         intents_failed: { type: integer }
-        equity: { $ref: "#/components/schemas/StrategyDecimal" }
-        turnover: { $ref: "#/components/schemas/StrategyDecimal" }
+        paper_cash:
+          $ref: "#/components/schemas/StrategyDecimal"
+          description: >-
+            The paper book's uninvested balance when the run started. Absent
+            for a run recorded before paper books, whose equity came from a
+            caller's snapshot and counts for no performance.
+        equity:
+          $ref: "#/components/schemas/StrategyDecimal"
+          description: The paper book -- its uninvested balance plus every position at its reference price -- when the run started.
+        turnover:
+          $ref: "#/components/schemas/StrategyDecimal"
+          description: The exact notional the run dispatched.
         evidence_ref: { type: string }
         evidence_sha256: { type: string }
         created_at: { $ref: "#/components/schemas/Timestamp" }
-        replayed: { type: boolean, description: "True when this snapshot time was already followed: nothing ran again" }
+        replayed: { type: boolean, description: "True when the install was already followed at this instant: nothing ran again" }
+        marks: { type: array, items: { $ref: "#/components/schemas/StrategyFollowMark" } }
         intents: { type: array, items: { $ref: "#/components/schemas/StrategyFollowIntent" } }
     StrategyFollowRunPage:
       allOf:
