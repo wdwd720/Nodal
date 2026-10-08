@@ -24,7 +24,9 @@ import (
 // Prediction markets (internal/predmarket). These handlers translate shapes
 // and nothing else: the service decides every lifecycle step, every
 // refusal and every dual-control rule (the creator never resolves or voids,
-// a disputer never rules), and its errors reach the client with their codes.
+// a disputer and the disputed resolution's author never rule, a void needs a
+// second operator's approval, an observation's recorder never resolves), and
+// its errors reach the client with their codes.
 //
 // Enum values are written as conversions from the service's own strings, never
 // as the generated constant names: oapi-codegen renames those whenever another
@@ -134,14 +136,18 @@ func (s *Server) GetAdvancedPredictionMarketsMarketId(ctx context.Context, reque
 	m := v.Record.Market
 	out := api.PredictionMarketDetail{
 		ValueDomain: predmarketDomain, Market: toAPIPredictionMarket(v.Record),
-		Resolutions: make([]api.PredictionResolution, 0, len(v.Resolutions)),
-		Disputes:    make([]api.PredictionDispute, 0, len(v.Disputes)),
+		Resolutions:   make([]api.PredictionResolution, 0, len(v.Resolutions)),
+		Disputes:      make([]api.PredictionDispute, 0, len(v.Disputes)),
+		VoidProposals: make([]api.PredictionVoidProposal, 0, len(v.VoidProposals)),
 	}
 	for _, r := range v.Resolutions {
 		out.Resolutions = append(out.Resolutions, toAPIPredictionResolution(m, r))
 	}
 	for _, d := range v.Disputes {
 		out.Disputes = append(out.Disputes, toAPIPredictionDispute(d))
+	}
+	for _, p := range v.VoidProposals {
+		out.VoidProposals = append(out.VoidProposals, toAPIPredictionVoidProposal(p))
 	}
 	if v.Settlement != nil {
 		st := toAPIPredictionSettlement(m, *v.Settlement)
@@ -173,7 +179,7 @@ func (s *Server) GetAdvancedPredictionMarketsMarketIdBooks(ctx context.Context, 
 		ValueDomain: predmarketDomain, MarketId: toUUID(m.ID), MarketStatus: api.PredictionMarketStatus(m.Status),
 		CollateralAssetId: toUUID(m.CollateralAssetID), CollateralSymbol: v.Record.Collateral.Symbol,
 		CollateralDecimals: int(v.Record.Collateral.Decimals), ShareDecimals: int(predmarket.ShareDecimals),
-		Escrow: b.Escrow.String(), Collateral: b.Collateral.String(), Residual: v.Residual.String(),
+		Escrow: b.Escrow.String(), Collateral: b.Collateral.String(), Residual: v.Residual.String(), Held: b.Held.String(),
 		Outcomes:   make([]api.PredictionBookOutcome, 0, len(m.Outcomes)),
 		Reconciles: len(v.Violations) == 0, Violations: append([]string{}, v.Violations...),
 	}
@@ -220,6 +226,13 @@ func (s *Server) GetAdvancedPredictionMarketsMarketIdPositions(ctx context.Conte
 			OutcomeIndex: p.OutcomeIndex, OutcomeSymbol: p.OutcomeSymbol, ShareAssetId: toUUID(p.ShareAssetID),
 			Quantity: p.Quantity.String(), AsOf: p.AsOf.UTC(),
 		})
+	}
+	if v.HeldPayout != nil {
+		if v.HeldPayout.AccountID != account {
+			return nil, errs.New(errs.CodeInternal, "the positions read returned another account's held payout")
+		}
+		h := toAPIPredictionHeldPayout(*v.HeldPayout)
+		out.HeldPayout = &h
 	}
 	return api.GetAdvancedPredictionMarketsMarketIdPositions200JSONResponse(out), nil
 }
@@ -439,8 +452,9 @@ func (s *Server) PostAdvancedPredictionMarketsMarketIdRequestResolution(ctx cont
 	return api.PostAdvancedPredictionMarketsMarketIdRequestResolution200JSONResponse(out), nil
 }
 
-// PostAdvancedPredictionMarketsMarketIdOracleObservations records what the
-// sandbox oracle observed for a market and returns the report it will sign.
+// PostAdvancedPredictionMarketsMarketIdOracleObservations records, as the
+// requesting operator, what the sandbox oracle observed for a market, and
+// returns the signed report the service stored.
 func (s *Server) PostAdvancedPredictionMarketsMarketIdOracleObservations(ctx context.Context, request api.PostAdvancedPredictionMarketsMarketIdOracleObservationsRequestObject) (api.PostAdvancedPredictionMarketsMarketIdOracleObservationsResponseObject, error) {
 	if s.opts.Ports.PredictionMarkets == nil {
 		return nil, errNotWired(predmarketWhat)
@@ -457,23 +471,25 @@ func (s *Server) PostAdvancedPredictionMarketsMarketIdOracleObservations(ctx con
 	if err != nil {
 		return nil, err
 	}
+	req := predmarket.ObservationRequest{
+		MarketID: id, Outcome: body.Outcome, ObservedAt: body.ObservedAt, Evidence: []byte(body.Evidence), Actor: actor,
+	}
 	res, err := runCommand(ctx, s, request.Params.IdempotencyKey,
 		func(ctx context.Context) (api.PredictionOracleObservation, commandMeta, error) {
-			rep, cerr := s.opts.Ports.PredictionMarkets.Observe(ctx, id, body.Outcome, body.ObservedAt, []byte(body.Evidence))
+			v, cerr := s.opts.Ports.PredictionMarkets.Observe(ctx, req)
 			if cerr != nil {
 				return api.PredictionOracleObservation{}, commandMeta{}, cerr
 			}
-			wire, cerr := toAPIOracleReport(rep)
+			o := v.Observation
+			wire, cerr := toAPIOracleReport(o.Report)
 			if cerr != nil {
 				return api.PredictionOracleObservation{}, commandMeta{}, cerr
 			}
-			observability.LoggerFrom(ctx).InfoContext(ctx, "sandbox oracle observation recorded",
-				"market_id", id.String(), "outcome", rep.Outcome, "report_hash", hex.EncodeToString(rep.Hash()),
-				"actor_type", string(actor.Type), "actor_id", actor.ID)
 			return api.PredictionOracleObservation{
-				ValueDomain: predmarketDomain, Report: wire, ReportHash: hex.EncodeToString(rep.Hash()),
+				ValueDomain: predmarketDomain, ObservationId: toUUID(o.ID), Report: wire, ReportHash: hex.EncodeToString(o.ReportHash),
+				RecordedBy: toAPIPredictionActor(o.RecordedBy), RecordedAt: o.RecordedAt.UTC(), Replay: v.Replay,
 			}, commandMeta{
-				Status: http.StatusOK, ResourceType: "prediction_market", ResourceID: id.String(),
+				Status: http.StatusOK, ResourceType: "prediction_oracle_observation", ResourceID: o.ID.String(),
 			}, nil
 		})
 	if err != nil {
@@ -595,9 +611,10 @@ func (s *Server) PostAdvancedPredictionMarketsMarketIdUphold(ctx context.Context
 	return api.PostAdvancedPredictionMarketsMarketIdUphold200JSONResponse(res.Value), nil
 }
 
-// PostAdvancedPredictionMarketsMarketIdVoid voids a market and refunds every
-// share.
-func (s *Server) PostAdvancedPredictionMarketsMarketIdVoid(ctx context.Context, request api.PostAdvancedPredictionMarketsMarketIdVoidRequestObject) (api.PostAdvancedPredictionMarketsMarketIdVoidResponseObject, error) {
+// PostAdvancedPredictionMarketsMarketIdVoidProposals records one operator's
+// proposal to void a market. Nothing is refunded until a different operator
+// approves it.
+func (s *Server) PostAdvancedPredictionMarketsMarketIdVoidProposals(ctx context.Context, request api.PostAdvancedPredictionMarketsMarketIdVoidProposalsRequestObject) (api.PostAdvancedPredictionMarketsMarketIdVoidProposalsResponseObject, error) {
 	if s.opts.Ports.PredictionMarkets == nil {
 		return nil, errNotWired(predmarketWhat)
 	}
@@ -613,13 +630,54 @@ func (s *Server) PostAdvancedPredictionMarketsMarketIdVoid(ctx context.Context, 
 	if err != nil {
 		return nil, err
 	}
-	req := predmarket.VoidRequest{MarketID: id, Actor: actor, Reason: body.Reason}
-	if body.Evidence != nil {
-		req.Evidence = evidenceOf(*body.Evidence)
+	req := predmarket.VoidProposalRequest{MarketID: id, Actor: actor, Reason: body.Reason, Evidence: evidenceOf(body.Evidence)}
+	res, err := runCommand(ctx, s, request.Params.IdempotencyKey,
+		func(ctx context.Context) (api.PredictionVoidProposalResult, commandMeta, error) {
+			v, cerr := s.opts.Ports.PredictionMarkets.ProposeVoid(ctx, req)
+			if cerr != nil {
+				return api.PredictionVoidProposalResult{}, commandMeta{}, cerr
+			}
+			return api.PredictionVoidProposalResult{
+				ValueDomain: predmarketDomain, Market: toAPIPredictionMarket(v.Record), Proposal: toAPIPredictionVoidProposal(v.Proposal),
+			}, commandMeta{
+				Status: http.StatusCreated, ResourceType: "prediction_void_proposal", ResourceID: v.Proposal.ID.String(),
+			}, nil
+		})
+	if err != nil {
+		return nil, err
+	}
+	return api.PostAdvancedPredictionMarketsMarketIdVoidProposals201JSONResponse(res.Value), nil
+}
+
+// PostAdvancedPredictionMarketsMarketIdVoidProposalsProposalIdApprove approves
+// a void proposal as a second operator, which voids the market and refunds
+// every share.
+func (s *Server) PostAdvancedPredictionMarketsMarketIdVoidProposalsProposalIdApprove(ctx context.Context, request api.PostAdvancedPredictionMarketsMarketIdVoidProposalsProposalIdApproveRequestObject) (api.PostAdvancedPredictionMarketsMarketIdVoidProposalsProposalIdApproveResponseObject, error) {
+	if s.opts.Ports.PredictionMarkets == nil {
+		return nil, errNotWired(predmarketWhat)
+	}
+	if request.Body == nil {
+		return nil, validationError("body", "a request body is required")
+	}
+	id, err := parseMarketID(request.MarketId)
+	if err != nil {
+		return nil, err
+	}
+	pid, err := predmarket.ParseVoidProposalID(request.ProposalId.String())
+	if err != nil || pid.IsZero() {
+		return nil, validationError("proposalId", "proposalId must be a canonical UUID")
+	}
+	actor, err := predmarketActor(ctx)
+	if err != nil {
+		return nil, err
+	}
+	req := predmarket.VoidApprovalRequest{MarketID: id, ProposalID: pid, Actor: actor}
+	if request.Body.Reason != nil {
+		req.Reason = *request.Body.Reason
 	}
 	res, err := runCommand(ctx, s, request.Params.IdempotencyKey,
 		func(ctx context.Context) (api.PredictionSettlementResult, commandMeta, error) {
-			v, cerr := s.opts.Ports.PredictionMarkets.Void(ctx, req)
+			v, cerr := s.opts.Ports.PredictionMarkets.ApproveVoid(ctx, req)
 			if cerr != nil {
 				return api.PredictionSettlementResult{}, commandMeta{}, cerr
 			}
@@ -630,7 +688,50 @@ func (s *Server) PostAdvancedPredictionMarketsMarketIdVoid(ctx context.Context, 
 	if err != nil {
 		return nil, err
 	}
-	return api.PostAdvancedPredictionMarketsMarketIdVoid200JSONResponse(res.Value), nil
+	return api.PostAdvancedPredictionMarketsMarketIdVoidProposalsProposalIdApprove200JSONResponse(res.Value), nil
+}
+
+// PostAdvancedPredictionMarketsMarketIdHeldPayoutsClaim claims, for the
+// caller's own account, the payout a settled or voided market holds for it.
+func (s *Server) PostAdvancedPredictionMarketsMarketIdHeldPayoutsClaim(ctx context.Context, request api.PostAdvancedPredictionMarketsMarketIdHeldPayoutsClaimRequestObject) (api.PostAdvancedPredictionMarketsMarketIdHeldPayoutsClaimResponseObject, error) {
+	if s.opts.Ports.PredictionMarkets == nil {
+		return nil, errNotWired(predmarketWhat)
+	}
+	if request.Body == nil {
+		return nil, validationError("body", "a request body is required")
+	}
+	// Ownership only: an operator's account:read_any never lets them claim a
+	// customer's payout.
+	account, err := accountScopeWrite(ctx, request.Body.AccountId)
+	if err != nil {
+		return nil, err
+	}
+	id, err := parseMarketID(request.MarketId)
+	if err != nil {
+		return nil, err
+	}
+	p, ok := security.PrincipalFrom(ctx)
+	if !ok || p.SubjectID == "" {
+		return nil, errs.New(errs.CodeUnauthenticated, "authentication is required")
+	}
+	req := predmarket.ClaimRequest{
+		MarketID: id, AccountID: account, IdempotencyKey: predmarketIntentKey("claim", request.Params.IdempotencyKey),
+		ActorType: p.ActorType, ActorID: p.SubjectID, CorrelationID: observability.CorrelationID(ctx),
+	}
+	res, err := runCommand(ctx, s, request.Params.IdempotencyKey,
+		func(ctx context.Context) (api.PredictionClaimResult, commandMeta, error) {
+			r, cerr := s.opts.Ports.PredictionMarkets.Claim(ctx, req)
+			if cerr != nil {
+				return api.PredictionClaimResult{}, commandMeta{}, cerr
+			}
+			return toAPIPredictionClaimResult(req, r), commandMeta{
+				Status: http.StatusOK, ResourceType: "economic_intent", ResourceID: r.Action.Intent.ID.String(),
+			}, nil
+		})
+	if err != nil {
+		return nil, err
+	}
+	return api.PostAdvancedPredictionMarketsMarketIdHeldPayoutsClaim200JSONResponse(res.Value), nil
 }
 
 // PostAdvancedPredictionMarketsMarketIdSettle settles a RESOLVED market from
@@ -771,7 +872,7 @@ func toAPIPredictionSettlement(m predmarket.Market, st predmarket.Settlement) ap
 		Id: toUUID(st.ID), MarketId: toUUID(st.MarketID), Kind: api.PredictionSettlementKind(st.Kind),
 		OutcomeCount: st.OutcomeCount, UnitQuantity: st.UnitQuantity.String(), RefundRatePerShare: qtyPtr(st.RefundRatePerShare),
 		RoundingPolicy: api.PredictionRoundingPolicy(st.RoundingPolicy), EscrowBefore: st.EscrowBefore.String(),
-		TotalPaid: st.TotalPaid.String(), Residual: st.Residual.String(), HolderCount: st.HolderCount,
+		TotalPaid: st.TotalPaid.String(), TotalHeld: st.TotalHeld.String(), Residual: st.Residual.String(), HolderCount: st.HolderCount,
 		EvidenceRef: st.EvidenceRef, EvidenceSha256: hex.EncodeToString(st.EvidenceSHA256),
 		SettledBy: toAPIPredictionActor(st.SettledBy), SettledAt: st.SettledAt.UTC(),
 	}
@@ -798,7 +899,11 @@ func toAPIPredictionSettlementResult(v PredictionSettleView) api.PredictionSettl
 	out := api.PredictionSettlementResult{
 		ValueDomain: predmarketDomain, Market: toAPIPredictionMarket(v.Record),
 		Settlement: toAPIPredictionSettlement(m, v.Settlement), Replay: v.Replay,
-		Lines: make([]api.PredictionPayoutLine, 0, len(v.Plan.Lines)),
+		Lines:       make([]api.PredictionPayoutLine, 0, len(v.Plan.Lines)),
+		HeldPayouts: make([]api.PredictionHeldPayout, 0, len(v.Held)),
+	}
+	for _, h := range v.Held {
+		out.HeldPayouts = append(out.HeldPayouts, toAPIPredictionHeldPayout(h))
 	}
 	for i, line := range v.Plan.Lines {
 		l := api.PredictionPayoutLine{
@@ -808,14 +913,66 @@ func toAPIPredictionSettlementResult(v PredictionSettleView) api.PredictionSettl
 		for j, q := range line.Shares {
 			l.Shares = append(l.Shares, api.PredictionShareCount{OutcomeSymbol: outcomeSymbolOf(m, j), Quantity: q.String()})
 		}
-		// The service runs one economic action per plan line, in plan order.
+		// The service runs one economic action per plan line, in plan order:
+		// a delivered payout's intent COMPLETED, a held one's REJECTED (its
+		// journal retired the shares and the amount stayed in the escrow).
 		if i < len(v.Lines) {
 			l.IntentId = toUUID(v.Lines[i].Intent.ID)
+			l.Held = v.Lines[i].Intent.Status == econ.StatusRejected
 			if !v.Lines[i].JournalTransactionID.IsZero() {
 				l.JournalTransactionId = uuidPtr(v.Lines[i].JournalTransactionID)
 			}
 		}
 		out.Lines = append(out.Lines, l)
+	}
+	return out
+}
+
+func toAPIPredictionVoidProposal(p predmarket.VoidProposal) api.PredictionVoidProposal {
+	out := api.PredictionVoidProposal{
+		Id: toUUID(p.ID), MarketId: toUUID(p.MarketID), MarketStatus: api.PredictionMarketStatus(p.MarketStatus),
+		Reason: p.Reason, EvidenceRef: p.EvidenceRef, EvidenceSha256: hex.EncodeToString(p.EvidenceSHA256),
+		ProposedBy: toAPIPredictionActor(p.ProposedBy), ProposedAt: p.ProposedAt.UTC(),
+	}
+	if p.ResolutionID != nil {
+		out.ResolutionId = uuidPtr(*p.ResolutionID)
+	}
+	if a := p.Approval; a != nil {
+		out.Approval = &api.PredictionVoidApproval{
+			Id: toUUID(a.ID), ApprovedBy: toAPIPredictionActor(a.ApprovedBy), Reason: a.Reason, ApprovedAt: a.ApprovedAt.UTC(),
+		}
+	}
+	return out
+}
+
+func toAPIPredictionHeldPayout(h predmarket.HeldPayout) api.PredictionHeldPayout {
+	out := api.PredictionHeldPayout{
+		Id: toUUID(h.ID), MarketId: toUUID(h.MarketID), SettlementId: toUUID(h.SettlementID), AccountId: toUUID(h.AccountID),
+		Kind: api.PredictionSettlementKind(h.Kind), Amount: h.Amount.String(), ReasonCodes: append([]string{}, h.ReasonCodes...),
+		RefusedIntentId: toUUID(h.RefusedIntentID), JournalTransactionId: toUUID(h.JournalTransactionID), HeldAt: h.HeldAt.UTC(),
+		Claimed: h.Claimed(),
+	}
+	if c := h.Claim; c != nil {
+		out.Claim = &api.PredictionHeldPayoutClaim{
+			Id: toUUID(c.ID), Amount: c.Amount.String(), IntentId: toUUID(c.IntentID),
+			JournalTransactionId: toUUID(c.JournalTransactionID), ClaimedBy: toAPIPredictionActor(c.ClaimedBy), ClaimedAt: c.ClaimedAt.UTC(),
+		}
+	}
+	return out
+}
+
+func toAPIPredictionClaimResult(req predmarket.ClaimRequest, r predmarket.ClaimResult) api.PredictionClaimResult {
+	out := api.PredictionClaimResult{
+		ValueDomain: predmarketDomain, MarketId: toUUID(req.MarketID), AccountId: toUUID(req.AccountID),
+		HeldPayout: toAPIPredictionHeldPayout(r.HeldPayout), Replay: r.Action.Replay,
+		Intent: toAPIEconomicIntent(r.Action.Intent), RiskDecisionHash: strPtr(r.Action.DecisionHash),
+	}
+	if !r.Action.Effect.ID.IsZero() {
+		e := toAPIEconomicEffect(r.Action.Effect)
+		out.Effect = &e
+	}
+	if !r.Action.JournalTransactionID.IsZero() {
+		out.JournalTransactionId = uuidPtr(r.Action.JournalTransactionID)
 	}
 	return out
 }

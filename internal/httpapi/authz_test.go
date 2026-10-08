@@ -190,6 +190,7 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 
 		// >>> advanced:predmarket path parameters
 		// {marketId} is mapped above (the native markets declared it first).
+		"{proposalId}": testOrderID.String(),
 
 		// >>> advanced:marketplace path parameters
 

@@ -47,6 +47,7 @@ var (
 	pmOperatorID = accounts.NewUserID()
 	pmBase       = "/v1/advanced/prediction-markets"
 	pmPath       = pmBase + "/" + pmMarketID.String()
+	pmProposalID = pmID[*predmarket.VoidProposalID]()
 )
 
 // pmOperator is an operator who owns no account and authenticated strongly a
@@ -79,6 +80,9 @@ type fakePredmarket struct {
 	dispute     predmarket.Dispute
 	plan        predmarket.SettlementPlan
 	lines       []predmarket.ActionResult
+	held        []predmarket.HeldPayout
+	proposal    predmarket.VoidProposal
+	claim       predmarket.ClaimResult
 	record      reconciliation.Record
 	existing    bool
 	replay      bool
@@ -92,7 +96,10 @@ type fakePredmarket struct {
 	lastResolve  PredictionResolveCommand
 	lastDispute  predmarket.DisputeRequest
 	lastRuling   predmarket.RulingRequest
-	lastVoid     predmarket.VoidRequest
+	lastProposal predmarket.VoidProposalRequest
+	lastApproval predmarket.VoidApprovalRequest
+	lastClaim    predmarket.ClaimRequest
+	lastObserve  predmarket.ObservationRequest
 	lastRecActor reconciliation.Actor
 }
 
@@ -122,7 +129,8 @@ func (f *fakePredmarket) Markets(_ context.Context, status predmarket.MarketStat
 
 func (f *fakePredmarket) Market(context.Context, predmarket.MarketID) (PredictionMarketDetailView, error) {
 	f.called("Market")
-	return PredictionMarketDetailView{Record: f.rec(), Resolutions: f.resolutions, Disputes: f.disputes, Settlement: f.settlement}, f.fail()
+	return PredictionMarketDetailView{Record: f.rec(), Resolutions: f.resolutions, Disputes: f.disputes,
+		VoidProposals: []predmarket.VoidProposal{f.proposal}, Settlement: f.settlement}, f.fail()
 }
 
 func (f *fakePredmarket) Books(context.Context, predmarket.MarketID) (PredictionBooksView, error) {
@@ -141,7 +149,14 @@ func (f *fakePredmarket) Positions(_ context.Context, _ predmarket.MarketID, acc
 			mine = append(mine, p)
 		}
 	}
-	return PredictionPositionsView{Record: f.rec(), Positions: mine}, f.fail()
+	v := PredictionPositionsView{Record: f.rec(), Positions: mine}
+	for i := range f.held {
+		if f.held[i].AccountID == account {
+			h := f.held[i]
+			v.HeldPayout = &h
+		}
+	}
+	return v, f.fail()
 }
 
 func (f *fakePredmarket) Oracle(context.Context) (PredictionOracleView, error) {
@@ -193,17 +208,25 @@ func (f *fakePredmarket) RequestResolution(_ context.Context, _ predmarket.Marke
 	return f.step("RequestResolution", by)
 }
 
-// Observe uses a real sandbox oracle, so the report a test receives is one
-// the package itself would verify.
-func (f *fakePredmarket) Observe(_ context.Context, mid predmarket.MarketID, outcome string, at time.Time, evidence []byte) (predmarket.OracleReport, error) {
+// Observe signs with a real sandbox oracle, so the report a test receives is
+// one the package itself would verify.
+func (f *fakePredmarket) Observe(_ context.Context, req predmarket.ObservationRequest) (predmarket.ObservationResult, error) {
 	f.called("Observe")
+	f.mu.Lock()
+	f.lastObserve = req
+	f.mu.Unlock()
 	if err := f.fail(); err != nil {
-		return predmarket.OracleReport{}, err
+		return predmarket.ObservationResult{}, err
 	}
-	if err := f.oracle.Observe(mid, outcome, at, evidence); err != nil {
-		return predmarket.OracleReport{}, err
+	r, err := f.oracle.Sign(predmarket.OracleReport{MarketID: req.MarketID, Outcome: req.Outcome, ObservedAt: req.ObservedAt, Evidence: req.Evidence})
+	if err != nil {
+		return predmarket.ObservationResult{}, err
 	}
-	return f.oracle.Report(context.Background(), mid)
+	sum := sha256.Sum256(r.Evidence)
+	return predmarket.ObservationResult{Observation: predmarket.OracleObservation{
+		ID: pmID[*predmarket.ObservationID](), MarketID: req.MarketID, Report: r, ReportHash: r.Hash(), EvidenceSHA256: sum[:],
+		RecordedBy: req.Actor, RecordedAt: testNow,
+	}}, nil
 }
 
 func (f *fakePredmarket) Resolve(_ context.Context, cmd PredictionResolveCommand) (PredictionResolveView, error) {
@@ -233,17 +256,33 @@ func (f *fakePredmarket) Uphold(_ context.Context, req predmarket.RulingRequest)
 func (f *fakePredmarket) settled() PredictionSettleView {
 	v := PredictionSettleView{Record: f.rec(), Settlement: *f.settlement, Replay: f.replay}
 	if !f.replay {
-		v.Plan, v.Lines = f.plan, f.lines
+		v.Plan, v.Lines, v.Held = f.plan, f.lines, f.held
 	}
 	return v
 }
 
-func (f *fakePredmarket) Void(_ context.Context, req predmarket.VoidRequest) (PredictionSettleView, error) {
-	f.called("Void")
+func (f *fakePredmarket) ProposeVoid(_ context.Context, req predmarket.VoidProposalRequest) (PredictionVoidProposalView, error) {
+	f.called("ProposeVoid")
 	f.mu.Lock()
-	f.lastVoid = req
+	f.lastProposal = req
+	f.mu.Unlock()
+	return PredictionVoidProposalView{Record: f.rec(), Proposal: f.proposal}, f.fail()
+}
+
+func (f *fakePredmarket) ApproveVoid(_ context.Context, req predmarket.VoidApprovalRequest) (PredictionSettleView, error) {
+	f.called("ApproveVoid")
+	f.mu.Lock()
+	f.lastApproval = req
 	f.mu.Unlock()
 	return f.settled(), f.fail()
+}
+
+func (f *fakePredmarket) Claim(_ context.Context, req predmarket.ClaimRequest) (predmarket.ClaimResult, error) {
+	f.called("Claim")
+	f.mu.Lock()
+	f.lastClaim = req
+	f.mu.Unlock()
+	return f.claim, f.fail()
 }
 
 func (f *fakePredmarket) Settle(_ context.Context, req predmarket.SettleRequest) (PredictionSettleView, error) {
@@ -321,6 +360,24 @@ func newFakePredmarket(t *testing.T) *fakePredmarket {
 	}
 	payA, payB := econ.NewIntentID(), econ.NewIntentID()
 	jidA, jidB := ledger.NewTransactionID(), ledger.NewTransactionID()
+	held := predmarket.HeldPayout{
+		ID: pmID[*predmarket.HeldPayoutID](), MarketID: pmMarketID, SettlementID: settlementID, AccountID: testOtherAcct,
+		Kind: predmarket.SettlementPayout, CollateralAssetID: econ.SandboxDollarID(), Amount: qty("2000000"),
+		ReasonCodes: []string{"RISK_ACCOUNT_STATUS"}, RefusedIntentID: payB, EffectID: econ.NewEffectID(),
+		JournalTransactionID: jidB, EvidenceRef: "proof://predmarket/held.json", EvidenceSHA256: []byte{0x0d},
+		HeldAt: testNow.Add(2 * time.Hour),
+	}
+	settlement.TotalHeld = qty("2000000")
+	claimIntent := econ.NewIntentID()
+	claimJournal := ledger.NewTransactionID()
+	claimed := held
+	claimed.AccountID = testAccountID
+	claimed.Claim = &predmarket.HeldPayoutClaim{
+		ID: pmID[*predmarket.HeldPayoutClaimID](), HeldPayoutID: held.ID, MarketID: pmMarketID, AccountID: testAccountID,
+		Amount: qty("2000000"), IntentID: claimIntent, EffectID: econ.NewEffectID(), JournalTransactionID: claimJournal,
+		ClaimedBy: econ.Actor{Type: security.ActorUser, ID: testUserID.String()}, ClaimedAt: testNow.Add(3 * time.Hour),
+	}
+	twoUnits := qty("2000000")
 	return &fakePredmarket{
 		calls: map[string]int{}, oracle: oracle, market: market,
 		collateral: assets.Asset{
@@ -370,9 +427,24 @@ func newFakePredmarket(t *testing.T) *fakePredmarket {
 			},
 		},
 		lines: []predmarket.ActionResult{
-			{Intent: econ.Intent{ID: payA}, JournalTransactionID: jidA},
-			{Intent: econ.Intent{ID: payB}, JournalTransactionID: jidB},
+			{Intent: econ.Intent{ID: payA, Status: econ.StatusCompleted}, JournalTransactionID: jidA},
+			{Intent: econ.Intent{ID: payB, Status: econ.StatusRejected}, JournalTransactionID: jidB},
 		},
+		held: []predmarket.HeldPayout{held},
+		proposal: predmarket.VoidProposal{
+			ID: pmID[*predmarket.VoidProposalID](), MarketID: pmMarketID, MarketStatus: predmarket.StatusDisputed, ResolutionID: &first,
+			Reason: "the event was cancelled by its organiser", EvidenceRef: "proof://predmarket/void-proposal.json",
+			EvidenceSHA256: []byte{0x0e}, ProposedBy: disputer, ProposedAt: testNow.Add(time.Hour + 3*time.Minute),
+		},
+		claim: predmarket.ClaimResult{HeldPayout: claimed, Action: predmarket.ActionResult{
+			Intent: econ.Intent{
+				ID: claimIntent, AccountID: testAccountID, Kind: econ.KindResolvePredictionPosition, Mode: gates.ModeSandbox,
+				Capability: gates.PredictionMarkets, ActorType: security.ActorUser, ActorID: testUserID.String(), Quantity: &twoUnits,
+				Terms: []byte(`{"action":"CLAIM_HELD_PAYOUT"}`), ContentHash: []byte{0x02}, Status: econ.StatusCompleted,
+				CreatedAt: testNow, UpdatedAt: testNow,
+			},
+			DecisionHash: "decision-hash-claim", JournalTransactionID: claimJournal,
+		}},
 		record: reconciliation.Record{
 			ID: pmID[*reconciliation.RecordID](), Kind: reconciliation.KindPredictionEscrow, Mode: reconciliation.ModeFull,
 			ScopeType: predmarket.ScopePredictionMarket, ScopeID: pmMarketID.String(),
@@ -438,7 +510,14 @@ func pmMutations() []pmMutation {
 			map[string]any{"reason": "the certificate names the wrong district", "evidence": map[string]any{"notice": "district"}},
 			"Dispute", false},
 		{"uphold", pmPath + "/uphold", reason("the board's certificate stands"), reason("the recount confirmed it"), "Uphold", false},
-		{"void", pmPath + "/void", reason("the event was cancelled by its organiser"), reason("the event never took place"), "Void", false},
+		{"void-propose", pmPath + "/void-proposals",
+			map[string]any{"reason": "the event was cancelled by its organiser", "evidence": map[string]any{"notice": "cancelled"}},
+			map[string]any{"reason": "the event never took place", "evidence": map[string]any{"notice": "never"}},
+			"ProposeVoid", false},
+		{"void-approve", pmPath + "/void-proposals/" + pmProposalID.String() + "/approve",
+			reason("a second operator confirms the cancellation"), reason("confirmed by the organiser's notice"), "ApproveVoid", false},
+		{"claim", pmPath + "/held-payouts/claim", map[string]any{"account_id": testAccountID.String()},
+			map[string]any{"account_id": testAccountID.String(), "note": "another body"}, "Claim", true},
 		{"settle", pmPath + "/settle", nil, noBody, "Settle", false},
 		{"reconcile", pmPath + "/reconcile", nil, noBody, "Reconcile", false},
 	}
@@ -852,7 +931,7 @@ func TestPredmarket_DualControlRefusalsReachTheClient(t *testing.T) {
 	t.Parallel()
 	for _, m := range pmMutations() {
 		switch m.name {
-		case "resolve", "uphold", "void":
+		case "resolve", "uphold", "void-propose", "void-approve":
 		default:
 			continue
 		}
@@ -880,8 +959,10 @@ func pmActorOf(fp *fakePredmarket, name string) econ.Actor {
 		return fp.lastResolve.Actor
 	case "uphold":
 		return fp.lastRuling.Actor
-	case "void":
-		return fp.lastVoid.Actor
+	case "void-propose":
+		return fp.lastProposal.Actor
+	case "void-approve":
+		return fp.lastApproval.Actor
 	}
 	return fp.lastActor
 }
@@ -979,6 +1060,14 @@ func TestPredmarket_Settlement_ListsWhatThisCallPaid(t *testing.T) {
 	assert.Equal(t, fp.lines[1].Intent.ID.String(), sr.Lines[1].IntentId.String())
 	require.NotNil(t, sr.Lines[1].JournalTransactionId)
 	assert.Equal(t, fp.lines[1].JournalTransactionID.String(), sr.Lines[1].JournalTransactionId.String())
+	assert.False(t, sr.Lines[0].Held, "a delivered payout")
+	assert.True(t, sr.Lines[1].Held, "a payout refused for its holder is held, not lost")
+	assert.Equal(t, "2000000", sr.Settlement.TotalHeld)
+	require.Len(t, sr.HeldPayouts, 1)
+	assert.Equal(t, testOtherAcct.String(), sr.HeldPayouts[0].AccountId.String())
+	assert.Equal(t, "2000000", sr.HeldPayouts[0].Amount)
+	assert.Equal(t, []string{"RISK_ACCOUNT_STATUS"}, sr.HeldPayouts[0].ReasonCodes)
+	assert.False(t, sr.HeldPayouts[0].Claimed)
 
 	// Settling a settled market is the service's replay: nothing paid.
 	fp.replay = true
@@ -989,13 +1078,6 @@ func TestPredmarket_Settlement_ListsWhatThisCallPaid(t *testing.T) {
 	assert.Empty(t, sr.Lines)
 	assert.Equal(t, []any{}, res.raw()["lines"], "an empty list, never null")
 
-	// A void passes its reason and evidence through.
-	res = h.do(http.MethodPost, pmPath+"/void",
-		map[string]any{"reason": "the event was cancelled by its organiser", "evidence": map[string]any{"notice": "cancelled"}},
-		"Idempotency-Key", "pm-void-0001")
-	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
-	assert.Equal(t, "the event was cancelled by its organiser", fp.lastVoid.Reason)
-	assert.Equal(t, map[string]interface{}{"notice": "cancelled"}, fp.lastVoid.Evidence)
 }
 
 func TestPredmarket_Reconcile_RecordsAsThePrincipal(t *testing.T) {
