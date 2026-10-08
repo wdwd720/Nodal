@@ -1057,6 +1057,30 @@ paths:
         "403": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
 
+  # >>> advanced:margin paths (insert this subsystem's paths directly below; keep the marker)
+
+  # >>> advanced:derivatives paths (insert this subsystem's paths directly below; keep the marker)
+
+  # >>> advanced:equities paths (insert this subsystem's paths directly below; keep the marker)
+
+  # >>> advanced:orders paths (insert this subsystem's paths directly below; keep the marker)
+
+  # >>> advanced:transfers paths (insert this subsystem's paths directly below; keep the marker)
+
+  # >>> advanced:treasury paths (insert this subsystem's paths directly below; keep the marker)
+
+  # >>> advanced:stable paths (insert this subsystem's paths directly below; keep the marker)
+
+  # >>> advanced:bridge paths (insert this subsystem's paths directly below; keep the marker)
+
+  # >>> advanced:predmarket paths (insert this subsystem's paths directly below; keep the marker)
+
+  # >>> advanced:marketplace paths (insert this subsystem's paths directly below; keep the marker)
+
+  # >>> advanced:delegation paths (insert this subsystem's paths directly below; keep the marker)
+
+  # >>> advanced:operator paths (insert this subsystem's paths directly below; keep the marker)
+
 components:
   securitySchemes:
     sessionCookie:
@@ -2507,3 +2531,27 @@ components:
         lines: { type: array, items: { $ref: "#/components/schemas/BuyingPowerV2Line" } }
         policy_version: { type: string }
         as_of: { $ref: "#/components/schemas/Timestamp" }
+
+    # >>> advanced:margin schemas (insert this subsystem's schemas directly below; keep the marker)
+
+    # >>> advanced:derivatives schemas (insert this subsystem's schemas directly below; keep the marker)
+
+    # >>> advanced:equities schemas (insert this subsystem's schemas directly below; keep the marker)
+
+    # >>> advanced:orders schemas (insert this subsystem's schemas directly below; keep the marker)
+
+    # >>> advanced:transfers schemas (insert this subsystem's schemas directly below; keep the marker)
+
+    # >>> advanced:treasury schemas (insert this subsystem's schemas directly below; keep the marker)
+
+    # >>> advanced:stable schemas (insert this subsystem's schemas directly below; keep the marker)
+
+    # >>> advanced:bridge schemas (insert this subsystem's schemas directly below; keep the marker)
+
+    # >>> advanced:predmarket schemas (insert this subsystem's schemas directly below; keep the marker)
+
+    # >>> advanced:marketplace schemas (insert this subsystem's schemas directly below; keep the marker)
+
+    # >>> advanced:delegation schemas (insert this subsystem's schemas directly below; keep the marker)
+
+    # >>> advanced:operator schemas (insert this subsystem's schemas directly below; keep the marker)

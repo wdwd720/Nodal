@@ -65,7 +65,32 @@ type Ports struct {
 	Commerce      CommercePort
 	// Advanced serves the foundation of the advanced financial capabilities
 	// (ADR-0020); every figure it returns is value domain SIMULATED.
-	Advanced    AdvancedCorePort
+	Advanced AdvancedCorePort
+
+	// >>> advanced:margin port
+
+	// >>> advanced:derivatives port
+
+	// >>> advanced:equities port
+
+	// >>> advanced:orders port
+
+	// >>> advanced:transfers port
+
+	// >>> advanced:treasury port
+
+	// >>> advanced:stable port
+
+	// >>> advanced:bridge port
+
+	// >>> advanced:predmarket port
+
+	// >>> advanced:marketplace port
+
+	// >>> advanced:delegation port
+
+	// >>> advanced:operator port
+
 	Health      HealthPort
 	Idempotency IdempotencyPort
 	// Webhooks is keyed by the provider name in the path.

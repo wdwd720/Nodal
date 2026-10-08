@@ -36,17 +36,67 @@ type AdvancedDeps struct {
 	Margin buyingpower.MarginReader
 	// Extra reports reservations the capital tables cannot classify.
 	Extra buyingpower.ExtraReservationReader
+
+	// >>> advanced:margin deps
+
+	// >>> advanced:derivatives deps
+
+	// >>> advanced:equities deps
+
+	// >>> advanced:orders deps
+
+	// >>> advanced:transfers deps
+
+	// >>> advanced:treasury deps
+
+	// >>> advanced:stable deps
+
+	// >>> advanced:bridge deps
+
+	// >>> advanced:predmarket deps
+
+	// >>> advanced:marketplace deps
+
+	// >>> advanced:delegation deps
+
+	// >>> advanced:operator deps
 }
 
 func (d AdvancedDeps) complete() bool {
 	return d.Authorizer != nil && d.Intents != nil && d.Effects != nil && d.Risk != nil
 }
 
+// wireAdvanced wires each advanced port whose services are present. Each
+// subsystem decides for itself what "complete" means; a missing service
+// leaves only that subsystem's routes UNSUPPORTED.
 func wireAdvanced(p *Ports, d WireDeps) {
-	if !d.Advanced.complete() || d.Instruments == nil {
-		return
+	if d.Advanced.complete() && d.Instruments != nil {
+		p.Advanced = advancedCoreAdapter{deps: d.Advanced, instruments: d.Instruments, db: d.DB, clk: d.Clock}
 	}
-	p.Advanced = advancedCoreAdapter{deps: d.Advanced, instruments: d.Instruments, db: d.DB, clk: d.Clock}
+
+	// >>> advanced:margin wire
+
+	// >>> advanced:derivatives wire
+
+	// >>> advanced:equities wire
+
+	// >>> advanced:orders wire
+
+	// >>> advanced:transfers wire
+
+	// >>> advanced:treasury wire
+
+	// >>> advanced:stable wire
+
+	// >>> advanced:bridge wire
+
+	// >>> advanced:predmarket wire
+
+	// >>> advanced:marketplace wire
+
+	// >>> advanced:delegation wire
+
+	// >>> advanced:operator wire
 }
 
 type advancedCoreAdapter struct {

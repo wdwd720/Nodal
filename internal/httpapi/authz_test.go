@@ -167,6 +167,30 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		"{payoutId}":     testSessionID,
 		"{paymentId}":    testSessionID,
 		"{productId}":    testOrderID.String(),
+
+		// >>> advanced:margin path parameters
+
+		// >>> advanced:derivatives path parameters
+
+		// >>> advanced:equities path parameters
+
+		// >>> advanced:orders path parameters
+
+		// >>> advanced:transfers path parameters
+
+		// >>> advanced:treasury path parameters
+
+		// >>> advanced:stable path parameters
+
+		// >>> advanced:bridge path parameters
+
+		// >>> advanced:predmarket path parameters
+
+		// >>> advanced:marketplace path parameters
+
+		// >>> advanced:delegation path parameters
+
+		// >>> advanced:operator path parameters
 	}
 
 	requiredQuery := map[string]string{
@@ -181,6 +205,30 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		"/v1/advanced/effects":        "account_id=" + testAccountID.String(),
 		"/v1/advanced/risk/decisions": "account_id=" + testAccountID.String(),
 		"/v1/advanced/buying-power":   "account_id=" + testAccountID.String(),
+
+		// >>> advanced:margin required query
+
+		// >>> advanced:derivatives required query
+
+		// >>> advanced:equities required query
+
+		// >>> advanced:orders required query
+
+		// >>> advanced:transfers required query
+
+		// >>> advanced:treasury required query
+
+		// >>> advanced:stable required query
+
+		// >>> advanced:bridge required query
+
+		// >>> advanced:predmarket required query
+
+		// >>> advanced:marketplace required query
+
+		// >>> advanced:delegation required query
+
+		// >>> advanced:operator required query
 	}
 
 	var out []routeProbe

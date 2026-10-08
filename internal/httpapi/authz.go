@@ -175,6 +175,30 @@ var operationPolicies = map[string]operationPolicy{
 	"GetAdvancedRiskDecisions":           {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
 	"GetAdvancedBuyingPower":             {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
 
+	// >>> advanced:margin operations
+
+	// >>> advanced:derivatives operations
+
+	// >>> advanced:equities operations
+
+	// >>> advanced:orders operations
+
+	// >>> advanced:transfers operations
+
+	// >>> advanced:treasury operations
+
+	// >>> advanced:stable operations
+
+	// >>> advanced:bridge operations
+
+	// >>> advanced:predmarket operations
+
+	// >>> advanced:marketplace operations
+
+	// >>> advanced:delegation operations
+
+	// >>> advanced:operator operations
+
 	// --- trading ----------------------------------------------------------
 	"PostQuotesPreview":         {AnyOf: perms(security.PermTradeRead)},
 	"PostIntents":               {AnyOf: perms(security.PermTradeCreate), Mutating: true},

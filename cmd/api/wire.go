@@ -306,6 +306,30 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// economy above. Every capability here moves only SIMULATED value, LIVE is
 	// unrepresentable in the schema, and in STAGING and PROD even a simulated
 	// mode needs its gate ACTIVE (gates.DecideMode).
+	// >>> advanced:margin services
+
+	// >>> advanced:derivatives services
+
+	// >>> advanced:equities services
+
+	// >>> advanced:orders services
+
+	// >>> advanced:transfers services
+
+	// >>> advanced:treasury services
+
+	// >>> advanced:stable services
+
+	// >>> advanced:bridge services
+
+	// >>> advanced:predmarket services
+
+	// >>> advanced:marketplace services
+
+	// >>> advanced:delegation services
+
+	// >>> advanced:operator services
+
 	advancedDeps := httpapi.AdvancedDeps{
 		Authorizer: econ.NewAuthorizer(gateChecker, killChecker),
 		Intents:    econ.NewIntentStore(clk, outbox, auditWriter),
@@ -315,6 +339,30 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		// A sandbox mark older than this is stale and buying power V2 refuses
 		// to value the holding rather than use it.
 		MaxPriceAge: 5 * time.Minute,
+
+		// >>> advanced:margin deps
+
+		// >>> advanced:derivatives deps
+
+		// >>> advanced:equities deps
+
+		// >>> advanced:orders deps
+
+		// >>> advanced:transfers deps
+
+		// >>> advanced:treasury deps
+
+		// >>> advanced:stable deps
+
+		// >>> advanced:bridge deps
+
+		// >>> advanced:predmarket deps
+
+		// >>> advanced:marketplace deps
+
+		// >>> advanced:delegation deps
+
+		// >>> advanced:operator deps
 	}
 
 	// --- realtime ----------------------------------------------------------
