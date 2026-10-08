@@ -2266,6 +2266,938 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/advanced/delegation/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The account's agents, any of which its owner may grant a capability to */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The account's agents, newest first (bounded; the service decides whether an agent may act) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationAgentList"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** An account's delegated capabilities with their scope, limits, use and expiry, newest first */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of capabilities (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationCapabilityPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /**
+         * Grant one of the account's agents a scoped, expiring capability (owner only; step-up)
+         * @description The environment is the deployment's and the strategy is the agent's own; neither is the caller's to choose. The capability is immutable except for revocation. The Idempotency-Key is also the grant's own key: the same key with the same terms returns the existing grant.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DelegationGrantRequest"];
+                };
+            };
+            responses: {
+                /** @description The capability, ACTIVE */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationCapability"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/capabilities/{capabilityId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One capability with every use recorded under it, newest first */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    capabilityId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The capability (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationCapabilityDetail"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/capabilities/{capabilityId}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revoke a capability (owner only; step-up). Nothing not yet signed under it can be signed afterwards */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    capabilityId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DelegationReasonRequest"];
+                };
+            };
+            responses: {
+                /** @description The capability, REVOKED (revoking a revoked capability returns it unchanged) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationCapability"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/destinations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The account's allow-listed withdrawal destinations, newest first */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Every destination the account allow-listed, active and removed (bounded) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationDestinationList"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /** Allow-list a withdrawal destination (owner only; step-up). Its age starts now */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DelegationDestinationRequest"];
+                };
+            };
+            responses: {
+                /** @description The destination, ACTIVE */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationDestination"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/destinations/{destinationId}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Remove a destination from the allow-list (owner only; step-up). Nothing not yet signed goes to it afterwards */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    destinationId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DelegationReasonRequest"];
+                };
+            };
+            responses: {
+                /** @description The destination, REMOVED */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationDestination"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/ops/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Operator — capabilities across every account, newest first (read only) */
+        get: {
+            parameters: {
+                query?: {
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                    status?: components["schemas"]["DelegationCapabilityStatus"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of capabilities (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationCapabilityPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/ops/execute-pending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Operator — execute every swap and withdrawal that is ready, oldest first (step-up)
+         * @description Admitted and approved swaps and approved withdrawals are each executed under the service's own authority: inspected, signed, submitted exactly once and settled. The service refuses what may not go ahead (a revoked capability, a cooling period, a closed gate); each subject's outcome is reported.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DelegationExecuteRequest"];
+                };
+            };
+            responses: {
+                /** @description What the run did to each subject */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationExecutionRun"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/ops/pending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Operator — every swap and withdrawal not yet at an end, across accounts, oldest first (read only)
+         * @description Awaiting a decision, awaiting execution, or signed and in flight. Bounded by limit per kind.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Pending swaps and withdrawals (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationPending"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/ops/venues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Operator — register a sandbox venue this deployment co-signs for (step-up)
+         * @description The venue's settlement address is its co-signer's, never the caller's to choose: a name with no co-signer in this deployment is refused. Without a house book, one is created for the venue.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DelegationVenueRequest"];
+                };
+            };
+            responses: {
+                /** @description The venue */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationVenue"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/swaps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Signing requests (delegated swaps) of an account with their plan, inspection and decision trail, newest first */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                    status?: components["schemas"]["DelegationSwapStatus"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of swaps (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationSwapPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/swaps/{swapId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One signing request with its plan, inspection and decision trail */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    swapId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The swap (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationSwap"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/swaps/{swapId}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve or decline a swap awaiting approval, bound to the plan hash shown (owner only; step-up)
+         * @description An approval is executed at once under the service's own authority: compiled, inspected, signed by the delegated wallet and the venue, submitted exactly once and settled. The decision stands whatever the execution then does; `execution` says what it did. A decline cancels the swap and returns its funds.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    swapId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DelegationDecisionRequest"];
+                };
+            };
+            responses: {
+                /** @description The swap after the decision (and, for an approval, after its execution) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationSwapDecisionResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/venues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Registered sandbox venues, and the venues this deployment holds a co-signer for */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Venues (bounded) and the deployment's co-signers */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationVenueList"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/withdrawal-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The account's withdrawal policy in force and every earlier version */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The latest version (absent when the account has none, so nothing can be withdrawn) and its history */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationWithdrawalPolicyState"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /** Write the account's next withdrawal policy version (owner only; step-up). Versions are immutable */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DelegationWithdrawalPolicyRequest"];
+                };
+            };
+            responses: {
+                /** @description The new version, which applies to every proposal from now on */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationWithdrawalPolicy"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/withdrawals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Withdrawals the account's agents proposed, with destination, policy evaluation and decision trail, newest first */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                    status?: components["schemas"]["DelegationWithdrawalStatus"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of withdrawals (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationWithdrawalPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/withdrawals/{withdrawalId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One withdrawal with its plan, policy evaluation, inspection and decision trail */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    withdrawalId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The withdrawal (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationWithdrawal"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/withdrawals/{withdrawalId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stop a withdrawal that has not been signed (owner only). Cancelling only reduces risk, so it needs no step-up */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    withdrawalId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DelegationReasonRequest"];
+                };
+            };
+            responses: {
+                /** @description The withdrawal, CANCELLED, with its funds returned */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationWithdrawal"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/delegation/withdrawals/{withdrawalId}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve or decline a withdrawal awaiting approval, bound to the plan hash shown (owner only; step-up)
+         * @description An approval past the policy's cooling period is executed at once under the service's own authority: compiled, inspected, signed, submitted exactly once and settled. Before it, the withdrawal stays APPROVED and `execution` carries the refusal; an operator's execution run takes it later. A decline returns the funds.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    withdrawalId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DelegationDecisionRequest"];
+                };
+            };
+            responses: {
+                /** @description The withdrawal after the decision (and, for an approval, after its execution) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DelegationWithdrawalDecisionResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/advanced/derivatives/clearing-house/funding": {
         parameters: {
             query?: never;
@@ -14838,6 +15770,497 @@ export interface components {
             policy_version: string;
             reason_codes: string[];
         };
+        /** @enum {string} */
+        DelegationActionClass: "ACQUIRE_EXPOSURE" | "REDUCE_EXPOSURE" | "PROPOSE_WITHDRAWAL";
+        DelegationActor: {
+            actor_id: string;
+            actor_type: string;
+        };
+        DelegationAgent: {
+            created_at: components["schemas"]["Timestamp"];
+            id: components["schemas"]["UUID"];
+            name: string;
+            stage: string;
+            /** @description A PAUSED, FAILED, REVOKED or SUPERSEDED agent may not act; the service refuses a grant to one */
+            state: string;
+            strategy_id: components["schemas"]["UUID"];
+        };
+        DelegationAgentList: {
+            items: components["schemas"]["DelegationAgent"][];
+        };
+        DelegationApproval: {
+            approver: components["schemas"]["DelegationActor"];
+            authenticated_at?: components["schemas"]["Timestamp"];
+            decided_at: components["schemas"]["Timestamp"];
+            decision: components["schemas"]["DelegationDecision"];
+            plan_hash: string;
+            reason: string;
+        };
+        DelegationAssetRef: {
+            decimals: number;
+            id: components["schemas"]["UUID"];
+            symbol: string;
+        };
+        DelegationCapability: {
+            account_id: components["schemas"]["UUID"];
+            action_classes: components["schemas"]["DelegationActionClass"][];
+            agent_id: components["schemas"]["UUID"];
+            agent_name?: string;
+            as_of: components["schemas"]["Timestamp"];
+            chain_allowlist: components["schemas"]["DelegationChain"][];
+            /** @description SHA-256 of the canonical grant; every plan signed under it names it */
+            content_hash: string;
+            destination_allowlist: string[];
+            environment: string;
+            expires_at: components["schemas"]["Timestamp"];
+            granted_at: components["schemas"]["Timestamp"];
+            granted_by: components["schemas"]["DelegationActor"];
+            id: components["schemas"]["UUID"];
+            instrument_classes: components["schemas"]["DelegationInstrumentClass"][];
+            max_daily_notional_usd: components["schemas"]["USD"];
+            max_notional_usd: components["schemas"]["USD"];
+            max_single_trade_usd: components["schemas"]["USD"];
+            mode: components["schemas"]["AdvancedMode"];
+            requires_human_approval: boolean;
+            revocation_reason?: string;
+            revoked_at?: components["schemas"]["Timestamp"];
+            revoked_by?: components["schemas"]["DelegationActor"];
+            standing: components["schemas"]["DelegationCapabilityStanding"];
+            status: components["schemas"]["DelegationCapabilityStatus"];
+            strategy_id: components["schemas"]["UUID"];
+            usage: components["schemas"]["DelegationCapabilityUsage"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        DelegationCapabilityDetail: components["schemas"]["DelegationCapability"] & {
+            /** @description Newest first, bounded */
+            uses: components["schemas"]["DelegationCapabilityUse"][];
+        };
+        DelegationCapabilityPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["DelegationCapability"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /**
+         * @description REVOKED when revoked; EXPIRED when as_of is at or after expires_at; ACTIVE otherwise. Expiry is not a stored status.
+         * @enum {string}
+         */
+        DelegationCapabilityStanding: "ACTIVE" | "EXPIRED" | "REVOKED";
+        /** @enum {string} */
+        DelegationCapabilityStatus: "ACTIVE" | "REVOKED";
+        /** @description What the capability has used, measured from its usage rows: on the UTC day of as_of and in all. remaining_* is the limit less the use, never below zero. A use is recorded at admission, so a request that was later refused or failed still counts against the limits. */
+        DelegationCapabilityUsage: {
+            /** @description The UTC day used_today_usd counts */
+            day: string;
+            remaining_today_usd: components["schemas"]["USD"];
+            remaining_total_usd: components["schemas"]["USD"];
+            used_today_usd: components["schemas"]["USD"];
+            used_total_usd: components["schemas"]["USD"];
+            uses: number;
+        };
+        DelegationCapabilityUse: {
+            action_class: components["schemas"]["DelegationActionClass"];
+            id: components["schemas"]["UUID"];
+            notional_usd: components["schemas"]["USD"];
+            subject_id: components["schemas"]["UUID"];
+            subject_kind: components["schemas"]["DelegationSubjectKind"];
+            used_at: components["schemas"]["Timestamp"];
+        };
+        /** @enum {string} */
+        DelegationChain: "sbx-solana" | "sbx-ethereum";
+        DelegationCoSigner: {
+            address: string;
+            chain: components["schemas"]["DelegationChain"];
+            name: string;
+            registered: boolean;
+        };
+        /** @enum {string} */
+        DelegationDecision: "APPROVE" | "DECLINE";
+        DelegationDecisionRequest: {
+            decision: components["schemas"]["DelegationDecision"];
+            /** @description The plan hash the owner was shown; any other plan is refused */
+            plan_hash: string;
+            reason: string;
+        };
+        DelegationDestination: {
+            account_id: components["schemas"]["UUID"];
+            added_at: components["schemas"]["Timestamp"];
+            added_by: components["schemas"]["DelegationActor"];
+            address: string;
+            chain: components["schemas"]["DelegationChain"];
+            id: components["schemas"]["UUID"];
+            label: string;
+            removed_at?: components["schemas"]["Timestamp"];
+            removed_by?: components["schemas"]["DelegationActor"];
+            status: components["schemas"]["DelegationDestinationStatus"];
+        };
+        DelegationDestinationList: {
+            items: components["schemas"]["DelegationDestination"][];
+        };
+        /** @description The destination as the allow-list holds it now (its status may have changed since the plan froze it). */
+        DelegationDestinationRef: {
+            id: components["schemas"]["UUID"];
+            label: string;
+            status: components["schemas"]["DelegationDestinationStatus"];
+        };
+        DelegationDestinationRequest: {
+            account_id: components["schemas"]["UUID"];
+            address: string;
+            chain: components["schemas"]["DelegationChain"];
+            label: string;
+        };
+        /** @enum {string} */
+        DelegationDestinationStatus: "ACTIVE" | "REMOVED";
+        /**
+         * @description AUTO_APPROVE exists only in LOCAL, TEST and DEV with every auto bound met; a rejected proposal is never stored as a withdrawal.
+         * @enum {string}
+         */
+        DelegationEvaluationOutcome: "AUTO_APPROVE" | "HUMAN_REQUIRED";
+        DelegationExecuteRequest: {
+            /** @default 10 */
+            limit: number;
+        };
+        /** @description Whether the decision was followed by an execution, and how that ended when it did not run to its end. */
+        DelegationExecution: {
+            attempted: boolean;
+            error?: components["schemas"]["DelegationExecutionError"];
+        };
+        DelegationExecutionError: {
+            /** @description The stable error code the execution ended with */
+            code: string;
+            detail: string;
+            /** @description The delegation reason code, when the service gave one */
+            reason?: string;
+        };
+        DelegationExecutionItem: {
+            account_id: components["schemas"]["UUID"];
+            error?: components["schemas"]["DelegationExecutionError"];
+            id: components["schemas"]["UUID"];
+            kind: components["schemas"]["DelegationSubjectKind"];
+            status: string;
+            status_before: string;
+        };
+        DelegationExecutionRun: {
+            items: components["schemas"]["DelegationExecutionItem"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        DelegationGrantRequest: {
+            account_id: components["schemas"]["UUID"];
+            action_classes: components["schemas"]["DelegationActionClass"][];
+            agent_id: components["schemas"]["UUID"];
+            chain_allowlist: components["schemas"]["DelegationChain"][];
+            /** @description Simulated-chain addresses a swap may pay to and a withdrawal may go to; a swap's venue must be among them */
+            destination_allowlist: string[];
+            expires_at: components["schemas"]["Timestamp"];
+            instrument_classes: components["schemas"]["DelegationInstrumentClass"][];
+            max_daily_notional_usd: components["schemas"]["USD"];
+            max_notional_usd: components["schemas"]["USD"];
+            max_single_trade_usd: components["schemas"]["USD"];
+            mode: components["schemas"]["AdvancedMode"];
+            requires_human_approval: boolean;
+        };
+        /** @description The signing provider's one decision: the capability validated again, the compiled message inspected field by field against the persisted plan, then the signing policy. REJECTED carries every reason code. */
+        DelegationInspection: {
+            capability_hash: string;
+            decided_at: components["schemas"]["Timestamp"];
+            id: components["schemas"]["UUID"];
+            inspector_version: string;
+            message_sha256: string;
+            plan_hash: string;
+            policy_hash: string;
+            policy_version: string;
+            reason_codes: string[];
+            signer_public_key: string;
+            verdict: components["schemas"]["DelegationVerdict"];
+        };
+        /** @enum {string} */
+        DelegationInstrumentClass: "STABLE_VALUE" | "SPOT_TOKEN" | "SPECULATIVE_TOKEN";
+        DelegationPending: {
+            as_of: components["schemas"]["Timestamp"];
+            swaps: components["schemas"]["DelegationSwap"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            withdrawals: components["schemas"]["DelegationWithdrawal"][];
+        };
+        /** @description Whole sandbox dollars per whole unit of the asset, mantissa x 10^-scale. A par price is the registry's USD peg, not an observation. */
+        DelegationPlanPrice: {
+            mantissa: string;
+            observed_at: components["schemas"]["Timestamp"];
+            par: boolean;
+            scale: string;
+            source: string;
+        };
+        DelegationReasonRequest: {
+            reason: string;
+        };
+        /** @enum {string} */
+        DelegationSubjectKind: "SWAP" | "WITHDRAWAL";
+        DelegationSwap: {
+            account_id: components["schemas"]["UUID"];
+            action_class: components["schemas"]["DelegationActionClass"];
+            agent_id: components["schemas"]["UUID"];
+            amount_in: components["schemas"]["Quantity"];
+            amount_out: components["schemas"]["Quantity"];
+            approval?: components["schemas"]["DelegationApproval"];
+            capability_id: components["schemas"]["UUID"];
+            chain: components["schemas"]["DelegationChain"];
+            created_at: components["schemas"]["Timestamp"];
+            effect_id?: components["schemas"]["UUID"];
+            failure_code?: string;
+            id: components["schemas"]["UUID"];
+            inspection?: components["schemas"]["DelegationInspection"];
+            intent_id: components["schemas"]["UUID"];
+            journal_transaction_id?: components["schemas"]["UUID"];
+            min_amount_out: components["schemas"]["Quantity"];
+            mode: components["schemas"]["AdvancedMode"];
+            notional_usd: components["schemas"]["USD"];
+            pay_asset: components["schemas"]["DelegationAssetRef"];
+            plan: components["schemas"]["DelegationSwapPlan"];
+            plan_hash: string;
+            quote_expires_at: components["schemas"]["Timestamp"];
+            receive_asset: components["schemas"]["DelegationAssetRef"];
+            request_nonce: string;
+            requested_at: components["schemas"]["Timestamp"];
+            requires_approval: boolean;
+            reservation_id: components["schemas"]["UUID"];
+            signed_at?: components["schemas"]["Timestamp"];
+            status: components["schemas"]["DelegationSwapStatus"];
+            /** @description Oldest first */
+            transitions: components["schemas"]["DelegationTransition"][];
+            tx_id?: string;
+            updated_at: components["schemas"]["Timestamp"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            venue: components["schemas"]["DelegationVenueRef"];
+            wallet: string;
+        };
+        DelegationSwapDecisionResult: {
+            execution: components["schemas"]["DelegationExecution"];
+            swap: components["schemas"]["DelegationSwap"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        DelegationSwapPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["DelegationSwap"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @description The canonical settlement plan exactly as hashed; numbers are the plan's own decimal strings. */
+        DelegationSwapPlan: {
+            account_id: string;
+            action_class: string;
+            agent_id: string;
+            amount_in: components["schemas"]["Quantity"];
+            amount_out: components["schemas"]["Quantity"];
+            capability_hash: string;
+            capability_id: string;
+            chain: string;
+            fee_per_tx: components["schemas"]["Quantity"];
+            intent_id: string;
+            max_slippage_bps: string;
+            min_amount_out: components["schemas"]["Quantity"];
+            mode: string;
+            notional_usd: components["schemas"]["USD"];
+            pay_asset_id: string;
+            pay_decimals: string;
+            pay_mint: string;
+            pay_price: components["schemas"]["DelegationPlanPrice"];
+            quote_expires_at: components["schemas"]["Timestamp"];
+            receive_asset_id: string;
+            receive_decimals: string;
+            receive_mint: string;
+            receive_price: components["schemas"]["DelegationPlanPrice"];
+            request_nonce: string;
+            requested_at: components["schemas"]["Timestamp"];
+            spread_bps: string;
+            swap_id: string;
+            venue_address: string;
+            venue_id: string;
+            version: string;
+            wallet: string;
+        };
+        /** @enum {string} */
+        DelegationSwapStatus: "ADMITTED" | "AWAITING_APPROVAL" | "APPROVED" | "SIGNED" | "SUBMITTED" | "UNKNOWN" | "SETTLED" | "REJECTED" | "CANCELLED" | "FAILED";
+        DelegationTransition: {
+            actor: components["schemas"]["DelegationActor"];
+            from_status: string;
+            occurred_at: components["schemas"]["Timestamp"];
+            reason: string;
+            to_status: string;
+        };
+        DelegationVenue: {
+            address: string;
+            chain: components["schemas"]["DelegationChain"];
+            /** @description Whether this deployment holds the venue's co-signer; without it no swap there is signed */
+            co_signer: boolean;
+            created_at: components["schemas"]["Timestamp"];
+            created_by: components["schemas"]["DelegationActor"];
+            house_account_id: components["schemas"]["UUID"];
+            id: components["schemas"]["UUID"];
+            name: string;
+            spread_bps: components["schemas"]["BPS"];
+        };
+        DelegationVenueList: {
+            co_signers: components["schemas"]["DelegationCoSigner"][];
+            items: components["schemas"]["DelegationVenue"][];
+        };
+        DelegationVenueRef: {
+            address: string;
+            id: components["schemas"]["UUID"];
+            name: string;
+        };
+        DelegationVenueRequest: {
+            house_account_id?: components["schemas"]["UUID"];
+            name: string;
+            spread_bps: components["schemas"]["BPS"];
+        };
+        /** @enum {string} */
+        DelegationVerdict: "APPROVED" | "REJECTED";
+        DelegationWithdrawal: {
+            account_id: components["schemas"]["UUID"];
+            agent_id: components["schemas"]["UUID"];
+            amount: components["schemas"]["Quantity"];
+            approval?: components["schemas"]["DelegationApproval"];
+            approval_expires_at: components["schemas"]["Timestamp"];
+            asset: components["schemas"]["DelegationAssetRef"];
+            capability_id: components["schemas"]["UUID"];
+            chain: components["schemas"]["DelegationChain"];
+            created_at: components["schemas"]["Timestamp"];
+            destination: components["schemas"]["DelegationDestinationRef"];
+            destination_address: string;
+            effect_id?: components["schemas"]["UUID"];
+            environment: string;
+            evaluation: components["schemas"]["DelegationWithdrawalEvaluation"];
+            /** @description The end of the policy's cooling period; nothing is signed before it */
+            executable_at: components["schemas"]["Timestamp"];
+            failure_code?: string;
+            id: components["schemas"]["UUID"];
+            inspection?: components["schemas"]["DelegationInspection"];
+            intent_id: components["schemas"]["UUID"];
+            journal_transaction_id?: components["schemas"]["UUID"];
+            mode: components["schemas"]["AdvancedMode"];
+            notional_usd: components["schemas"]["USD"];
+            plan: components["schemas"]["DelegationWithdrawalPlan"];
+            plan_hash: string;
+            policy_id: components["schemas"]["UUID"];
+            proposal_nonce: string;
+            proposed_at: components["schemas"]["Timestamp"];
+            reservation_id: components["schemas"]["UUID"];
+            signed_at?: components["schemas"]["Timestamp"];
+            status: components["schemas"]["DelegationWithdrawalStatus"];
+            /** @description Oldest first */
+            transitions: components["schemas"]["DelegationTransition"][];
+            tx_id?: string;
+            updated_at: components["schemas"]["Timestamp"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            wallet: string;
+        };
+        DelegationWithdrawalDecisionResult: {
+            execution: components["schemas"]["DelegationExecution"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            withdrawal: components["schemas"]["DelegationWithdrawal"];
+        };
+        /** @description The withdrawal policy's decision about the proposal, as recorded with it. */
+        DelegationWithdrawalEvaluation: {
+            /** Format: int64 */
+            account_age_seconds: number;
+            anomalies: string[];
+            compliance_clear: boolean;
+            count_last_24h: number;
+            day_total_before_usd: components["schemas"]["USD"];
+            /** Format: int64 */
+            destination_age_seconds: number;
+            environment: string;
+            outcome: components["schemas"]["DelegationEvaluationOutcome"];
+            policy_hash: string;
+            policy_version: string;
+            reason_codes: string[];
+            risk_score: number;
+        };
+        DelegationWithdrawalPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["DelegationWithdrawal"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @description The frozen withdrawal plan exactly as hashed; numbers are the plan's own decimal strings. */
+        DelegationWithdrawalPlan: {
+            account_id: string;
+            agent_id: string;
+            amount: components["schemas"]["Quantity"];
+            approval_expires_at: components["schemas"]["Timestamp"];
+            asset_id: string;
+            capability_hash: string;
+            capability_id: string;
+            chain: string;
+            decimals: string;
+            destination_address: string;
+            destination_id: string;
+            evaluation_outcome: string;
+            executable_at: components["schemas"]["Timestamp"];
+            fee_per_tx: components["schemas"]["Quantity"];
+            intent_id: string;
+            mint: string;
+            mode: string;
+            notional_usd: components["schemas"]["USD"];
+            policy_hash: string;
+            policy_id: string;
+            policy_version: string;
+            price: components["schemas"]["DelegationPlanPrice"];
+            proposal_nonce: string;
+            proposed_at: components["schemas"]["Timestamp"];
+            risk_score: string;
+            version: string;
+            wallet: string;
+            withdrawal_id: string;
+        };
+        DelegationWithdrawalPolicy: {
+            account_id: components["schemas"]["UUID"];
+            /** @description Honoured only in LOCAL, TEST and DEV; everywhere else the owner decides */
+            auto_approve_enabled: boolean;
+            auto_approve_max_risk_score: number;
+            auto_approve_max_usd: components["schemas"]["USD"];
+            /** Format: int64 */
+            cooling_period_seconds: number;
+            created_at: components["schemas"]["Timestamp"];
+            created_by: components["schemas"]["DelegationActor"];
+            daily_limit_usd: components["schemas"]["USD"];
+            effective_at: components["schemas"]["Timestamp"];
+            id: components["schemas"]["UUID"];
+            max_risk_score: number;
+            /** Format: int64 */
+            min_account_age_seconds: number;
+            /** Format: int64 */
+            min_destination_age_seconds: number;
+            per_withdrawal_limit_usd: components["schemas"]["USD"];
+            policy_hash: string;
+            /** Format: int64 */
+            strong_auth_max_age_seconds: number;
+            strong_auth_required: boolean;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            velocity_max_count: number;
+            version: number;
+        };
+        DelegationWithdrawalPolicyRequest: {
+            account_id: components["schemas"]["UUID"];
+            auto_approve_enabled: boolean;
+            auto_approve_max_risk_score: number;
+            auto_approve_max_usd: components["schemas"]["USD"];
+            /** Format: int64 */
+            cooling_period_seconds: number;
+            daily_limit_usd: components["schemas"]["USD"];
+            max_risk_score: number;
+            /** Format: int64 */
+            min_account_age_seconds: number;
+            /** Format: int64 */
+            min_destination_age_seconds: number;
+            per_withdrawal_limit_usd: components["schemas"]["USD"];
+            /** Format: int64 */
+            strong_auth_max_age_seconds: number;
+            strong_auth_required: boolean;
+            velocity_max_count: number;
+        };
+        DelegationWithdrawalPolicyState: {
+            account_id: components["schemas"]["UUID"];
+            current?: components["schemas"]["DelegationWithdrawalPolicy"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            /** @description Newest first, bounded */
+            versions: components["schemas"]["DelegationWithdrawalPolicy"][];
+        };
+        /** @enum {string} */
+        DelegationWithdrawalStatus: "PROPOSED" | "AWAITING_APPROVAL" | "APPROVED" | "SIGNED" | "SUBMITTED" | "UNKNOWN" | "SETTLED" | "REJECTED" | "DECLINED" | "CANCELLED" | "FAILED";
         Deposit: {
             account_id: components["schemas"]["UUID"];
             available_at?: components["schemas"]["Timestamp"];

@@ -5038,6 +5038,348 @@ paths:
         "403": { $ref: "#/components/responses/Problem" }
 
   # >>> advanced:delegation paths (insert this subsystem's paths directly below; keep the marker)
+  #
+  # Delegated agent authority over SIMULATED value (internal/delegation): a customer grants one of the
+  # account's own agents a scoped, expiring capability; the agent's swap requests are signed only after the
+  # transaction inspector proves they are the approved plan; withdrawals go only to allow-listed
+  # destinations under the customer's policy, with a human decision except AUTO_APPROVE in a test
+  # environment. These routes are the account owner's and the operators'. An agent never reaches HTTP:
+  # its swap requests and withdrawal proposals are admitted in-process by the agent runtime, and it never
+  # signs, executes, decides or reads a key. The delegation service decides every rule and refusal.
+  /advanced/delegation/agents:
+    get:
+      tags: [advanced]
+      summary: The account's agents, any of which its owner may grant a capability to
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The account's agents, newest first (bounded; the service decides whether an agent may act)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationAgentList" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/delegation/capabilities:
+    get:
+      tags: [advanced]
+      summary: An account's delegated capabilities with their scope, limits, use and expiry, newest first
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of capabilities (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationCapabilityPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Grant one of the account's agents a scoped, expiring capability (owner only; step-up)
+      description: >-
+        The environment is the deployment's and the strategy is the agent's own; neither is the caller's to
+        choose. The capability is immutable except for revocation. The Idempotency-Key is also the grant's
+        own key: the same key with the same terms returns the existing grant.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DelegationGrantRequest" } } }
+      responses:
+        "200":
+          description: The capability, ACTIVE
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationCapability" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/delegation/capabilities/{capabilityId}:
+    get:
+      tags: [advanced]
+      summary: One capability with every use recorded under it, newest first
+      parameters:
+        - { in: path, name: capabilityId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The capability (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationCapabilityDetail" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/delegation/capabilities/{capabilityId}/revoke:
+    post:
+      tags: [advanced]
+      summary: Revoke a capability (owner only; step-up). Nothing not yet signed under it can be signed afterwards
+      parameters:
+        - { in: path, name: capabilityId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DelegationReasonRequest" } } }
+      responses:
+        "200":
+          description: The capability, REVOKED (revoking a revoked capability returns it unchanged)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationCapability" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/delegation/destinations:
+    get:
+      tags: [advanced]
+      summary: The account's allow-listed withdrawal destinations, newest first
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: Every destination the account allow-listed, active and removed (bounded)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationDestinationList" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Allow-list a withdrawal destination (owner only; step-up). Its age starts now
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DelegationDestinationRequest" } } }
+      responses:
+        "200":
+          description: The destination, ACTIVE
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationDestination" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/delegation/destinations/{destinationId}/remove:
+    post:
+      tags: [advanced]
+      summary: Remove a destination from the allow-list (owner only; step-up). Nothing not yet signed goes to it afterwards
+      parameters:
+        - { in: path, name: destinationId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DelegationReasonRequest" } } }
+      responses:
+        "200":
+          description: The destination, REMOVED
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationDestination" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/delegation/withdrawal-policy:
+    get:
+      tags: [advanced]
+      summary: The account's withdrawal policy in force and every earlier version
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The latest version (absent when the account has none, so nothing can be withdrawn) and its history
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationWithdrawalPolicyState" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Write the account's next withdrawal policy version (owner only; step-up). Versions are immutable
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DelegationWithdrawalPolicyRequest" } } }
+      responses:
+        "200":
+          description: The new version, which applies to every proposal from now on
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationWithdrawalPolicy" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/delegation/swaps:
+    get:
+      tags: [advanced]
+      summary: Signing requests (delegated swaps) of an account with their plan, inspection and decision trail, newest first
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { in: query, name: status, required: false, schema: { $ref: "#/components/schemas/DelegationSwapStatus" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of swaps (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationSwapPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/delegation/swaps/{swapId}:
+    get:
+      tags: [advanced]
+      summary: One signing request with its plan, inspection and decision trail
+      parameters:
+        - { in: path, name: swapId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The swap (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationSwap" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/delegation/swaps/{swapId}/decision:
+    post:
+      tags: [advanced]
+      summary: Approve or decline a swap awaiting approval, bound to the plan hash shown (owner only; step-up)
+      description: >-
+        An approval is executed at once under the service's own authority: compiled, inspected, signed by the
+        delegated wallet and the venue, submitted exactly once and settled. The decision stands whatever the
+        execution then does; `execution` says what it did. A decline cancels the swap and returns its funds.
+      parameters:
+        - { in: path, name: swapId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DelegationDecisionRequest" } } }
+      responses:
+        "200":
+          description: The swap after the decision (and, for an approval, after its execution)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationSwapDecisionResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/delegation/withdrawals:
+    get:
+      tags: [advanced]
+      summary: Withdrawals the account's agents proposed, with destination, policy evaluation and decision trail, newest first
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { in: query, name: status, required: false, schema: { $ref: "#/components/schemas/DelegationWithdrawalStatus" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of withdrawals (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationWithdrawalPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/delegation/withdrawals/{withdrawalId}:
+    get:
+      tags: [advanced]
+      summary: One withdrawal with its plan, policy evaluation, inspection and decision trail
+      parameters:
+        - { in: path, name: withdrawalId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The withdrawal (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationWithdrawal" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/delegation/withdrawals/{withdrawalId}/decision:
+    post:
+      tags: [advanced]
+      summary: Approve or decline a withdrawal awaiting approval, bound to the plan hash shown (owner only; step-up)
+      description: >-
+        An approval past the policy's cooling period is executed at once under the service's own authority:
+        compiled, inspected, signed, submitted exactly once and settled. Before it, the withdrawal stays
+        APPROVED and `execution` carries the refusal; an operator's execution run takes it later. A decline
+        returns the funds.
+      parameters:
+        - { in: path, name: withdrawalId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DelegationDecisionRequest" } } }
+      responses:
+        "200":
+          description: The withdrawal after the decision (and, for an approval, after its execution)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationWithdrawalDecisionResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/delegation/withdrawals/{withdrawalId}/cancel:
+    post:
+      tags: [advanced]
+      summary: Stop a withdrawal that has not been signed (owner only). Cancelling only reduces risk, so it needs no step-up
+      parameters:
+        - { in: path, name: withdrawalId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DelegationReasonRequest" } } }
+      responses:
+        "200":
+          description: The withdrawal, CANCELLED, with its funds returned
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationWithdrawal" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/delegation/venues:
+    get:
+      tags: [advanced]
+      summary: Registered sandbox venues, and the venues this deployment holds a co-signer for
+      responses:
+        "200":
+          description: Venues (bounded) and the deployment's co-signers
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationVenueList" } } }
+  /advanced/delegation/ops/capabilities:
+    get:
+      tags: [advanced]
+      summary: Operator — capabilities across every account, newest first (read only)
+      parameters:
+        - { in: query, name: status, required: false, schema: { $ref: "#/components/schemas/DelegationCapabilityStatus" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of capabilities (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationCapabilityPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/delegation/ops/pending:
+    get:
+      tags: [advanced]
+      summary: Operator — every swap and withdrawal not yet at an end, across accounts, oldest first (read only)
+      description: Awaiting a decision, awaiting execution, or signed and in flight. Bounded by limit per kind.
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Pending swaps and withdrawals (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationPending" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/delegation/ops/venues:
+    post:
+      tags: [advanced]
+      summary: Operator — register a sandbox venue this deployment co-signs for (step-up)
+      description: >-
+        The venue's settlement address is its co-signer's, never the caller's to choose: a name with no
+        co-signer in this deployment is refused. Without a house book, one is created for the venue.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DelegationVenueRequest" } } }
+      responses:
+        "200":
+          description: The venue
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationVenue" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/delegation/ops/execute-pending:
+    post:
+      tags: [advanced]
+      summary: Operator — execute every swap and withdrawal that is ready, oldest first (step-up)
+      description: >-
+        Admitted and approved swaps and approved withdrawals are each executed under the service's own
+        authority: inspected, signed, submitted exactly once and settled. The service refuses what may not go
+        ahead (a revoked capability, a cooling period, a closed gate); each subject's outcome is reported.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DelegationExecuteRequest" } } }
+      responses:
+        "200":
+          description: What the run did to each subject
+          content: { application/json: { schema: { $ref: "#/components/schemas/DelegationExecutionRun" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
 
   # >>> advanced:operator paths (insert this subsystem's paths directly below; keep the marker)
   #
@@ -12267,6 +12609,626 @@ components:
             items: { type: array, items: { $ref: "#/components/schemas/StrategySandboxRun" } }
 
     # >>> advanced:delegation schemas (insert this subsystem's schemas directly below; keep the marker)
+    #
+    # Every enum carries x-enum-varnames so its Go constants can never collide with another schema's
+    # (ACTIVE, APPROVED, REJECTED and FAILED already exist unprefixed). *_usd figures are the sandbox
+    # dollar as an exact two-decimal string; amounts are exact base units. Plans are reported exactly as
+    # they were hashed: the plan hash a decision names must be the one the plan below it carries.
+    DelegationInstrumentClass:
+      type: string
+      enum: [STABLE_VALUE, SPOT_TOKEN, SPECULATIVE_TOKEN]
+      x-enum-varnames: [DelegationClassStableValue, DelegationClassSpotToken, DelegationClassSpeculativeToken]
+    DelegationActionClass:
+      type: string
+      enum: [ACQUIRE_EXPOSURE, REDUCE_EXPOSURE, PROPOSE_WITHDRAWAL]
+      x-enum-varnames: [DelegationActionAcquireExposure, DelegationActionReduceExposure, DelegationActionProposeWithdrawal]
+    DelegationChain:
+      type: string
+      enum: [sbx-solana, sbx-ethereum]
+      x-enum-varnames: [DelegationChainSolana, DelegationChainEthereum]
+    DelegationCapabilityStatus:
+      type: string
+      enum: [ACTIVE, REVOKED]
+      x-enum-varnames: [DelegationCapabilityActive, DelegationCapabilityRevoked]
+    DelegationCapabilityStanding:
+      type: string
+      enum: [ACTIVE, EXPIRED, REVOKED]
+      x-enum-varnames: [DelegationStandingActive, DelegationStandingExpired, DelegationStandingRevoked]
+      description: REVOKED when revoked; EXPIRED when as_of is at or after expires_at; ACTIVE otherwise. Expiry is not a stored status.
+    DelegationSwapStatus:
+      type: string
+      enum: [ADMITTED, AWAITING_APPROVAL, APPROVED, SIGNED, SUBMITTED, UNKNOWN, SETTLED, REJECTED, CANCELLED, FAILED]
+      x-enum-varnames: [DelegationSwapAdmitted, DelegationSwapAwaitingApproval, DelegationSwapApproved, DelegationSwapSigned,
+                        DelegationSwapSubmitted, DelegationSwapUnknown, DelegationSwapSettled, DelegationSwapRejected,
+                        DelegationSwapCancelled, DelegationSwapFailed]
+    DelegationWithdrawalStatus:
+      type: string
+      enum: [PROPOSED, AWAITING_APPROVAL, APPROVED, SIGNED, SUBMITTED, UNKNOWN, SETTLED, REJECTED, DECLINED, CANCELLED, FAILED]
+      x-enum-varnames: [DelegationWithdrawalProposed, DelegationWithdrawalAwaitingApproval, DelegationWithdrawalApproved,
+                        DelegationWithdrawalSigned, DelegationWithdrawalSubmitted, DelegationWithdrawalUnknown,
+                        DelegationWithdrawalSettled, DelegationWithdrawalRejected, DelegationWithdrawalDeclined,
+                        DelegationWithdrawalCancelled, DelegationWithdrawalFailed]
+    DelegationDestinationStatus:
+      type: string
+      enum: [ACTIVE, REMOVED]
+      x-enum-varnames: [DelegationDestinationActive, DelegationDestinationRemoved]
+    DelegationDecision:
+      type: string
+      enum: [APPROVE, DECLINE]
+      x-enum-varnames: [DelegationDecisionApprove, DelegationDecisionDecline]
+    DelegationVerdict:
+      type: string
+      enum: [APPROVED, REJECTED]
+      x-enum-varnames: [DelegationVerdictApproved, DelegationVerdictRejected]
+    DelegationEvaluationOutcome:
+      type: string
+      enum: [AUTO_APPROVE, HUMAN_REQUIRED]
+      x-enum-varnames: [DelegationOutcomeAutoApprove, DelegationOutcomeHumanRequired]
+      description: AUTO_APPROVE exists only in LOCAL, TEST and DEV with every auto bound met; a rejected proposal is never stored as a withdrawal.
+    DelegationSubjectKind:
+      type: string
+      enum: [SWAP, WITHDRAWAL]
+      x-enum-varnames: [DelegationSubjectSwap, DelegationSubjectWithdrawal]
+    DelegationActor:
+      type: object
+      required: [actor_type, actor_id]
+      properties:
+        actor_type: { type: string }
+        actor_id: { type: string }
+    DelegationAgent:
+      type: object
+      required: [id, name, stage, state, strategy_id, created_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        name: { type: string }
+        stage: { type: string }
+        state: { type: string, description: "A PAUSED, FAILED, REVOKED or SUPERSEDED agent may not act; the service refuses a grant to one" }
+        strategy_id: { $ref: "#/components/schemas/UUID" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+    DelegationAgentList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/DelegationAgent" } }
+    DelegationCapabilityUsage:
+      type: object
+      description: >-
+        What the capability has used, measured from its usage rows: on the UTC day of as_of and in all.
+        remaining_* is the limit less the use, never below zero. A use is recorded at admission, so a
+        request that was later refused or failed still counts against the limits.
+      required: [day, uses, used_today_usd, used_total_usd, remaining_today_usd, remaining_total_usd]
+      properties:
+        day: { type: string, pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}$', description: The UTC day used_today_usd counts }
+        uses: { type: integer }
+        used_today_usd: { $ref: "#/components/schemas/USD" }
+        used_total_usd: { $ref: "#/components/schemas/USD" }
+        remaining_today_usd: { $ref: "#/components/schemas/USD" }
+        remaining_total_usd: { $ref: "#/components/schemas/USD" }
+    DelegationCapability:
+      type: object
+      required: [id, account_id, agent_id, strategy_id, environment, mode, instrument_classes, action_classes, max_notional_usd,
+                 max_daily_notional_usd, max_single_trade_usd, destination_allowlist, chain_allowlist, granted_at, expires_at,
+                 requires_human_approval, status, standing, content_hash, granted_by, usage, as_of, value_domain]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        agent_id: { $ref: "#/components/schemas/UUID" }
+        agent_name: { type: string }
+        strategy_id: { $ref: "#/components/schemas/UUID" }
+        environment: { type: string }
+        mode: { $ref: "#/components/schemas/AdvancedMode" }
+        instrument_classes: { type: array, items: { $ref: "#/components/schemas/DelegationInstrumentClass" } }
+        action_classes: { type: array, items: { $ref: "#/components/schemas/DelegationActionClass" } }
+        max_notional_usd: { $ref: "#/components/schemas/USD" }
+        max_daily_notional_usd: { $ref: "#/components/schemas/USD" }
+        max_single_trade_usd: { $ref: "#/components/schemas/USD" }
+        destination_allowlist: { type: array, items: { type: string } }
+        chain_allowlist: { type: array, items: { $ref: "#/components/schemas/DelegationChain" } }
+        granted_at: { $ref: "#/components/schemas/Timestamp" }
+        expires_at: { $ref: "#/components/schemas/Timestamp" }
+        requires_human_approval: { type: boolean }
+        status: { $ref: "#/components/schemas/DelegationCapabilityStatus" }
+        standing: { $ref: "#/components/schemas/DelegationCapabilityStanding" }
+        content_hash: { type: string, description: "SHA-256 of the canonical grant; every plan signed under it names it" }
+        granted_by: { $ref: "#/components/schemas/DelegationActor" }
+        revoked_by: { $ref: "#/components/schemas/DelegationActor" }
+        revocation_reason: { type: string }
+        revoked_at: { $ref: "#/components/schemas/Timestamp" }
+        usage: { $ref: "#/components/schemas/DelegationCapabilityUsage" }
+        as_of: { $ref: "#/components/schemas/Timestamp" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    DelegationCapabilityUse:
+      type: object
+      required: [id, subject_kind, subject_id, action_class, notional_usd, used_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        subject_kind: { $ref: "#/components/schemas/DelegationSubjectKind" }
+        subject_id: { $ref: "#/components/schemas/UUID" }
+        action_class: { $ref: "#/components/schemas/DelegationActionClass" }
+        notional_usd: { $ref: "#/components/schemas/USD" }
+        used_at: { $ref: "#/components/schemas/Timestamp" }
+    DelegationCapabilityDetail:
+      allOf:
+        - { $ref: "#/components/schemas/DelegationCapability" }
+        - type: object
+          required: [uses]
+          properties:
+            uses: { type: array, items: { $ref: "#/components/schemas/DelegationCapabilityUse" }, description: "Newest first, bounded" }
+    DelegationCapabilityPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items, value_domain]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/DelegationCapability" } }
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    DelegationGrantRequest:
+      type: object
+      required: [account_id, agent_id, mode, instrument_classes, action_classes, max_notional_usd, max_daily_notional_usd,
+                 max_single_trade_usd, destination_allowlist, chain_allowlist, expires_at, requires_human_approval]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        agent_id: { $ref: "#/components/schemas/UUID" }
+        mode: { $ref: "#/components/schemas/AdvancedMode" }
+        instrument_classes: { type: array, minItems: 1, maxItems: 3, items: { $ref: "#/components/schemas/DelegationInstrumentClass" } }
+        action_classes: { type: array, minItems: 1, maxItems: 3, items: { $ref: "#/components/schemas/DelegationActionClass" } }
+        max_notional_usd: { $ref: "#/components/schemas/USD" }
+        max_daily_notional_usd: { $ref: "#/components/schemas/USD" }
+        max_single_trade_usd: { $ref: "#/components/schemas/USD" }
+        destination_allowlist:
+          type: array
+          minItems: 1
+          maxItems: 64
+          items: { type: string, minLength: 32, maxLength: 44 }
+          description: Simulated-chain addresses a swap may pay to and a withdrawal may go to; a swap's venue must be among them
+        chain_allowlist: { type: array, minItems: 1, maxItems: 2, items: { $ref: "#/components/schemas/DelegationChain" } }
+        expires_at: { $ref: "#/components/schemas/Timestamp" }
+        requires_human_approval: { type: boolean }
+    DelegationReasonRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    DelegationDestination:
+      type: object
+      required: [id, account_id, chain, address, label, status, added_by, added_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        chain: { $ref: "#/components/schemas/DelegationChain" }
+        address: { type: string }
+        label: { type: string }
+        status: { $ref: "#/components/schemas/DelegationDestinationStatus" }
+        added_by: { $ref: "#/components/schemas/DelegationActor" }
+        added_at: { $ref: "#/components/schemas/Timestamp" }
+        removed_by: { $ref: "#/components/schemas/DelegationActor" }
+        removed_at: { $ref: "#/components/schemas/Timestamp" }
+    DelegationDestinationList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/DelegationDestination" } }
+    DelegationDestinationRequest:
+      type: object
+      required: [account_id, chain, address, label]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        chain: { $ref: "#/components/schemas/DelegationChain" }
+        address: { type: string, minLength: 32, maxLength: 44 }
+        label: { type: string, minLength: 1, maxLength: 120 }
+    DelegationWithdrawalPolicy:
+      type: object
+      required: [id, account_id, version, auto_approve_enabled, auto_approve_max_usd, auto_approve_max_risk_score, max_risk_score,
+                 per_withdrawal_limit_usd, daily_limit_usd, velocity_max_count, min_destination_age_seconds, min_account_age_seconds,
+                 cooling_period_seconds, strong_auth_required, strong_auth_max_age_seconds, policy_hash, created_by, effective_at,
+                 created_at, value_domain]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        version: { type: integer }
+        auto_approve_enabled: { type: boolean, description: "Honoured only in LOCAL, TEST and DEV; everywhere else the owner decides" }
+        auto_approve_max_usd: { $ref: "#/components/schemas/USD" }
+        auto_approve_max_risk_score: { type: integer }
+        max_risk_score: { type: integer }
+        per_withdrawal_limit_usd: { $ref: "#/components/schemas/USD" }
+        daily_limit_usd: { $ref: "#/components/schemas/USD" }
+        velocity_max_count: { type: integer }
+        min_destination_age_seconds: { type: integer, format: int64 }
+        min_account_age_seconds: { type: integer, format: int64 }
+        cooling_period_seconds: { type: integer, format: int64 }
+        strong_auth_required: { type: boolean }
+        strong_auth_max_age_seconds: { type: integer, format: int64 }
+        policy_hash: { type: string }
+        created_by: { $ref: "#/components/schemas/DelegationActor" }
+        effective_at: { $ref: "#/components/schemas/Timestamp" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    DelegationWithdrawalPolicyState:
+      type: object
+      required: [account_id, versions, value_domain]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        current: { $ref: "#/components/schemas/DelegationWithdrawalPolicy" }
+        versions: { type: array, items: { $ref: "#/components/schemas/DelegationWithdrawalPolicy" }, description: "Newest first, bounded" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    DelegationWithdrawalPolicyRequest:
+      type: object
+      required: [account_id, auto_approve_enabled, auto_approve_max_usd, auto_approve_max_risk_score, max_risk_score,
+                 per_withdrawal_limit_usd, daily_limit_usd, velocity_max_count, min_destination_age_seconds, min_account_age_seconds,
+                 cooling_period_seconds, strong_auth_required, strong_auth_max_age_seconds]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        auto_approve_enabled: { type: boolean }
+        auto_approve_max_usd: { $ref: "#/components/schemas/USD" }
+        auto_approve_max_risk_score: { type: integer, minimum: 0, maximum: 100 }
+        max_risk_score: { type: integer, minimum: 0, maximum: 100 }
+        per_withdrawal_limit_usd: { $ref: "#/components/schemas/USD" }
+        daily_limit_usd: { $ref: "#/components/schemas/USD" }
+        velocity_max_count: { type: integer, minimum: 1, maximum: 1000 }
+        min_destination_age_seconds: { type: integer, format: int64, minimum: 0, maximum: 31536000 }
+        min_account_age_seconds: { type: integer, format: int64, minimum: 0, maximum: 31536000 }
+        cooling_period_seconds: { type: integer, format: int64, minimum: 0, maximum: 604800 }
+        strong_auth_required: { type: boolean }
+        strong_auth_max_age_seconds: { type: integer, format: int64, minimum: 1, maximum: 86400 }
+    DelegationAssetRef:
+      type: object
+      required: [id, symbol, decimals]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        decimals: { type: integer, minimum: 0, maximum: 38 }
+    DelegationVenueRef:
+      type: object
+      required: [id, name, address]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        name: { type: string }
+        address: { type: string }
+    DelegationDestinationRef:
+      type: object
+      description: The destination as the allow-list holds it now (its status may have changed since the plan froze it).
+      required: [id, label, status]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        label: { type: string }
+        status: { $ref: "#/components/schemas/DelegationDestinationStatus" }
+    DelegationPlanPrice:
+      type: object
+      description: Whole sandbox dollars per whole unit of the asset, mantissa x 10^-scale. A par price is the registry's USD peg, not an observation.
+      required: [mantissa, scale, source, observed_at, par]
+      properties:
+        mantissa: { type: string }
+        scale: { type: string }
+        source: { type: string }
+        observed_at: { $ref: "#/components/schemas/Timestamp" }
+        par: { type: boolean }
+    DelegationSwapPlan:
+      type: object
+      description: The canonical settlement plan exactly as hashed; numbers are the plan's own decimal strings.
+      required: [version, swap_id, account_id, agent_id, capability_id, capability_hash, intent_id, request_nonce, action_class,
+                 mode, chain, wallet, venue_id, venue_address, pay_asset_id, pay_mint, pay_decimals, receive_asset_id, receive_mint,
+                 receive_decimals, amount_in, amount_out, min_amount_out, pay_price, receive_price, spread_bps, max_slippage_bps,
+                 notional_usd, fee_per_tx, requested_at, quote_expires_at]
+      properties:
+        version: { type: string }
+        swap_id: { type: string }
+        account_id: { type: string }
+        agent_id: { type: string }
+        capability_id: { type: string }
+        capability_hash: { type: string }
+        intent_id: { type: string }
+        request_nonce: { type: string }
+        action_class: { type: string }
+        mode: { type: string }
+        chain: { type: string }
+        wallet: { type: string }
+        venue_id: { type: string }
+        venue_address: { type: string }
+        pay_asset_id: { type: string }
+        pay_mint: { type: string }
+        pay_decimals: { type: string }
+        receive_asset_id: { type: string }
+        receive_mint: { type: string }
+        receive_decimals: { type: string }
+        amount_in: { $ref: "#/components/schemas/Quantity" }
+        amount_out: { $ref: "#/components/schemas/Quantity" }
+        min_amount_out: { $ref: "#/components/schemas/Quantity" }
+        pay_price: { $ref: "#/components/schemas/DelegationPlanPrice" }
+        receive_price: { $ref: "#/components/schemas/DelegationPlanPrice" }
+        spread_bps: { type: string }
+        max_slippage_bps: { type: string }
+        notional_usd: { $ref: "#/components/schemas/USD" }
+        fee_per_tx: { $ref: "#/components/schemas/Quantity" }
+        requested_at: { $ref: "#/components/schemas/Timestamp" }
+        quote_expires_at: { $ref: "#/components/schemas/Timestamp" }
+    DelegationWithdrawalPlan:
+      type: object
+      description: The frozen withdrawal plan exactly as hashed; numbers are the plan's own decimal strings.
+      required: [version, withdrawal_id, account_id, agent_id, capability_id, capability_hash, intent_id, proposal_nonce, mode,
+                 chain, wallet, destination_id, destination_address, asset_id, mint, decimals, amount, notional_usd, price,
+                 policy_id, policy_version, policy_hash, evaluation_outcome, risk_score, fee_per_tx, proposed_at, executable_at,
+                 approval_expires_at]
+      properties:
+        version: { type: string }
+        withdrawal_id: { type: string }
+        account_id: { type: string }
+        agent_id: { type: string }
+        capability_id: { type: string }
+        capability_hash: { type: string }
+        intent_id: { type: string }
+        proposal_nonce: { type: string }
+        mode: { type: string }
+        chain: { type: string }
+        wallet: { type: string }
+        destination_id: { type: string }
+        destination_address: { type: string }
+        asset_id: { type: string }
+        mint: { type: string }
+        decimals: { type: string }
+        amount: { $ref: "#/components/schemas/Quantity" }
+        notional_usd: { $ref: "#/components/schemas/USD" }
+        price: { $ref: "#/components/schemas/DelegationPlanPrice" }
+        policy_id: { type: string }
+        policy_version: { type: string }
+        policy_hash: { type: string }
+        evaluation_outcome: { type: string }
+        risk_score: { type: string }
+        fee_per_tx: { $ref: "#/components/schemas/Quantity" }
+        proposed_at: { $ref: "#/components/schemas/Timestamp" }
+        executable_at: { $ref: "#/components/schemas/Timestamp" }
+        approval_expires_at: { $ref: "#/components/schemas/Timestamp" }
+    DelegationApproval:
+      type: object
+      required: [decision, plan_hash, approver, decided_at, reason]
+      properties:
+        decision: { $ref: "#/components/schemas/DelegationDecision" }
+        plan_hash: { type: string }
+        approver: { $ref: "#/components/schemas/DelegationActor" }
+        authenticated_at: { $ref: "#/components/schemas/Timestamp" }
+        decided_at: { $ref: "#/components/schemas/Timestamp" }
+        reason: { type: string }
+    DelegationInspection:
+      type: object
+      description: >-
+        The signing provider's one decision: the capability validated again, the compiled message inspected
+        field by field against the persisted plan, then the signing policy. REJECTED carries every reason code.
+      required: [id, verdict, reason_codes, signer_public_key, capability_hash, plan_hash, message_sha256, policy_version,
+                 policy_hash, inspector_version, decided_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        verdict: { $ref: "#/components/schemas/DelegationVerdict" }
+        reason_codes: { type: array, items: { type: string } }
+        signer_public_key: { type: string }
+        capability_hash: { type: string }
+        plan_hash: { type: string }
+        message_sha256: { type: string }
+        policy_version: { type: string }
+        policy_hash: { type: string }
+        inspector_version: { type: string }
+        decided_at: { $ref: "#/components/schemas/Timestamp" }
+    DelegationTransition:
+      type: object
+      required: [from_status, to_status, actor, reason, occurred_at]
+      properties:
+        from_status: { type: string }
+        to_status: { type: string }
+        actor: { $ref: "#/components/schemas/DelegationActor" }
+        reason: { type: string }
+        occurred_at: { $ref: "#/components/schemas/Timestamp" }
+    DelegationSwap:
+      type: object
+      required: [id, capability_id, account_id, agent_id, request_nonce, intent_id, reservation_id, venue, mode, action_class, chain,
+                 wallet, pay_asset, receive_asset, amount_in, amount_out, min_amount_out, notional_usd, requested_at,
+                 quote_expires_at, requires_approval, plan, plan_hash, status, transitions, created_at, updated_at, value_domain]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        capability_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        agent_id: { $ref: "#/components/schemas/UUID" }
+        request_nonce: { type: string }
+        intent_id: { $ref: "#/components/schemas/UUID" }
+        reservation_id: { $ref: "#/components/schemas/UUID" }
+        venue: { $ref: "#/components/schemas/DelegationVenueRef" }
+        mode: { $ref: "#/components/schemas/AdvancedMode" }
+        action_class: { $ref: "#/components/schemas/DelegationActionClass" }
+        chain: { $ref: "#/components/schemas/DelegationChain" }
+        wallet: { type: string }
+        pay_asset: { $ref: "#/components/schemas/DelegationAssetRef" }
+        receive_asset: { $ref: "#/components/schemas/DelegationAssetRef" }
+        amount_in: { $ref: "#/components/schemas/Quantity" }
+        amount_out: { $ref: "#/components/schemas/Quantity" }
+        min_amount_out: { $ref: "#/components/schemas/Quantity" }
+        notional_usd: { $ref: "#/components/schemas/USD" }
+        requested_at: { $ref: "#/components/schemas/Timestamp" }
+        quote_expires_at: { $ref: "#/components/schemas/Timestamp" }
+        requires_approval: { type: boolean }
+        plan: { $ref: "#/components/schemas/DelegationSwapPlan" }
+        plan_hash: { type: string }
+        status: { $ref: "#/components/schemas/DelegationSwapStatus" }
+        signed_at: { $ref: "#/components/schemas/Timestamp" }
+        tx_id: { type: string }
+        effect_id: { $ref: "#/components/schemas/UUID" }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        failure_code: { type: string }
+        approval: { $ref: "#/components/schemas/DelegationApproval" }
+        inspection: { $ref: "#/components/schemas/DelegationInspection" }
+        transitions: { type: array, items: { $ref: "#/components/schemas/DelegationTransition" }, description: Oldest first }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    DelegationSwapPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items, value_domain]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/DelegationSwap" } }
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    DelegationWithdrawalEvaluation:
+      type: object
+      description: The withdrawal policy's decision about the proposal, as recorded with it.
+      required: [outcome, risk_score, reason_codes, anomalies, destination_age_seconds, account_age_seconds, day_total_before_usd,
+                 count_last_24h, policy_version, policy_hash, environment, compliance_clear]
+      properties:
+        outcome: { $ref: "#/components/schemas/DelegationEvaluationOutcome" }
+        risk_score: { type: integer }
+        reason_codes: { type: array, items: { type: string } }
+        anomalies: { type: array, items: { type: string } }
+        destination_age_seconds: { type: integer, format: int64 }
+        account_age_seconds: { type: integer, format: int64 }
+        day_total_before_usd: { $ref: "#/components/schemas/USD" }
+        count_last_24h: { type: integer }
+        policy_version: { type: string }
+        policy_hash: { type: string }
+        environment: { type: string }
+        compliance_clear: { type: boolean }
+    DelegationWithdrawal:
+      type: object
+      required: [id, capability_id, account_id, agent_id, proposal_nonce, intent_id, reservation_id, policy_id, destination,
+                 environment, mode, chain, wallet, destination_address, asset, amount, notional_usd, proposed_at,
+                 approval_expires_at, executable_at, evaluation, plan, plan_hash, status, transitions, created_at, updated_at,
+                 value_domain]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        capability_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        agent_id: { $ref: "#/components/schemas/UUID" }
+        proposal_nonce: { type: string }
+        intent_id: { $ref: "#/components/schemas/UUID" }
+        reservation_id: { $ref: "#/components/schemas/UUID" }
+        policy_id: { $ref: "#/components/schemas/UUID" }
+        destination: { $ref: "#/components/schemas/DelegationDestinationRef" }
+        environment: { type: string }
+        mode: { $ref: "#/components/schemas/AdvancedMode" }
+        chain: { $ref: "#/components/schemas/DelegationChain" }
+        wallet: { type: string }
+        destination_address: { type: string }
+        asset: { $ref: "#/components/schemas/DelegationAssetRef" }
+        amount: { $ref: "#/components/schemas/Quantity" }
+        notional_usd: { $ref: "#/components/schemas/USD" }
+        proposed_at: { $ref: "#/components/schemas/Timestamp" }
+        approval_expires_at: { $ref: "#/components/schemas/Timestamp" }
+        executable_at: { $ref: "#/components/schemas/Timestamp", description: "The end of the policy's cooling period; nothing is signed before it" }
+        evaluation: { $ref: "#/components/schemas/DelegationWithdrawalEvaluation" }
+        plan: { $ref: "#/components/schemas/DelegationWithdrawalPlan" }
+        plan_hash: { type: string }
+        status: { $ref: "#/components/schemas/DelegationWithdrawalStatus" }
+        signed_at: { $ref: "#/components/schemas/Timestamp" }
+        tx_id: { type: string }
+        effect_id: { $ref: "#/components/schemas/UUID" }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        failure_code: { type: string }
+        approval: { $ref: "#/components/schemas/DelegationApproval" }
+        inspection: { $ref: "#/components/schemas/DelegationInspection" }
+        transitions: { type: array, items: { $ref: "#/components/schemas/DelegationTransition" }, description: Oldest first }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    DelegationWithdrawalPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items, value_domain]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/DelegationWithdrawal" } }
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    DelegationDecisionRequest:
+      type: object
+      required: [decision, plan_hash, reason]
+      properties:
+        decision: { $ref: "#/components/schemas/DelegationDecision" }
+        plan_hash: { type: string, pattern: '^[0-9a-f]{64}$', description: "The plan hash the owner was shown; any other plan is refused" }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    DelegationExecutionError:
+      type: object
+      required: [code, detail]
+      properties:
+        code: { type: string, description: "The stable error code the execution ended with" }
+        reason: { type: string, description: "The delegation reason code, when the service gave one" }
+        detail: { type: string }
+    DelegationExecution:
+      type: object
+      description: Whether the decision was followed by an execution, and how that ended when it did not run to its end.
+      required: [attempted]
+      properties:
+        attempted: { type: boolean }
+        error: { $ref: "#/components/schemas/DelegationExecutionError" }
+    DelegationSwapDecisionResult:
+      type: object
+      required: [swap, execution, value_domain]
+      properties:
+        swap: { $ref: "#/components/schemas/DelegationSwap" }
+        execution: { $ref: "#/components/schemas/DelegationExecution" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    DelegationWithdrawalDecisionResult:
+      type: object
+      required: [withdrawal, execution, value_domain]
+      properties:
+        withdrawal: { $ref: "#/components/schemas/DelegationWithdrawal" }
+        execution: { $ref: "#/components/schemas/DelegationExecution" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    DelegationVenue:
+      type: object
+      required: [id, name, chain, address, house_account_id, spread_bps, co_signer, created_by, created_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        name: { type: string }
+        chain: { $ref: "#/components/schemas/DelegationChain" }
+        address: { type: string }
+        house_account_id: { $ref: "#/components/schemas/UUID" }
+        spread_bps: { $ref: "#/components/schemas/BPS" }
+        co_signer: { type: boolean, description: "Whether this deployment holds the venue's co-signer; without it no swap there is signed" }
+        created_by: { $ref: "#/components/schemas/DelegationActor" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+    DelegationCoSigner:
+      type: object
+      required: [name, chain, address, registered]
+      properties:
+        name: { type: string }
+        chain: { $ref: "#/components/schemas/DelegationChain" }
+        address: { type: string }
+        registered: { type: boolean }
+    DelegationVenueList:
+      type: object
+      required: [items, co_signers]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/DelegationVenue" } }
+        co_signers: { type: array, items: { $ref: "#/components/schemas/DelegationCoSigner" } }
+    DelegationVenueRequest:
+      type: object
+      required: [name, spread_bps]
+      properties:
+        name: { type: string, pattern: '^[a-z0-9][a-z0-9-]{0,62}$' }
+        house_account_id: { $ref: "#/components/schemas/UUID" }
+        spread_bps: { $ref: "#/components/schemas/BPS" }
+    DelegationPending:
+      type: object
+      required: [swaps, withdrawals, as_of, value_domain]
+      properties:
+        swaps: { type: array, items: { $ref: "#/components/schemas/DelegationSwap" } }
+        withdrawals: { type: array, items: { $ref: "#/components/schemas/DelegationWithdrawal" } }
+        as_of: { $ref: "#/components/schemas/Timestamp" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    DelegationExecuteRequest:
+      type: object
+      properties:
+        limit: { type: integer, minimum: 1, maximum: 50, default: 10 }
+    DelegationExecutionItem:
+      type: object
+      required: [kind, id, account_id, status_before, status]
+      properties:
+        kind: { $ref: "#/components/schemas/DelegationSubjectKind" }
+        id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        status_before: { type: string }
+        status: { type: string }
+        error: { $ref: "#/components/schemas/DelegationExecutionError" }
+    DelegationExecutionRun:
+      type: object
+      required: [items, value_domain]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/DelegationExecutionItem" } }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
 
     # >>> advanced:operator schemas (insert this subsystem's schemas directly below; keep the marker)
     #
