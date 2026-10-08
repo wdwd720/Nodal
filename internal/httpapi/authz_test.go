@@ -175,6 +175,7 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		// >>> advanced:equities path parameters
 
 		// >>> advanced:orders path parameters
+		"{tradeSeq}": "1",
 
 		// >>> advanced:transfers path parameters
 		"{transferId}": testSessionID,
@@ -212,8 +213,14 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		// >>> advanced:derivatives required query
 
 		// >>> advanced:equities required query
+		"/v1/advanced/equities/orders":                        "account_id=" + testAccountID.String(),
+		"/v1/advanced/equities/fills":                         "account_id=" + testAccountID.String(),
+		"/v1/advanced/equities/settlements":                   "account_id=" + testAccountID.String(),
+		"/v1/advanced/equities/corporate-action-applications": "account_id=" + testAccountID.String(),
 
 		// >>> advanced:orders required query
+		"/v1/advanced/books/orders": "account_id=" + testAccountID.String(),
+		"/v1/advanced/books/trades": "account_id=" + testAccountID.String(),
 
 		// >>> advanced:transfers required query
 		"/v1/advanced/transfers":                  "account_id=" + testAccountID.String(),

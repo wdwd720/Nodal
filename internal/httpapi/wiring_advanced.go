@@ -43,8 +43,13 @@ type AdvancedDeps struct {
 	// >>> advanced:derivatives deps
 
 	// >>> advanced:equities deps
+	// Equities holds the equities service; nil leaves its routes UNSUPPORTED.
+	Equities EquitiesDeps
 
 	// >>> advanced:orders deps
+	// Orders holds the internal order book and its pipeline; either nil
+	// leaves the book routes UNSUPPORTED.
+	Orders OrdersDeps
 
 	// >>> advanced:transfers deps
 	// Transfers holds the transfer service and the sandbox faucet; each that is
@@ -83,8 +88,10 @@ func wireAdvanced(p *Ports, d WireDeps) {
 	// >>> advanced:derivatives wire
 
 	// >>> advanced:equities wire
+	wireEquities(p, d)
 
 	// >>> advanced:orders wire
+	wireOrders(p, d)
 
 	// >>> advanced:transfers wire
 	wireTransfers(p, d)

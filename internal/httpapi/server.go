@@ -72,8 +72,13 @@ type Ports struct {
 	// >>> advanced:derivatives port
 
 	// >>> advanced:equities port
+	// Equities serves paper and sandbox equities and ETFs. A nil port answers
+	// UNSUPPORTED (it is never wired outside LOCAL, TEST and DEV).
+	Equities AdvancedEquitiesPort
 
 	// >>> advanced:orders port
+	// Books serves the internal order book. A nil port answers UNSUPPORTED.
+	Books AdvancedBooksPort
 
 	// >>> advanced:transfers port
 	// Transfers serves customer-to-customer transfers of simulated value, and
