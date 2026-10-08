@@ -797,9 +797,13 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// advanced reader values a SIMULATED asset at, quoted in the sandbox dollar.
 	// A mark is accepted only while it is younger than the bound buying power V2
 	// and the transfer valuer accept one, and the console calls older marks
-	// stale. This binary runs no devnet host, so /advanced/ops/chains answers
-	// UNSUPPORTED rather than describing chains that do not exist here.
+	// stale. The chains it reports are the sandbox chain's host, where one is
+	// configured; elsewhere /advanced/ops/chains answers UNSUPPORTED rather than
+	// describing chains that do not exist here.
 	operatorDeps := httpapi.OperatorDeps{Prices: priceStore, Audit: auditWriter, MaxMarkAge: 5 * time.Minute}
+	if sandboxChain != nil {
+		operatorDeps.Chains = sandboxChain.Host
+	}
 
 	advancedDeps := httpapi.AdvancedDeps{
 		Authorizer: econ.NewAuthorizer(gateChecker, killChecker),

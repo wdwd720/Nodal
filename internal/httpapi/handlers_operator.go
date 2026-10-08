@@ -230,6 +230,14 @@ func toAPIOpsOverview(v OpsOverview) api.AdvancedOpsOverview {
 		}
 		out.BridgeRoutes = append(out.BridgeRoutes, item)
 	}
+	out.BridgeLegsInReview = make([]api.AdvancedOpsBridgeLeg, 0, len(v.BridgeLegsInReview))
+	for _, l := range v.BridgeLegsInReview {
+		out.BridgeLegsInReview = append(out.BridgeLegsInReview, api.AdvancedOpsBridgeLeg{
+			Id: l.ID, RouteId: l.RouteID, RouteName: l.RouteName, AccountId: l.AccountID, Quantity: l.Quantity.String(),
+			Decimals: int(l.Decimals), SourceSymbol: l.SourceSymbol, Released: l.Released, RefundRequested: l.RefundRequested,
+			EnteredReviewAt: timePtr(l.EnteredReviewAt), ReviewReason: strPtr(l.ReviewReason),
+		})
+	}
 	for _, k := range v.Reconciliation {
 		item := api.AdvancedOpsReconciliationKind{
 			Kind: k.Kind, Unresolved: k.Unresolved, Material: k.Material, BlocksNewRisk: k.BlocksNewRisk,

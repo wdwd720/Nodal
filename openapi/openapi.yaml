@@ -3386,6 +3386,83 @@ paths:
           content: { application/json: { schema: { $ref: "#/components/schemas/BridgeFaultResult" } } }
         "400": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
+  # A leg whose release attempts are exhausted, or whose released state does
+  # not reconcile, waits in MANUAL_REVIEW for an operator. These three routes
+  # are the operator's ways out; the bridge service decides which one a leg
+  # admits, and each needs a reason and a recent step-up.
+  /advanced/bridge/legs/{bridgeLegId}/resume-relay:
+    post:
+      tags: [advanced]
+      summary: Operator — relay a leg in MANUAL_REVIEW again, with a fresh round of release attempts (step-up)
+      description: >-
+        For instance once a frozen destination mint is unfrozen. Only a leg whose source is final, whose
+        destination never released and whose refund was never requested resumes; it returns to
+        MESSAGE_IN_FLIGHT, and reconciling the leg then relays it. Anything else is INVALID_STATE_TRANSITION.
+      parameters:
+        - { in: path, name: bridgeLegId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/BridgeReasonRequest" } } }
+      responses:
+        "200":
+          description: The leg, relaying again
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeLeg" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/bridge/legs/{bridgeLegId}/resolve-review:
+    post:
+      tags: [advanced]
+      summary: Operator — resolve a released leg in MANUAL_REVIEW as reconciled, after re-checking it against both chains (step-up)
+      description: >-
+        Only a leg whose destination released can be resolved (INVALID_STATE_TRANSITION otherwise). The lock,
+        the release and both postings are checked again on the chains: when they agree the leg is
+        RECONCILED, when they do not the answer is RECONCILIATION_REQUIRED with the problem and the leg stays
+        in review.
+      parameters:
+        - { in: path, name: bridgeLegId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/BridgeReasonRequest" } } }
+      responses:
+        "200":
+          description: The leg, RECONCILED
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeLeg" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/bridge/legs/{bridgeLegId}/refund:
+    post:
+      tags: [advanced]
+      summary: Operator — refund a leg in MANUAL_REVIEW on its source chain (step-up)
+      description: >-
+        Only a leg whose source is final and whose destination never released can be refunded: a leg whose
+        destination released is refused (INVALID_STATE_TRANSITION), and so is one while any release of it can
+        still land or has landed (CONFLICT); an asset whose supply the stable asset controller reconciles is
+        never refunded (FORBIDDEN). The refund is recorded before it is submitted once on the source chain, and
+        BRIDGE_REFUND posts only when it is final: 200 when the leg ended FAILED with code REFUNDED, 202 while
+        the refund is not final yet (repeat to observe it; a refund is never sent twice).
+      parameters:
+        - { in: path, name: bridgeLegId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/BridgeReasonRequest" } } }
+      responses:
+        "200":
+          description: The leg, refunded
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeLegResult" } } }
+        "202":
+          description: The leg, its refund not final yet
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeLegResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
 
   # >>> advanced:predmarket paths (insert this subsystem's paths directly below; keep the marker)
   # Prediction markets (internal/predmarket): complete sets of outcome shares against the sandbox dollar,
@@ -4114,8 +4191,8 @@ paths:
       description: >-
         Active kill switches; every stable asset's status (PAUSED includes a
         peg breaker's pause) with its latest peg alert and latest supply
-        reconciliation; every bridge route's status; unresolved reconciliation
-        records of the advanced kinds; the dual-control items awaiting a
+        reconciliation; every bridge route's status and every bridge leg waiting in
+        MANUAL_REVIEW; unresolved reconciliation records of the advanced kinds; the dual-control items awaiting a
         second operator; the age of the latest reference mark of every
         SIMULATED asset someone holds; and whether a simulated chain host is
         configured. Lists are bounded (at most 100 entries each). Capability
@@ -9941,10 +10018,29 @@ components:
         source: { type: string }
         age_ms: { type: integer, format: int64 }
         stale: { type: boolean, description: "No mark at all, or the latest is older than the maximum mark age" }
+    AdvancedOpsBridgeLeg:
+      type: object
+      description: >-
+        A bridge leg waiting in MANUAL_REVIEW for an operator. released says the destination released (only
+        resolve-review applies); otherwise resume-relay or refund may, and refund_requested says a refund is
+        already on its way. quantity is base units of the source asset with decimals.
+      required: [id, route_id, route_name, account_id, quantity, decimals, source_symbol, released, refund_requested]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        route_id: { $ref: "#/components/schemas/UUID" }
+        route_name: { type: string }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        decimals: { type: integer, minimum: 0, maximum: 18 }
+        source_symbol: { type: string }
+        released: { type: boolean }
+        refund_requested: { type: boolean }
+        entered_review_at: { $ref: "#/components/schemas/Timestamp" }
+        review_reason: { type: string }
     AdvancedOpsOverview:
       type: object
-      required: [generated_at, environment, max_mark_age_ms, kill_switches, stable_assets, bridge_routes, reconciliation,
-                 dual_control, oracle, chains_configured, value_domain]
+      required: [generated_at, environment, max_mark_age_ms, kill_switches, stable_assets, bridge_routes, bridge_legs_in_review,
+                 reconciliation, dual_control, oracle, chains_configured, value_domain]
       properties:
         generated_at: { $ref: "#/components/schemas/Timestamp" }
         environment: { type: string }
@@ -9952,6 +10048,7 @@ components:
         kill_switches: { type: array, items: { $ref: "#/components/schemas/AdvancedOpsKillSwitch" }, description: Active ones only }
         stable_assets: { type: array, items: { $ref: "#/components/schemas/AdvancedOpsStableAsset" } }
         bridge_routes: { type: array, items: { $ref: "#/components/schemas/AdvancedOpsBridgeRoute" } }
+        bridge_legs_in_review: { type: array, items: { $ref: "#/components/schemas/AdvancedOpsBridgeLeg" }, description: "The longest waiting first; at most 100" }
         reconciliation: { type: array, items: { $ref: "#/components/schemas/AdvancedOpsReconciliationKind" }, description: One entry per advanced reconciliation kind }
         dual_control: { $ref: "#/components/schemas/AdvancedOpsDualControl" }
         oracle: { type: array, items: { $ref: "#/components/schemas/AdvancedOpsOracleAsset" }, description: SIMULATED assets other than the sandbox dollar that someone holds }

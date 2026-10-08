@@ -345,6 +345,9 @@ func (a operatorAdapter) Overview(ctx context.Context) (OpsOverview, error) {
 		if v.BridgeRoutes, err = opsBridgeRoutes(ctx, tx); err != nil {
 			return err
 		}
+		if v.BridgeLegsInReview, err = opsBridgeLegsInReview(ctx, tx); err != nil {
+			return err
+		}
 		if v.Reconciliation, err = opsReconciliation(ctx, tx, now); err != nil {
 			return err
 		}
@@ -449,6 +452,52 @@ func opsBridgeRoutes(ctx context.Context, tx pgx.Tx) ([]OpsBridgeRoute, error) {
 		}
 		b.OpenReconciliation = opsScanRecord(rid, rkind, rstatus, rmaterial, rblocks, ropened, rresolved)
 		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
+// opsBridgeLegsInReview reads the legs in MANUAL_REVIEW, the longest waiting
+// first, with when and why each entered review (its latest transition into
+// it) and the facts that decide which way out the bridge service admits.
+func opsBridgeLegsInReview(ctx context.Context, tx pgx.Tx) ([]OpsBridgeLeg, error) {
+	rows, err := tx.Query(ctx, `SELECT l.id, l.route_id, r.name, l.account_id, l.quantity::text, r.decimals, sa.symbol,
+			l.destination_journal_transaction_id IS NOT NULL, l.refund_effect_id IS NOT NULL, t.occurred_at, t.reason
+		FROM bridge_legs l
+		JOIN bridge_routes r ON r.id = l.route_id
+		JOIN assets sa ON sa.id = r.source_asset_id
+		LEFT JOIN LATERAL (SELECT occurred_at, reason FROM bridge_leg_transitions
+			WHERE leg_id = l.id AND to_status = 'MANUAL_REVIEW' ORDER BY occurred_at DESC, id DESC LIMIT 1) t ON true
+		WHERE l.status = 'MANUAL_REVIEW'
+		ORDER BY t.occurred_at NULLS LAST, l.id LIMIT $1`, opsListBound)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []OpsBridgeLeg{}
+	for rows.Next() {
+		var l OpsBridgeLeg
+		var quantity string
+		var decimals int16
+		var entered *time.Time
+		var reason *string
+		if err := rows.Scan(&l.ID, &l.RouteID, &l.RouteName, &l.AccountID, &quantity, &decimals, &l.SourceSymbol,
+			&l.Released, &l.RefundRequested, &entered, &reason); err != nil {
+			return nil, err
+		}
+		q, err := money.ScanQuantity(quantity)
+		if err != nil {
+			return nil, errs.Wrap(err, errs.CodeInternal, "a stored leg quantity is not an integer")
+		}
+		if decimals < 0 || decimals > 18 {
+			return nil, errs.New(errs.CodeInternal, "a stored route has decimals out of range")
+		}
+		l.Quantity, l.Decimals = q, uint8(decimals) // #nosec G115 -- 0..18 by the check above
+		if entered != nil {
+			t := entered.UTC()
+			l.EnteredReviewAt = &t
+		}
+		l.ReviewReason = deref(reason)
+		out = append(out, l)
 	}
 	return out, rows.Err()
 }

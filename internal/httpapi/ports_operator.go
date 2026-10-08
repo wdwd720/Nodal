@@ -93,12 +93,14 @@ type OpsOverview struct {
 	Environment string
 	MaxMarkAge  time.Duration
 	// KillSwitches are the active ones.
-	KillSwitches   []killswitch.Switch
-	StableAssets   []OpsStableAsset
-	BridgeRoutes   []OpsBridgeRoute
-	Reconciliation []OpsReconciliationKind
-	DualControl    OpsDualControl
-	Oracle         []OpsOracleAsset
+	KillSwitches []killswitch.Switch
+	StableAssets []OpsStableAsset
+	BridgeRoutes []OpsBridgeRoute
+	// BridgeLegsInReview are the legs waiting in MANUAL_REVIEW for an operator.
+	BridgeLegsInReview []OpsBridgeLeg
+	Reconciliation     []OpsReconciliationKind
+	DualControl        OpsDualControl
+	Oracle             []OpsOracleAsset
 	// ChainsConfigured says whether a devnet host is wired (Chains answers).
 	ChainsConfigured bool
 }
@@ -143,6 +145,23 @@ type OpsBridgeRoute struct {
 	DestinationChain   string
 	Status             string
 	OpenReconciliation *OpsReconciliationRecord
+}
+
+// OpsBridgeLeg is a bridge leg in MANUAL_REVIEW and what an operator needs to
+// choose a way out: whether its destination released, whether a refund was
+// already requested, and when and why it entered review.
+type OpsBridgeLeg struct {
+	ID              uuid.UUID
+	RouteID         uuid.UUID
+	RouteName       string
+	AccountID       uuid.UUID
+	Quantity        money.Quantity
+	Decimals        uint8
+	SourceSymbol    string
+	Released        bool
+	RefundRequested bool
+	EnteredReviewAt *time.Time
+	ReviewReason    string
 }
 
 // OpsReconciliationKind counts the unresolved records of one advanced kind.

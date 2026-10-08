@@ -411,6 +411,13 @@ var operationPolicies = map[string]operationPolicy{
 	"PostAdvancedBridgeLegsBridgeLegIdReconcile":           {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
 	"PostAdvancedBridgeChainsBridgeChainIdBlocks":          {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
 	"PostAdvancedBridgeChainsBridgeChainIdFaults":          {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	// A leg in MANUAL_REVIEW waits for an operator: relaying it again,
+	// resolving it as reconciled after a re-check, or refunding it on its
+	// source chain. Each moves (or decides) value, hence a recent step-up; the
+	// bridge service decides which a leg admits.
+	"PostAdvancedBridgeLegsBridgeLegIdResumeRelay":   {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedBridgeLegsBridgeLegIdResolveReview": {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedBridgeLegsBridgeLegIdRefund":        {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
 
 	// >>> advanced:predmarket operations
 	//

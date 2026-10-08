@@ -1766,6 +1766,171 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/advanced/bridge/legs/{bridgeLegId}/refund": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Operator — refund a leg in MANUAL_REVIEW on its source chain (step-up)
+         * @description Only a leg whose source is final and whose destination never released can be refunded: a leg whose destination released is refused (INVALID_STATE_TRANSITION), and so is one while any release of it can still land or has landed (CONFLICT); an asset whose supply the stable asset controller reconciles is never refunded (FORBIDDEN). The refund is recorded before it is submitted once on the source chain, and BRIDGE_REFUND posts only when it is final: 200 when the leg ended FAILED with code REFUNDED, 202 while the refund is not final yet (repeat to observe it; a refund is never sent twice).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    bridgeLegId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["BridgeReasonRequest"];
+                };
+            };
+            responses: {
+                /** @description The leg, refunded */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BridgeLegResult"];
+                    };
+                };
+                /** @description The leg, its refund not final yet */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BridgeLegResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/bridge/legs/{bridgeLegId}/resolve-review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Operator — resolve a released leg in MANUAL_REVIEW as reconciled, after re-checking it against both chains (step-up)
+         * @description Only a leg whose destination released can be resolved (INVALID_STATE_TRANSITION otherwise). The lock, the release and both postings are checked again on the chains: when they agree the leg is RECONCILED, when they do not the answer is RECONCILIATION_REQUIRED with the problem and the leg stays in review.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    bridgeLegId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["BridgeReasonRequest"];
+                };
+            };
+            responses: {
+                /** @description The leg, RECONCILED */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BridgeLeg"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/bridge/legs/{bridgeLegId}/resume-relay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Operator — relay a leg in MANUAL_REVIEW again, with a fresh round of release attempts (step-up)
+         * @description For instance once a frozen destination mint is unfrozen. Only a leg whose source is final, whose destination never released and whose refund was never requested resumes; it returns to MESSAGE_IN_FLIGHT, and reconciling the leg then relays it. Anything else is INVALID_STATE_TRANSITION.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    bridgeLegId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["BridgeReasonRequest"];
+                };
+            };
+            responses: {
+                /** @description The leg, relaying again */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BridgeLeg"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/advanced/bridge/routes": {
         parameters: {
             query?: never;
@@ -5317,7 +5482,7 @@ export interface paths {
         };
         /**
          * Operator — one read of what needs an operator now
-         * @description Active kill switches; every stable asset's status (PAUSED includes a peg breaker's pause) with its latest peg alert and latest supply reconciliation; every bridge route's status; unresolved reconciliation records of the advanced kinds; the dual-control items awaiting a second operator; the age of the latest reference mark of every SIMULATED asset someone holds; and whether a simulated chain host is configured. Lists are bounded (at most 100 entries each). Capability gates and the liquidation queue have their own reads (/advanced/capabilities, /advanced/margin/ops/queue).
+         * @description Active kill switches; every stable asset's status (PAUSED includes a peg breaker's pause) with its latest peg alert and latest supply reconciliation; every bridge route's status and every bridge leg waiting in MANUAL_REVIEW; unresolved reconciliation records of the advanced kinds; the dual-control items awaiting a second operator; the age of the latest reference mark of every SIMULATED asset someone holds; and whether a simulated chain host is configured. Lists are bounded (at most 100 entries each). Capability gates and the liquidation queue have their own reads (/advanced/capabilities, /advanced/margin/ops/queue).
          */
         get: {
             parameters: {
@@ -11623,6 +11788,20 @@ export interface components {
             mode: components["schemas"]["AdvancedMode"];
             reasons: string[];
         };
+        /** @description A bridge leg waiting in MANUAL_REVIEW for an operator. released says the destination released (only resolve-review applies); otherwise resume-relay or refund may, and refund_requested says a refund is already on its way. quantity is base units of the source asset with decimals. */
+        AdvancedOpsBridgeLeg: {
+            account_id: components["schemas"]["UUID"];
+            decimals: number;
+            entered_review_at?: components["schemas"]["Timestamp"];
+            id: components["schemas"]["UUID"];
+            quantity: components["schemas"]["Quantity"];
+            refund_requested: boolean;
+            released: boolean;
+            review_reason?: string;
+            route_id: components["schemas"]["UUID"];
+            route_name: string;
+            source_symbol: string;
+        };
         AdvancedOpsBridgeRoute: {
             destination_chain: string;
             id: components["schemas"]["UUID"];
@@ -11684,6 +11863,8 @@ export interface components {
             symbol: string;
         };
         AdvancedOpsOverview: {
+            /** @description The longest waiting first; at most 100 */
+            bridge_legs_in_review: components["schemas"]["AdvancedOpsBridgeLeg"][];
             bridge_routes: components["schemas"]["AdvancedOpsBridgeRoute"][];
             /** @description Whether this deployment runs a devnet host (/advanced/ops/chains) */
             chains_configured: boolean;

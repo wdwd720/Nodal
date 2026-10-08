@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/bridge"
@@ -400,6 +401,102 @@ func (s *Server) PostAdvancedBridgeLegsBridgeLegIdReconcile(ctx context.Context,
 		return api.PostAdvancedBridgeLegsBridgeLegIdReconcile202JSONResponse(res.Value), nil
 	}
 	return api.PostAdvancedBridgeLegsBridgeLegIdReconcile200JSONResponse(res.Value), nil
+}
+
+// --- a leg in manual review ------------------------------------------------------
+
+// bridgeReviewCommand reads what every way out of a leg's MANUAL_REVIEW
+// needs: the leg, the operator and a reason, which the route requires even
+// where the service would not.
+func (s *Server) bridgeReviewCommand(ctx context.Context, rawID string, body *api.BridgeReasonRequest) (bridge.LegID, econ.Actor, string, error) {
+	lid, err := bridgeLegIDParam(rawID)
+	if err != nil {
+		return bridge.LegID{}, econ.Actor{}, "", err
+	}
+	if body == nil {
+		return bridge.LegID{}, econ.Actor{}, "", validationError("body", "a request body is required")
+	}
+	if strings.TrimSpace(body.Reason) == "" || len(body.Reason) > 1000 {
+		return bridge.LegID{}, econ.Actor{}, "", validationError("reason", "a reason of 1..1000 bytes is required")
+	}
+	actor, err := stableActor(ctx)
+	if err != nil {
+		return bridge.LegID{}, econ.Actor{}, "", err
+	}
+	return lid, actor, body.Reason, nil
+}
+
+// PostAdvancedBridgeLegsBridgeLegIdResumeRelay has a leg in manual review
+// relayed again, with a fresh round of release attempts.
+func (s *Server) PostAdvancedBridgeLegsBridgeLegIdResumeRelay(ctx context.Context, request api.PostAdvancedBridgeLegsBridgeLegIdResumeRelayRequestObject) (api.PostAdvancedBridgeLegsBridgeLegIdResumeRelayResponseObject, error) {
+	if s.opts.Ports.Bridge == nil {
+		return nil, bridgeNotWired()
+	}
+	lid, actor, reason, err := s.bridgeReviewCommand(ctx, request.BridgeLegId.String(), request.Body)
+	if err != nil {
+		return nil, err
+	}
+	res, err := runCommand(ctx, s, request.Params.IdempotencyKey, func(ctx context.Context) (api.BridgeLeg, commandMeta, error) {
+		v, rerr := s.opts.Ports.Bridge.ResumeRelay(ctx, lid, actor, reason)
+		if rerr != nil {
+			return api.BridgeLeg{}, commandMeta{}, rerr
+		}
+		return toAPIBridgeLeg(v), commandMeta{Status: http.StatusOK, ResourceType: "bridge_leg", ResourceID: lid.String()}, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return api.PostAdvancedBridgeLegsBridgeLegIdResumeRelay200JSONResponse(res.Value), nil
+}
+
+// PostAdvancedBridgeLegsBridgeLegIdResolveReview re-checks a released leg in
+// manual review against both chains and resolves it as reconciled when they
+// agree.
+func (s *Server) PostAdvancedBridgeLegsBridgeLegIdResolveReview(ctx context.Context, request api.PostAdvancedBridgeLegsBridgeLegIdResolveReviewRequestObject) (api.PostAdvancedBridgeLegsBridgeLegIdResolveReviewResponseObject, error) {
+	if s.opts.Ports.Bridge == nil {
+		return nil, bridgeNotWired()
+	}
+	lid, actor, reason, err := s.bridgeReviewCommand(ctx, request.BridgeLegId.String(), request.Body)
+	if err != nil {
+		return nil, err
+	}
+	res, err := runCommand(ctx, s, request.Params.IdempotencyKey, func(ctx context.Context) (api.BridgeLeg, commandMeta, error) {
+		v, rerr := s.opts.Ports.Bridge.ResolveReview(ctx, lid, actor, reason)
+		if rerr != nil {
+			return api.BridgeLeg{}, commandMeta{}, rerr
+		}
+		return toAPIBridgeLeg(v), commandMeta{Status: http.StatusOK, ResourceType: "bridge_leg", ResourceID: lid.String()}, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return api.PostAdvancedBridgeLegsBridgeLegIdResolveReview200JSONResponse(res.Value), nil
+}
+
+// PostAdvancedBridgeLegsBridgeLegIdRefund refunds a leg in manual review on
+// its source chain; 202 while the refund is not final yet.
+func (s *Server) PostAdvancedBridgeLegsBridgeLegIdRefund(ctx context.Context, request api.PostAdvancedBridgeLegsBridgeLegIdRefundRequestObject) (api.PostAdvancedBridgeLegsBridgeLegIdRefundResponseObject, error) {
+	if s.opts.Ports.Bridge == nil {
+		return nil, bridgeNotWired()
+	}
+	lid, actor, reason, err := s.bridgeReviewCommand(ctx, request.BridgeLegId.String(), request.Body)
+	if err != nil {
+		return nil, err
+	}
+	res, err := runCommand(ctx, s, request.Params.IdempotencyKey, func(ctx context.Context) (api.BridgeLegResult, commandMeta, error) {
+		o, rerr := s.opts.Ports.Bridge.Refund(ctx, lid, actor, reason)
+		if rerr != nil {
+			return api.BridgeLegResult{}, commandMeta{}, rerr
+		}
+		return toAPIBridgeLegResult(o), commandMeta{Status: stableCommandStatus(o.Settled), ResourceType: "bridge_leg", ResourceID: lid.String()}, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if res.Meta.Status == http.StatusAccepted {
+		return api.PostAdvancedBridgeLegsBridgeLegIdRefund202JSONResponse(res.Value), nil
+	}
+	return api.PostAdvancedBridgeLegsBridgeLegIdRefund200JSONResponse(res.Value), nil
 }
 
 // PostAdvancedBridgeChainsBridgeChainIdBlocks produces blocks on a chain.

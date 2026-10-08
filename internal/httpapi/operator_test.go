@@ -15,6 +15,7 @@ import (
 	"pgregory.net/rapid"
 
 	"github.com/nodal/controlplane/internal/assets"
+	"github.com/nodal/controlplane/internal/bridge"
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
@@ -507,4 +508,139 @@ func FuzzParseReferencePrice(f *testing.F) {
 			t.Fatalf("%q does not round-trip: %v %s %d", raw, err, back, backScale)
 		}
 	})
+}
+
+// --- a bridge leg in manual review --------------------------------------------------
+
+func bridgeReviewPath(verb string) string { return bridgeLegPath + "/" + verb }
+
+// Each way out of a leg's MANUAL_REVIEW is an operator's, under a recent
+// step-up, with a reason; nothing reaches the service otherwise.
+func TestBridgeReview_EveryWayOutIsAnOperatorsWithAReasonUnderStepUp(t *testing.T) {
+	t.Parallel()
+	for _, verb := range []string{"resume-relay", "resolve-review", "refund"} {
+		t.Run(verb, func(t *testing.T) {
+			t.Parallel()
+			h, fp := newBridgeHarness(t)
+			body := map[string]any{"reason": "the destination mint was unfrozen"}
+			res := h.do(http.MethodPost, bridgeReviewPath(verb), body, "Idempotency-Key", "bridge-review-cust-1")
+			require.Equal(t, http.StatusForbidden, res.Code, "a customer; body=%s", res.Body.String())
+
+			stale := operatorPrincipal()
+			stale.AuthTime = testNow.Add(-2 * stepUpMaxAge)
+			h.as(&stale)
+			res = h.do(http.MethodPost, bridgeReviewPath(verb), body, "Idempotency-Key", "bridge-review-stale-1")
+			require.Equal(t, http.StatusForbidden, res.Code, "body=%s", res.Body.String())
+			assert.Equal(t, errs.CodeStepUpRequired, res.problem().Code)
+
+			op := operatorPrincipal()
+			h.as(&op)
+			for i, bad := range []any{nil, map[string]any{"reason": "   "}, map[string]any{"reason": strings.Repeat("x", 1001)}} {
+				res = h.do(http.MethodPost, bridgeReviewPath(verb), bad, "Idempotency-Key", "bridge-review-bad-"+itoa(i))
+				require.Equal(t, http.StatusBadRequest, res.Code, "%v body=%s", bad, res.Body.String())
+			}
+			res = h.do(http.MethodPost, bridgeBase+"/legs/not-a-uuid/"+verb, body, "Idempotency-Key", "bridge-review-bad-id")
+			require.Equal(t, http.StatusBadRequest, res.Code, "body=%s", res.Body.String())
+			assert.Zero(t, fp.count("ResumeRelay")+fp.count("ResolveReview")+fp.count("Refund"))
+		})
+	}
+}
+
+func TestBridgeReview_AnOperatorsDecisionReachesTheServiceOnceAndKeepsItsRefusals(t *testing.T) {
+	t.Parallel()
+	for name, c := range map[string]struct {
+		verb, call string
+	}{
+		"resume":  {"resume-relay", "ResumeRelay"},
+		"resolve": {"resolve-review", "ResolveReview"},
+		"refund":  {"refund", "Refund"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			h, fp := newBridgeHarness(t)
+			op := operatorPrincipal()
+			h.as(&op)
+			body := map[string]any{"reason": "the destination mint was unfrozen"}
+			res := h.do(http.MethodPost, bridgeReviewPath(c.verb), body, "Idempotency-Key", "bridge-review-key-1")
+			require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+			assert.Equal(t, bridgeTestLegID, fp.lastReviewLeg)
+			assert.Equal(t, econ.Actor{Type: security.ActorOperator, ID: testUserID.String()}, fp.lastActor)
+			assert.Equal(t, "the destination mint was unfrozen", fp.lastReason)
+			assert.Contains(t, res.Body.String(), bridgeTestLegID.String())
+			assert.Contains(t, res.Body.String(), `"value_domain":"SIMULATED"`)
+
+			again := h.do(http.MethodPost, bridgeReviewPath(c.verb), body, "Idempotency-Key", "bridge-review-key-1")
+			require.Equal(t, http.StatusOK, again.Code, "body=%s", again.Body.String())
+			assert.JSONEq(t, res.Body.String(), again.Body.String())
+			assert.Equal(t, 1, fp.count(c.call), "a replay must not reach the service")
+			changed := map[string]any{"reason": "another reason"}
+			res = h.do(http.MethodPost, bridgeReviewPath(c.verb), changed, "Idempotency-Key", "bridge-review-key-1")
+			require.Equal(t, http.StatusConflict, res.Code, "body=%s", res.Body.String())
+			assert.Equal(t, errs.CodeInvalidIdempotencyReuse, res.problem().Code)
+
+			fp.err = errs.New(errs.CodeInvalidStateTransition, "bridge: only a source-final, unreleased leg in manual review can be refunded")
+			res = h.do(http.MethodPost, bridgeReviewPath(c.verb), body, "Idempotency-Key", "bridge-review-key-2")
+			require.Equal(t, http.StatusConflict, res.Code, "body=%s", res.Body.String())
+			assert.Equal(t, errs.CodeInvalidStateTransition, res.problem().Code)
+		})
+	}
+}
+
+// A refund whose source-chain transaction is not final yet is 202, and the
+// leg is read as it stands.
+func TestBridgeReview_ARefundNotFinalYetIsAccepted(t *testing.T) {
+	t.Parallel()
+	h, fp := newBridgeHarness(t)
+	op := operatorPrincipal()
+	h.as(&op)
+	fp.outcome = BridgeLegOutcome{View: fp.outcome.View}
+	fp.outcome.View.Leg.Status = bridge.StateManualReview
+	res := h.do(http.MethodPost, bridgeReviewPath("refund"), map[string]any{"reason": "destination frozen for good"},
+		"Idempotency-Key", "bridge-refund-pending-1")
+	require.Equal(t, http.StatusAccepted, res.Code, "body=%s", res.Body.String())
+	var out api.BridgeLegResult
+	res.json(&out)
+	assert.False(t, out.Settled)
+	assert.Equal(t, api.BridgeLegStatusManualReview, out.Leg.Status)
+}
+
+func TestBridgeReview_AnUnwiredBridgeIsUnsupported(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	op := operatorPrincipal()
+	h.as(&op)
+	for _, verb := range []string{"resume-relay", "resolve-review", "refund"} {
+		res := h.do(http.MethodPost, bridgeReviewPath(verb), map[string]any{"reason": "x"}, "Idempotency-Key", "bridge-unwired-"+verb)
+		require.Equal(t, http.StatusUnprocessableEntity, res.Code, "%s body=%s", verb, res.Body.String())
+		assert.Equal(t, errs.CodeUnsupported, res.problem().Code)
+	}
+}
+
+func TestOperator_TheOverviewListsBridgeLegsInReview(t *testing.T) {
+	t.Parallel()
+	h, fo := newOperatorHarness(t)
+	entered := testNow.Add(-time.Hour)
+	leg := uuid.MustParse("0193b2e0-0000-7000-8000-0000000000d5")
+	fo.overview.BridgeLegsInReview = []OpsBridgeLeg{{
+		ID: leg, RouteID: testOpsBridgeID, RouteName: "sol-to-eth", AccountID: uuid.UUID(testAccountID.Bytes()),
+		Quantity: money.QuantityFromInt64(400_000), Decimals: 6, SourceSymbol: "BS1", Released: false, RefundRequested: false,
+		EnteredReviewAt: &entered, ReviewReason: "release attempts exhausted",
+	}}
+	res := h.do(http.MethodGet, "/v1/advanced/ops/overview", nil)
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	var out api.AdvancedOpsOverview
+	res.json(&out)
+	require.Len(t, out.BridgeLegsInReview, 1)
+	l := out.BridgeLegsInReview[0]
+	assert.Equal(t, leg, l.Id)
+	assert.Equal(t, "400000", l.Quantity, "exact base units")
+	assert.Equal(t, 6, l.Decimals)
+	assert.False(t, l.Released)
+	require.NotNil(t, l.ReviewReason)
+	assert.Equal(t, "release attempts exhausted", *l.ReviewReason)
+
+	fo.overview.BridgeLegsInReview = nil
+	res = h.do(http.MethodGet, "/v1/advanced/ops/overview", nil)
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	assert.Equal(t, []any{}, res.raw()["bridge_legs_in_review"], "none is an empty list, never null")
 }

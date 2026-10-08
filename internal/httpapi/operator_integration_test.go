@@ -4,7 +4,9 @@ package httpapi
 
 import (
 	"context"
+	"crypto/sha256"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -337,4 +339,180 @@ func TestIntegration_TheChainsReadReportsTheDevnetHost(t *testing.T) {
 	res = w.h.do(http.MethodGet, "/v1/advanced/ops/overview", nil)
 	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
 	assert.Equal(t, true, res.raw()["chains_configured"])
+}
+
+// TestIntegration_BridgeLegsInReviewOverHTTP drives the three ways out of a
+// bridge leg's MANUAL_REVIEW over the real bridge service and the sandbox
+// chain: a leg stuck behind a frozen destination mint waits in the console's
+// pending items; it cannot be resolved as reconciled before it released; once
+// the mint is unfrozen an operator resumes its relay and it completes; a leg
+// whose destination released is never refunded; and a second stuck leg is
+// refunded on its source chain exactly once.
+func TestIntegration_BridgeLegsInReviewOverHTTP(t *testing.T) {
+	w := newStableChainWorld(t)
+	ctx := t.Context()
+	user, acct := w.customer(0)
+	w.serve(user, acct)
+	cust := customerOf(user, acct)
+	op := w.operator()
+	controller, err := killswitch.NewController(w.clk, noopKillAudit{}, NewApprovalVerifier(admin.NewService(w.clk, audit.NewWriter())))
+	require.NoError(t, err)
+	ops, err := Wire(WireDeps{DB: w.d, Clock: w.clk, Env: config.EnvTest, KillSwitches: controller, Advanced: AdvancedDeps{
+		Operator: OperatorDeps{Prices: w.prices, Audit: audit.NewWriter(), MaxMarkAge: 5 * time.Minute, Chains: w.chain.Host},
+	}})
+	require.NoError(t, err)
+	w.h.server.opts.Ports.Operator = ops.Operator
+	host := w.chain.Host
+
+	// A source asset no stable asset controller reconciles (so it may be
+	// refunded), minted on sbx-solana by a test minter.
+	tag := strings.ReplaceAll(uuid.NewString(), "-", "")[:8]
+	minter := devnet.NewKeypairFromSeed(sha256.Sum256([]byte("ops-itest-minter-" + tag)))
+	mint := devnet.NewKeypairFromSeed(sha256.Sum256([]byte("ops-itest-mint-" + tag))).PublicKey()
+	require.NoError(t, host.EnsureMint(ctx, devnethost.ChainSolana, devnet.MintConfig{Address: mint, Decimals: 6, Authority: minter.PublicKey()}))
+	src, err := assets.NewRepository().Create(ctx, w.d, assets.Asset{
+		Chain: string(devnethost.ChainSolana), MintAddress: mint.String(), Kind: assets.KindSimulated, ValueDomain: valuedomain.Simulated,
+		Symbol: "OPSB" + strings.ToUpper(tag[:4]), Name: "operator console itest bridge source", Decimals: 6,
+		RiskClass: assets.RiskSettlement, Status: assets.StatusActive,
+	})
+	require.NoError(t, err)
+	var route api.BridgeRoute
+	w.post(op, "/v1/advanced/bridge/routes", map[string]any{
+		"name": "ops-itest-" + tag, "source_asset_id": src.ID.String(), "destination_chain": "sbx-ethereum",
+		"destination_symbol": "OPSE" + strings.ToUpper(tag[:4]), "unit_price": "1", "max_release_attempts": 1,
+	}, w.key("route"), http.StatusOK, &route)
+	destMint, err := devnet.ParsePublicKey(route.DestinationMint)
+	require.NoError(t, err)
+	twin := stableItestAssetID(t, route.DestinationAssetId)
+
+	// The customer holds 1,000,000 units on the books and on the source chain.
+	holder := w.chain.Keys.Custody.HolderAddress(acct)
+	units := money.QuantityFromInt64(1_000_000)
+	require.NoError(t, w.d.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted}, func(ctx context.Context, tx pgx.Tx) error {
+		ref := uuid.NewString()
+		_, err := w.ledger.Post(ctx, tx, ledger.Posting{
+			Kind: ledger.KindSandboxFunding, IdempotencyKey: "ops-itest-bridge-fund:" + ref,
+			Reference: ledger.FinancialEventReference{Type: "sandbox_funding", ID: ref}, EffectiveAt: w.clk.Now(),
+			Entries: []ledger.Entry{
+				{Account: ledger.CustomerAccount(acct, ledger.CodeWallet, src.ID), Side: ledger.Debit, Quantity: units},
+				{Account: ledger.CustomerAccount(acct, ledger.CodeCapital, src.ID), Side: ledger.Credit, Quantity: units},
+			},
+		})
+		return err
+	}))
+	require.NoError(t, host.EnsureNativeBalance(ctx, devnethost.ChainSolana, minter.PublicKey(), 1_000_000, 100_000_000))
+	tip, err := host.Tip(ctx, devnethost.ChainSolana)
+	require.NoError(t, err)
+	signed, err := devnet.Sign(devnet.Message{ChainID: devnethost.ChainSolana, RecentBlockhash: tip.Hash, FeePayer: minter.PublicKey(),
+		Instructions: []devnet.Instruction{devnet.TokenMintTo{Mint: mint, ToOwner: holder, Amount: 1_000_000, Authority: minter.PublicKey()}}}, minter)
+	require.NoError(t, err)
+	raw, err := signed.Encode()
+	require.NoError(t, err)
+	minted, err := host.Submit(ctx, devnethost.ChainSolana, raw)
+	require.NoError(t, err)
+	_, err = host.ProduceBlocks(ctx, devnethost.ChainSolana, devnet.DefaultFinalityDepth+1)
+	require.NoError(t, err)
+	st, err := host.Status(ctx, devnethost.ChainSolana, minted)
+	require.NoError(t, err)
+	require.Equal(t, devnet.TxFinalized, st.State, "the funding mint is final")
+
+	// The destination mint is frozen: the leg's one release fails and it waits for an operator.
+	require.NoError(t, host.SetMintFrozen(ctx, devnethost.ChainEthereum, destMint, true))
+	bridgeLeg := func(quantity string) api.BridgeLegResult {
+		t.Helper()
+		var out api.BridgeLegResult
+		w.post(cust, "/v1/advanced/bridge/legs", map[string]any{
+			"account_id": acct.String(), "route_id": route.Id.String(), "quantity": quantity, "mode": "SANDBOX",
+		}, w.key("leg"), http.StatusAccepted, &out)
+		require.Equal(t, api.BridgeLegStatusManualReview, out.Leg.Status)
+		return out
+	}
+	first := bridgeLeg("400000")
+	legPath := "/v1/advanced/bridge/legs/" + first.Leg.Id.String()
+	review := func(p security.Principal, verb, reason, key string) *response {
+		t.Helper()
+		w.h.as(&p)
+		return w.h.do(http.MethodPost, legPath+"/"+verb, map[string]any{"reason": reason}, "Idempotency-Key", key)
+	}
+	inReview := func() map[string]api.AdvancedOpsBridgeLeg {
+		t.Helper()
+		var o api.AdvancedOpsOverview
+		w.get(op, "/v1/advanced/ops/overview", &o)
+		out := map[string]api.AdvancedOpsBridgeLeg{}
+		for _, l := range o.BridgeLegsInReview {
+			out[l.Id.String()] = l
+		}
+		return out
+	}
+	pending, ok := inReview()[first.Leg.Id.String()]
+	require.True(t, ok, "the console lists the leg among the items waiting for an operator")
+	assert.False(t, pending.Released)
+	assert.False(t, pending.RefundRequested)
+	assert.Equal(t, "400000", pending.Quantity)
+	assert.Equal(t, route.Id, pending.RouteId)
+
+	// Not released, so not resolvable as reconciled; a customer decides nothing.
+	res := review(op, "resolve-review", "checked the chains", w.key("resolve-early"))
+	require.Equal(t, http.StatusConflict, res.Code, "body=%s", res.Body.String())
+	assert.Equal(t, errs.CodeInvalidStateTransition, res.problem().Code)
+	res = review(cust, "resume-relay", "mine", w.key("resume-customer"))
+	require.Equal(t, http.StatusForbidden, res.Code, "body=%s", res.Body.String())
+
+	// Unfrozen, the operator resumes the relay; reconciling the leg completes it.
+	require.NoError(t, host.SetMintFrozen(ctx, devnethost.ChainEthereum, destMint, false))
+	resumeKey := w.key("resume")
+	res = review(op, "resume-relay", "the destination mint is unfrozen", resumeKey)
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	var resumed api.BridgeLeg
+	res.json(&resumed)
+	assert.Equal(t, api.BridgeLegStatusMessageInFlight, resumed.Status)
+	again := review(op, "resume-relay", "the destination mint is unfrozen", resumeKey)
+	require.Equal(t, http.StatusOK, again.Code, "body=%s", again.Body.String())
+	assert.JSONEq(t, res.Body.String(), again.Body.String(), "the same key replays the first answer")
+	var done api.BridgeLegResult
+	w.post(op, legPath+"/reconcile", nil, w.key("reconcile"), http.StatusOK, &done)
+	assert.Equal(t, api.BridgeLegStatusReconciled, done.Leg.Status)
+	assert.Equal(t, "400000", w.wallet(acct, twin), "the destination released")
+	_, stillPending := inReview()[first.Leg.Id.String()]
+	assert.False(t, stillPending)
+
+	// A leg whose destination released is never refunded, and nothing moves.
+	res = review(op, "refund", "refund it anyway", w.key("refund-released"))
+	require.Equal(t, http.StatusConflict, res.Code, "body=%s", res.Body.String())
+	assert.Equal(t, errs.CodeInvalidStateTransition, res.problem().Code)
+	assert.Zero(t, w.count(`SELECT count(*) FROM bridge_release_attempts WHERE leg_id = $1 AND kind = 'REFUND'`, first.Leg.Id),
+		"no refund was recorded or submitted")
+	assert.Zero(t, w.count(`SELECT count(*) FROM journal_transactions WHERE kind = 'BRIDGE_REFUND' AND reference_id = $1`, first.Leg.Id.String()))
+	assert.Equal(t, "400000", w.wallet(acct, twin))
+	assert.Equal(t, "600000", w.wallet(acct, src.ID))
+
+	// A second leg sticks behind the frozen mint and is refunded on its source, once.
+	require.NoError(t, host.SetMintFrozen(ctx, devnethost.ChainEthereum, destMint, true))
+	second := bridgeLeg("250000")
+	assert.Equal(t, "350000", w.wallet(acct, src.ID), "the lock left the wallet")
+	legPath = "/v1/advanced/bridge/legs/" + second.Leg.Id.String()
+	refundKey := w.key("refund")
+	res = review(op, "refund", "the destination mint stays frozen", refundKey)
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	var refunded api.BridgeLegResult
+	res.json(&refunded)
+	assert.True(t, refunded.Settled)
+	assert.Equal(t, api.BridgeLegStatusFailed, refunded.Leg.Status)
+	assert.Equal(t, "600000", w.wallet(acct, src.ID), "the units are back in the source wallet")
+	assert.Equal(t, 1, w.count(`SELECT count(*) FROM bridge_release_attempts WHERE leg_id = $1 AND kind = 'REFUND'`, second.Leg.Id))
+	replayed := review(op, "refund", "the destination mint stays frozen", refundKey)
+	require.Equal(t, http.StatusOK, replayed.Code, "body=%s", replayed.Body.String())
+	assert.JSONEq(t, res.Body.String(), replayed.Body.String())
+	res = review(op, "refund", "the same decision again", w.key("refund-again"))
+	require.Equal(t, http.StatusOK, res.Code, "an already refunded leg changes nothing; body=%s", res.Body.String())
+	assert.Equal(t, 1, w.count(`SELECT count(*) FROM bridge_release_attempts WHERE leg_id = $1 AND kind = 'REFUND'`, second.Leg.Id),
+		"a refund is never sent twice")
+	res = review(op, "resume-relay", "relay it after all", w.key("resume-refunded"))
+	require.Equal(t, http.StatusConflict, res.Code, "a refunded leg never relays; body=%s", res.Body.String())
+
+	// The chains the console reports are the host's.
+	var chains api.AdvancedOpsChains
+	w.get(op, "/v1/advanced/ops/chains", &chains)
+	assert.Equal(t, w.network, chains.Network)
+	require.Len(t, chains.Items, 2)
 }
