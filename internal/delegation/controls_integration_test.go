@@ -432,8 +432,8 @@ func TestIntegration_AFailedChainTransactionPostsNothing(t *testing.T) {
 func TestIntegration_KeysSurviveARestart(t *testing.T) {
 	f := newFixture(t)
 	c := f.customer(10_000_000)
-	capability := f.grant(c, nil)
-	f.mustSwap(c, capability.ID, 1, 1_000_000) // registers the key
+	capability := f.grant(c, nil) // registers the key
+	f.mustSwap(c, capability.ID, 1, 1_000_000)
 
 	restarted, err := NewDelegatedSigner(seedOf("master-"+f.tag), SignerConfig{Environment: config.EnvTest, Clock: f.clk,
 		Policy: DefaultSigningPolicy(), Fees: HostFees(f.host)})

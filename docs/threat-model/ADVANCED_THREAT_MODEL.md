@@ -358,11 +358,27 @@ packages named; `go run ./scripts/inttest -pkg '^\./internal/<pkg>$'` runs a pac
   current strategy version, so `STRATEGY_VERSION_DISABLE` stops its swaps and withdrawals at every step.
 - **Controls (the agent runtime):** agents never reach the HTTP surface. The runtime acts in-process through
   `delegation.AgentAdmission`, which can request a swap, propose a withdrawal and read the agent's own
-  capabilities, and nothing else — it holds no service, signer or seed — and a delegated tool is offered only
-  under an active, unexpired, intact capability in a PAPER run.
+  capabilities, and nothing else, and a delegated tool is offered only under an active, unexpired, intact
+  capability in a PAPER run. **The agent worker holds no private key material** — no seed, no key, no delegated
+  signer and no venue co-signer. The facade wraps the half of the delegation service that admits, a type that
+  declares no signer, co-signer, key pair or seed, built from the deployment's settings and a read-only view of
+  the sandbox chain (`AdmissionConfig` takes no seed and no signer). It plans from the delegated wallet's public
+  key, which the owner's grant registers in `cmd/api`, where the signer is, on every chain the capability allows;
+  an account with no key on the chain is refused before anything is recorded
+  (`DELEGATION_SIGNER_KEY_NOT_REGISTERED`). It counts a venue able to co-sign when the venue's house book is ACTIVE
+  and its co-signer's public key (the address it was registered at) is registered. `cmd/agent-worker` never reads
+  `CP_SANDBOX_DEVNET_SEED_REF` — its configuration loader is never shown it — and opens the sandbox chain without
+  the seed: the host replays the network's recorded history under the attester public key its genesis names, over
+  a history that refuses every write. The processes that sign (`cmd/api`, `cmd/advanced-worker`) keep the real
+  signer and co-signers and check both again before anything is signed (`DELEGATION_SIGNER_KEY_MISMATCH`,
+  `DELEGATION_VENUE_SIGNER_UNAVAILABLE`).
 - **Residual risk:** review-1 finding F5 (an agent requester could post a customer's collateral) and red-team
   findings F1 (the swap's label) and F2 (the strategy-version kill switch) are fixed (`SECURITY_RED_TEAM.md`). A
-  kill-switch check uses the agent's current strategy version, not the version that made the request.
+  kill-switch check uses the agent's current strategy version, not the version that made the request. Admission no
+  longer knows which co-signers the signing processes hold: a swap admitted at a registered venue none of them can
+  co-sign for holds its reservation until signing refuses it (`DELEGATION_VENUE_SIGNER_UNAVAILABLE`) or it expires,
+  and its funds then return. The worker cannot keep a deployment from putting the seed's reference in its
+  environment; it never reads it and warns when it is there.
 - **Tests:** `TestIntegration_StrategyCannotSelfExpandCapability`, `TestIntegration_CapabilityCannotCrossAccountBoundary`,
   `TestTheActorsOfAGrantAreNeverAgents`, `TestIntegration_ExpiredTokenRejected`, `TestIntegration_RevokedTokenRejected`,
   `TestProp_CapabilityLimitsNeverOverspend`, `TestIntegration_AReduceOnlyCapabilityNeverBuysExposure`,
@@ -370,7 +386,14 @@ packages named; `go run ./scripts/inttest -pkg '^\./internal/<pkg>$'` runs a pac
   `TestIntegration_TheDatabaseBindsASwapsActionToItsDirection`, `TestIntegration_AStrategyVersionKillSwitchStopsItsAgentAtEveryStep`,
   `TestAgentAdmissionExposesOnlyAdmissionAndTheCapabilityRead` (`internal/delegation`);
   `TestTheRuntimeHoldsNoDelegationServiceOrSigner`, `TestDelegatedToolsAreOfferedOnlyUnderAUsableCapabilityInAPaperRun`
-  (`internal/agent`); `TestIntegration_AnAgentCannotPostCollateral`
+  (`internal/agent`). That the agent worker holds no private key material: `TestTheAgentAdmissionHoldsNoKeyMaterial`,
+  `TestNewAgentAdmissionTakesNoSeedAndNoSigner`, `TestAnAdmissionPlansFromTheRegisteredKeyOrRefuses`,
+  `TestIntegration_AGrantRegistersTheWalletKeyOnEveryChainItAllows`,
+  `TestIntegration_AnAdmissionRefusesAnAccountWithNoRegisteredWalletKey` (`internal/delegation`);
+  `TestTheWorkerTakesNoSeed`, `TestTheWorkersConfigurationHoldsNoSeed`, `TestTheWorkerHoldsOnlyTheAdmissionFacade`,
+  `TestIntegration_TheWorkerWiresDelegatedAuthorityOnlyWithASandboxChain` (`cmd/agent-worker`);
+  `TestIntegration_DelegationGrantRegistersTheWalletKeyTheAgentsAdmissionReads` (`internal/httpapi`). Elsewhere:
+  `TestIntegration_AnAgentCannotPostCollateral`
   (`internal/margin`); `TestRoute_TheCompilerForbidsAgentTransfersAtEveryLevel`, `TestIntegration_AnAgentNeverTransfersAndTheCompilerAgrees`
   (`internal/transfers`); `TestNoOperationAdmitsAnAgent` (`internal/httpapi`); `TestIntegration_AnAgentCannotTouchTheMarketplace`
   (`internal/marketplace`); `TestProp_NoStrategyOutputBecomesATransferOrWithdrawal` (`internal/sandboxrt`).
@@ -384,21 +407,29 @@ packages named; `go run ./scripts/inttest -pkg '^\./internal/<pkg>$'` runs a pac
 - **Privilege needed:** an agent holding a capability; process access between steps.
 - **Attack:** get a different transaction signed than the plan the capability and the human approved; change
   the amount, the venue or the recipient after approval; replay a signature; sign beyond the capability.
-- **Controls:** agents never hold or read keys — keys are derived inside the signer from a seed held in a
-  closure, and only public keys are stored; a swap compiles to one delivery-versus-payment transaction whose
-  plan hash covers every field; the inspector accepts exactly the planned transaction and refuses every
-  mutation, checking signatures over the exact bytes; the human approval binds the plan hash; the venue
-  co-signs only the planned transaction; one signature per swap, and the database refuses a signing that is
-  not licensed by an approved decision under a live capability (DG005); usage against the capability's limits
-  is consumed under concurrency control (DG004); an unknown submission is reconciled, never resubmitted.
+- **Controls:** agents never hold or read keys, and neither does the process that runs them — keys are derived
+  inside the signer from a seed held in a closure, only in the processes that sign (`cmd/api`,
+  `cmd/advanced-worker`), and the agent worker holds no seed, key, signer or venue co-signer and never reads the
+  sandbox chain's seed reference (threat 12). Only public keys are stored, registered by the account owner's
+  grant where the signer is; an admission plans from the registered key and derives nothing, and the signer
+  refuses to sign for a wallet that is not the one it derives (`DELEGATION_SIGNER_KEY_MISMATCH`). A swap
+  compiles to one delivery-versus-payment transaction whose plan hash covers every field; the inspector accepts
+  exactly the planned transaction and refuses every mutation, checking signatures over the exact bytes; the human
+  approval binds the plan hash; the venue co-signs only the planned transaction; one signature per swap, and the
+  database refuses a signing that is not licensed by an approved decision under a live capability (DG005); usage
+  against the capability's limits is consumed under concurrency control (DG004); an unknown submission is
+  reconciled, never resubmitted.
 - **Residual risk:** a kill switch activated between the final pre-submit check and the chain accepting the
-  transaction is not caught; the signer is in-process (see threat 1).
+  transaction is not caught; the signer is in-process in `cmd/api` and `cmd/advanced-worker` (see threat 1), never
+  in the agent worker.
 - **Tests:** `TestTheInspectorRefusesEveryModifiedSwap`, `TestProp_TheInspectorRefusesEveryMutation`,
   `TestTheInspectorChecksSignaturesOverTheExactBytes`, `TestTheVenueCoSignsOnlyThePlannedTransaction`,
   `TestIntegration_ModifiedTransactionRejected`, `TestIntegration_HumanApprovalBindsThePlan`,
   `TestIntegration_ExactlyOneSignaturePerSwap`, `TestIntegration_ReplayRejected`,
   `TestIntegration_ConcurrentSigningsCannotExceedDailyNotional`, `TestIntegration_TheDatabaseRefusesUnlicensedSwapStates`,
-  `TestSignersNeverFormatTheirSecrets` (`internal/delegation`).
+  `TestSignersNeverFormatTheirSecrets`, `TestIntegration_KeysSurviveARestart`, `TestTheAgentAdmissionHoldsNoKeyMaterial`,
+  `TestIntegration_AGrantRegistersTheWalletKeyOnEveryChainItAllows` (`internal/delegation`); `TestTheWorkerTakesNoSeed`
+  (`cmd/agent-worker`).
 
 ## 14. Withdrawal address substitution
 

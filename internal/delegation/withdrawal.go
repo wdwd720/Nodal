@@ -237,7 +237,7 @@ type withdrawalTerms struct {
 // evaluation, and the policy's auto-approval in low-risk test mode. The
 // WITHDRAW intent is the withdrawal service's, never the agent's: the
 // settlement compiler forbids an agent to withdraw at every level.
-func (s *Service) ProposeWithdrawal(ctx context.Context, tx pgx.Tx, req ProposalRequest) (WithdrawalTicket, error) {
+func (s *admitter) ProposeWithdrawal(ctx context.Context, tx pgx.Tx, req ProposalRequest) (WithdrawalTicket, error) {
 	if err := req.validate(); err != nil {
 		return WithdrawalTicket{}, err
 	}
@@ -283,7 +283,7 @@ func (s *Service) ProposeWithdrawal(ctx context.Context, tx pgx.Tx, req Proposal
 		return WithdrawalTicket{}, errs.New(errs.CodeValidationFailed, "delegation: the account has no withdrawal policy; nothing is withdrawn without one").
 			WithField("reason", ReasonPolicyMissing)
 	}
-	wallet, err := s.signer.EnsureKey(ctx, tx, req.AccountID, dest.Chain)
+	wallet, err := admittedWallet(ctx, tx, req.AccountID, dest.Chain)
 	if err != nil {
 		return WithdrawalTicket{}, err
 	}
@@ -432,7 +432,7 @@ func (s *Service) ProposeWithdrawal(ctx context.Context, tx pgx.Tx, req Proposal
 	if err := insertUsage(ctx, tx, usage, c, SubjectWithdrawal, wid.String(), ActionProposeWithdrawal, notional, now); err != nil {
 		return WithdrawalTicket{}, err
 	}
-	fee, ok := HostFees(s.host)(dest.Chain)
+	fee, ok := HostFees(s.chain)(dest.Chain)
 	if !ok {
 		return WithdrawalTicket{}, errs.New(errs.CodeValidationFailed, "delegation: the host does not run chain "+string(dest.Chain))
 	}
@@ -506,7 +506,7 @@ func (s *Service) ProposeWithdrawal(ctx context.Context, tx pgx.Tx, req Proposal
 	return WithdrawalTicket{Withdrawal: w}, nil
 }
 
-func (s *Service) replayWithdrawal(ctx context.Context, tx pgx.Tx, in econ.Intent) (WithdrawalTicket, error) {
+func (s *admitter) replayWithdrawal(ctx context.Context, tx pgx.Tx, in econ.Intent) (WithdrawalTicket, error) {
 	w, found, err := withdrawalByIntent(ctx, tx, in.ID)
 	if err != nil {
 		return WithdrawalTicket{}, err
@@ -525,7 +525,7 @@ func (s *Service) replayWithdrawal(ctx context.Context, tx pgx.Tx, in econ.Inten
 // account must be ACTIVE, no switch that stops withdrawals may apply, and no
 // switch that stops the proposing agent's activity -- on its account, the
 // agent itself or the strategy version it runs -- may apply either.
-func (s *Service) withdrawalBlocked(ctx context.Context, tx pgx.Tx, account accounts.AccountID, agent agentRow) (string, string, error) {
+func (s *admitter) withdrawalBlocked(ctx context.Context, tx pgx.Tx, account accounts.AccountID, agent agentRow) (string, string, error) {
 	acct, err := s.loadAccount(ctx, tx, account)
 	if err != nil {
 		return "", "", err
@@ -574,7 +574,7 @@ type withdrawalFacts struct {
 // liveStatuses excludes the withdrawals that never left and never will.
 const liveWithdrawal = `status NOT IN ('REJECTED','DECLINED','CANCELLED','FAILED')`
 
-func (s *Service) withdrawalFacts(ctx context.Context, tx pgx.Tx, account accounts.AccountID, amount money.USD, now time.Time) (withdrawalFacts, error) {
+func (s *admitter) withdrawalFacts(ctx context.Context, tx pgx.Tx, account accounts.AccountID, amount money.USD, now time.Time) (withdrawalFacts, error) {
 	var f withdrawalFacts
 	var day, notional24 int64
 	if err := tx.QueryRow(ctx, `SELECT
@@ -617,7 +617,7 @@ func (s *Service) withdrawalFacts(ctx context.Context, tx pgx.Tx, account accoun
 	return f, nil
 }
 
-func (s *Service) sanctionsClear(ctx context.Context, q db.Querier, acct accounts.Account) (bool, error) {
+func (s *admitter) sanctionsClear(ctx context.Context, q db.Querier, acct accounts.Account) (bool, error) {
 	p, err := s.profiles.Get(ctx, q, acct.OwnerUserID)
 	if err != nil {
 		if errs.HasCode(err, errs.CodeNotFound) {
@@ -633,7 +633,7 @@ func (s *Service) sanctionsClear(ctx context.Context, q db.Querier, acct account
 // strategy) plus the agent's capability as the authority section, and
 // persists the decision whatever it says. A withdrawal is risk-increasing:
 // value leaves, so an account freeze stops it in the kernel too.
-func (s *Service) evaluateWithdrawalRisk(ctx context.Context, tx pgx.Tx, in econ.Intent, agent agentRow, acct accounts.Account,
+func (s *admitter) evaluateWithdrawalRisk(ctx context.Context, tx pgx.Tx, in econ.Intent, agent agentRow, acct accounts.Account,
 	asset assets.Asset, price money.Price, amount money.Quantity, notional money.USD, dest Destination, c Capability,
 	check AuthorityCheck, facts withdrawalFacts, now time.Time) (risk.AdvancedDecision, error) {
 	verified, err := s.identity.IdentityVerified(ctx, tx, in.AccountID)
@@ -672,7 +672,7 @@ func (s *Service) evaluateWithdrawalRisk(ctx context.Context, tx pgx.Tx, in econ
 		Balance:      &risk.BalanceSnapshot{Available: available, Required: required},
 		Velocity:     &risk.VelocitySnapshot{CountInWindow: facts.count24h, NotionalInWindow: facts.notional24},
 		Destination:  &risk.DestinationSnapshot{Allowlisted: dest.Status == DestinationActive && c.Terms.AllowsDestination(dest.Address), AddedAt: dest.AddedAt},
-		Chain:        &risk.ChainSnapshot{Healthy: s.host.Health(ctx, dest.Chain) == nil},
+		Chain:        &risk.ChainSnapshot{Healthy: s.chain.Health(ctx, dest.Chain) == nil},
 		Settlement:   &risk.SettlementSnapshot{UnknownEffects: facts.unknown},
 		Authority:    check.Snapshot(),
 		Strategy:     &risk.StrategySnapshot{Approved: approved && agent.usable(), ManifestPermits: check.InScope},
@@ -688,7 +688,7 @@ func (s *Service) evaluateWithdrawalRisk(ctx context.Context, tx pgx.Tx, in econ
 
 // transitionWithdrawal moves a withdrawal and writes the transition row, the
 // set-once columns and the audit event.
-func (s *Service) transitionWithdrawal(ctx context.Context, tx pgx.Tx, w Withdrawal, to WithdrawalStatus, actor Actor, reason string,
+func (s *admitter) transitionWithdrawal(ctx context.Context, tx pgx.Tx, w Withdrawal, to WithdrawalStatus, actor Actor, reason string,
 	set subjectSet) (Withdrawal, error) {
 	if !CanTransitionWithdrawal(w.Status, to) {
 		return Withdrawal{}, errs.Newf(errs.CodeInvalidStateTransition, "delegation: withdrawal %s cannot move %s -> %s", w.ID, w.Status, to)
