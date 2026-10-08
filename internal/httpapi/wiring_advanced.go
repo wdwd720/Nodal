@@ -66,8 +66,14 @@ type AdvancedDeps struct {
 	// >>> advanced:treasury deps
 
 	// >>> advanced:stable deps
+	// Stable serves /advanced/stable-assets (see StableDeps). Its zero value
+	// -- no sandbox chain configured -- leaves those routes UNSUPPORTED.
+	Stable StableDeps
 
 	// >>> advanced:bridge deps
+	// Bridge serves /advanced/bridge (see BridgeDeps). Its zero value leaves
+	// those routes UNSUPPORTED.
+	Bridge BridgeDeps
 
 	// >>> advanced:predmarket deps
 	// PredictionMarkets runs prediction markets. Nil leaves their routes
@@ -122,8 +128,10 @@ func wireAdvanced(p *Ports, d WireDeps) {
 	// >>> advanced:treasury wire
 
 	// >>> advanced:stable wire
+	wireStable(p, d)
 
 	// >>> advanced:bridge wire
+	wireBridge(p, d)
 
 	// >>> advanced:predmarket wire
 	if d.Advanced.PredictionMarkets != nil {

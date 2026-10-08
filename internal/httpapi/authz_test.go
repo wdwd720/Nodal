@@ -186,8 +186,14 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		// >>> advanced:treasury path parameters
 
 		// >>> advanced:stable path parameters
+		"{stableAssetId}":      testInstrument.String(),
+		"{stableIssuanceId}":   testOrderID.String(),
+		"{stableRedemptionId}": testDepositID.String(),
 
 		// >>> advanced:bridge path parameters
+		"{bridgeRouteId}": testInstrument.String(),
+		"{bridgeLegId}":   testOrderID.String(),
+		"{bridgeChainId}": "sbx-solana",
 
 		// >>> advanced:predmarket path parameters
 		// {marketId} is mapped above (the native markets declared it first).
@@ -244,8 +250,13 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		// >>> advanced:treasury required query
 
 		// >>> advanced:stable required query
+		"/v1/advanced/stable-assets/holdings":    "account_id=" + testAccountID.String(),
+		"/v1/advanced/stable-assets/issuances":   "account_id=" + testAccountID.String(),
+		"/v1/advanced/stable-assets/redemptions": "account_id=" + testAccountID.String(),
 
 		// >>> advanced:bridge required query
+		"/v1/advanced/bridge/legs":     "account_id=" + testAccountID.String(),
+		"/v1/advanced/bridge/holdings": "account_id=" + testAccountID.String(),
 
 		// >>> advanced:predmarket required query
 		"/v1/advanced/prediction-markets":                      "status=OPEN",

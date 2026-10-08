@@ -69,6 +69,7 @@ var financialPackages = []string{
 	"internal/sandboxfund",
 	"internal/predmarket",
 	"internal/sandboxrt",
+	"internal/stableasset",
 	"internal/derivatives",
 }
 
@@ -164,6 +165,14 @@ func TestReachability_EveryFinancialMutatorHasADeploymentCaller(t *testing.T) {
 			reachable := calledOutside(t, root, pkg, name)
 			reason, exempt := unreachableOnPurpose[key]
 			viaIface, indirect := reachedThroughInterface[key]
+			if driver, driven := reachedThroughDriver[key]; driven {
+				// Checked by TestReachability_EveryDriverClaimIsTrue.
+				if reachable {
+					staleExemptions = append(staleExemptions,
+						key+" is listed as reached through its driver "+driver+" but a direct caller now exists; drop the entry")
+				}
+				continue
+			}
 			switch {
 			case exempt && indirect:
 				staleExemptions = append(staleExemptions,

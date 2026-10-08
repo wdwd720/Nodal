@@ -33,6 +33,8 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -144,6 +146,14 @@ func run() int {
 		tags += "," + *extraTag
 	}
 
+	// Every run names its databases with a suffix of its own, so two runs of
+	// the same package at once -- two worktrees, two terminals -- never drop
+	// each other's database mid-test.
+	run, err := runSuffix()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "inttest:", err)
+		return 1
+	}
 	fmt.Printf("inttest: %d packages, one database each\n", len(pkgs))
 	var failed []string
 	start := time.Now()
@@ -152,7 +162,7 @@ func run() int {
 			fmt.Fprintln(os.Stderr, "inttest: interrupted")
 			return 130
 		}
-		name := dbName(pkg)
+		name := dbName(pkg) + "_" + run
 		fmt.Printf("\n=== [%d/%d] %s (database controlplane_test_%s)\n", i+1, len(pkgs), pkg, name)
 
 		env, err := provision(ctx, root, name)
@@ -319,6 +329,15 @@ func hasIntegrationTag(path string) (bool, error) {
 
 // dbNameUnsafe matches everything a PostgreSQL identifier should not contain.
 var dbNameUnsafe = regexp.MustCompile(`[^a-z0-9_]+`)
+
+// runSuffix is six random hex characters naming this run's databases.
+func runSuffix() (string, error) {
+	var b [3]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", fmt.Errorf("run suffix: %w", err)
+	}
+	return hex.EncodeToString(b[:]), nil
+}
 
 // dbName derives a short, stable, lowercase database suffix from an import
 // path. PostgreSQL truncates identifiers at 63 bytes and testdb prefixes
