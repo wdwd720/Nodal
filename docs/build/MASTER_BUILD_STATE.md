@@ -38,35 +38,64 @@ are not running here; nothing in the advanced work depends on them.
   fell back to 1 when the measured count was 0). Fixed in `40ffe3c` by measuring inside a rolled-back
   transaction that first inserts one row per dimension. 51/51 after the fix.
 
-## What has landed
+## What has landed (as of 2026-10-08)
 
-- `40ffe3c` capacity test fix (above).
-- `964eadb` the foundation: Ledger V2 (67 codes, 50 kinds, HOUSE/FACILITY owner types, SM001/SM002/FA001),
-  SIMULATED asset kind, 15 capability gates + `AdvancedSpecs`/`DecideMode`, `CAPABILITY_DISABLE` kill
-  switch, `internal/econ` (intents, exactly-once effects, authorizer, facilities, evidence, route), Risk
-  Kernel V2, 16 `SIMULATED_*` settlement actions, canonical instruments (00732), six reconciliation kinds,
-  restore drill re-run at version 732 (128 tables, 0 drift).
-- `91f13b8` wazero v1.12.0 for the strategy sandbox.
+- `40ffe3c` capacity test fix (above). `964eadb` the foundation: Ledger V2, SIMULATED asset kind, the
+  advanced capability gates + `AdvancedSpecs`/`DecideMode`, `internal/econ` (intents, exactly-once effects,
+  authorizer, facilities, evidence, route), Risk Kernel V2, `SIMULATED_*` settlement actions, canonical
+  instruments (00732). `91f13b8` wazero for the strategy sandbox.
+- Kernel: `0fe0043` multi-step transitions (00733), reservations that name their economic intent, one
+  sandbox dollar (`econ.SandboxDollarID`); `a330704` the intent status machine in SQL (00734, EI001);
+  `f838263` one identity rule (D-055); `f46d780` the ledger's holding classification
+  (`ledger.HoldingCodes`), which supply reconciliations use.
+- Pure cores: devnet (`209e446`), fees (`16f9e8e`), quant (`e42c404`), matching (`b5a8969`).
+- Domain subsystems, each merged and integrated (enum CHECKs paired, workarounds removed, restore drill re-run):
+  transfers + faucet (`b0d49f6`, 00744), margin (`f351add`, 00740), prediction markets (`221f4fa`, 00749),
+  derivatives (`b834400`, 00741), sandbox runtime + marketplace (`138bbce`, 00750/00751), orders
+  (`d2e8827`, 00742), devnet host + stable asset + bridge (`1cc7163`, 00747/00748), equities (`9fcd7af`, 00743).
+- Review 1 (kernel, transfers, faucet, margin; 13 findings): F8, F9, F10 fixed by the integrator; F1, F2, F4,
+  F5, F6, F11, F12, F13 fixed by the margin hardening (`d91ead2`, 00754). Review 2 (derivatives, prediction
+  markets, marketplace, sandbox runtime; 14 findings): hardening lanes in flight.
+- API + web: the advanced area and core pages (`0832e7d`), transfers (`672b6bb`), margin (`8ea8194`),
+  prediction markets (`5c42af0`), derivatives (`9781267`, buying power reads margin through
+  `CombinedMarginReader`, D-054), strategy marketplace (`e434367`).
+- `17b2982` `internal/sandboxchain` + `CP_SANDBOX_DEVNET_NETWORK`/`CP_SANDBOX_DEVNET_SEED_REF`: one seed and
+  network give every binary the same chain keys.
+- Evidence tools: `make perf-advanced` (`c4defed`, every measured target met in its smoke run);
+  `make advanced-demo` runs Scenarios 0, A, B, C, D, G, H and I (79 checks, all holding at `53b3480`);
+  threat model entries 1-8, 10-12 and 15-17 (`fb7810c`), cited tests machine-checked by `test/docs`.
+- Restore drill at version 754: 220 tables, identical row counts, 0 drift.
 
 ## In flight (isolated worktrees, merged by the integrator)
 
-Pure cores: `internal/matching`, `internal/quant`, `internal/fees` (spread/fee/performance), `internal/devnet`.
-DB-backed lanes: `internal/margin` (00740), `internal/transfers` + `internal/sandboxfund` (00744),
-`internal/sandboxrt` (00751) + `internal/marketplace` (00750).
+Orders + equities API/UI; stable asset + bridge API/UI (with the cross-chain capital page); treasury +
+fee ledger (00745/00746); delegated agent signing and withdrawals (00752/00753); the advanced worker
+(`internal/advancedjobs`, `internal/advancedmetrics`, `cmd/advanced-worker`: scheduled jobs, reconcilers
+and the metrics collector — review-1 F7); review-2 hardening of derivatives (00755), prediction markets
+(00756) and the marketplace + sandbox runtime (00757); the operator console with transfers reversal under
+dual control (review-1 F3, 00758), the margin deficit and case-resolution surfaces and sandbox marks.
 
 ## Next exact work
 
-1. Merge the four pure cores; launch derivatives (00741, needs quant), orders + treasury + fee ledger
-   (00742/00745/00746, need matching + fees), stable asset + bridge (00747/00748, need devnet), prediction
-   markets (00749, needs matching), equities (00743), delegation (00752/00753, needs devnet).
-2. Buying power V2, API surface (OpenAPI + handlers + wiring), web pages, `make advanced-demo`.
-3. Hardening: race/fuzz/load runs, threat models, the three reviews, README and portfolio evidence.
+1. Merge each in-flight lane as it reports (scratchpad INTEGRATOR_TODO procedure); after the worker merges,
+   add margin and marketplace to `test/reachability` and CloudWatch alarms/dashboard widgets for the
+   advanced metrics; after orders merges, wire prediction markets' `OutcomeBooks` over the order book.
+2. Launch the delegation API/UI and treasury/fees API lanes when their domains merge; a portfolio page
+   (balances by chain, positions across subsystems, pending capital) when the API lanes are in.
+3. Demo Scenarios E (strategy sandbox, after the marketplace hardening) and F (delegation).
+4. Threat model entries 9, 13 and 14; the three reviews (`docs/reviews/`); README; `docs/portfolio/
+   TECHNICAL_EVIDENCE.md`; `ADVANCED_TEST_EVIDENCE.md`; traceability; a recorded performance run on an
+   idle machine; the Playwright suite against a live API.
 
 ## Verification commands that matter for this goal
 
 ```
 go test -count=1 ./internal/econ/... ./internal/risk/... ./internal/ledger/... ./internal/gates/...
 go run ./scripts/inttest -pkg '^\./(internal/(econ|risk|ledger|instruments|gates|assets)|test/integration/(enums|migrations))$'
+go run ./scripts/inttest -pkg '^\./internal/<subsystem>$'          # each advanced package
+go run ./scripts/advanceddemo                                     # make advanced-demo
+go run ./scripts/advperf                                          # make perf-advanced
+go test ./test/reachability/ ./test/docs/ ./test/security/ ./test/source/
 go run ./scripts/restoredrill -pg-bin <postgres client bin dir>
 ```
 

@@ -12,7 +12,7 @@ an external provider's sandbox) · `BLOCKED_EXTERNAL` · `LIVE_CAPABLE_BUT_DISAB
 code (`gates.DecideMode` → `LIVE_NOT_IMPLEMENTED`) and unrepresentable in the database (D-049). The live
 column below says what activation would need, never that it is near.
 
-Last updated: 2026-10-08 — foundation, kernel amendments (00733), transfers + faucet (00744), margin (00740), derivatives (00741), prediction markets (00749), strategy marketplace (00750), sandboxed runs (00751) the internal order book (00742), the stable asset (00747), bridges (00748) and equities (00743) merged; other subsystem lanes in progress.
+Last updated: 2026-10-08 — every domain subsystem is merged: kernel amendments (00733/00734), transfers + faucet (00744), margin (00740, hardened 00754), derivatives (00741), prediction markets (00749), strategy marketplace (00750), sandboxed runs (00751), the internal order book (00742), the stable asset (00747), bridges (00748), equities (00743), the treasury book (00745), the fee ledger (00746) and delegated signing and withdrawals (00752/00753). API + UI are merged for transfers, margin, prediction markets, derivatives and the marketplace; the others, the review-2 hardening and the advanced worker are in flight.
 
 ## Summary
 
@@ -24,27 +24,27 @@ Last updated: 2026-10-08 — foundation, kernel amendments (00733), transfers + 
 | 4 | Ledger V2 subledgers (§22) | VERIFIED_LOCAL | SIMULATED domain | — |
 | 5 | Capability gates + mode policy (§28) | VERIFIED_LOCAL | — | — |
 | 6 | Risk Kernel V2 (§21) | VERIFIED_LOCAL | — | — |
-| 7 | Stable asset subsystem (§5) | VERIFIED_LOCAL (API in progress) | SANDBOX/DEVNET | B-16 |
-| 8 | Margin + leverage engine (§6) | VERIFIED_LOCAL (API in progress) | PAPER/SANDBOX | B-15 |
-| 9 | Derivatives: futures, perps, options (§7) | VERIFIED_LOCAL (API in progress) | PAPER/SANDBOX | B-15, B-17 |
+| 7 | Stable asset subsystem (§5) | VERIFIED_LOCAL (API in progress; demo A, I) | SANDBOX/DEVNET | B-16 |
+| 8 | Margin + leverage engine (§6) | VERIFIED_LOCAL (API + UI merged; review-1 findings fixed; demo B) | PAPER/SANDBOX | B-15 |
+| 9 | Derivatives: futures, perps, options (§7) | VERIFIED_LOCAL (API + UI merged; review-2 hardening in progress; demo C) | PAPER/SANDBOX | B-15, B-17 |
 | 10 | Equities abstraction (§8) | VERIFIED_LOCAL (API in progress) | PAPER/SANDBOX | B-15, B-17 |
-| 11 | Internal matching engine (§9) | VERIFIED_LOCAL (API in progress) | internal simulation | B-15 |
-| 12 | Customer-to-customer transfers (§10) | VERIFIED_LOCAL (API in progress) | SANDBOX | B-15 |
-| 13 | Principal / treasury book (§11) | IN_PROGRESS | PAPER/SANDBOX | B-15 |
-| 14 | Transparent spread + fee engine (§12) | IN_PROGRESS (pure engine VERIFIED_LOCAL; fee ledger pending) | PAPER/SANDBOX | B-15 |
-| 15 | Performance fee engine (§13) | IN_PROGRESS (pure engine VERIFIED_LOCAL; persistence pending) | PAPER/SANDBOX | B-15 |
-| 16 | Strategy marketplace (§14) | VERIFIED_LOCAL (API in progress) | PAPER | B-15 |
-| 17 | Sandboxed user code (§15) | VERIFIED_LOCAL (API in progress) | SANDBOX | B-19 |
-| 18 | Delegated agent signing (§16) | NOT_STARTED | SANDBOX/DEVNET | B-18 |
-| 19 | Delegated agent withdrawals (§17) | NOT_STARTED | SANDBOX/DEVNET | B-18 |
-| 20 | Cross-chain buying power (§18) | VERIFIED_LOCAL (bridge; V2 wiring and API in progress) | SANDBOX/DEVNET | B-20 |
-| 21 | Prediction markets (§19) | VERIFIED_LOCAL (API in progress) | PAPER/SANDBOX | B-15, B-17 |
-| 22 | Universal buying power V2 (§20) | VERIFIED_LOCAL (margin wired; derivatives, bridge pending) | SIMULATED domain | — |
+| 11 | Internal matching engine (§9) | VERIFIED_LOCAL (API in progress; demo D, H) | internal simulation | B-15 |
+| 12 | Customer-to-customer transfers (§10) | VERIFIED_LOCAL (API + UI merged; reversal dual control in progress; demo 0) | SANDBOX | B-15 |
+| 13 | Principal / treasury book (§11) | VERIFIED_LOCAL (API in progress) | PAPER/SANDBOX | B-15 |
+| 14 | Transparent spread + fee engine (§12) | VERIFIED_LOCAL (engine + fee ledger; API in progress; subsystems' fee-ledger calls being wired) | PAPER/SANDBOX | B-15 |
+| 15 | Performance fee engine (§13) | VERIFIED_LOCAL (engine + periods; API in progress) | PAPER/SANDBOX | B-15 |
+| 16 | Strategy marketplace (§14) | VERIFIED_LOCAL (API + UI merged; review-2 hardening in progress) | PAPER | B-15 |
+| 17 | Sandboxed user code (§15) | VERIFIED_LOCAL (API + UI merged; review-2 hardening in progress) | SANDBOX | B-19 |
+| 18 | Delegated agent signing (§16) | VERIFIED_LOCAL (API in progress) | SANDBOX/DEVNET | B-18 |
+| 19 | Delegated agent withdrawals (§17) | VERIFIED_LOCAL (API in progress) | SANDBOX/DEVNET | B-18 |
+| 20 | Cross-chain buying power (§18) | VERIFIED_LOCAL (bridge; API in progress; demo G) | SANDBOX/DEVNET | B-20 |
+| 21 | Prediction markets (§19) | VERIFIED_LOCAL (API + UI merged; review-2 hardening in progress; demo H) | PAPER/SANDBOX | B-15, B-17 |
+| 22 | Universal buying power V2 (§20) | VERIFIED_LOCAL (margin + derivatives combined, D-054; bridge in-flight haircut) | SIMULATED domain | — |
 | 23 | Provider layer modes (§27) | IN_PROGRESS | fake/sandbox | B-17, B-20 |
-| 24 | Observability (§29) | NOT_STARTED | — | — |
-| 25 | API surface (§25) | IN_PROGRESS (core reads VERIFIED_LOCAL; per-subsystem lanes running) | — | — |
-| 26 | Web application (§26) | IN_PROGRESS (advanced area lane running) | — | — |
-| 27 | Demo scenarios A–I (§34) | IN_PROGRESS (`make advanced-demo`: transfer prologue and B pass) | — | — |
+| 24 | Observability (§29) | IN_PROGRESS (instruments declared; collector in the advanced worker lane) | — | — |
+| 25 | API surface (§25) | IN_PROGRESS (core, transfers, margin, prediction markets, derivatives, marketplace merged; orders/equities, stable/bridge, treasury/fees, delegation, operator console running) | — | — |
+| 26 | Web application (§26) | IN_PROGRESS (core, transfers, margin, prediction markets, derivatives, marketplace sections merged) | — | — |
+| 27 | Demo scenarios A–I (§34) | IN_PROGRESS (`make advanced-demo`: 0, A, B, C, D, G, H, I pass — 79 checks; E and F pending) | — | — |
 
 ## Foundation detail
 

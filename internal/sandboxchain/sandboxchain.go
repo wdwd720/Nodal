@@ -24,6 +24,12 @@ const (
 	PurposeIssuer    = "issuer"
 	PurposeSnapshots = "reserve-snapshots"
 	PurposeAttester  = "bridge-attester"
+	// PurposeDelegatedSigner is the master seed of the delegated wallet
+	// signer (internal/delegation), which derives one key per account and
+	// chain from it; PurposeDelegationVenue prefixes each venue co-signer's
+	// purpose (VenueSeed).
+	PurposeDelegatedSigner = "delegated-signer"
+	PurposeDelegationVenue = "delegation-venue/"
 )
 
 // derivationLabel versions the derivation itself.
@@ -57,6 +63,9 @@ func (s Seed) Derive(purpose string) [32]byte {
 	copy(out[:], mac.Sum(nil))
 	return out
 }
+
+// VenueSeed is the co-signer seed of one delegation venue, by its name.
+func (s Seed) VenueSeed(venue string) [32]byte { return s.Derive(PurposeDelegationVenue + venue) }
 
 // Keys are the platform's sandbox chain signers.
 type Keys struct {
