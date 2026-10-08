@@ -28,6 +28,7 @@ import (
 	"github.com/nodal/controlplane/internal/capital/buyingpower"
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/commerce"
+	"github.com/nodal/controlplane/internal/compliance"
 	"github.com/nodal/controlplane/internal/config"
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
@@ -44,6 +45,7 @@ import (
 	"github.com/nodal/controlplane/internal/killswitch"
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/legalrouter"
+	"github.com/nodal/controlplane/internal/margin"
 	"github.com/nodal/controlplane/internal/nativeasset"
 	"github.com/nodal/controlplane/internal/nativemarket"
 	"github.com/nodal/controlplane/internal/notification"
@@ -310,6 +312,47 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// unrepresentable in the schema, and in STAGING and PROD even a simulated
 	// mode needs its gate ACTIVE (gates.DecideMode).
 	// >>> advanced:margin services
+	//
+	// Margin, leverage, borrowing and liquidation (internal/margin), with the
+	// production identity reader (D-055: an ACTIVE owner with a verified email
+	// address, or a VERIFIED unexpired compliance profile; fail closed), the
+	// reference-price paper venue and no derivatives book connected. Its legal router is the determination the rest of the API
+	// applies: CONSERVATIVE unless CP_API_LEGAL_POLICY chose otherwise where
+	// that is allowed. The numeraire is the sandbox dollar, which the margin
+	// routes resolve per request; nothing here creates an asset.
+	marginRouter, err := legalRouterFor(cfg.Env, in.cfg.API.LegalPolicy)
+	if err != nil {
+		return nil, err
+	}
+	if marginRouter == nil {
+		if marginRouter, err = legalrouter.New(legalrouter.ConservativePolicy()); err != nil {
+			return nil, fmt.Errorf("margin legal router: %w", err)
+		}
+	}
+	marginSvc, err := margin.NewService(margin.Config{
+		Policy:            margin.DefaultPolicy(),
+		RiskPolicy:        risk.DefaultAdvancedPolicy(),
+		LendingPoolName:   "Margin lending pool (sandbox)",
+		InsuranceFundName: "Margin insurance fund (sandbox)",
+	}, margin.Dependencies{
+		Clock:      clk,
+		Ledger:     ledgerSvc,
+		Effects:    econ.NewEffectStore(clk, outbox, auditWriter),
+		Intents:    econ.NewIntentStore(clk, outbox, auditWriter),
+		Authorizer: econ.NewAuthorizer(gateChecker, killChecker),
+		Registry:   econ.NewRegistry(),
+		Risk:       risk.NewStore(),
+		Capital:    capitalSvc,
+		Prices:     priceStore,
+		Router:     marginRouter,
+		Identity:   compliance.NewAccountVerification(clk),
+		KillSwitch: killChecker,
+		Venue:      margin.PaperVenue{},
+		Audit:      auditWriter,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("margin service: %w", err)
+	}
 
 	// >>> advanced:derivatives services
 
@@ -404,6 +447,10 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		MaxPriceAge: 5 * time.Minute,
 
 		// >>> advanced:margin deps
+		// Buying power V2 reads each customer's margin state from the margin
+		// engine's own evaluation, so the two can never disagree.
+		Margin:        marginSvc.BuyingPowerReader(),
+		MarginService: marginSvc,
 
 		// >>> advanced:derivatives deps
 

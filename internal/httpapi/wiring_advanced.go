@@ -39,6 +39,10 @@ type AdvancedDeps struct {
 	Extra buyingpower.ExtraReservationReader
 
 	// >>> advanced:margin deps
+	// MarginService runs margin accounts (internal/margin). Nil leaves the
+	// margin routes UNSUPPORTED. It needs the ledger of WireDeps as well, to
+	// report the facilities' balances after a seeding.
+	MarginService *MarginService
 
 	// >>> advanced:derivatives deps
 
@@ -79,6 +83,9 @@ func wireAdvanced(p *Ports, d WireDeps) {
 	}
 
 	// >>> advanced:margin wire
+	if d.Advanced.MarginService != nil && d.Ledger != nil {
+		p.Margin = marginAdapter{svc: d.Advanced.MarginService, ledger: d.Ledger, db: d.DB}
+	}
 
 	// >>> advanced:derivatives wire
 

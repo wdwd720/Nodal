@@ -1080,6 +1080,967 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/advanced/margin/account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * An account's margin account, evaluated by the margin engine at the instant of the read
+         * @description The read changes nothing: the stored status moves only when the account is marked to market or acted on, so `status` can lag `evaluation.health`. Loans are the open borrow lots; accrued interest since the last posted period is `evaluation.accrued_interest`. The engine reports no liquidation price. NOT_FOUND when the account has no margin account.
+         */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The margin account and its evaluation (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MarginAccountDetail"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /**
+         * Open a margin account in PAPER or SANDBOX mode with the sandbox dollar as numeraire
+         * @description Opening the same account again on the same terms returns it unchanged; other terms are a CONFLICT. An ISOLATED account names its one risky asset.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["MarginOpenRequest"];
+                };
+            };
+            responses: {
+                /** @description The margin account */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MarginAccount"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/margin/account/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Close a margin account that holds nothing and owes the lending pool nothing */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["MarginAccountRef"];
+                };
+            };
+            responses: {
+                /** @description The closed margin account */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MarginAccount"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/margin/borrow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Borrow the numeraire from the lending pool into the wallet (MARGIN_BORROW; Risk Kernel V2 decides) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["MarginAmountRequest"];
+                };
+            };
+            responses: {
+                /** @description The new borrow lot and the account's evaluation after it */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MarginLoanResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/margin/calls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Margin calls of an account, newest first */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of margin calls (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MarginCallPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/margin/cases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Liquidation cases of an account, newest first */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of liquidation cases (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MarginCasePage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/margin/cases/{marginCaseId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One liquidation case with every step it executed */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    marginCaseId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The case and its steps (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MarginCaseDetail"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/margin/collateral/post": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Move collateral from the wallet into the margin account (MARGIN_COLLATERAL_MOVE) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["MarginCollateralRequest"];
+                };
+            };
+            responses: {
+                /** @description The collateral move and the account's evaluation after it */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MarginCollateralResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/margin/collateral/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Release collateral from the margin account to the wallet (Risk Kernel V2 decides) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["MarginCollateralRequest"];
+                };
+            };
+            responses: {
+                /** @description The collateral move and the account's evaluation after it */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MarginCollateralResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/margin/leveraged-buys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Buy an asset entirely on margin at mark plus the disclosed paper slippage (Risk Kernel V2 decides) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["MarginLeveragedBuyRequest"];
+                };
+            };
+            responses: {
+                /** @description The financed buy, its journals and the account's evaluation after it */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MarginLeveragedBuyResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/margin/ops/calls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Operator — margin calls across every account, newest first */
+        get: {
+            parameters: {
+                query?: {
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                    status?: components["schemas"]["MarginCallStatus"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of margin calls (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MarginCallPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/margin/ops/cases/{marginCaseId}/cover-deficit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Operator — have the insurance fund cover a bankrupt case's deficit (DEFICIT_COVERAGE; step-up) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    marginCaseId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The coverage and the case after it */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MarginDeficitResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/margin/ops/facilities/seed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Operator — fund the lending pool and the insurance fund in sandbox dollars (FACILITY_FUNDING; step-up)
+         * @description Exactly once per Idempotency-Key; a different key funds again.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["MarginSeedRequest"];
+                };
+            };
+            responses: {
+                /** @description The facilities and the sandbox dollars each holds after funding */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MarginFacilities"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/margin/ops/liquidations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Operator — execute at most one deterministic liquidation step of one account (step-up) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["MarginLiquidateRequest"];
+                };
+            };
+            responses: {
+                /** @description What the step decided and executed */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MarginLiquidationResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/margin/ops/mark-to-market": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Operator — evaluate open margin accounts, moving them between NORMAL, WARNING and MARGIN_CALL */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["MarginBatchRequest"];
+                };
+            };
+            responses: {
+                /** @description Every account evaluated and every one that could not be */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MarginMarkToMarketResult"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/margin/ops/queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Operator — accounts in MARGIN_CALL or LIQUIDATING under the service's policy, with their live evaluation
+         * @description A queue run takes them most under-margined first and skips an account whose case is in MANUAL_REVIEW (a person owns it); this read lists them by margin account id.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The liquidation queue (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MarginQueue"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/margin/ops/queue/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Operator — run one liquidation step for each of the most under-margined accounts (step-up) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["MarginBatchRequest"];
+                };
+            };
+            responses: {
+                /** @description Every step taken and every account that could not be processed */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MarginQueueRunResult"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/margin/ops/stress-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Operator — run every stress scenario against any account's margin account and store the report */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["MarginAccountRef"];
+                };
+            };
+            responses: {
+                /** @description The stored stress run */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MarginStressRun"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/margin/repay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Repay loans from the wallet, interest first and oldest lot first (MARGIN_REPAY) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["MarginAmountRequest"];
+                };
+            };
+            responses: {
+                /** @description The repayment, its allocation per lot and the account's evaluation after it */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MarginLoanResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/margin/stress-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stored stress runs of an account, newest first */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of stress run summaries (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MarginStressRunPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /** Run every stress scenario against your margin account and store the report (moves no value) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["MarginAccountRef"];
+                };
+            };
+            responses: {
+                /** @description The stored stress run */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MarginStressRun"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/margin/stress-runs/{marginStressRunId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One stored stress run with every scenario's result */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    marginStressRunId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The stress run (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MarginStressRun"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/advanced/risk/decisions": {
         parameters: {
             query?: never;
@@ -4411,6 +5372,440 @@ export interface components {
             /** @default * */
             scope_id: string;
         };
+        MarginAccount: {
+            account_id: components["schemas"]["UUID"];
+            id: components["schemas"]["UUID"];
+            insurance_fund_id: components["schemas"]["UUID"];
+            isolated_asset_id?: components["schemas"]["UUID"];
+            lending_pool_id: components["schemas"]["UUID"];
+            margin_mode: components["schemas"]["MarginMode"];
+            mode: components["schemas"]["AdvancedMode"];
+            numeraire_asset_id: components["schemas"]["UUID"];
+            opened_at: components["schemas"]["Timestamp"];
+            policy_version: string;
+            status: components["schemas"]["MarginAccountStatus"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        MarginAccountDetail: components["schemas"]["MarginAccount"] & {
+            evaluation: components["schemas"]["MarginEvaluation"];
+            latest_case?: components["schemas"]["MarginCase"];
+            loans: components["schemas"]["MarginLoan"][];
+            open_call?: components["schemas"]["MarginCall"];
+        };
+        MarginAccountRef: {
+            account_id: components["schemas"]["UUID"];
+        };
+        /** @enum {string} */
+        MarginAccountStatus: "NORMAL" | "WARNING" | "MARGIN_CALL" | "LIQUIDATING" | "BANKRUPT" | "CLOSED";
+        MarginAmountRequest: {
+            account_id: components["schemas"]["UUID"];
+            amount: components["schemas"]["Quantity"];
+        };
+        MarginBatchRequest: {
+            limit?: number;
+        };
+        MarginCall: {
+            account_id: components["schemas"]["UUID"];
+            deficiency: components["schemas"]["Quantity"];
+            equity: components["schemas"]["Quantity"];
+            evaluation_hash: string;
+            id: components["schemas"]["UUID"];
+            issued_at: components["schemas"]["Timestamp"];
+            maintenance_margin: components["schemas"]["Quantity"];
+            margin_account_id: components["schemas"]["UUID"];
+            numeraire_asset_id: components["schemas"]["UUID"];
+            numeraire_decimals: number;
+            resolved_at?: components["schemas"]["Timestamp"];
+            status: components["schemas"]["MarginCallStatus"];
+        };
+        MarginCallPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["MarginCall"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @enum {string} */
+        MarginCallStatus: "OPEN" | "MET" | "LIQUIDATED";
+        MarginCase: {
+            account_id: components["schemas"]["UUID"];
+            closed_at?: components["schemas"]["Timestamp"];
+            deficit?: components["schemas"]["Quantity"];
+            deficit_coverage_journal_transaction_id?: components["schemas"]["UUID"];
+            deficit_covered_at?: components["schemas"]["Timestamp"];
+            id: components["schemas"]["UUID"];
+            last_reason: string;
+            margin_account_id: components["schemas"]["UUID"];
+            margin_call_id: components["schemas"]["UUID"];
+            max_steps: number;
+            numeraire_asset_id: components["schemas"]["UUID"];
+            numeraire_decimals: number;
+            opened_at: components["schemas"]["Timestamp"];
+            policy_version: string;
+            status: components["schemas"]["MarginCaseStatus"];
+            steps_executed: number;
+            target: components["schemas"]["MarginLiquidationTarget"];
+        };
+        MarginCaseDetail: components["schemas"]["MarginCase"] & {
+            steps: components["schemas"]["MarginLiquidationStep"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        MarginCasePage: components["schemas"]["Page"] & {
+            items: components["schemas"]["MarginCase"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @enum {string} */
+        MarginCaseStatus: "AWAITING_PRICE" | "AWAITING_VENUE" | "IN_PROGRESS" | "COMPLETED" | "BANKRUPT" | "MANUAL_REVIEW";
+        MarginCollateralRequest: {
+            account_id: components["schemas"]["UUID"];
+            asset_id: components["schemas"]["UUID"];
+            quantity: components["schemas"]["Quantity"];
+        };
+        MarginCollateralResult: {
+            effect_id: components["schemas"]["UUID"];
+            evaluation?: components["schemas"]["MarginEvaluation"];
+            intent_id?: components["schemas"]["UUID"];
+            journal_transaction_id: components["schemas"]["UUID"];
+            margin_account_id: components["schemas"]["UUID"];
+            move_id: components["schemas"]["UUID"];
+            /** @description the service found this operation already applied and posted nothing; no evaluation is reported */
+            replayed: boolean;
+            reservation_id?: components["schemas"]["UUID"];
+            status: components["schemas"]["MarginAccountStatus"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        MarginDeficitResult: {
+            case: components["schemas"]["MarginCase"];
+            case_id: components["schemas"]["UUID"];
+            deficit: components["schemas"]["Quantity"];
+            journal_transaction_id: components["schemas"]["UUID"];
+            replayed: boolean;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        MarginEvaluated: {
+            account_id: components["schemas"]["UUID"];
+            call?: components["schemas"]["MarginCall"];
+            evaluation: components["schemas"]["MarginEvaluation"];
+            margin_account_id: components["schemas"]["UUID"];
+            previous_status: components["schemas"]["MarginAccountStatus"];
+            status: components["schemas"]["MarginAccountStatus"];
+        };
+        /** @description The margin engine's deterministic evaluation. equity = eligible_collateral + realized_pnl + unrealized_pnl − borrow_liabilities − accrued_fees − accrued_interest; liquidation_buffer = equity − maintenance_margin (negative once eligible for liquidation). Quantities are numeraire base units. */
+        MarginEvaluation: {
+            accrued_fees: components["schemas"]["Quantity"];
+            accrued_interest: components["schemas"]["Quantity"];
+            at: components["schemas"]["Timestamp"];
+            borrow_liabilities: components["schemas"]["Quantity"];
+            capacity: components["schemas"]["Quantity"];
+            /**
+             * Format: int64
+             * @description basis points, rounded up
+             */
+            effective_leverage_bps: number;
+            eligible_collateral: components["schemas"]["Quantity"];
+            equity: components["schemas"]["Quantity"];
+            gross_exposure: components["schemas"]["Quantity"];
+            hash: string;
+            health: components["schemas"]["MarginAccountStatus"];
+            holdings: components["schemas"]["MarginHolding"][];
+            initial_margin: components["schemas"]["Quantity"];
+            /**
+             * Format: int64
+             * @description basis points of gross exposure over equity (50000 = 5x)
+             */
+            leverage_cap_bps: number;
+            leverage_unbounded: boolean;
+            levered: boolean;
+            liquidation_buffer: components["schemas"]["Quantity"];
+            liquidation_eligible: boolean;
+            maintenance_margin: components["schemas"]["Quantity"];
+            margin_available: components["schemas"]["Quantity"];
+            market_value: components["schemas"]["Quantity"];
+            missing_marks: boolean;
+            net_asset_value: components["schemas"]["Quantity"];
+            net_exposure: components["schemas"]["Quantity"];
+            newest_mark_at?: components["schemas"]["Timestamp"];
+            numeraire_asset_id: components["schemas"]["UUID"];
+            numeraire_decimals: number;
+            oldest_mark_at?: components["schemas"]["Timestamp"];
+            policy_hash: string;
+            policy_version: string;
+            prices_fresh: boolean;
+            realized_pnl: components["schemas"]["Quantity"];
+            stale_assets: components["schemas"]["UUID"][];
+            unrealized_pnl: components["schemas"]["Quantity"];
+            usd: components["schemas"]["MarginEvaluationUSD"];
+            warning_threshold: components["schemas"]["Quantity"];
+        };
+        /** @description The engine's cent rendering, rounded so the account can only look less healthy (assets and equity down, liabilities and requirements up). */
+        MarginEvaluationUSD: {
+            accrued_interest: components["schemas"]["USD"];
+            borrow_liabilities: components["schemas"]["USD"];
+            eligible_collateral: components["schemas"]["USD"];
+            equity: components["schemas"]["USD"];
+            gross_exposure: components["schemas"]["USD"];
+            initial_margin: components["schemas"]["USD"];
+            liquidation_buffer: components["schemas"]["USD"];
+            maintenance_margin: components["schemas"]["USD"];
+            margin_available: components["schemas"]["USD"];
+            market_value: components["schemas"]["USD"];
+            warning_threshold: components["schemas"]["USD"];
+        };
+        MarginFacilities: {
+            asset_decimals: number;
+            asset_id: components["schemas"]["UUID"];
+            insurance_fund: components["schemas"]["MarginFacility"];
+            lending_pool: components["schemas"]["MarginFacility"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        MarginFacility: {
+            /** @description sandbox-dollar base units the facility holds unlent (lending pool) or undrawn (insurance fund) */
+            available: components["schemas"]["Quantity"];
+            id: components["schemas"]["UUID"];
+            kind: string;
+            name: string;
+            status: string;
+        };
+        MarginFailure: {
+            account_id?: components["schemas"]["UUID"];
+            code: string;
+            detail: string;
+        };
+        MarginHaircut: {
+            concentration_bps: components["schemas"]["BPS"];
+            cross_chain_bps: components["schemas"]["BPS"];
+            liquidity_bps: components["schemas"]["BPS"];
+            oracle_bps: components["schemas"]["BPS"];
+            settlement_bps: components["schemas"]["BPS"];
+            total_bps: components["schemas"]["BPS"];
+            venue_bps: components["schemas"]["BPS"];
+            volatility_bps: components["schemas"]["BPS"];
+            /** @description A stale, missing or future mark (or a delayed bridge) makes the collateral worthless. */
+            zero_value: boolean;
+        };
+        MarginHolding: {
+            asset_id: components["schemas"]["UUID"];
+            collateral_value: components["schemas"]["Quantity"];
+            concentration_share_bps: components["schemas"]["BPS"];
+            exposure: components["schemas"]["Quantity"];
+            fresh: boolean;
+            haircut: components["schemas"]["MarginHaircut"];
+            initial_margin: components["schemas"]["Quantity"];
+            maintenance_margin: components["schemas"]["Quantity"];
+            /** @description the mark the evaluation used; present on reads */
+            mark?: components["schemas"]["MarginPrice"];
+            mark_at?: components["schemas"]["Timestamp"];
+            market_value: components["schemas"]["Quantity"];
+            numeraire: boolean;
+            priced: boolean;
+            /** @description base units of the asset */
+            quantity: components["schemas"]["Quantity"];
+        };
+        MarginLeveragedBuyRequest: {
+            account_id: components["schemas"]["UUID"];
+            asset_id: components["schemas"]["UUID"];
+            quantity: components["schemas"]["Quantity"];
+        };
+        MarginLeveragedBuyResult: {
+            borrow_journal_transaction_id: components["schemas"]["UUID"];
+            collateral_journal_transaction_id: components["schemas"]["UUID"];
+            /** @description numeraire base units borrowed: quantity × execution price, rounded up */
+            cost: components["schemas"]["Quantity"];
+            evaluation?: components["schemas"]["MarginEvaluation"];
+            /** @description mark × (1 + slippage_bps) */
+            execution_price?: components["schemas"]["MarginPrice"];
+            intent_id: components["schemas"]["UUID"];
+            lot_id?: components["schemas"]["UUID"];
+            margin_account_id: components["schemas"]["UUID"];
+            mark?: components["schemas"]["MarginPrice"];
+            replayed: boolean;
+            reservation_id?: components["schemas"]["UUID"];
+            slippage_bps?: components["schemas"]["BPS"];
+            status: components["schemas"]["MarginAccountStatus"];
+            trade_journal_transaction_id: components["schemas"]["UUID"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        MarginLiquidateRequest: {
+            account_id: components["schemas"]["UUID"];
+            /** @description The step meant (1 for the first); 0 or absent means whatever step is next. A step already executed is returned, not repeated. */
+            expected_step?: number;
+        };
+        MarginLiquidationOrder: {
+            action: components["schemas"]["MarginStepAction"];
+            asset_id: components["schemas"]["UUID"];
+            excess: components["schemas"]["Quantity"];
+            execution_price?: components["schemas"]["MarginPrice"];
+            fee: components["schemas"]["Quantity"];
+            mark?: components["schemas"]["MarginPrice"];
+            proceeds: components["schemas"]["Quantity"];
+            quantity: components["schemas"]["Quantity"];
+            repay: components["schemas"]["Quantity"];
+            slippage_bps: components["schemas"]["BPS"];
+        };
+        MarginLiquidationResult: {
+            account_id: components["schemas"]["UUID"];
+            account_status: components["schemas"]["MarginAccountStatus"];
+            case?: components["schemas"]["MarginCase"];
+            decision: components["schemas"]["MarginPlanDecision"];
+            /** @description false when the account needed no liquidation and no case was opened */
+            eligible: boolean;
+            margin_account_id: components["schemas"]["UUID"];
+            numeraire_decimals: number;
+            plan?: components["schemas"]["MarginPlan"];
+            reason: string;
+            replayed: boolean;
+            step?: components["schemas"]["MarginLiquidationStep"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        MarginLiquidationStep: {
+            action: components["schemas"]["MarginStepAction"];
+            asset_id: components["schemas"]["UUID"];
+            equity_after: components["schemas"]["Quantity"];
+            equity_before: components["schemas"]["Quantity"];
+            excess: components["schemas"]["Quantity"];
+            excess_journal_transaction_id?: components["schemas"]["UUID"];
+            executed_at: components["schemas"]["Timestamp"];
+            execution_price?: components["schemas"]["MarginPrice"];
+            fee: components["schemas"]["Quantity"];
+            id: components["schemas"]["UUID"];
+            mark?: components["schemas"]["MarginPrice"];
+            plan_hash: string;
+            proceeds: components["schemas"]["Quantity"];
+            quantity: components["schemas"]["Quantity"];
+            release_journal_transaction_id?: components["schemas"]["UUID"];
+            repaid: components["schemas"]["Quantity"];
+            repay_journal_transaction_id?: components["schemas"]["UUID"];
+            slippage_bps: components["schemas"]["BPS"];
+            slippage_cap_bps: components["schemas"]["BPS"];
+            step_no: number;
+            trade_journal_transaction_id?: components["schemas"]["UUID"];
+        };
+        /** @enum {string} */
+        MarginLiquidationTarget: "INITIAL_MARGIN" | "MAINTENANCE_PLUS_BUFFER";
+        MarginLoan: {
+            accrued_through: components["schemas"]["Timestamp"];
+            /** @description interest posted (capitalized) and not yet repaid */
+            interest: components["schemas"]["Quantity"];
+            lot_id: components["schemas"]["UUID"];
+            /** @description outstanding principal */
+            principal: components["schemas"]["Quantity"];
+            /**
+             * Format: int64
+             * @description annual simple rate
+             */
+            rate_bps: number;
+        };
+        MarginLoanAllocation: {
+            interest: components["schemas"]["Quantity"];
+            lot_id: components["schemas"]["UUID"];
+            principal: components["schemas"]["Quantity"];
+        };
+        MarginLoanResult: {
+            allocations: components["schemas"]["MarginLoanAllocation"][];
+            effect_id: components["schemas"]["UUID"];
+            evaluation?: components["schemas"]["MarginEvaluation"];
+            intent_id: components["schemas"]["UUID"];
+            journal_transaction_id: components["schemas"]["UUID"];
+            lot_id?: components["schemas"]["UUID"];
+            margin_account_id: components["schemas"]["UUID"];
+            replayed: boolean;
+            status: components["schemas"]["MarginAccountStatus"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        MarginMarkToMarketResult: {
+            evaluated: components["schemas"]["MarginEvaluated"][];
+            failures: components["schemas"]["MarginFailure"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /**
+         * @description CASH takes no leverage; ISOLATED margins one risky asset; CROSS shares the collateral across positions.
+         * @enum {string}
+         */
+        MarginMode: "CASH" | "ISOLATED" | "CROSS";
+        MarginOpenRequest: {
+            account_id: components["schemas"]["UUID"];
+            isolated_asset_id?: components["schemas"]["UUID"];
+            margin_mode: components["schemas"]["MarginMode"];
+            mode: components["schemas"]["AdvancedMode"];
+        };
+        MarginPlan: {
+            decision: components["schemas"]["MarginPlanDecision"];
+            deficit_units: components["schemas"]["Quantity"];
+            hash: string;
+            orders: components["schemas"]["MarginLiquidationOrder"][];
+            reason: string;
+            steps_taken: number;
+            target: components["schemas"]["MarginLiquidationTarget"];
+            target_units: components["schemas"]["Quantity"];
+        };
+        /** @enum {string} */
+        MarginPlanDecision: "COMPLETE" | "AWAIT_PRICE" | "AWAIT_VENUE" | "SELL" | "SELL_ALL" | "APPLY_COLLATERAL" | "BANKRUPT" | "MANUAL_REVIEW";
+        /** @description The price of one whole unit in the numeraire, exactly mantissa × 10^-scale. */
+        MarginPrice: {
+            mantissa: components["schemas"]["Quantity"];
+            observed_at?: components["schemas"]["Timestamp"];
+            scale: number;
+            source?: string;
+        };
+        MarginQueue: {
+            items: components["schemas"]["MarginQueueEntry"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        MarginQueueEntry: {
+            account: components["schemas"]["MarginAccount"];
+            evaluation?: components["schemas"]["MarginEvaluation"];
+            evaluation_error?: components["schemas"]["MarginFailure"];
+            latest_case?: components["schemas"]["MarginCase"];
+            numeraire_decimals: number;
+            open_call?: components["schemas"]["MarginCall"];
+        };
+        MarginQueueRunResult: {
+            failures: components["schemas"]["MarginFailure"][];
+            results: components["schemas"]["MarginLiquidationResult"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        MarginSeedRequest: {
+            fund_amount: components["schemas"]["Quantity"];
+            pool_amount: components["schemas"]["Quantity"];
+        };
+        /** @enum {string} */
+        MarginStepAction: "SELL" | "APPLY_COLLATERAL";
+        MarginStressResult: {
+            deficit: components["schemas"]["Quantity"];
+            deficit_usd: components["schemas"]["USD"];
+            equity_after: components["schemas"]["Quantity"];
+            equity_after_usd: components["schemas"]["USD"];
+            executable: boolean;
+            initial_after: components["schemas"]["Quantity"];
+            insurance_fund_draw: components["schemas"]["Quantity"];
+            insurance_fund_draw_usd: components["schemas"]["USD"];
+            maintenance_after: components["schemas"]["Quantity"];
+            maintenance_after_usd: components["schemas"]["USD"];
+            outcome: components["schemas"]["MarginPlanDecision"];
+            scenario: components["schemas"]["MarginStressScenario"];
+            shock_bps: components["schemas"]["BPS"];
+            steps_simulated: number;
+            would_liquidate: boolean;
+        };
+        MarginStressRun: components["schemas"]["MarginStressRunSummary"] & {
+            results: components["schemas"]["MarginStressResult"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        MarginStressRunPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["MarginStressRunSummary"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        MarginStressRunSummary: {
+            account_id: components["schemas"]["UUID"];
+            id: components["schemas"]["UUID"];
+            input_hash: string;
+            margin_account_id: components["schemas"]["UUID"];
+            numeraire_asset_id: components["schemas"]["UUID"];
+            numeraire_decimals: number;
+            policy_hash: string;
+            policy_version: string;
+            report_hash: string;
+            run_at: components["schemas"]["Timestamp"];
+        };
+        /** @enum {string} */
+        MarginStressScenario: "GAP_DOWN_5" | "GAP_DOWN_10" | "GAP_DOWN_25" | "GAP_DOWN_50" | "GAP_UP_5" | "GAP_UP_10" | "GAP_UP_25" | "GAP_UP_50" | "ORACLE_UNAVAILABLE" | "VENUE_UNAVAILABLE" | "PARTIAL_FILL" | "EXTREME_SPREAD" | "BRIDGE_DELAYED" | "COLLATERAL_DEPEG";
         NativeAsset: {
             activated_at?: components["schemas"]["Timestamp"];
             asset_id: components["schemas"]["UUID"];

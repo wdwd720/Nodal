@@ -176,6 +176,38 @@ var operationPolicies = map[string]operationPolicy{
 	"GetAdvancedBuyingPower":             {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
 
 	// >>> advanced:margin operations
+	//
+	// Margin, leverage, borrowing and liquidation (internal/margin), simulated
+	// value only. Reads of one account are tenant-scoped per request (the
+	// owner, or an operator holding account:read_any); a case or stress run
+	// read by its own id is scoped by its own account and answers NOT_FOUND
+	// otherwise. The owner's commands need sandbox:trade and are scoped by
+	// ownership alone. Operator actions need sandbox:operate, and those that
+	// move value -- funding the facilities, liquidating, covering a deficit --
+	// a recent step-up as well. Marking to market and running a stress test
+	// move none.
+	"GetAdvancedMarginAccount":                           {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedMarginCalls":                             {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedMarginCases":                             {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedMarginCasesMarginCaseId":                 {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedMarginStressRuns":                        {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedMarginStressRunsMarginStressRunId":       {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"PostAdvancedMarginAccount":                          {AnyOf: perms(security.PermSandboxTrade), Mutating: true},
+	"PostAdvancedMarginAccountClose":                     {AnyOf: perms(security.PermSandboxTrade), Mutating: true},
+	"PostAdvancedMarginCollateralPost":                   {AnyOf: perms(security.PermSandboxTrade), Mutating: true},
+	"PostAdvancedMarginCollateralRelease":                {AnyOf: perms(security.PermSandboxTrade), Mutating: true},
+	"PostAdvancedMarginBorrow":                           {AnyOf: perms(security.PermSandboxTrade), Mutating: true},
+	"PostAdvancedMarginRepay":                            {AnyOf: perms(security.PermSandboxTrade), Mutating: true},
+	"PostAdvancedMarginLeveragedBuys":                    {AnyOf: perms(security.PermSandboxTrade), Mutating: true},
+	"PostAdvancedMarginStressRuns":                       {AnyOf: perms(security.PermSandboxTrade), Mutating: true},
+	"PostAdvancedMarginOpsFacilitiesSeed":                {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedMarginOpsMarkToMarket":                  {AnyOf: perms(security.PermSandboxOperate), Mutating: true},
+	"GetAdvancedMarginOpsQueue":                          {AnyOf: perms(security.PermSandboxOperate)},
+	"PostAdvancedMarginOpsQueueRun":                      {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedMarginOpsLiquidations":                  {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit": {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedMarginOpsStressRuns":                    {AnyOf: perms(security.PermSandboxOperate), Mutating: true},
+	"GetAdvancedMarginOpsCalls":                          {AnyOf: perms(security.PermSandboxOperate)},
 
 	// >>> advanced:derivatives operations
 
