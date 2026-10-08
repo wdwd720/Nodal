@@ -257,8 +257,11 @@ func TestIDOR_QueryParameterSmuggling(t *testing.T) {
 		"/v1/advanced/derivatives/positions", "/v1/advanced/derivatives/flows", "/v1/advanced/derivatives/funding-accruals",
 
 		// >>> advanced:equities account-scoped list routes
+		"/v1/advanced/equities/orders", "/v1/advanced/equities/fills", "/v1/advanced/equities/settlements",
+		"/v1/advanced/equities/corporate-action-applications",
 
 		// >>> advanced:orders account-scoped list routes
+		"/v1/advanced/books/orders", "/v1/advanced/books/trades",
 
 		// >>> advanced:transfers account-scoped list routes
 		"/v1/advanced/transfers", "/v1/advanced/transfers/faucet/allowance",

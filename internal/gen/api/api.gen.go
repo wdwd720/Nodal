@@ -175,6 +175,576 @@ func (e AdminActionStatus) Valid() bool {
 	}
 }
 
+// Defines values for AdvancedBookLiquidity.
+const (
+	BookLiquidityMaker AdvancedBookLiquidity = "MAKER"
+	BookLiquidityTaker AdvancedBookLiquidity = "TAKER"
+)
+
+// Valid indicates whether the value is a known member of the AdvancedBookLiquidity enum.
+func (e AdvancedBookLiquidity) Valid() bool {
+	switch e {
+	case BookLiquidityMaker:
+		return true
+	case BookLiquidityTaker:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdvancedBookLiquidityIntent.
+const (
+	BookProvideLiquidity AdvancedBookLiquidityIntent = "PROVIDE_LIQUIDITY"
+	BookTakeLiquidity    AdvancedBookLiquidityIntent = "TAKE_LIQUIDITY"
+)
+
+// Valid indicates whether the value is a known member of the AdvancedBookLiquidityIntent enum.
+func (e AdvancedBookLiquidityIntent) Valid() bool {
+	switch e {
+	case BookProvideLiquidity:
+		return true
+	case BookTakeLiquidity:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdvancedBookMode.
+const (
+	BookModePaper   AdvancedBookMode = "PAPER"
+	BookModeSandbox AdvancedBookMode = "SANDBOX"
+)
+
+// Valid indicates whether the value is a known member of the AdvancedBookMode enum.
+func (e AdvancedBookMode) Valid() bool {
+	switch e {
+	case BookModePaper:
+		return true
+	case BookModeSandbox:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdvancedBookOrderScope.
+const (
+	BookOrderScopeAll     AdvancedBookOrderScope = "ALL"
+	BookOrderScopeWorking AdvancedBookOrderScope = "WORKING"
+)
+
+// Valid indicates whether the value is a known member of the AdvancedBookOrderScope enum.
+func (e AdvancedBookOrderScope) Valid() bool {
+	switch e {
+	case BookOrderScopeAll:
+		return true
+	case BookOrderScopeWorking:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdvancedBookOrderStatus.
+const (
+	BookOrderCancelled       AdvancedBookOrderStatus = "CANCELLED"
+	BookOrderFilled          AdvancedBookOrderStatus = "FILLED"
+	BookOrderOpen            AdvancedBookOrderStatus = "OPEN"
+	BookOrderPartiallyFilled AdvancedBookOrderStatus = "PARTIALLY_FILLED"
+	BookOrderPending         AdvancedBookOrderStatus = "PENDING"
+	BookOrderRejected        AdvancedBookOrderStatus = "REJECTED"
+)
+
+// Valid indicates whether the value is a known member of the AdvancedBookOrderStatus enum.
+func (e AdvancedBookOrderStatus) Valid() bool {
+	switch e {
+	case BookOrderCancelled:
+		return true
+	case BookOrderFilled:
+		return true
+	case BookOrderOpen:
+		return true
+	case BookOrderPartiallyFilled:
+		return true
+	case BookOrderPending:
+		return true
+	case BookOrderRejected:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdvancedBookOrderType.
+const (
+	BookOrderTypeLimit  AdvancedBookOrderType = "LIMIT"
+	BookOrderTypeMarket AdvancedBookOrderType = "MARKET"
+)
+
+// Valid indicates whether the value is a known member of the AdvancedBookOrderType enum.
+func (e AdvancedBookOrderType) Valid() bool {
+	switch e {
+	case BookOrderTypeLimit:
+		return true
+	case BookOrderTypeMarket:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdvancedBookOwnerType.
+const (
+	BookOwnerCustomer AdvancedBookOwnerType = "CUSTOMER"
+	BookOwnerHouse    AdvancedBookOwnerType = "HOUSE"
+)
+
+// Valid indicates whether the value is a known member of the AdvancedBookOwnerType enum.
+func (e AdvancedBookOwnerType) Valid() bool {
+	switch e {
+	case BookOwnerCustomer:
+		return true
+	case BookOwnerHouse:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdvancedBookSTP.
+const (
+	BookSTPCancelBoth  AdvancedBookSTP = "CANCEL_BOTH"
+	BookSTPCancelMaker AdvancedBookSTP = "CANCEL_MAKER"
+	BookSTPCancelTaker AdvancedBookSTP = "CANCEL_TAKER"
+)
+
+// Valid indicates whether the value is a known member of the AdvancedBookSTP enum.
+func (e AdvancedBookSTP) Valid() bool {
+	switch e {
+	case BookSTPCancelBoth:
+		return true
+	case BookSTPCancelMaker:
+		return true
+	case BookSTPCancelTaker:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdvancedBookSide.
+const (
+	BookSideBuy  AdvancedBookSide = "BUY"
+	BookSideSell AdvancedBookSide = "SELL"
+)
+
+// Valid indicates whether the value is a known member of the AdvancedBookSide enum.
+func (e AdvancedBookSide) Valid() bool {
+	switch e {
+	case BookSideBuy:
+		return true
+	case BookSideSell:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdvancedBookStatus.
+const (
+	BookStatusClosed AdvancedBookStatus = "CLOSED"
+	BookStatusHalted AdvancedBookStatus = "HALTED"
+	BookStatusOpen   AdvancedBookStatus = "OPEN"
+)
+
+// Valid indicates whether the value is a known member of the AdvancedBookStatus enum.
+func (e AdvancedBookStatus) Valid() bool {
+	switch e {
+	case BookStatusClosed:
+		return true
+	case BookStatusHalted:
+		return true
+	case BookStatusOpen:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdvancedBookTermsSource.
+const (
+	BookTermsCanonical AdvancedBookTermsSource = "CANONICAL"
+	BookTermsSpot      AdvancedBookTermsSource = "BOOK_SPOT"
+)
+
+// Valid indicates whether the value is a known member of the AdvancedBookTermsSource enum.
+func (e AdvancedBookTermsSource) Valid() bool {
+	switch e {
+	case BookTermsCanonical:
+		return true
+	case BookTermsSpot:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdvancedBookTimeInForce.
+const (
+	BookTimeInForceFOK AdvancedBookTimeInForce = "FOK"
+	BookTimeInForceGTC AdvancedBookTimeInForce = "GTC"
+	BookTimeInForceIOC AdvancedBookTimeInForce = "IOC"
+)
+
+// Valid indicates whether the value is a known member of the AdvancedBookTimeInForce enum.
+func (e AdvancedBookTimeInForce) Valid() bool {
+	switch e {
+	case BookTimeInForceFOK:
+		return true
+	case BookTimeInForceGTC:
+		return true
+	case BookTimeInForceIOC:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdvancedBookVenueLabel.
+const (
+	BookVenueSimulatedInternalBook AdvancedBookVenueLabel = "SIMULATED_INTERNAL_BOOK"
+)
+
+// Valid indicates whether the value is a known member of the AdvancedBookVenueLabel enum.
+func (e AdvancedBookVenueLabel) Valid() bool {
+	switch e {
+	case BookVenueSimulatedInternalBook:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdvancedEquityActionStatus.
+const (
+	EquityActionAnnounced AdvancedEquityActionStatus = "ANNOUNCED"
+	EquityActionApplied   AdvancedEquityActionStatus = "APPLIED"
+	EquityActionApplying  AdvancedEquityActionStatus = "APPLYING"
+	EquityActionCancelled AdvancedEquityActionStatus = "CANCELLED"
+)
+
+// Valid indicates whether the value is a known member of the AdvancedEquityActionStatus enum.
+func (e AdvancedEquityActionStatus) Valid() bool {
+	switch e {
+	case EquityActionAnnounced:
+		return true
+	case EquityActionApplied:
+		return true
+	case EquityActionApplying:
+		return true
+	case EquityActionCancelled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdvancedEquityActionType.
+const (
+	EquityActionDelisting    AdvancedEquityActionType = "DELISTING"
+	EquityActionDividend     AdvancedEquityActionType = "CASH_DIVIDEND"
+	EquityActionReverseSplit AdvancedEquityActionType = "REVERSE_SPLIT"
+	EquityActionSplit        AdvancedEquityActionType = "SPLIT"
+	EquityActionSymbolChange AdvancedEquityActionType = "SYMBOL_CHANGE"
+)
+
+// Valid indicates whether the value is a known member of the AdvancedEquityActionType enum.
+func (e AdvancedEquityActionType) Valid() bool {
+	switch e {
+	case EquityActionDelisting:
+		return true
+	case EquityActionDividend:
+		return true
+	case EquityActionReverseSplit:
+		return true
+	case EquityActionSplit:
+		return true
+	case EquityActionSymbolChange:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdvancedEquityKind.
+const (
+	EquityKindETF    AdvancedEquityKind = "ETF"
+	EquityKindEquity AdvancedEquityKind = "EQUITY"
+)
+
+// Valid indicates whether the value is a known member of the AdvancedEquityKind enum.
+func (e AdvancedEquityKind) Valid() bool {
+	switch e {
+	case EquityKindETF:
+		return true
+	case EquityKindEquity:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdvancedEquityMode.
+const (
+	EquityModePaper   AdvancedEquityMode = "PAPER"
+	EquityModeSandbox AdvancedEquityMode = "SANDBOX"
+)
+
+// Valid indicates whether the value is a known member of the AdvancedEquityMode enum.
+func (e AdvancedEquityMode) Valid() bool {
+	switch e {
+	case EquityModePaper:
+		return true
+	case EquityModeSandbox:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdvancedEquityOrderStatus.
+const (
+	EquityOrderAccepted  AdvancedEquityOrderStatus = "ACCEPTED"
+	EquityOrderCancelled AdvancedEquityOrderStatus = "CANCELLED"
+	EquityOrderExpired   AdvancedEquityOrderStatus = "EXPIRED"
+	EquityOrderFilled    AdvancedEquityOrderStatus = "FILLED"
+	EquityOrderOpen      AdvancedEquityOrderStatus = "OPEN"
+	EquityOrderRejected  AdvancedEquityOrderStatus = "REJECTED"
+)
+
+// Valid indicates whether the value is a known member of the AdvancedEquityOrderStatus enum.
+func (e AdvancedEquityOrderStatus) Valid() bool {
+	switch e {
+	case EquityOrderAccepted:
+		return true
+	case EquityOrderCancelled:
+		return true
+	case EquityOrderExpired:
+		return true
+	case EquityOrderFilled:
+		return true
+	case EquityOrderOpen:
+		return true
+	case EquityOrderRejected:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdvancedEquityOrderType.
+const (
+	EquityOrderTypeLimit  AdvancedEquityOrderType = "LIMIT"
+	EquityOrderTypeMarket AdvancedEquityOrderType = "MARKET"
+)
+
+// Valid indicates whether the value is a known member of the AdvancedEquityOrderType enum.
+func (e AdvancedEquityOrderType) Valid() bool {
+	switch e {
+	case EquityOrderTypeLimit:
+		return true
+	case EquityOrderTypeMarket:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdvancedEquityPlacementStatus.
+const (
+	EquityPlacementNotPlaced AdvancedEquityPlacementStatus = "NOT_PLACED"
+	EquityPlacementPlaced    AdvancedEquityPlacementStatus = "PLACED"
+)
+
+// Valid indicates whether the value is a known member of the AdvancedEquityPlacementStatus enum.
+func (e AdvancedEquityPlacementStatus) Valid() bool {
+	switch e {
+	case EquityPlacementNotPlaced:
+		return true
+	case EquityPlacementPlaced:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdvancedEquityRiskClass.
+const (
+	EquityRiskMajor       AdvancedEquityRiskClass = "MAJOR"
+	EquityRiskSpeculative AdvancedEquityRiskClass = "SPECULATIVE"
+	EquityRiskStandard    AdvancedEquityRiskClass = "STANDARD"
+)
+
+// Valid indicates whether the value is a known member of the AdvancedEquityRiskClass enum.
+func (e AdvancedEquityRiskClass) Valid() bool {
+	switch e {
+	case EquityRiskMajor:
+		return true
+	case EquityRiskSpeculative:
+		return true
+	case EquityRiskStandard:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdvancedEquityRounding.
+const (
+	EquityRoundingSharesDownAmountDown     AdvancedEquityRounding = "SHARES_DOWN_CASH_DOWN"
+	EquityRoundingSharesDownAmountHalfEven AdvancedEquityRounding = "SHARES_DOWN_CASH_HALF_EVEN"
+)
+
+// Valid indicates whether the value is a known member of the AdvancedEquityRounding enum.
+func (e AdvancedEquityRounding) Valid() bool {
+	switch e {
+	case EquityRoundingSharesDownAmountDown:
+		return true
+	case EquityRoundingSharesDownAmountHalfEven:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdvancedEquitySession.
+const (
+	EquitySessionAfterHours AdvancedEquitySession = "AFTER_HOURS"
+	EquitySessionClosed     AdvancedEquitySession = "CLOSED"
+	EquitySessionPreMarket  AdvancedEquitySession = "PRE_MARKET"
+	EquitySessionRegular    AdvancedEquitySession = "REGULAR"
+)
+
+// Valid indicates whether the value is a known member of the AdvancedEquitySession enum.
+func (e AdvancedEquitySession) Valid() bool {
+	switch e {
+	case EquitySessionAfterHours:
+		return true
+	case EquitySessionClosed:
+		return true
+	case EquitySessionPreMarket:
+		return true
+	case EquitySessionRegular:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdvancedEquitySettlementFilter.
+const (
+	EquitySettlementFilterAll     AdvancedEquitySettlementFilter = "ALL"
+	EquitySettlementFilterPending AdvancedEquitySettlementFilter = "PENDING"
+	EquitySettlementFilterSettled AdvancedEquitySettlementFilter = "SETTLED"
+)
+
+// Valid indicates whether the value is a known member of the AdvancedEquitySettlementFilter enum.
+func (e AdvancedEquitySettlementFilter) Valid() bool {
+	switch e {
+	case EquitySettlementFilterAll:
+		return true
+	case EquitySettlementFilterPending:
+		return true
+	case EquitySettlementFilterSettled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdvancedEquitySettlementState.
+const (
+	EquitySettlementPending AdvancedEquitySettlementState = "PENDING"
+	EquitySettlementSettled AdvancedEquitySettlementState = "SETTLED"
+)
+
+// Valid indicates whether the value is a known member of the AdvancedEquitySettlementState enum.
+func (e AdvancedEquitySettlementState) Valid() bool {
+	switch e {
+	case EquitySettlementPending:
+		return true
+	case EquitySettlementSettled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdvancedEquitySide.
+const (
+	EquitySideBuy  AdvancedEquitySide = "BUY"
+	EquitySideSell AdvancedEquitySide = "SELL"
+)
+
+// Valid indicates whether the value is a known member of the AdvancedEquitySide enum.
+func (e AdvancedEquitySide) Valid() bool {
+	switch e {
+	case EquitySideBuy:
+		return true
+	case EquitySideSell:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdvancedEquityVenueAction.
+const (
+	EquityVenueActionPlace AdvancedEquityVenueAction = "PLACE"
+	EquityVenueActionPoll  AdvancedEquityVenueAction = "POLL"
+)
+
+// Valid indicates whether the value is a known member of the AdvancedEquityVenueAction enum.
+func (e AdvancedEquityVenueAction) Valid() bool {
+	switch e {
+	case EquityVenueActionPlace:
+		return true
+	case EquityVenueActionPoll:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdvancedEquityVenueStatus.
+const (
+	EquityVenueCancelled AdvancedEquityVenueStatus = "CANCELLED"
+	EquityVenueExpired   AdvancedEquityVenueStatus = "EXPIRED"
+	EquityVenueFilled    AdvancedEquityVenueStatus = "FILLED"
+	EquityVenueOpen      AdvancedEquityVenueStatus = "OPEN"
+	EquityVenueRejected  AdvancedEquityVenueStatus = "REJECTED"
+)
+
+// Valid indicates whether the value is a known member of the AdvancedEquityVenueStatus enum.
+func (e AdvancedEquityVenueStatus) Valid() bool {
+	switch e {
+	case EquityVenueCancelled:
+		return true
+	case EquityVenueExpired:
+		return true
+	case EquityVenueFilled:
+		return true
+	case EquityVenueOpen:
+		return true
+	case EquityVenueRejected:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AdvancedMode.
 const (
 	AdvancedModeDEVNET  AdvancedMode = "DEVNET"
@@ -3171,6 +3741,555 @@ type AdminActionProposal struct {
 	TargetType string                  `json:"target_type"`
 }
 
+// AdvancedBook One internal book: its instrument and assets, the exact grid it trades on, the fee schedules that price every fill, the crossing rule in force and its journal cursor.
+type AdvancedBook struct {
+	// BaseAssetId UUIDv7 in canonical form
+	BaseAssetId  UUID   `json:"base_asset_id"`
+	BaseDecimals int    `json:"base_decimals"`
+	BaseSymbol   string `json:"base_symbol"`
+
+	// CrossingRule The house-versus-customer crossing rule in force. Version 0 is the default, in force until a rule is recorded: a house (principal) book never trades with a customer.
+	CrossingRule AdvancedBookCrossingRule `json:"crossing_rule"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// InstrumentId UUIDv7 in canonical form
+	InstrumentId   UUID           `json:"instrument_id"`
+	InstrumentKind InstrumentKind `json:"instrument_kind"`
+	LastCommandSeq int64          `json:"last_command_seq"`
+	LastEventSeq   int64          `json:"last_event_seq"`
+	LastTradeSeq   int64          `json:"last_trade_seq"`
+
+	// LotSize Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	LotSize Quantity `json:"lot_size"`
+
+	// MakerFee The fee schedule a book prices one side of every fill with, as recorded on the book, and its hash
+	MakerFee AdvancedBookFeeSchedule `json:"maker_fee"`
+
+	// MaxPrice An exact decimal price in the book's quote asset per whole base unit
+	//
+	// Examples: 2500.00
+	MaxPrice AdvancedBookPrice `json:"max_price"`
+
+	// MinQuantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	MinQuantity Quantity         `json:"min_quantity"`
+	Mode        AdvancedBookMode `json:"mode"`
+	PriceScale  int              `json:"price_scale"`
+
+	// QuoteAssetId UUIDv7 in canonical form
+	QuoteAssetId     UUID   `json:"quote_asset_id"`
+	QuoteDecimals    int    `json:"quote_decimals"`
+	QuoteSymbol      string `json:"quote_symbol"`
+	SnapshotInterval int64  `json:"snapshot_interval"`
+
+	// StateHash hex sha256 of the book's state after its last command
+	StateHash string             `json:"state_hash"`
+	Status    AdvancedBookStatus `json:"status"`
+
+	// TakerFee The fee schedule a book prices one side of every fill with, as recorded on the book, and its hash
+	TakerFee AdvancedBookFeeSchedule `json:"taker_fee"`
+
+	// TermsSource CANONICAL is the instrument's versioned terms; BOOK_SPOT is spot-pair terms stated when the book was opened
+	TermsSource AdvancedBookTermsSource `json:"terms_source"`
+
+	// TermsVersion The canonical terms version the book was opened on (absent for BOOK_SPOT)
+	TermsVersion *int `json:"terms_version,omitempty"`
+
+	// TickPrice An exact decimal price in the book's quote asset per whole base unit
+	//
+	// Examples: 2500.00
+	TickPrice       AdvancedBookPrice `json:"tick_price"`
+	TradingCalendar string            `json:"trading_calendar"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated   `json:"value_domain"`
+	VenueLabel  AdvancedBookVenueLabel `json:"venue_label"`
+}
+
+// AdvancedBookCommandResult The order after a command, with the fills that command made for it. command_seq and state_hash are absent when the command never reached the book.
+type AdvancedBookCommandResult struct {
+	CommandSeq *int64             `json:"command_seq,omitempty"`
+	Fills      []AdvancedBookFill `json:"fills"`
+
+	// IntentStatus The order's economic intent status after a submission
+	IntentStatus *string           `json:"intent_status,omitempty"`
+	Order        AdvancedBookOrder `json:"order"`
+	StateHash    *string           `json:"state_hash,omitempty"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// AdvancedBookCrossingRule The house-versus-customer crossing rule in force. Version 0 is the default, in force until a rule is recorded: a house (principal) book never trades with a customer.
+type AdvancedBookCrossingRule struct {
+	ActorId                    *string `json:"actor_id,omitempty"`
+	ActorType                  *string `json:"actor_type,omitempty"`
+	AllowHouseCustomerCrossing bool    `json:"allow_house_customer_crossing"`
+
+	// BookId UUIDv7 in canonical form
+	BookId    UUID       `json:"book_id"`
+	CreatedAt *Timestamp `json:"created_at,omitempty"`
+
+	// IsDefault True when no rule was ever recorded and the default applies
+	IsDefault bool    `json:"is_default"`
+	Reason    *string `json:"reason,omitempty"`
+	Version   int     `json:"version"`
+}
+
+// AdvancedBookDepth defines model for AdvancedBookDepth.
+type AdvancedBookDepth struct {
+	Asks         []AdvancedBookDepthLevel `json:"asks"`
+	BaseDecimals int                      `json:"base_decimals"`
+	Bids         []AdvancedBookDepthLevel `json:"bids"`
+
+	// BookId UUIDv7 in canonical form
+	BookId UUID `json:"book_id"`
+
+	// InstrumentId UUIDv7 in canonical form
+	InstrumentId   UUID               `json:"instrument_id"`
+	LastCommandSeq int64              `json:"last_command_seq"`
+	QuoteDecimals  int                `json:"quote_decimals"`
+	StateHash      string             `json:"state_hash"`
+	Status         AdvancedBookStatus `json:"status"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// AdvancedBookDepthLevel defines model for AdvancedBookDepthLevel.
+type AdvancedBookDepthLevel struct {
+	Orders int `json:"orders"`
+
+	// Price An exact decimal price in the book's quote asset per whole base unit
+	//
+	// Examples: 2500.00
+	Price      AdvancedBookPrice `json:"price"`
+	PriceTicks int64             `json:"price_ticks"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity Quantity `json:"quantity"`
+}
+
+// AdvancedBookFeeSchedule The fee schedule a book prices one side of every fill with, as recorded on the book, and its hash
+type AdvancedBookFeeSchedule struct {
+	// Hash The schedule's hash
+	Hash string `json:"hash"`
+
+	// MaxTotalFeeBps Basis points; 10000 == 100%
+	MaxTotalFeeBps BPS `json:"max_total_fee_bps"`
+
+	// PercentageFeeBps Basis points; 10000 == 100%
+	PercentageFeeBps BPS `json:"percentage_fee_bps"`
+
+	// QuoteAssetId UUIDv7 in canonical form
+	QuoteAssetId  UUID `json:"quote_asset_id"`
+	QuoteDecimals int  `json:"quote_decimals"`
+
+	// StrategyFeeBps Basis points; 10000 == 100%
+	StrategyFeeBps BPS `json:"strategy_fee_bps"`
+
+	// SubscriptionDiscountBps Basis points; 10000 == 100%
+	SubscriptionDiscountBps BPS    `json:"subscription_discount_bps"`
+	Version                 string `json:"version"`
+}
+
+// AdvancedBookFeeScheduleRequest The explicit fee one side of every fill pays, in the book's quote asset: a percentage of the fill's notional, an extra percentage for a strategy-originated order, a subscription discount on the percentage fee, and a cap in basis points of notional (0 disables it). The internal book charges nothing else -- no spread, no fixed or minimum fee, no venue pass-through -- and rounds in the customer's favour.
+type AdvancedBookFeeScheduleRequest struct {
+	// MaxTotalFeeBps Basis points; 10000 == 100%
+	MaxTotalFeeBps *BPS `json:"max_total_fee_bps,omitempty"`
+
+	// PercentageFeeBps Basis points; 10000 == 100%
+	PercentageFeeBps BPS `json:"percentage_fee_bps"`
+
+	// QuoteAssetId UUIDv7 in canonical form
+	QuoteAssetId  UUID `json:"quote_asset_id"`
+	QuoteDecimals int  `json:"quote_decimals"`
+
+	// StrategyFeeBps Basis points; 10000 == 100%
+	StrategyFeeBps *BPS `json:"strategy_fee_bps,omitempty"`
+
+	// SubscriptionDiscountBps Basis points; 10000 == 100%
+	SubscriptionDiscountBps *BPS   `json:"subscription_discount_bps,omitempty"`
+	Version                 string `json:"version"`
+}
+
+// AdvancedBookFill One trade seen from one account's side: the account's own order, side, role and fee. The counterparty is named only by its owner type; its account is never shown.
+type AdvancedBookFill struct {
+	BaseDecimals int     `json:"base_decimals"`
+	BaseSymbol   *string `json:"base_symbol,omitempty"`
+
+	// BookId UUIDv7 in canonical form
+	BookId                UUID                  `json:"book_id"`
+	CommandSeq            int64                 `json:"command_seq"`
+	CounterpartyOwnerType AdvancedBookOwnerType `json:"counterparty_owner_type"`
+	CrossingRuleVersion   int                   `json:"crossing_rule_version"`
+
+	// EffectId UUIDv7 in canonical form
+	EffectId       UUID      `json:"effect_id"`
+	EvidenceRef    string    `json:"evidence_ref"`
+	EvidenceSha256 string    `json:"evidence_sha256"`
+	ExecutedAt     Timestamp `json:"executed_at"`
+
+	// Fee Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Fee Quantity `json:"fee"`
+
+	// InstrumentId UUIDv7 in canonical form
+	InstrumentId UUID `json:"instrument_id"`
+
+	// JournalTransactionId UUIDv7 in canonical form
+	JournalTransactionId UUID `json:"journal_transaction_id"`
+
+	// Liquidity The role the account's order played in the fill
+	Liquidity AdvancedBookLiquidity `json:"liquidity"`
+
+	// OrderId UUIDv7 in canonical form
+	OrderId UUID `json:"order_id"`
+
+	// Price An exact decimal price in the book's quote asset per whole base unit
+	//
+	// Examples: 2500.00
+	Price      AdvancedBookPrice `json:"price"`
+	PriceTicks int64             `json:"price_ticks"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity      Quantity `json:"quantity"`
+	QuoteDecimals int      `json:"quote_decimals"`
+
+	// QuoteNotional Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	QuoteNotional Quantity         `json:"quote_notional"`
+	QuoteSymbol   *string          `json:"quote_symbol,omitempty"`
+	Side          AdvancedBookSide `json:"side"`
+	TradeSeq      int64            `json:"trade_seq"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// AdvancedBookFillPage defines model for AdvancedBookFillPage.
+type AdvancedBookFillPage struct {
+	Items      []AdvancedBookFill        `json:"items"`
+	NextCursor nullable.Nullable[string] `json:"next_cursor"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// AdvancedBookJournalVerification What replaying the book's journal from the database proved. Every hash is hex sha256.
+type AdvancedBookJournalVerification struct {
+	// BookId UUIDv7 in canonical form
+	BookId         UUID   `json:"book_id"`
+	Commands       int64  `json:"commands"`
+	Events         int64  `json:"events"`
+	FullReplayHash string `json:"full_replay_hash"`
+	GenesisHash    string `json:"genesis_hash"`
+
+	// InstrumentId UUIDv7 in canonical form
+	InstrumentId       UUID      `json:"instrument_id"`
+	OrdersChecked      int       `json:"orders_checked"`
+	SnapshotReplayHash string    `json:"snapshot_replay_hash"`
+	SnapshotSeq        int64     `json:"snapshot_seq"`
+	StateHash          string    `json:"state_hash"`
+	Trades             int64     `json:"trades"`
+	VerifiedAt         Timestamp `json:"verified_at"`
+}
+
+// AdvancedBookLiquidity The role the account's order played in the fill
+type AdvancedBookLiquidity string
+
+// AdvancedBookLiquidityIntent defines model for AdvancedBookLiquidityIntent.
+type AdvancedBookLiquidityIntent string
+
+// AdvancedBookMode defines model for AdvancedBookMode.
+type AdvancedBookMode string
+
+// AdvancedBookOpenRequest spot_terms is required for a SPOT_PAIR and refused for every other instrument.
+type AdvancedBookOpenRequest struct {
+	// InstrumentId UUIDv7 in canonical form
+	InstrumentId UUID `json:"instrument_id"`
+
+	// MakerFee The explicit fee one side of every fill pays, in the book's quote asset: a percentage of the fill's notional, an extra percentage for a strategy-originated order, a subscription discount on the percentage fee, and a cap in basis points of notional (0 disables it). The internal book charges nothing else -- no spread, no fixed or minimum fee, no venue pass-through -- and rounds in the customer's favour.
+	MakerFee AdvancedBookFeeScheduleRequest `json:"maker_fee"`
+	Mode     AdvancedBookMode               `json:"mode"`
+
+	// SnapshotInterval Commands between snapshots (default 64)
+	SnapshotInterval *int             `json:"snapshot_interval,omitempty"`
+	SpotTerms        *InstrumentTerms `json:"spot_terms,omitempty"`
+
+	// TakerFee The explicit fee one side of every fill pays, in the book's quote asset: a percentage of the fill's notional, an extra percentage for a strategy-originated order, a subscription discount on the percentage fee, and a cap in basis points of notional (0 disables it). The internal book charges nothing else -- no spread, no fixed or minimum fee, no venue pass-through -- and rounds in the customer's favour.
+	TakerFee AdvancedBookFeeScheduleRequest `json:"taker_fee"`
+}
+
+// AdvancedBookOrder defines model for AdvancedBookOrder.
+type AdvancedBookOrder struct {
+	AcceptedCommandSeq *int64 `json:"accepted_command_seq,omitempty"`
+
+	// AccountId UUIDv7 in canonical form
+	AccountId    UUID    `json:"account_id"`
+	BaseDecimals int     `json:"base_decimals"`
+	BaseSymbol   *string `json:"base_symbol,omitempty"`
+
+	// BookId UUIDv7 in canonical form
+	BookId       UUID    `json:"book_id"`
+	CancelReason *string `json:"cancel_reason,omitempty"`
+
+	// CancelledQuantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	CancelledQuantity Quantity  `json:"cancelled_quantity"`
+	ClientOrderId     *string   `json:"client_order_id,omitempty"`
+	CreatedAt         Timestamp `json:"created_at"`
+
+	// FilledQuantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	FilledQuantity Quantity `json:"filled_quantity"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// InstrumentId UUIDv7 in canonical form
+	InstrumentId UUID `json:"instrument_id"`
+
+	// IntentId UUIDv7 in canonical form
+	IntentId        *UUID                       `json:"intent_id,omitempty"`
+	LastCommandSeq  *int64                      `json:"last_command_seq,omitempty"`
+	LiquidityIntent AdvancedBookLiquidityIntent `json:"liquidity_intent"`
+	Mode            AdvancedBookMode            `json:"mode"`
+	OrderType       AdvancedBookOrderType       `json:"order_type"`
+	PostOnly        bool                        `json:"post_only"`
+
+	// Price An exact decimal price in the book's quote asset per whole base unit
+	//
+	// Examples: 2500.00
+	Price      AdvancedBookPrice `json:"price"`
+	PriceTicks int64             `json:"price_ticks"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity      Quantity `json:"quantity"`
+	QuoteDecimals int      `json:"quote_decimals"`
+	QuoteSymbol   *string  `json:"quote_symbol,omitempty"`
+	ReduceOnly    bool     `json:"reduce_only"`
+	RejectReason  *string  `json:"reject_reason,omitempty"`
+
+	// RemainingQuantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	RemainingQuantity Quantity `json:"remaining_quantity"`
+
+	// ReservationId UUIDv7 in canonical form
+	ReservationId *UUID                   `json:"reservation_id,omitempty"`
+	Side          AdvancedBookSide        `json:"side"`
+	Status        AdvancedBookOrderStatus `json:"status"`
+
+	// Stp Self-trade prevention when the order takes liquidity; two orders of one account never trade
+	Stp                AdvancedBookSTP         `json:"stp"`
+	StrategyOriginated bool                    `json:"strategy_originated"`
+	TimeInForce        AdvancedBookTimeInForce `json:"time_in_force"`
+	UpdatedAt          Timestamp               `json:"updated_at"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated   `json:"value_domain"`
+	VenueLabel  AdvancedBookVenueLabel `json:"venue_label"`
+}
+
+// AdvancedBookOrderCancelRequest defines model for AdvancedBookOrderCancelRequest.
+type AdvancedBookOrderCancelRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+}
+
+// AdvancedBookOrderPage defines model for AdvancedBookOrderPage.
+type AdvancedBookOrderPage struct {
+	Items      []AdvancedBookOrder       `json:"items"`
+	NextCursor nullable.Nullable[string] `json:"next_cursor"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// AdvancedBookOrderReplaceRequest quantity is the new TOTAL quantity in base units, fills included.
+type AdvancedBookOrderReplaceRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// Price An exact decimal price in the book's quote asset per whole base unit
+	//
+	// Examples: 2500.00
+	Price AdvancedBookPrice `json:"price"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity Quantity `json:"quantity"`
+}
+
+// AdvancedBookOrderRequest price is the limit price, or a market order's protection price, which this book requires; quantity is base units of the base asset.
+type AdvancedBookOrderRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId     UUID                  `json:"account_id"`
+	ClientOrderId *string               `json:"client_order_id,omitempty"`
+	Mode          *AdvancedBookMode     `json:"mode,omitempty"`
+	OrderType     AdvancedBookOrderType `json:"order_type"`
+	PostOnly      *bool                 `json:"post_only,omitempty"`
+
+	// Price An exact decimal price in the book's quote asset per whole base unit
+	//
+	// Examples: 2500.00
+	Price AdvancedBookPrice `json:"price"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity   Quantity         `json:"quantity"`
+	ReduceOnly *bool            `json:"reduce_only,omitempty"`
+	Side       AdvancedBookSide `json:"side"`
+
+	// Stp Self-trade prevention when the order takes liquidity; two orders of one account never trade
+	Stp         *AdvancedBookSTP        `json:"stp,omitempty"`
+	TimeInForce AdvancedBookTimeInForce `json:"time_in_force"`
+}
+
+// AdvancedBookOrderScope defines model for AdvancedBookOrderScope.
+type AdvancedBookOrderScope string
+
+// AdvancedBookOrderStatus defines model for AdvancedBookOrderStatus.
+type AdvancedBookOrderStatus string
+
+// AdvancedBookOrderType defines model for AdvancedBookOrderType.
+type AdvancedBookOrderType string
+
+// AdvancedBookOwnerType defines model for AdvancedBookOwnerType.
+type AdvancedBookOwnerType string
+
+// AdvancedBookPage defines model for AdvancedBookPage.
+type AdvancedBookPage struct {
+	Items      []AdvancedBook            `json:"items"`
+	NextCursor nullable.Nullable[string] `json:"next_cursor"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// AdvancedBookPrice An exact decimal price in the book's quote asset per whole base unit
+//
+// Examples: 2500.00
+type AdvancedBookPrice = string
+
+// AdvancedBookSTP Self-trade prevention when the order takes liquidity; two orders of one account never trade
+type AdvancedBookSTP string
+
+// AdvancedBookSide defines model for AdvancedBookSide.
+type AdvancedBookSide string
+
+// AdvancedBookStatus defines model for AdvancedBookStatus.
+type AdvancedBookStatus string
+
+// AdvancedBookStatusRequest defines model for AdvancedBookStatusRequest.
+type AdvancedBookStatusRequest struct {
+	Reason string             `json:"reason"`
+	Status AdvancedBookStatus `json:"status"`
+}
+
+// AdvancedBookTermsSource CANONICAL is the instrument's versioned terms; BOOK_SPOT is spot-pair terms stated when the book was opened
+type AdvancedBookTermsSource string
+
+// AdvancedBookTimeInForce defines model for AdvancedBookTimeInForce.
+type AdvancedBookTimeInForce string
+
+// AdvancedBookTradeProof The audit proof of one trade: the SIM_TRADE journal transaction (which the database balances per party), the APPLIED effect that names it, the write-once evidence document and its digest, the hashes of the fee schedules that priced it, and the book's journal cursor and latest snapshot, which the operator's journal verification replays.
+type AdvancedBookTradeProof struct {
+	AggressorSide AdvancedBookSide `json:"aggressor_side"`
+	BaseDecimals  int              `json:"base_decimals"`
+	BaseSymbol    *string          `json:"base_symbol,omitempty"`
+
+	// BookId UUIDv7 in canonical form
+	BookId              UUID   `json:"book_id"`
+	BookLastCommandSeq  int64  `json:"book_last_command_seq"`
+	BookStateHash       string `json:"book_state_hash"`
+	CommandSeq          int64  `json:"command_seq"`
+	CrossingRuleVersion int    `json:"crossing_rule_version"`
+
+	// EffectId UUIDv7 in canonical form
+	EffectId    UUID   `json:"effect_id"`
+	EventSeq    int64  `json:"event_seq"`
+	EvidenceRef string `json:"evidence_ref"`
+
+	// EvidenceSha256 hex sha256 of the archived canonical evidence document
+	EvidenceSha256 string    `json:"evidence_sha256"`
+	ExecutedAt     Timestamp `json:"executed_at"`
+
+	// InstrumentId UUIDv7 in canonical form
+	InstrumentId UUID `json:"instrument_id"`
+
+	// JournalTransactionId UUIDv7 in canonical form
+	JournalTransactionId UUID `json:"journal_transaction_id"`
+
+	// MakerFee Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	MakerFee Quantity `json:"maker_fee"`
+
+	// MakerOrderId UUIDv7 in canonical form
+	MakerOrderId      UUID                  `json:"maker_order_id"`
+	MakerOwnerType    AdvancedBookOwnerType `json:"maker_owner_type"`
+	MakerScheduleHash string                `json:"maker_schedule_hash"`
+
+	// Price An exact decimal price in the book's quote asset per whole base unit
+	//
+	// Examples: 2500.00
+	Price      AdvancedBookPrice `json:"price"`
+	PriceTicks int64             `json:"price_ticks"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity      Quantity `json:"quantity"`
+	QuoteDecimals int      `json:"quote_decimals"`
+
+	// QuoteNotional Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	QuoteNotional Quantity `json:"quote_notional"`
+	QuoteSymbol   *string  `json:"quote_symbol,omitempty"`
+	SnapshotHash  *string  `json:"snapshot_hash,omitempty"`
+
+	// SnapshotSeq Command sequence of the book's latest snapshot (0 when none)
+	SnapshotSeq int64 `json:"snapshot_seq"`
+
+	// TakerFee Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	TakerFee Quantity `json:"taker_fee"`
+
+	// TakerOrderId UUIDv7 in canonical form
+	TakerOrderId      UUID                  `json:"taker_order_id"`
+	TakerOwnerType    AdvancedBookOwnerType `json:"taker_owner_type"`
+	TakerScheduleHash string                `json:"taker_schedule_hash"`
+	TradeSeq          int64                 `json:"trade_seq"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated   `json:"value_domain"`
+	VenueLabel  AdvancedBookVenueLabel `json:"venue_label"`
+}
+
+// AdvancedBookVenueLabel defines model for AdvancedBookVenueLabel.
+type AdvancedBookVenueLabel string
+
 // AdvancedCapability defines model for AdvancedCapability.
 type AdvancedCapability struct {
 	Capability      string                 `json:"capability"`
@@ -3201,6 +4320,791 @@ type AdvancedCapabilityList struct {
 	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
 	ValueDomain ValueDomainSimulated `json:"value_domain"`
 }
+
+// AdvancedEquityActionStatus APPLYING is used only by a delisting, between DELISTING and DELISTED
+type AdvancedEquityActionStatus string
+
+// AdvancedEquityActionType defines model for AdvancedEquityActionType.
+type AdvancedEquityActionType string
+
+// AdvancedEquityApplication One account's share of one corporate action, applied once. shares_delta is base units of the share asset (negative for a reverse split); settlement_amount is base units of the settlement asset paid for a fractional remainder or as a dividend, exactly exact_amount_numerator / exact_amount_denominator before rounding.
+type AdvancedEquityApplication struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// ActionId UUIDv7 in canonical form
+	ActionId   UUID                      `json:"action_id"`
+	ActionType *AdvancedEquityActionType `json:"action_type,omitempty"`
+	CreatedAt  Timestamp                 `json:"created_at"`
+
+	// EffectId UUIDv7 in canonical form
+	EffectId *UUID `json:"effect_id,omitempty"`
+
+	// EntitledQuantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	EntitledQuantity Quantity `json:"entitled_quantity"`
+
+	// ExactAmountDenominator Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	ExactAmountDenominator Quantity `json:"exact_amount_denominator"`
+
+	// ExactAmountNumerator Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	ExactAmountNumerator Quantity `json:"exact_amount_numerator"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// InstrumentId UUIDv7 in canonical form
+	InstrumentId *UUID `json:"instrument_id,omitempty"`
+
+	// JournalTransactionId UUIDv7 in canonical form
+	JournalTransactionId *UUID `json:"journal_transaction_id,omitempty"`
+
+	// Rounding Shares always round down to a whole base unit; the amount paid for a fractional remainder, and a dividend, round down (the default, never paying more than the exact amount) or half-even.
+	Rounding AdvancedEquityRounding `json:"rounding"`
+
+	// SettlementAmount Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	SettlementAmount   Quantity `json:"settlement_amount"`
+	SettlementDecimals int      `json:"settlement_decimals"`
+	SettlementSymbol   string   `json:"settlement_symbol"`
+	ShareDecimals      int      `json:"share_decimals"`
+	ShareSymbol        string   `json:"share_symbol"`
+
+	// SharesDelta Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	SharesDelta Quantity `json:"shares_delta"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// AdvancedEquityApplicationPage defines model for AdvancedEquityApplicationPage.
+type AdvancedEquityApplicationPage struct {
+	Items      []AdvancedEquityApplication `json:"items"`
+	NextCursor nullable.Nullable[string]   `json:"next_cursor"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// AdvancedEquityCalendar defines model for AdvancedEquityCalendar.
+type AdvancedEquityCalendar struct {
+	Holidays            []AdvancedEquityHoliday `json:"holidays"`
+	SettlementCycleDays int                     `json:"settlement_cycle_days"`
+
+	// State The calendar at as_of: the session in force, the New York trade date (every session of a day shares it) and the T+1 settlement date of a trade made on it, when it is a trading day.
+	State AdvancedEquitySessionState `json:"state"`
+}
+
+// AdvancedEquityCorporateAction defines model for AdvancedEquityCorporateAction.
+type AdvancedEquityCorporateAction struct {
+	AnnouncedByActorId   string     `json:"announced_by_actor_id"`
+	AnnouncedByActorType string     `json:"announced_by_actor_type"`
+	AppliedAt            *Timestamp `json:"applied_at,omitempty"`
+	ContentHash          string     `json:"content_hash"`
+	CreatedAt            Timestamp  `json:"created_at"`
+
+	// DividendPerShare An exact decimal amount of the settlement asset per whole share
+	//
+	// Examples: 150.25
+	DividendPerShare *AdvancedEquityPrice `json:"dividend_per_share,omitempty"`
+
+	// EffectiveDate A calendar day, YYYY-MM-DD, with no time and no zone
+	//
+	// Examples: 2026-10-08
+	EffectiveDate AdvancedEquityDate `json:"effective_date"`
+
+	// ExDate A calendar day, YYYY-MM-DD, with no time and no zone
+	//
+	// Examples: 2026-10-08
+	ExDate *AdvancedEquityDate `json:"ex_date,omitempty"`
+
+	// FinalDate A calendar day, YYYY-MM-DD, with no time and no zone
+	//
+	// Examples: 2026-10-08
+	FinalDate *AdvancedEquityDate `json:"final_date,omitempty"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// InLieuPrice An exact decimal amount of the settlement asset per whole share
+	//
+	// Examples: 150.25
+	InLieuPrice *AdvancedEquityPrice `json:"in_lieu_price,omitempty"`
+
+	// InstrumentId UUIDv7 in canonical form
+	InstrumentId UUID    `json:"instrument_id"`
+	NewSymbol    *string `json:"new_symbol,omitempty"`
+
+	// PayDate A calendar day, YYYY-MM-DD, with no time and no zone
+	//
+	// Examples: 2026-10-08
+	PayDate *AdvancedEquityDate `json:"pay_date,omitempty"`
+
+	// Ratio New shares per old share, numerator/denominator (4/1 is a 4-for-1 split, 1/10 a 1-for-10 reverse split)
+	Ratio  *AdvancedEquityRatio `json:"ratio,omitempty"`
+	Reason string               `json:"reason"`
+
+	// RecordDate A calendar day, YYYY-MM-DD, with no time and no zone
+	//
+	// Examples: 2026-10-08
+	RecordDate *AdvancedEquityDate `json:"record_date,omitempty"`
+
+	// Rounding Shares always round down to a whole base unit; the amount paid for a fractional remainder, and a dividend, round down (the default, never paying more than the exact amount) or half-even.
+	Rounding AdvancedEquityRounding `json:"rounding"`
+
+	// SettlementAssetId UUIDv7 in canonical form
+	SettlementAssetId UUID `json:"settlement_asset_id"`
+
+	// ShareAssetId UUIDv7 in canonical form
+	ShareAssetId UUID `json:"share_asset_id"`
+
+	// Status APPLYING is used only by a delisting, between DELISTING and DELISTED
+	Status AdvancedEquityActionStatus `json:"status"`
+	Type   AdvancedEquityActionType   `json:"type"`
+}
+
+// AdvancedEquityCorporateActionCancelRequest defines model for AdvancedEquityCorporateActionCancelRequest.
+type AdvancedEquityCorporateActionCancelRequest struct {
+	Reason string `json:"reason"`
+}
+
+// AdvancedEquityCorporateActionPage defines model for AdvancedEquityCorporateActionPage.
+type AdvancedEquityCorporateActionPage struct {
+	Items      []AdvancedEquityCorporateAction `json:"items"`
+	NextCursor nullable.Nullable[string]       `json:"next_cursor"`
+}
+
+// AdvancedEquityCorporateActionRequest effective_date is the first trading day of a split, reverse split or symbol change, or the day a delisting begins; a dividend's is its ex-date and may be left out. dividend_per_share and in_lieu_price are exact amounts of the settlement asset per whole share (in_lieu_price per whole new share).
+type AdvancedEquityCorporateActionRequest struct {
+	// DividendPerShare An exact decimal amount of the settlement asset per whole share
+	//
+	// Examples: 150.25
+	DividendPerShare *AdvancedEquityPrice `json:"dividend_per_share,omitempty"`
+
+	// EffectiveDate A calendar day, YYYY-MM-DD, with no time and no zone
+	//
+	// Examples: 2026-10-08
+	EffectiveDate *AdvancedEquityDate `json:"effective_date,omitempty"`
+
+	// ExDate A calendar day, YYYY-MM-DD, with no time and no zone
+	//
+	// Examples: 2026-10-08
+	ExDate *AdvancedEquityDate `json:"ex_date,omitempty"`
+
+	// FinalDate A calendar day, YYYY-MM-DD, with no time and no zone
+	//
+	// Examples: 2026-10-08
+	FinalDate *AdvancedEquityDate `json:"final_date,omitempty"`
+
+	// InLieuPrice An exact decimal amount of the settlement asset per whole share
+	//
+	// Examples: 150.25
+	InLieuPrice *AdvancedEquityPrice `json:"in_lieu_price,omitempty"`
+
+	// InstrumentId UUIDv7 in canonical form
+	InstrumentId UUID    `json:"instrument_id"`
+	NewSymbol    *string `json:"new_symbol,omitempty"`
+
+	// PayDate A calendar day, YYYY-MM-DD, with no time and no zone
+	//
+	// Examples: 2026-10-08
+	PayDate *AdvancedEquityDate `json:"pay_date,omitempty"`
+
+	// Ratio New shares per old share, numerator/denominator (4/1 is a 4-for-1 split, 1/10 a 1-for-10 reverse split)
+	Ratio  *AdvancedEquityRatio `json:"ratio,omitempty"`
+	Reason string               `json:"reason"`
+
+	// RecordDate A calendar day, YYYY-MM-DD, with no time and no zone
+	//
+	// Examples: 2026-10-08
+	RecordDate *AdvancedEquityDate `json:"record_date,omitempty"`
+
+	// Rounding Shares always round down to a whole base unit; the amount paid for a fractional remainder, and a dividend, round down (the default, never paying more than the exact amount) or half-even.
+	Rounding *AdvancedEquityRounding  `json:"rounding,omitempty"`
+	Type     AdvancedEquityActionType `json:"type"`
+}
+
+// AdvancedEquityCorporateActionResult defines model for AdvancedEquityCorporateActionResult.
+type AdvancedEquityCorporateActionResult struct {
+	Action       AdvancedEquityCorporateAction `json:"action"`
+	Applications []AdvancedEquityApplication   `json:"applications"`
+
+	// InstrumentStatus The instrument's status after a delisting step
+	InstrumentStatus *string `json:"instrument_status,omitempty"`
+
+	// Replayed True when the action had been applied already and nothing was posted
+	Replayed bool `json:"replayed"`
+
+	// TermsVersion The terms version a symbol change wrote
+	TermsVersion *int `json:"terms_version,omitempty"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// AdvancedEquityDate A calendar day, YYYY-MM-DD, with no time and no zone
+//
+// Examples: 2026-10-08
+type AdvancedEquityDate = string
+
+// AdvancedEquityFill One execution at the simulated venue, with every charge it carried as disclosed and verified before posting: notional at the fill price, the disclosed spread, platform and venue fees, and the total the buyer paid or the seller receives, all in base units of the settlement asset.
+type AdvancedEquityFill struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// EffectId UUIDv7 in canonical form
+	EffectId           UUID      `json:"effect_id"`
+	ExecutedAt         Timestamp `json:"executed_at"`
+	FeeDisclosureHash  string    `json:"fee_disclosure_hash"`
+	FeeScheduleHash    string    `json:"fee_schedule_hash"`
+	FeeScheduleVersion string    `json:"fee_schedule_version"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// InstrumentId UUIDv7 in canonical form
+	InstrumentId UUID `json:"instrument_id"`
+
+	// JournalTransactionId UUIDv7 in canonical form
+	JournalTransactionId UUID `json:"journal_transaction_id"`
+
+	// Mark A reference price of one whole share in the settlement asset, as the price store observed it
+	Mark AdvancedEquityMark `json:"mark"`
+
+	// Notional Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Notional Quantity `json:"notional"`
+
+	// OrderId UUIDv7 in canonical form
+	OrderId UUID `json:"order_id"`
+
+	// PlatformFees Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	PlatformFees Quantity `json:"platform_fees"`
+
+	// Price An exact decimal amount of the settlement asset per whole share
+	//
+	// Examples: 150.25
+	Price AdvancedEquityPrice `json:"price"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity Quantity `json:"quantity"`
+
+	// Settlement One fill's T+1 settlement: what the account receives (shares for a buy, proceeds net of the disclosed charges for a sell) waits in UNSETTLED_RECEIVABLE from the trade date until it is SETTLED into the WALLET on the due date.
+	Settlement *AdvancedEquitySettlement `json:"settlement,omitempty"`
+
+	// SettlementAssetId UUIDv7 in canonical form
+	SettlementAssetId UUID `json:"settlement_asset_id"`
+
+	// SettlementDate A calendar day, YYYY-MM-DD, with no time and no zone
+	//
+	// Examples: 2026-10-08
+	SettlementDate     AdvancedEquityDate `json:"settlement_date"`
+	SettlementDecimals int                `json:"settlement_decimals"`
+	SettlementSymbol   string             `json:"settlement_symbol"`
+	ShareDecimals      int                `json:"share_decimals"`
+	Side               AdvancedEquitySide `json:"side"`
+	SlippageBps        int                `json:"slippage_bps"`
+
+	// Spread Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Spread Quantity `json:"spread"`
+
+	// Total Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Total Quantity `json:"total"`
+
+	// TradeDate A calendar day, YYYY-MM-DD, with no time and no zone
+	//
+	// Examples: 2026-10-08
+	TradeDate AdvancedEquityDate `json:"trade_date"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+	Venue       string               `json:"venue"`
+
+	// VenueFees Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	VenueFees   Quantity `json:"venue_fees"`
+	VenueFillId string   `json:"venue_fill_id"`
+}
+
+// AdvancedEquityFillPage defines model for AdvancedEquityFillPage.
+type AdvancedEquityFillPage struct {
+	Items      []AdvancedEquityFill      `json:"items"`
+	NextCursor nullable.Nullable[string] `json:"next_cursor"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// AdvancedEquityHoliday defines model for AdvancedEquityHoliday.
+type AdvancedEquityHoliday struct {
+	// Date A calendar day, YYYY-MM-DD, with no time and no zone
+	//
+	// Examples: 2026-10-08
+	Date AdvancedEquityDate `json:"date"`
+	Name string             `json:"name"`
+}
+
+// AdvancedEquityHolidayRequest defines model for AdvancedEquityHolidayRequest.
+type AdvancedEquityHolidayRequest struct {
+	// Date A calendar day, YYYY-MM-DD, with no time and no zone
+	//
+	// Examples: 2026-10-08
+	Date AdvancedEquityDate `json:"date"`
+	Name string             `json:"name"`
+}
+
+// AdvancedEquityKind defines model for AdvancedEquityKind.
+type AdvancedEquityKind string
+
+// AdvancedEquityListing defines model for AdvancedEquityListing.
+type AdvancedEquityListing struct {
+	ExchangeMic string `json:"exchange_mic"`
+
+	// InstrumentId UUIDv7 in canonical form
+	InstrumentId UUID               `json:"instrument_id"`
+	Kind         AdvancedEquityKind `json:"kind"`
+
+	// LotSize Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	LotSize Quantity `json:"lot_size"`
+
+	// Mark A reference price of one whole share in the settlement asset, as the price store observed it
+	Mark *AdvancedEquityMark `json:"mark,omitempty"`
+
+	// MinQuantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	MinQuantity Quantity `json:"min_quantity"`
+
+	// Name The share asset's name
+	Name           string `json:"name"`
+	OracleMaxAgeMs int64  `json:"oracle_max_age_ms"`
+	PriceScale     int    `json:"price_scale"`
+
+	// SettlementAssetId UUIDv7 in canonical form
+	SettlementAssetId  UUID   `json:"settlement_asset_id"`
+	SettlementDecimals int    `json:"settlement_decimals"`
+	SettlementSymbol   string `json:"settlement_symbol"`
+
+	// ShareAssetId UUIDv7 in canonical form
+	ShareAssetId  UUID   `json:"share_asset_id"`
+	ShareDecimals int    `json:"share_decimals"`
+	ShareSymbol   string `json:"share_symbol"`
+
+	// Status The instrument's status (ACTIVE
+	Status       string `json:"status"`
+	Symbol       string `json:"symbol"`
+	TermsHash    string `json:"terms_hash"`
+	TermsVersion int    `json:"terms_version"`
+
+	// TickPrice An exact decimal amount of the settlement asset per whole share
+	//
+	// Examples: 150.25
+	TickPrice       AdvancedEquityPrice `json:"tick_price"`
+	TradingCalendar string              `json:"trading_calendar"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+
+	// Venue The simulated venue the listing trades at
+	Venue string `json:"venue"`
+}
+
+// AdvancedEquityListingList defines model for AdvancedEquityListingList.
+type AdvancedEquityListingList struct {
+	Items []AdvancedEquityListing `json:"items"`
+
+	// Session The calendar at as_of: the session in force, the New York trade date (every session of a day shares it) and the T+1 settlement date of a trade made on it, when it is a trading day.
+	Session AdvancedEquitySessionState `json:"session"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// AdvancedEquityListingRequest tick_size is in price units at price_scale (at scale 2 a tick of 1 is one hundredth); lot_size and min_quantity are base units of the share asset, whose decimals are share_decimals. settlement_asset_id defaults to the sandbox dollar.
+type AdvancedEquityListingRequest struct {
+	ExchangeMic string             `json:"exchange_mic"`
+	Kind        AdvancedEquityKind `json:"kind"`
+
+	// LotSize Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	LotSize Quantity `json:"lot_size"`
+
+	// MinQuantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	MinQuantity    Quantity                `json:"min_quantity"`
+	Name           string                  `json:"name"`
+	OracleMaxAgeMs int64                   `json:"oracle_max_age_ms"`
+	OracleSources  []string                `json:"oracle_sources"`
+	PriceScale     int                     `json:"price_scale"`
+	RiskClass      AdvancedEquityRiskClass `json:"risk_class"`
+
+	// SettlementAssetId UUIDv7 in canonical form
+	SettlementAssetId *UUID  `json:"settlement_asset_id,omitempty"`
+	ShareDecimals     int    `json:"share_decimals"`
+	Symbol            string `json:"symbol"`
+
+	// TickSize Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	TickSize Quantity `json:"tick_size"`
+}
+
+// AdvancedEquityMark A reference price of one whole share in the settlement asset, as the price store observed it
+type AdvancedEquityMark struct {
+	ObservedAt Timestamp `json:"observed_at"`
+
+	// Price An exact decimal amount of the settlement asset per whole share
+	//
+	// Examples: 150.25
+	Price  AdvancedEquityPrice `json:"price"`
+	Source string              `json:"source"`
+}
+
+// AdvancedEquityMode defines model for AdvancedEquityMode.
+type AdvancedEquityMode string
+
+// AdvancedEquityOrder An equity order. reserved_quantity is what the order holds reserved on the WALLET it draws from: base units of the settlement asset for a buy, of the share asset for a sell. Every order is a DAY order and expires at expires_at.
+type AdvancedEquityOrder struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId     UUID      `json:"account_id"`
+	CreatedAt     Timestamp `json:"created_at"`
+	ExchangeMic   string    `json:"exchange_mic"`
+	ExpiresAt     Timestamp `json:"expires_at"`
+	ExtendedHours bool      `json:"extended_hours"`
+
+	// Fill One execution at the simulated venue, with every charge it carried as disclosed and verified before posting: notional at the fill price, the disclosed spread, platform and venue fees, and the total the buyer paid or the seller receives, all in base units of the settlement asset.
+	Fill *AdvancedEquityFill `json:"fill,omitempty"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// InstrumentId UUIDv7 in canonical form
+	InstrumentId UUID `json:"instrument_id"`
+
+	// IntentId UUIDv7 in canonical form
+	IntentId UUID `json:"intent_id"`
+
+	// LimitPrice An exact decimal amount of the settlement asset per whole share
+	//
+	// Examples: 150.25
+	LimitPrice *AdvancedEquityPrice    `json:"limit_price,omitempty"`
+	Mode       AdvancedEquityMode      `json:"mode"`
+	OrderType  AdvancedEquityOrderType `json:"order_type"`
+	PriceScale int                     `json:"price_scale"`
+
+	// ProtectionPrice An exact decimal amount of the settlement asset per whole share
+	//
+	// Examples: 150.25
+	ProtectionPrice *AdvancedEquityPrice `json:"protection_price,omitempty"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity         Quantity `json:"quantity"`
+	RejectionCode    *string  `json:"rejection_code,omitempty"`
+	RejectionReasons []string `json:"rejection_reasons"`
+
+	// ReservationId UUIDv7 in canonical form
+	ReservationId *UUID `json:"reservation_id,omitempty"`
+
+	// ReservedQuantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	ReservedQuantity *Quantity `json:"reserved_quantity,omitempty"`
+
+	// RiskDecisionId UUIDv7 in canonical form
+	RiskDecisionId *UUID                 `json:"risk_decision_id,omitempty"`
+	Session        AdvancedEquitySession `json:"session"`
+
+	// SettlementAssetId UUIDv7 in canonical form
+	SettlementAssetId UUID `json:"settlement_asset_id"`
+
+	// ShareAssetId UUIDv7 in canonical form
+	ShareAssetId  UUID               `json:"share_asset_id"`
+	ShareDecimals int                `json:"share_decimals"`
+	Side          AdvancedEquitySide `json:"side"`
+
+	// Status ACCEPTED is recorded and reserved and not yet answered by the venue; OPEN rests at the venue
+	Status AdvancedEquityOrderStatus `json:"status"`
+	Symbol string                    `json:"symbol"`
+
+	// TickPrice An exact decimal amount of the settlement asset per whole share
+	//
+	// Examples: 150.25
+	TickPrice AdvancedEquityPrice `json:"tick_price"`
+
+	// TradeDate A calendar day, YYYY-MM-DD, with no time and no zone
+	//
+	// Examples: 2026-10-08
+	TradeDate AdvancedEquityDate `json:"trade_date"`
+	UpdatedAt Timestamp          `json:"updated_at"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain  ValueDomainSimulated `json:"value_domain"`
+	Venue        string               `json:"venue"`
+	VenueOrderId *string              `json:"venue_order_id,omitempty"`
+}
+
+// AdvancedEquityOrderCancelRequest defines model for AdvancedEquityOrderCancelRequest.
+type AdvancedEquityOrderCancelRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+}
+
+// AdvancedEquityOrderPage defines model for AdvancedEquityOrderPage.
+type AdvancedEquityOrderPage struct {
+	Items      []AdvancedEquityOrder     `json:"items"`
+	NextCursor nullable.Nullable[string] `json:"next_cursor"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// AdvancedEquityOrderRequest quantity is base units of the listing's share asset; limit_price is required for a LIMIT order and refused for a MARKET order, which never trades outside regular hours.
+type AdvancedEquityOrderRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId     UUID  `json:"account_id"`
+	ExtendedHours *bool `json:"extended_hours,omitempty"`
+
+	// InstrumentId UUIDv7 in canonical form
+	InstrumentId UUID `json:"instrument_id"`
+
+	// LimitPrice An exact decimal amount of the settlement asset per whole share
+	//
+	// Examples: 150.25
+	LimitPrice *AdvancedEquityPrice    `json:"limit_price,omitempty"`
+	Mode       AdvancedEquityMode      `json:"mode"`
+	OrderType  AdvancedEquityOrderType `json:"order_type"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity Quantity           `json:"quantity"`
+	Side     AdvancedEquitySide `json:"side"`
+}
+
+// AdvancedEquityOrderStatus ACCEPTED is recorded and reserved and not yet answered by the venue; OPEN rests at the venue
+type AdvancedEquityOrderStatus string
+
+// AdvancedEquityOrderSubmission defines model for AdvancedEquityOrderSubmission.
+type AdvancedEquityOrderSubmission struct {
+	// Order An equity order. reserved_quantity is what the order holds reserved on the WALLET it draws from: base units of the settlement asset for a buy, of the share asset for a sell. Every order is a DAY order and expires at expires_at.
+	Order AdvancedEquityOrder `json:"order"`
+
+	// Placement What placing the order at the simulated venue did. PLACED carries the venue's answer; NOT_PLACED says why nothing was sent (the order stays ACCEPTED with its submission PENDING, for an operator's venue run).
+	Placement AdvancedEquityPlacement `json:"placement"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// AdvancedEquityOrderType defines model for AdvancedEquityOrderType.
+type AdvancedEquityOrderType string
+
+// AdvancedEquityPlacement What placing the order at the simulated venue did. PLACED carries the venue's answer; NOT_PLACED says why nothing was sent (the order stays ACCEPTED with its submission PENDING, for an operator's venue run).
+type AdvancedEquityPlacement struct {
+	Detail      string                        `json:"detail"`
+	ErrorCode   *string                       `json:"error_code,omitempty"`
+	Status      AdvancedEquityPlacementStatus `json:"status"`
+	VenueReason *string                       `json:"venue_reason,omitempty"`
+	VenueStatus *AdvancedEquityVenueStatus    `json:"venue_status,omitempty"`
+}
+
+// AdvancedEquityPlacementStatus defines model for AdvancedEquityPlacementStatus.
+type AdvancedEquityPlacementStatus string
+
+// AdvancedEquityPrice An exact decimal amount of the settlement asset per whole share
+//
+// Examples: 150.25
+type AdvancedEquityPrice = string
+
+// AdvancedEquityRatio New shares per old share, numerator/denominator (4/1 is a 4-for-1 split, 1/10 a 1-for-10 reverse split)
+type AdvancedEquityRatio struct {
+	Denominator int64 `json:"denominator"`
+	Numerator   int64 `json:"numerator"`
+}
+
+// AdvancedEquityRiskClass defines model for AdvancedEquityRiskClass.
+type AdvancedEquityRiskClass string
+
+// AdvancedEquityRounding Shares always round down to a whole base unit; the amount paid for a fractional remainder, and a dividend, round down (the default, never paying more than the exact amount) or half-even.
+type AdvancedEquityRounding string
+
+// AdvancedEquitySession defines model for AdvancedEquitySession.
+type AdvancedEquitySession string
+
+// AdvancedEquitySessionState The calendar at as_of: the session in force, the New York trade date (every session of a day shares it) and the T+1 settlement date of a trade made on it, when it is a trading day.
+type AdvancedEquitySessionState struct {
+	AsOf        Timestamp `json:"as_of"`
+	Calendar    string    `json:"calendar"`
+	HolidayName *string   `json:"holiday_name,omitempty"`
+
+	// NextTradingDay A calendar day, YYYY-MM-DD, with no time and no zone
+	//
+	// Examples: 2026-10-08
+	NextTradingDay AdvancedEquityDate    `json:"next_trading_day"`
+	Session        AdvancedEquitySession `json:"session"`
+
+	// SettlementDate A calendar day, YYYY-MM-DD, with no time and no zone
+	//
+	// Examples: 2026-10-08
+	SettlementDate *AdvancedEquityDate `json:"settlement_date,omitempty"`
+	Timezone       string              `json:"timezone"`
+
+	// TradeDate A calendar day, YYYY-MM-DD, with no time and no zone
+	//
+	// Examples: 2026-10-08
+	TradeDate  AdvancedEquityDate `json:"trade_date"`
+	TradingDay bool               `json:"trading_day"`
+}
+
+// AdvancedEquitySettlement One fill's T+1 settlement: what the account receives (shares for a buy, proceeds net of the disclosed charges for a sell) waits in UNSETTLED_RECEIVABLE from the trade date until it is SETTLED into the WALLET on the due date.
+type AdvancedEquitySettlement struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId     UUID `json:"account_id"`
+	AssetDecimals int  `json:"asset_decimals"`
+
+	// AssetId UUIDv7 in canonical form
+	AssetId     UUID   `json:"asset_id"`
+	AssetSymbol string `json:"asset_symbol"`
+
+	// DueDate A calendar day, YYYY-MM-DD, with no time and no zone
+	//
+	// Examples: 2026-10-08
+	DueDate AdvancedEquityDate `json:"due_date"`
+
+	// FillId UUIDv7 in canonical form
+	FillId UUID `json:"fill_id"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// InstrumentId UUIDv7 in canonical form
+	InstrumentId UUID `json:"instrument_id"`
+
+	// JournalTransactionId UUIDv7 in canonical form
+	JournalTransactionId *UUID `json:"journal_transaction_id,omitempty"`
+
+	// OrderId UUIDv7 in canonical form
+	OrderId UUID `json:"order_id"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity  Quantity                      `json:"quantity"`
+	SettledAt *Timestamp                    `json:"settled_at,omitempty"`
+	State     AdvancedEquitySettlementState `json:"state"`
+
+	// TradeDate A calendar day, YYYY-MM-DD, with no time and no zone
+	//
+	// Examples: 2026-10-08
+	TradeDate AdvancedEquityDate `json:"trade_date"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// AdvancedEquitySettlementFilter defines model for AdvancedEquitySettlementFilter.
+type AdvancedEquitySettlementFilter string
+
+// AdvancedEquitySettlementPage defines model for AdvancedEquitySettlementPage.
+type AdvancedEquitySettlementPage struct {
+	Items      []AdvancedEquitySettlement `json:"items"`
+	NextCursor nullable.Nullable[string]  `json:"next_cursor"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// AdvancedEquitySettlementRun defines model for AdvancedEquitySettlementRun.
+type AdvancedEquitySettlementRun struct {
+	AsOf Timestamp `json:"as_of"`
+
+	// Batches Transactions the run used
+	Batches int                        `json:"batches"`
+	Settled []AdvancedEquitySettlement `json:"settled"`
+
+	// TradeDate A calendar day, YYYY-MM-DD, with no time and no zone
+	//
+	// Examples: 2026-10-08
+	TradeDate AdvancedEquityDate `json:"trade_date"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// AdvancedEquitySettlementRunRequest defines model for AdvancedEquitySettlementRunRequest.
+type AdvancedEquitySettlementRunRequest struct {
+	// Limit The most settlements to settle in this run (default 500)
+	Limit *int `json:"limit,omitempty"`
+}
+
+// AdvancedEquitySettlementState defines model for AdvancedEquitySettlementState.
+type AdvancedEquitySettlementState string
+
+// AdvancedEquitySide defines model for AdvancedEquitySide.
+type AdvancedEquitySide string
+
+// AdvancedEquityVenueAction defines model for AdvancedEquityVenueAction.
+type AdvancedEquityVenueAction string
+
+// AdvancedEquityVenueRun defines model for AdvancedEquityVenueRun.
+type AdvancedEquityVenueRun struct {
+	AsOf  Timestamp                    `json:"as_of"`
+	Items []AdvancedEquityVenueRunItem `json:"items"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// AdvancedEquityVenueRunItem defines model for AdvancedEquityVenueRunItem.
+type AdvancedEquityVenueRunItem struct {
+	Action    AdvancedEquityVenueAction `json:"action"`
+	Detail    *string                   `json:"detail,omitempty"`
+	ErrorCode *string                   `json:"error_code,omitempty"`
+
+	// OrderId UUIDv7 in canonical form
+	OrderId UUID `json:"order_id"`
+
+	// StatusAfter ACCEPTED is recorded and reserved and not yet answered by the venue; OPEN rests at the venue
+	StatusAfter *AdvancedEquityOrderStatus `json:"status_after,omitempty"`
+
+	// StatusBefore ACCEPTED is recorded and reserved and not yet answered by the venue; OPEN rests at the venue
+	StatusBefore AdvancedEquityOrderStatus  `json:"status_before"`
+	VenueReason  *string                    `json:"venue_reason,omitempty"`
+	VenueStatus  *AdvancedEquityVenueStatus `json:"venue_status,omitempty"`
+}
+
+// AdvancedEquityVenueRunRequest defines model for AdvancedEquityVenueRunRequest.
+type AdvancedEquityVenueRunRequest struct {
+	// Limit The most orders to work in this run (default 100)
+	Limit *int `json:"limit,omitempty"`
+}
+
+// AdvancedEquityVenueStatus defines model for AdvancedEquityVenueStatus.
+type AdvancedEquityVenueStatus string
 
 // AdvancedFaucetAllowance cap is the faucet policy's per-account limit for the rolling window, used is what the account was granted inside it, and remaining is cap - used (never below zero), all in base units of the sandbox dollar.
 type AdvancedFaucetAllowance struct {
@@ -9475,6 +11379,65 @@ type PostAdminReconciliationRecordsRecordIdResolveParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// GetAdvancedBooksParams defines parameters for GetAdvancedBooks.
+type GetAdvancedBooksParams struct {
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PostAdvancedBooksParams defines parameters for PostAdvancedBooks.
+type PostAdvancedBooksParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetAdvancedBooksOrdersParams defines parameters for GetAdvancedBooksOrders.
+type GetAdvancedBooksOrdersParams struct {
+	AccountId UUID `form:"account_id" json:"account_id"`
+
+	// Scope WORKING (the default) lists orders still PENDING, OPEN or PARTIALLY_FILLED; ALL lists every order
+	Scope  *AdvancedBookOrderScope `form:"scope,omitempty" json:"scope,omitempty"`
+	Cursor *Cursor                 `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit                  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PostAdvancedBooksOrdersOrderIdCancelParams defines parameters for PostAdvancedBooksOrdersOrderIdCancel.
+type PostAdvancedBooksOrdersOrderIdCancelParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedBooksOrdersOrderIdReplaceParams defines parameters for PostAdvancedBooksOrdersOrderIdReplace.
+type PostAdvancedBooksOrdersOrderIdReplaceParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetAdvancedBooksTradesParams defines parameters for GetAdvancedBooksTrades.
+type GetAdvancedBooksTradesParams struct {
+	AccountId UUID    `form:"account_id" json:"account_id"`
+	Cursor    *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit     *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetAdvancedBooksInstrumentIdDepthParams defines parameters for GetAdvancedBooksInstrumentIdDepth.
+type GetAdvancedBooksInstrumentIdDepthParams struct {
+	// Levels Price levels per side
+	Levels *int `form:"levels,omitempty" json:"levels,omitempty"`
+}
+
+// PostAdvancedBooksInstrumentIdOrdersParams defines parameters for PostAdvancedBooksInstrumentIdOrders.
+type PostAdvancedBooksInstrumentIdOrdersParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedBooksInstrumentIdStatusParams defines parameters for PostAdvancedBooksInstrumentIdStatus.
+type PostAdvancedBooksInstrumentIdStatusParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // GetAdvancedBuyingPowerParams defines parameters for GetAdvancedBuyingPower.
 type GetAdvancedBuyingPowerParams struct {
 	AccountId UUID `form:"account_id" json:"account_id"`
@@ -9588,6 +11551,103 @@ type GetAdvancedEffectsParams struct {
 	AccountId UUID    `form:"account_id" json:"account_id"`
 	Cursor    *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 	Limit     *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PostAdvancedEquitiesCalendarHolidaysParams defines parameters for PostAdvancedEquitiesCalendarHolidays.
+type PostAdvancedEquitiesCalendarHolidaysParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetAdvancedEquitiesCorporateActionApplicationsParams defines parameters for GetAdvancedEquitiesCorporateActionApplications.
+type GetAdvancedEquitiesCorporateActionApplicationsParams struct {
+	AccountId UUID    `form:"account_id" json:"account_id"`
+	Cursor    *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit     *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetAdvancedEquitiesCorporateActionsParams defines parameters for GetAdvancedEquitiesCorporateActions.
+type GetAdvancedEquitiesCorporateActionsParams struct {
+	InstrumentId *UUID   `form:"instrument_id,omitempty" json:"instrument_id,omitempty"`
+	Cursor       *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit        *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PostAdvancedEquitiesCorporateActionsParams defines parameters for PostAdvancedEquitiesCorporateActions.
+type PostAdvancedEquitiesCorporateActionsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedEquitiesCorporateActionsActionIdApplyParams defines parameters for PostAdvancedEquitiesCorporateActionsActionIdApply.
+type PostAdvancedEquitiesCorporateActionsActionIdApplyParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedEquitiesCorporateActionsActionIdCancelParams defines parameters for PostAdvancedEquitiesCorporateActionsActionIdCancel.
+type PostAdvancedEquitiesCorporateActionsActionIdCancelParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetAdvancedEquitiesFillsParams defines parameters for GetAdvancedEquitiesFills.
+type GetAdvancedEquitiesFillsParams struct {
+	AccountId UUID    `form:"account_id" json:"account_id"`
+	Cursor    *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit     *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetAdvancedEquitiesListingsParams defines parameters for GetAdvancedEquitiesListings.
+type GetAdvancedEquitiesListingsParams struct {
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PostAdvancedEquitiesListingsParams defines parameters for PostAdvancedEquitiesListings.
+type PostAdvancedEquitiesListingsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetAdvancedEquitiesOrdersParams defines parameters for GetAdvancedEquitiesOrders.
+type GetAdvancedEquitiesOrdersParams struct {
+	AccountId UUID    `form:"account_id" json:"account_id"`
+	Cursor    *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit     *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PostAdvancedEquitiesOrdersParams defines parameters for PostAdvancedEquitiesOrders.
+type PostAdvancedEquitiesOrdersParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedEquitiesOrdersOrderIdCancelParams defines parameters for PostAdvancedEquitiesOrdersOrderIdCancel.
+type PostAdvancedEquitiesOrdersOrderIdCancelParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedEquitiesSettlementRunsParams defines parameters for PostAdvancedEquitiesSettlementRuns.
+type PostAdvancedEquitiesSettlementRunsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetAdvancedEquitiesSettlementsParams defines parameters for GetAdvancedEquitiesSettlements.
+type GetAdvancedEquitiesSettlementsParams struct {
+	AccountId UUID `form:"account_id" json:"account_id"`
+
+	// State PENDING, SETTLED or ALL (the default)
+	State  *AdvancedEquitySettlementFilter `form:"state,omitempty" json:"state,omitempty"`
+	Cursor *Cursor                         `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit                          `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PostAdvancedEquitiesVenueRunsParams defines parameters for PostAdvancedEquitiesVenueRuns.
+type PostAdvancedEquitiesVenueRunsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
 // GetAdvancedInstrumentsParams defines parameters for GetAdvancedInstruments.
@@ -10270,6 +12330,21 @@ type PostAdminKillSwitchesJSONRequestBody = KillSwitchRequest
 // PostAdminReconciliationRecordsRecordIdResolveJSONRequestBody defines body for PostAdminReconciliationRecordsRecordIdResolve for application/json ContentType.
 type PostAdminReconciliationRecordsRecordIdResolveJSONRequestBody = ReconciliationResolution
 
+// PostAdvancedBooksJSONRequestBody defines body for PostAdvancedBooks for application/json ContentType.
+type PostAdvancedBooksJSONRequestBody = AdvancedBookOpenRequest
+
+// PostAdvancedBooksOrdersOrderIdCancelJSONRequestBody defines body for PostAdvancedBooksOrdersOrderIdCancel for application/json ContentType.
+type PostAdvancedBooksOrdersOrderIdCancelJSONRequestBody = AdvancedBookOrderCancelRequest
+
+// PostAdvancedBooksOrdersOrderIdReplaceJSONRequestBody defines body for PostAdvancedBooksOrdersOrderIdReplace for application/json ContentType.
+type PostAdvancedBooksOrdersOrderIdReplaceJSONRequestBody = AdvancedBookOrderReplaceRequest
+
+// PostAdvancedBooksInstrumentIdOrdersJSONRequestBody defines body for PostAdvancedBooksInstrumentIdOrders for application/json ContentType.
+type PostAdvancedBooksInstrumentIdOrdersJSONRequestBody = AdvancedBookOrderRequest
+
+// PostAdvancedBooksInstrumentIdStatusJSONRequestBody defines body for PostAdvancedBooksInstrumentIdStatus for application/json ContentType.
+type PostAdvancedBooksInstrumentIdStatusJSONRequestBody = AdvancedBookStatusRequest
+
 // PostAdvancedDerivativesClearingHouseFundingJSONRequestBody defines body for PostAdvancedDerivativesClearingHouseFunding for application/json ContentType.
 type PostAdvancedDerivativesClearingHouseFundingJSONRequestBody = DerivativeClearingFundingRequest
 
@@ -10296,6 +12371,30 @@ type PostAdvancedDerivativesPositionsPositionIdCloseJSONRequestBody = Derivative
 
 // PostAdvancedDerivativesPositionsPositionIdExerciseJSONRequestBody defines body for PostAdvancedDerivativesPositionsPositionIdExercise for application/json ContentType.
 type PostAdvancedDerivativesPositionsPositionIdExerciseJSONRequestBody = DerivativeExerciseRequest
+
+// PostAdvancedEquitiesCalendarHolidaysJSONRequestBody defines body for PostAdvancedEquitiesCalendarHolidays for application/json ContentType.
+type PostAdvancedEquitiesCalendarHolidaysJSONRequestBody = AdvancedEquityHolidayRequest
+
+// PostAdvancedEquitiesCorporateActionsJSONRequestBody defines body for PostAdvancedEquitiesCorporateActions for application/json ContentType.
+type PostAdvancedEquitiesCorporateActionsJSONRequestBody = AdvancedEquityCorporateActionRequest
+
+// PostAdvancedEquitiesCorporateActionsActionIdCancelJSONRequestBody defines body for PostAdvancedEquitiesCorporateActionsActionIdCancel for application/json ContentType.
+type PostAdvancedEquitiesCorporateActionsActionIdCancelJSONRequestBody = AdvancedEquityCorporateActionCancelRequest
+
+// PostAdvancedEquitiesListingsJSONRequestBody defines body for PostAdvancedEquitiesListings for application/json ContentType.
+type PostAdvancedEquitiesListingsJSONRequestBody = AdvancedEquityListingRequest
+
+// PostAdvancedEquitiesOrdersJSONRequestBody defines body for PostAdvancedEquitiesOrders for application/json ContentType.
+type PostAdvancedEquitiesOrdersJSONRequestBody = AdvancedEquityOrderRequest
+
+// PostAdvancedEquitiesOrdersOrderIdCancelJSONRequestBody defines body for PostAdvancedEquitiesOrdersOrderIdCancel for application/json ContentType.
+type PostAdvancedEquitiesOrdersOrderIdCancelJSONRequestBody = AdvancedEquityOrderCancelRequest
+
+// PostAdvancedEquitiesSettlementRunsJSONRequestBody defines body for PostAdvancedEquitiesSettlementRuns for application/json ContentType.
+type PostAdvancedEquitiesSettlementRunsJSONRequestBody = AdvancedEquitySettlementRunRequest
+
+// PostAdvancedEquitiesVenueRunsJSONRequestBody defines body for PostAdvancedEquitiesVenueRuns for application/json ContentType.
+type PostAdvancedEquitiesVenueRunsJSONRequestBody = AdvancedEquityVenueRunRequest
 
 // PostAdvancedMarginAccountJSONRequestBody defines body for PostAdvancedMarginAccount for application/json ContentType.
 type PostAdvancedMarginAccountJSONRequestBody = MarginOpenRequest
@@ -10545,6 +12644,45 @@ type ServerInterface interface {
 	// PostAdminReconciliationRecordsRecordIdResolve Resolve a mismatch (reason + evidence; material resolutions require an approved admin action; corrections post a compensating journal transaction)
 	// (POST /admin/reconciliation/records/{recordId}/resolve)
 	PostAdminReconciliationRecordsRecordIdResolve(w http.ResponseWriter, r *http.Request, recordId UUID, params PostAdminReconciliationRecordsRecordIdResolveParams)
+	// GetAdvancedBooks Internal books, oldest first, with their terms, disclosed fee schedules and the crossing rule in force
+	// (GET /advanced/books)
+	GetAdvancedBooks(w http.ResponseWriter, r *http.Request, params GetAdvancedBooksParams)
+	// PostAdvancedBooks Open the internal book of an instrument (operator; requires step-up)
+	// (POST /advanced/books)
+	PostAdvancedBooks(w http.ResponseWriter, r *http.Request, params PostAdvancedBooksParams)
+	// GetAdvancedBooksOrders An account's orders on the internal books, newest first
+	// (GET /advanced/books/orders)
+	GetAdvancedBooksOrders(w http.ResponseWriter, r *http.Request, params GetAdvancedBooksOrdersParams)
+	// GetAdvancedBooksOrdersOrderId One order, to its owner or an operator who may read any account; anyone else is told it does not exist
+	// (GET /advanced/books/orders/{orderId})
+	GetAdvancedBooksOrdersOrderId(w http.ResponseWriter, r *http.Request, orderId OrderId)
+	// PostAdvancedBooksOrdersOrderIdCancel Cancel one of your own orders
+	// (POST /advanced/books/orders/{orderId}/cancel)
+	PostAdvancedBooksOrdersOrderIdCancel(w http.ResponseWriter, r *http.Request, orderId OrderId, params PostAdvancedBooksOrdersOrderIdCancelParams)
+	// PostAdvancedBooksOrdersOrderIdReplace Change the price and total quantity of one of your own resting orders
+	// (POST /advanced/books/orders/{orderId}/replace)
+	PostAdvancedBooksOrdersOrderIdReplace(w http.ResponseWriter, r *http.Request, orderId OrderId, params PostAdvancedBooksOrdersOrderIdReplaceParams)
+	// GetAdvancedBooksTrades An account's fills on the internal books, newest first, each seen from the account's own side
+	// (GET /advanced/books/trades)
+	GetAdvancedBooksTrades(w http.ResponseWriter, r *http.Request, params GetAdvancedBooksTradesParams)
+	// GetAdvancedBooksInstrumentId One internal book
+	// (GET /advanced/books/{instrumentId})
+	GetAdvancedBooksInstrumentId(w http.ResponseWriter, r *http.Request, instrumentId InstrumentId)
+	// GetAdvancedBooksInstrumentIdDepth The resting book as persisted, aggregated by price level, best level first
+	// (GET /advanced/books/{instrumentId}/depth)
+	GetAdvancedBooksInstrumentIdDepth(w http.ResponseWriter, r *http.Request, instrumentId InstrumentId, params GetAdvancedBooksInstrumentIdDepthParams)
+	// GetAdvancedBooksInstrumentIdJournalVerification Prove from the database alone that the book's journal replays to its recorded state (operator; read-only)
+	// (GET /advanced/books/{instrumentId}/journal-verification)
+	GetAdvancedBooksInstrumentIdJournalVerification(w http.ResponseWriter, r *http.Request, instrumentId InstrumentId)
+	// PostAdvancedBooksInstrumentIdOrders Submit a limit or market order to an internal book from one of your own accounts
+	// (POST /advanced/books/{instrumentId}/orders)
+	PostAdvancedBooksInstrumentIdOrders(w http.ResponseWriter, r *http.Request, instrumentId InstrumentId, params PostAdvancedBooksInstrumentIdOrdersParams)
+	// PostAdvancedBooksInstrumentIdStatus Halt, resume or close a book (operator; requires step-up)
+	// (POST /advanced/books/{instrumentId}/status)
+	PostAdvancedBooksInstrumentIdStatus(w http.ResponseWriter, r *http.Request, instrumentId InstrumentId, params PostAdvancedBooksInstrumentIdStatusParams)
+	// GetAdvancedBooksInstrumentIdTradesTradeSeqProof The audit proof of one trade, to one of its parties or an operator who may read any account
+	// (GET /advanced/books/{instrumentId}/trades/{tradeSeq}/proof)
+	GetAdvancedBooksInstrumentIdTradesTradeSeqProof(w http.ResponseWriter, r *http.Request, instrumentId InstrumentId, tradeSeq int64)
 	// GetAdvancedBuyingPower Universal buying power V2 for an account's simulated holdings, with an explanation of every number
 	// (GET /advanced/buying-power)
 	GetAdvancedBuyingPower(w http.ResponseWriter, r *http.Request, params GetAdvancedBuyingPowerParams)
@@ -10608,6 +12746,63 @@ type ServerInterface interface {
 	// GetAdvancedEffects Economic effects of an account (the exactly-once register), newest first
 	// (GET /advanced/effects)
 	GetAdvancedEffects(w http.ResponseWriter, r *http.Request, params GetAdvancedEffectsParams)
+	// GetAdvancedEquitiesCalendar The XNYS calendar now -- session, trade date, T+1 settlement date -- and its recorded holidays
+	// (GET /advanced/equities/calendar)
+	GetAdvancedEquitiesCalendar(w http.ResponseWriter, r *http.Request)
+	// PostAdvancedEquitiesCalendarHolidays Record a full-day XNYS closure (operator; requires step-up)
+	// (POST /advanced/equities/calendar/holidays)
+	PostAdvancedEquitiesCalendarHolidays(w http.ResponseWriter, r *http.Request, params PostAdvancedEquitiesCalendarHolidaysParams)
+	// GetAdvancedEquitiesCorporateActionApplications What corporate actions did to an account, newest first
+	// (GET /advanced/equities/corporate-action-applications)
+	GetAdvancedEquitiesCorporateActionApplications(w http.ResponseWriter, r *http.Request, params GetAdvancedEquitiesCorporateActionApplicationsParams)
+	// GetAdvancedEquitiesCorporateActions Corporate actions, newest effective date first
+	// (GET /advanced/equities/corporate-actions)
+	GetAdvancedEquitiesCorporateActions(w http.ResponseWriter, r *http.Request, params GetAdvancedEquitiesCorporateActionsParams)
+	// PostAdvancedEquitiesCorporateActions Announce a corporate action (operator; requires step-up)
+	// (POST /advanced/equities/corporate-actions)
+	PostAdvancedEquitiesCorporateActions(w http.ResponseWriter, r *http.Request, params PostAdvancedEquitiesCorporateActionsParams)
+	// GetAdvancedEquitiesCorporateActionsActionId One corporate action
+	// (GET /advanced/equities/corporate-actions/{actionId})
+	GetAdvancedEquitiesCorporateActionsActionId(w http.ResponseWriter, r *http.Request, actionId UUID)
+	// PostAdvancedEquitiesCorporateActionsActionIdApply Apply an announced corporate action on or after the day it takes effect (operator; requires step-up)
+	// (POST /advanced/equities/corporate-actions/{actionId}/apply)
+	PostAdvancedEquitiesCorporateActionsActionIdApply(w http.ResponseWriter, r *http.Request, actionId UUID, params PostAdvancedEquitiesCorporateActionsActionIdApplyParams)
+	// PostAdvancedEquitiesCorporateActionsActionIdCancel Withdraw an announced corporate action that has not been applied (operator; requires step-up)
+	// (POST /advanced/equities/corporate-actions/{actionId}/cancel)
+	PostAdvancedEquitiesCorporateActionsActionIdCancel(w http.ResponseWriter, r *http.Request, actionId UUID, params PostAdvancedEquitiesCorporateActionsActionIdCancelParams)
+	// GetAdvancedEquitiesFills An account's equity fills, newest first, each with its disclosed charges and its settlement
+	// (GET /advanced/equities/fills)
+	GetAdvancedEquitiesFills(w http.ResponseWriter, r *http.Request, params GetAdvancedEquitiesFillsParams)
+	// GetAdvancedEquitiesListings Equity and ETF listings with their terms, the latest fresh mark and the calendar's session now
+	// (GET /advanced/equities/listings)
+	GetAdvancedEquitiesListings(w http.ResponseWriter, r *http.Request, params GetAdvancedEquitiesListingsParams)
+	// PostAdvancedEquitiesListings List a simulated equity or ETF (operator; requires step-up)
+	// (POST /advanced/equities/listings)
+	PostAdvancedEquitiesListings(w http.ResponseWriter, r *http.Request, params PostAdvancedEquitiesListingsParams)
+	// GetAdvancedEquitiesListingsInstrumentId One listing
+	// (GET /advanced/equities/listings/{instrumentId})
+	GetAdvancedEquitiesListingsInstrumentId(w http.ResponseWriter, r *http.Request, instrumentId InstrumentId)
+	// GetAdvancedEquitiesOrders An account's equity orders, newest first, each with its fill and settlement
+	// (GET /advanced/equities/orders)
+	GetAdvancedEquitiesOrders(w http.ResponseWriter, r *http.Request, params GetAdvancedEquitiesOrdersParams)
+	// PostAdvancedEquitiesOrders Submit an equity order from one of your own accounts, and place it at the simulated venue
+	// (POST /advanced/equities/orders)
+	PostAdvancedEquitiesOrders(w http.ResponseWriter, r *http.Request, params PostAdvancedEquitiesOrdersParams)
+	// GetAdvancedEquitiesOrdersOrderId One equity order, to its owner or an operator who may read any account; anyone else is told it does not exist
+	// (GET /advanced/equities/orders/{orderId})
+	GetAdvancedEquitiesOrdersOrderId(w http.ResponseWriter, r *http.Request, orderId OrderId)
+	// PostAdvancedEquitiesOrdersOrderIdCancel Ask the simulated venue to cancel one of your own ACCEPTED or OPEN orders
+	// (POST /advanced/equities/orders/{orderId}/cancel)
+	PostAdvancedEquitiesOrdersOrderIdCancel(w http.ResponseWriter, r *http.Request, orderId OrderId, params PostAdvancedEquitiesOrdersOrderIdCancelParams)
+	// PostAdvancedEquitiesSettlementRuns Run due T+1 settlements now (operator; requires step-up)
+	// (POST /advanced/equities/settlement-runs)
+	PostAdvancedEquitiesSettlementRuns(w http.ResponseWriter, r *http.Request, params PostAdvancedEquitiesSettlementRunsParams)
+	// GetAdvancedEquitiesSettlements An account's T+1 settlements, by due date, newest first
+	// (GET /advanced/equities/settlements)
+	GetAdvancedEquitiesSettlements(w http.ResponseWriter, r *http.Request, params GetAdvancedEquitiesSettlementsParams)
+	// PostAdvancedEquitiesVenueRuns Run the venue worker once (operator; requires step-up)
+	// (POST /advanced/equities/venue-runs)
+	PostAdvancedEquitiesVenueRuns(w http.ResponseWriter, r *http.Request, params PostAdvancedEquitiesVenueRunsParams)
 	// GetAdvancedInstruments Instruments of the canonical model with their current terms
 	// (GET /advanced/instruments)
 	GetAdvancedInstruments(w http.ResponseWriter, r *http.Request, params GetAdvancedInstrumentsParams)
@@ -11142,6 +13337,84 @@ func (_ Unimplemented) PostAdminReconciliationRecordsRecordIdResolve(w http.Resp
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// GetAdvancedBooks Internal books, oldest first, with their terms, disclosed fee schedules and the crossing rule in force
+// (GET /advanced/books)
+func (_ Unimplemented) GetAdvancedBooks(w http.ResponseWriter, r *http.Request, params GetAdvancedBooksParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedBooks Open the internal book of an instrument (operator; requires step-up)
+// (POST /advanced/books)
+func (_ Unimplemented) PostAdvancedBooks(w http.ResponseWriter, r *http.Request, params PostAdvancedBooksParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedBooksOrders An account's orders on the internal books, newest first
+// (GET /advanced/books/orders)
+func (_ Unimplemented) GetAdvancedBooksOrders(w http.ResponseWriter, r *http.Request, params GetAdvancedBooksOrdersParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedBooksOrdersOrderId One order, to its owner or an operator who may read any account; anyone else is told it does not exist
+// (GET /advanced/books/orders/{orderId})
+func (_ Unimplemented) GetAdvancedBooksOrdersOrderId(w http.ResponseWriter, r *http.Request, orderId OrderId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedBooksOrdersOrderIdCancel Cancel one of your own orders
+// (POST /advanced/books/orders/{orderId}/cancel)
+func (_ Unimplemented) PostAdvancedBooksOrdersOrderIdCancel(w http.ResponseWriter, r *http.Request, orderId OrderId, params PostAdvancedBooksOrdersOrderIdCancelParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedBooksOrdersOrderIdReplace Change the price and total quantity of one of your own resting orders
+// (POST /advanced/books/orders/{orderId}/replace)
+func (_ Unimplemented) PostAdvancedBooksOrdersOrderIdReplace(w http.ResponseWriter, r *http.Request, orderId OrderId, params PostAdvancedBooksOrdersOrderIdReplaceParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedBooksTrades An account's fills on the internal books, newest first, each seen from the account's own side
+// (GET /advanced/books/trades)
+func (_ Unimplemented) GetAdvancedBooksTrades(w http.ResponseWriter, r *http.Request, params GetAdvancedBooksTradesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedBooksInstrumentId One internal book
+// (GET /advanced/books/{instrumentId})
+func (_ Unimplemented) GetAdvancedBooksInstrumentId(w http.ResponseWriter, r *http.Request, instrumentId InstrumentId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedBooksInstrumentIdDepth The resting book as persisted, aggregated by price level, best level first
+// (GET /advanced/books/{instrumentId}/depth)
+func (_ Unimplemented) GetAdvancedBooksInstrumentIdDepth(w http.ResponseWriter, r *http.Request, instrumentId InstrumentId, params GetAdvancedBooksInstrumentIdDepthParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedBooksInstrumentIdJournalVerification Prove from the database alone that the book's journal replays to its recorded state (operator; read-only)
+// (GET /advanced/books/{instrumentId}/journal-verification)
+func (_ Unimplemented) GetAdvancedBooksInstrumentIdJournalVerification(w http.ResponseWriter, r *http.Request, instrumentId InstrumentId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedBooksInstrumentIdOrders Submit a limit or market order to an internal book from one of your own accounts
+// (POST /advanced/books/{instrumentId}/orders)
+func (_ Unimplemented) PostAdvancedBooksInstrumentIdOrders(w http.ResponseWriter, r *http.Request, instrumentId InstrumentId, params PostAdvancedBooksInstrumentIdOrdersParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedBooksInstrumentIdStatus Halt, resume or close a book (operator; requires step-up)
+// (POST /advanced/books/{instrumentId}/status)
+func (_ Unimplemented) PostAdvancedBooksInstrumentIdStatus(w http.ResponseWriter, r *http.Request, instrumentId InstrumentId, params PostAdvancedBooksInstrumentIdStatusParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedBooksInstrumentIdTradesTradeSeqProof The audit proof of one trade, to one of its parties or an operator who may read any account
+// (GET /advanced/books/{instrumentId}/trades/{tradeSeq}/proof)
+func (_ Unimplemented) GetAdvancedBooksInstrumentIdTradesTradeSeqProof(w http.ResponseWriter, r *http.Request, instrumentId InstrumentId, tradeSeq int64) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // GetAdvancedBuyingPower Universal buying power V2 for an account's simulated holdings, with an explanation of every number
 // (GET /advanced/buying-power)
 func (_ Unimplemented) GetAdvancedBuyingPower(w http.ResponseWriter, r *http.Request, params GetAdvancedBuyingPowerParams) {
@@ -11265,6 +13538,120 @@ func (_ Unimplemented) PostAdvancedDerivativesPositionsPositionIdExercise(w http
 // GetAdvancedEffects Economic effects of an account (the exactly-once register), newest first
 // (GET /advanced/effects)
 func (_ Unimplemented) GetAdvancedEffects(w http.ResponseWriter, r *http.Request, params GetAdvancedEffectsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedEquitiesCalendar The XNYS calendar now -- session, trade date, T+1 settlement date -- and its recorded holidays
+// (GET /advanced/equities/calendar)
+func (_ Unimplemented) GetAdvancedEquitiesCalendar(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedEquitiesCalendarHolidays Record a full-day XNYS closure (operator; requires step-up)
+// (POST /advanced/equities/calendar/holidays)
+func (_ Unimplemented) PostAdvancedEquitiesCalendarHolidays(w http.ResponseWriter, r *http.Request, params PostAdvancedEquitiesCalendarHolidaysParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedEquitiesCorporateActionApplications What corporate actions did to an account, newest first
+// (GET /advanced/equities/corporate-action-applications)
+func (_ Unimplemented) GetAdvancedEquitiesCorporateActionApplications(w http.ResponseWriter, r *http.Request, params GetAdvancedEquitiesCorporateActionApplicationsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedEquitiesCorporateActions Corporate actions, newest effective date first
+// (GET /advanced/equities/corporate-actions)
+func (_ Unimplemented) GetAdvancedEquitiesCorporateActions(w http.ResponseWriter, r *http.Request, params GetAdvancedEquitiesCorporateActionsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedEquitiesCorporateActions Announce a corporate action (operator; requires step-up)
+// (POST /advanced/equities/corporate-actions)
+func (_ Unimplemented) PostAdvancedEquitiesCorporateActions(w http.ResponseWriter, r *http.Request, params PostAdvancedEquitiesCorporateActionsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedEquitiesCorporateActionsActionId One corporate action
+// (GET /advanced/equities/corporate-actions/{actionId})
+func (_ Unimplemented) GetAdvancedEquitiesCorporateActionsActionId(w http.ResponseWriter, r *http.Request, actionId UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedEquitiesCorporateActionsActionIdApply Apply an announced corporate action on or after the day it takes effect (operator; requires step-up)
+// (POST /advanced/equities/corporate-actions/{actionId}/apply)
+func (_ Unimplemented) PostAdvancedEquitiesCorporateActionsActionIdApply(w http.ResponseWriter, r *http.Request, actionId UUID, params PostAdvancedEquitiesCorporateActionsActionIdApplyParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedEquitiesCorporateActionsActionIdCancel Withdraw an announced corporate action that has not been applied (operator; requires step-up)
+// (POST /advanced/equities/corporate-actions/{actionId}/cancel)
+func (_ Unimplemented) PostAdvancedEquitiesCorporateActionsActionIdCancel(w http.ResponseWriter, r *http.Request, actionId UUID, params PostAdvancedEquitiesCorporateActionsActionIdCancelParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedEquitiesFills An account's equity fills, newest first, each with its disclosed charges and its settlement
+// (GET /advanced/equities/fills)
+func (_ Unimplemented) GetAdvancedEquitiesFills(w http.ResponseWriter, r *http.Request, params GetAdvancedEquitiesFillsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedEquitiesListings Equity and ETF listings with their terms, the latest fresh mark and the calendar's session now
+// (GET /advanced/equities/listings)
+func (_ Unimplemented) GetAdvancedEquitiesListings(w http.ResponseWriter, r *http.Request, params GetAdvancedEquitiesListingsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedEquitiesListings List a simulated equity or ETF (operator; requires step-up)
+// (POST /advanced/equities/listings)
+func (_ Unimplemented) PostAdvancedEquitiesListings(w http.ResponseWriter, r *http.Request, params PostAdvancedEquitiesListingsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedEquitiesListingsInstrumentId One listing
+// (GET /advanced/equities/listings/{instrumentId})
+func (_ Unimplemented) GetAdvancedEquitiesListingsInstrumentId(w http.ResponseWriter, r *http.Request, instrumentId InstrumentId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedEquitiesOrders An account's equity orders, newest first, each with its fill and settlement
+// (GET /advanced/equities/orders)
+func (_ Unimplemented) GetAdvancedEquitiesOrders(w http.ResponseWriter, r *http.Request, params GetAdvancedEquitiesOrdersParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedEquitiesOrders Submit an equity order from one of your own accounts, and place it at the simulated venue
+// (POST /advanced/equities/orders)
+func (_ Unimplemented) PostAdvancedEquitiesOrders(w http.ResponseWriter, r *http.Request, params PostAdvancedEquitiesOrdersParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedEquitiesOrdersOrderId One equity order, to its owner or an operator who may read any account; anyone else is told it does not exist
+// (GET /advanced/equities/orders/{orderId})
+func (_ Unimplemented) GetAdvancedEquitiesOrdersOrderId(w http.ResponseWriter, r *http.Request, orderId OrderId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedEquitiesOrdersOrderIdCancel Ask the simulated venue to cancel one of your own ACCEPTED or OPEN orders
+// (POST /advanced/equities/orders/{orderId}/cancel)
+func (_ Unimplemented) PostAdvancedEquitiesOrdersOrderIdCancel(w http.ResponseWriter, r *http.Request, orderId OrderId, params PostAdvancedEquitiesOrdersOrderIdCancelParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedEquitiesSettlementRuns Run due T+1 settlements now (operator; requires step-up)
+// (POST /advanced/equities/settlement-runs)
+func (_ Unimplemented) PostAdvancedEquitiesSettlementRuns(w http.ResponseWriter, r *http.Request, params PostAdvancedEquitiesSettlementRunsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedEquitiesSettlements An account's T+1 settlements, by due date, newest first
+// (GET /advanced/equities/settlements)
+func (_ Unimplemented) GetAdvancedEquitiesSettlements(w http.ResponseWriter, r *http.Request, params GetAdvancedEquitiesSettlementsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedEquitiesVenueRuns Run the venue worker once (operator; requires step-up)
+// (POST /advanced/equities/venue-runs)
+func (_ Unimplemented) PostAdvancedEquitiesVenueRuns(w http.ResponseWriter, r *http.Request, params PostAdvancedEquitiesVenueRunsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -12984,6 +15371,599 @@ func (siw *ServerInterfaceWrapper) PostAdminReconciliationRecordsRecordIdResolve
 	handler.ServeHTTP(w, r)
 }
 
+// GetAdvancedBooks operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedBooks(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedBooksParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedBooks(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedBooks operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedBooks(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedBooksParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedBooks(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedBooksOrders operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedBooksOrders(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedBooksOrdersParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "scope" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "scope", r.URL.Query(), &params.Scope, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "scope"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "scope", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedBooksOrders(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedBooksOrdersOrderId operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedBooksOrdersOrderId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "orderId" -------------
+	var orderId OrderId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "orderId", chi.URLParam(r, "orderId"), &orderId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "orderId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedBooksOrdersOrderId(w, r, orderId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedBooksOrdersOrderIdCancel operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedBooksOrdersOrderIdCancel(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "orderId" -------------
+	var orderId OrderId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "orderId", chi.URLParam(r, "orderId"), &orderId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "orderId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedBooksOrdersOrderIdCancelParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedBooksOrdersOrderIdCancel(w, r, orderId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedBooksOrdersOrderIdReplace operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedBooksOrdersOrderIdReplace(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "orderId" -------------
+	var orderId OrderId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "orderId", chi.URLParam(r, "orderId"), &orderId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "orderId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedBooksOrdersOrderIdReplaceParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedBooksOrdersOrderIdReplace(w, r, orderId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedBooksTrades operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedBooksTrades(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedBooksTradesParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedBooksTrades(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedBooksInstrumentId operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedBooksInstrumentId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "instrumentId" -------------
+	var instrumentId InstrumentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "instrumentId", chi.URLParam(r, "instrumentId"), &instrumentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "instrumentId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedBooksInstrumentId(w, r, instrumentId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedBooksInstrumentIdDepth operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedBooksInstrumentIdDepth(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "instrumentId" -------------
+	var instrumentId InstrumentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "instrumentId", chi.URLParam(r, "instrumentId"), &instrumentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "instrumentId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedBooksInstrumentIdDepthParams
+
+	// ------------- Optional query parameter "levels" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "levels", r.URL.Query(), &params.Levels, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "levels"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "levels", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedBooksInstrumentIdDepth(w, r, instrumentId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedBooksInstrumentIdJournalVerification operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedBooksInstrumentIdJournalVerification(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "instrumentId" -------------
+	var instrumentId InstrumentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "instrumentId", chi.URLParam(r, "instrumentId"), &instrumentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "instrumentId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedBooksInstrumentIdJournalVerification(w, r, instrumentId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedBooksInstrumentIdOrders operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedBooksInstrumentIdOrders(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "instrumentId" -------------
+	var instrumentId InstrumentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "instrumentId", chi.URLParam(r, "instrumentId"), &instrumentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "instrumentId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedBooksInstrumentIdOrdersParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedBooksInstrumentIdOrders(w, r, instrumentId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedBooksInstrumentIdStatus operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedBooksInstrumentIdStatus(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "instrumentId" -------------
+	var instrumentId InstrumentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "instrumentId", chi.URLParam(r, "instrumentId"), &instrumentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "instrumentId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedBooksInstrumentIdStatusParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedBooksInstrumentIdStatus(w, r, instrumentId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedBooksInstrumentIdTradesTradeSeqProof operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedBooksInstrumentIdTradesTradeSeqProof(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "instrumentId" -------------
+	var instrumentId InstrumentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "instrumentId", chi.URLParam(r, "instrumentId"), &instrumentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "instrumentId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "tradeSeq" -------------
+	var tradeSeq int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tradeSeq", chi.URLParam(r, "tradeSeq"), &tradeSeq, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "int64", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tradeSeq", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedBooksInstrumentIdTradesTradeSeqProof(w, r, instrumentId, tradeSeq)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetAdvancedBuyingPower operation middleware
 func (siw *ServerInterfaceWrapper) GetAdvancedBuyingPower(w http.ResponseWriter, r *http.Request) {
 
@@ -14004,6 +16984,871 @@ func (siw *ServerInterfaceWrapper) GetAdvancedEffects(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetAdvancedEffects(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedEquitiesCalendar operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedEquitiesCalendar(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedEquitiesCalendar(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedEquitiesCalendarHolidays operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedEquitiesCalendarHolidays(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedEquitiesCalendarHolidaysParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedEquitiesCalendarHolidays(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedEquitiesCorporateActionApplications operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedEquitiesCorporateActionApplications(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedEquitiesCorporateActionApplicationsParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedEquitiesCorporateActionApplications(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedEquitiesCorporateActions operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedEquitiesCorporateActions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedEquitiesCorporateActionsParams
+
+	// ------------- Optional query parameter "instrument_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "instrument_id", r.URL.Query(), &params.InstrumentId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "instrument_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "instrument_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedEquitiesCorporateActions(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedEquitiesCorporateActions operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedEquitiesCorporateActions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedEquitiesCorporateActionsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedEquitiesCorporateActions(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedEquitiesCorporateActionsActionId operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedEquitiesCorporateActionsActionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "actionId" -------------
+	var actionId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "actionId", chi.URLParam(r, "actionId"), &actionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "actionId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedEquitiesCorporateActionsActionId(w, r, actionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedEquitiesCorporateActionsActionIdApply operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedEquitiesCorporateActionsActionIdApply(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "actionId" -------------
+	var actionId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "actionId", chi.URLParam(r, "actionId"), &actionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "actionId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedEquitiesCorporateActionsActionIdApplyParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedEquitiesCorporateActionsActionIdApply(w, r, actionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedEquitiesCorporateActionsActionIdCancel operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedEquitiesCorporateActionsActionIdCancel(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "actionId" -------------
+	var actionId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "actionId", chi.URLParam(r, "actionId"), &actionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "actionId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedEquitiesCorporateActionsActionIdCancelParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedEquitiesCorporateActionsActionIdCancel(w, r, actionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedEquitiesFills operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedEquitiesFills(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedEquitiesFillsParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedEquitiesFills(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedEquitiesListings operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedEquitiesListings(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedEquitiesListingsParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedEquitiesListings(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedEquitiesListings operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedEquitiesListings(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedEquitiesListingsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedEquitiesListings(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedEquitiesListingsInstrumentId operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedEquitiesListingsInstrumentId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "instrumentId" -------------
+	var instrumentId InstrumentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "instrumentId", chi.URLParam(r, "instrumentId"), &instrumentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "instrumentId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedEquitiesListingsInstrumentId(w, r, instrumentId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedEquitiesOrders operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedEquitiesOrders(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedEquitiesOrdersParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedEquitiesOrders(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedEquitiesOrders operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedEquitiesOrders(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedEquitiesOrdersParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedEquitiesOrders(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedEquitiesOrdersOrderId operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedEquitiesOrdersOrderId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "orderId" -------------
+	var orderId OrderId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "orderId", chi.URLParam(r, "orderId"), &orderId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "orderId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedEquitiesOrdersOrderId(w, r, orderId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedEquitiesOrdersOrderIdCancel operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedEquitiesOrdersOrderIdCancel(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "orderId" -------------
+	var orderId OrderId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "orderId", chi.URLParam(r, "orderId"), &orderId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "orderId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedEquitiesOrdersOrderIdCancelParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedEquitiesOrdersOrderIdCancel(w, r, orderId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedEquitiesSettlementRuns operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedEquitiesSettlementRuns(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedEquitiesSettlementRunsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedEquitiesSettlementRuns(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedEquitiesSettlements operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedEquitiesSettlements(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedEquitiesSettlementsParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "state" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "state", r.URL.Query(), &params.State, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "state"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "state", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedEquitiesSettlements(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedEquitiesVenueRuns operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedEquitiesVenueRuns(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedEquitiesVenueRunsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedEquitiesVenueRuns(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -20354,6 +24199,102 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/advanced/derivatives/clearing-house/reconciliations", wrapper.PostAdvancedDerivativesClearingHouseReconciliations)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/equities/listings", wrapper.GetAdvancedEquitiesListings)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/equities/listings", wrapper.PostAdvancedEquitiesListings)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/equities/listings/{instrumentId}", wrapper.GetAdvancedEquitiesListingsInstrumentId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/equities/calendar", wrapper.GetAdvancedEquitiesCalendar)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/equities/calendar/holidays", wrapper.PostAdvancedEquitiesCalendarHolidays)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/equities/orders", wrapper.GetAdvancedEquitiesOrders)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/equities/orders", wrapper.PostAdvancedEquitiesOrders)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/equities/orders/{orderId}", wrapper.GetAdvancedEquitiesOrdersOrderId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/equities/orders/{orderId}/cancel", wrapper.PostAdvancedEquitiesOrdersOrderIdCancel)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/equities/fills", wrapper.GetAdvancedEquitiesFills)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/equities/settlements", wrapper.GetAdvancedEquitiesSettlements)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/equities/settlement-runs", wrapper.PostAdvancedEquitiesSettlementRuns)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/equities/venue-runs", wrapper.PostAdvancedEquitiesVenueRuns)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/equities/corporate-actions", wrapper.GetAdvancedEquitiesCorporateActions)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/equities/corporate-actions", wrapper.PostAdvancedEquitiesCorporateActions)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/equities/corporate-actions/{actionId}", wrapper.GetAdvancedEquitiesCorporateActionsActionId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/equities/corporate-actions/{actionId}/cancel", wrapper.PostAdvancedEquitiesCorporateActionsActionIdCancel)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/equities/corporate-actions/{actionId}/apply", wrapper.PostAdvancedEquitiesCorporateActionsActionIdApply)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/equities/corporate-action-applications", wrapper.GetAdvancedEquitiesCorporateActionApplications)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/books", wrapper.GetAdvancedBooks)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/books", wrapper.PostAdvancedBooks)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/books/orders", wrapper.GetAdvancedBooksOrders)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/books/orders/{orderId}", wrapper.GetAdvancedBooksOrdersOrderId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/books/orders/{orderId}/cancel", wrapper.PostAdvancedBooksOrdersOrderIdCancel)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/books/orders/{orderId}/replace", wrapper.PostAdvancedBooksOrdersOrderIdReplace)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/books/trades", wrapper.GetAdvancedBooksTrades)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/books/{instrumentId}", wrapper.GetAdvancedBooksInstrumentId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/books/{instrumentId}/depth", wrapper.GetAdvancedBooksInstrumentIdDepth)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/books/{instrumentId}/orders", wrapper.PostAdvancedBooksInstrumentIdOrders)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/books/{instrumentId}/status", wrapper.PostAdvancedBooksInstrumentIdStatus)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/books/{instrumentId}/journal-verification", wrapper.GetAdvancedBooksInstrumentIdJournalVerification)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/books/{instrumentId}/trades/{tradeSeq}/proof", wrapper.GetAdvancedBooksInstrumentIdTradesTradeSeqProof)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/advanced/transfers", wrapper.GetAdvancedTransfers)
 	})
 	r.Group(func(r chi.Router) {
@@ -21201,6 +25142,889 @@ func (response PostAdminReconciliationRecordsRecordIdResolve422ApplicationProble
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedBooksRequestObject struct {
+	Params GetAdvancedBooksParams
+}
+
+type GetAdvancedBooksResponseObject interface {
+	VisitGetAdvancedBooksResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedBooks200JSONResponse AdvancedBookPage
+
+func (response GetAdvancedBooks200JSONResponse) VisitGetAdvancedBooksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedBooks400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedBooks400ApplicationProblemPlusJSONResponse) VisitGetAdvancedBooksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedBooksRequestObject struct {
+	Params PostAdvancedBooksParams
+	Body   *PostAdvancedBooksJSONRequestBody
+}
+
+type PostAdvancedBooksResponseObject interface {
+	VisitPostAdvancedBooksResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedBooks200JSONResponse AdvancedBook
+
+func (response PostAdvancedBooks200JSONResponse) VisitPostAdvancedBooksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedBooks201JSONResponse AdvancedBook
+
+func (response PostAdvancedBooks201JSONResponse) VisitPostAdvancedBooksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedBooks400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedBooks400ApplicationProblemPlusJSONResponse) VisitPostAdvancedBooksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedBooks403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedBooks403ApplicationProblemPlusJSONResponse) VisitPostAdvancedBooksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedBooks404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedBooks404ApplicationProblemPlusJSONResponse) VisitPostAdvancedBooksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedBooks409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedBooks409ApplicationProblemPlusJSONResponse) VisitPostAdvancedBooksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedBooks422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedBooks422ApplicationProblemPlusJSONResponse) VisitPostAdvancedBooksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedBooksOrdersRequestObject struct {
+	Params GetAdvancedBooksOrdersParams
+}
+
+type GetAdvancedBooksOrdersResponseObject interface {
+	VisitGetAdvancedBooksOrdersResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedBooksOrders200JSONResponse AdvancedBookOrderPage
+
+func (response GetAdvancedBooksOrders200JSONResponse) VisitGetAdvancedBooksOrdersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedBooksOrders400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedBooksOrders400ApplicationProblemPlusJSONResponse) VisitGetAdvancedBooksOrdersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedBooksOrders403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedBooksOrders403ApplicationProblemPlusJSONResponse) VisitGetAdvancedBooksOrdersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedBooksOrdersOrderIdRequestObject struct {
+	OrderId OrderId `json:"orderId"`
+}
+
+type GetAdvancedBooksOrdersOrderIdResponseObject interface {
+	VisitGetAdvancedBooksOrdersOrderIdResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedBooksOrdersOrderId200JSONResponse AdvancedBookOrder
+
+func (response GetAdvancedBooksOrdersOrderId200JSONResponse) VisitGetAdvancedBooksOrdersOrderIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedBooksOrdersOrderId400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedBooksOrdersOrderId400ApplicationProblemPlusJSONResponse) VisitGetAdvancedBooksOrdersOrderIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedBooksOrdersOrderId404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedBooksOrdersOrderId404ApplicationProblemPlusJSONResponse) VisitGetAdvancedBooksOrdersOrderIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedBooksOrdersOrderIdCancelRequestObject struct {
+	OrderId OrderId `json:"orderId"`
+	Params  PostAdvancedBooksOrdersOrderIdCancelParams
+	Body    *PostAdvancedBooksOrdersOrderIdCancelJSONRequestBody
+}
+
+type PostAdvancedBooksOrdersOrderIdCancelResponseObject interface {
+	VisitPostAdvancedBooksOrdersOrderIdCancelResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedBooksOrdersOrderIdCancel200JSONResponse AdvancedBookCommandResult
+
+func (response PostAdvancedBooksOrdersOrderIdCancel200JSONResponse) VisitPostAdvancedBooksOrdersOrderIdCancelResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedBooksOrdersOrderIdCancel400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedBooksOrdersOrderIdCancel400ApplicationProblemPlusJSONResponse) VisitPostAdvancedBooksOrdersOrderIdCancelResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedBooksOrdersOrderIdCancel403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedBooksOrdersOrderIdCancel403ApplicationProblemPlusJSONResponse) VisitPostAdvancedBooksOrdersOrderIdCancelResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedBooksOrdersOrderIdCancel404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedBooksOrdersOrderIdCancel404ApplicationProblemPlusJSONResponse) VisitPostAdvancedBooksOrdersOrderIdCancelResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedBooksOrdersOrderIdCancel409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedBooksOrdersOrderIdCancel409ApplicationProblemPlusJSONResponse) VisitPostAdvancedBooksOrdersOrderIdCancelResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedBooksOrdersOrderIdReplaceRequestObject struct {
+	OrderId OrderId `json:"orderId"`
+	Params  PostAdvancedBooksOrdersOrderIdReplaceParams
+	Body    *PostAdvancedBooksOrdersOrderIdReplaceJSONRequestBody
+}
+
+type PostAdvancedBooksOrdersOrderIdReplaceResponseObject interface {
+	VisitPostAdvancedBooksOrdersOrderIdReplaceResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedBooksOrdersOrderIdReplace200JSONResponse AdvancedBookCommandResult
+
+func (response PostAdvancedBooksOrdersOrderIdReplace200JSONResponse) VisitPostAdvancedBooksOrdersOrderIdReplaceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedBooksOrdersOrderIdReplace400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedBooksOrdersOrderIdReplace400ApplicationProblemPlusJSONResponse) VisitPostAdvancedBooksOrdersOrderIdReplaceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedBooksOrdersOrderIdReplace403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedBooksOrdersOrderIdReplace403ApplicationProblemPlusJSONResponse) VisitPostAdvancedBooksOrdersOrderIdReplaceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedBooksOrdersOrderIdReplace404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedBooksOrdersOrderIdReplace404ApplicationProblemPlusJSONResponse) VisitPostAdvancedBooksOrdersOrderIdReplaceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedBooksOrdersOrderIdReplace409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedBooksOrdersOrderIdReplace409ApplicationProblemPlusJSONResponse) VisitPostAdvancedBooksOrdersOrderIdReplaceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedBooksOrdersOrderIdReplace422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedBooksOrdersOrderIdReplace422ApplicationProblemPlusJSONResponse) VisitPostAdvancedBooksOrdersOrderIdReplaceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedBooksTradesRequestObject struct {
+	Params GetAdvancedBooksTradesParams
+}
+
+type GetAdvancedBooksTradesResponseObject interface {
+	VisitGetAdvancedBooksTradesResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedBooksTrades200JSONResponse AdvancedBookFillPage
+
+func (response GetAdvancedBooksTrades200JSONResponse) VisitGetAdvancedBooksTradesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedBooksTrades400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedBooksTrades400ApplicationProblemPlusJSONResponse) VisitGetAdvancedBooksTradesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedBooksTrades403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedBooksTrades403ApplicationProblemPlusJSONResponse) VisitGetAdvancedBooksTradesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedBooksInstrumentIdRequestObject struct {
+	InstrumentId InstrumentId `json:"instrumentId"`
+}
+
+type GetAdvancedBooksInstrumentIdResponseObject interface {
+	VisitGetAdvancedBooksInstrumentIdResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedBooksInstrumentId200JSONResponse AdvancedBook
+
+func (response GetAdvancedBooksInstrumentId200JSONResponse) VisitGetAdvancedBooksInstrumentIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedBooksInstrumentId400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedBooksInstrumentId400ApplicationProblemPlusJSONResponse) VisitGetAdvancedBooksInstrumentIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedBooksInstrumentId404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedBooksInstrumentId404ApplicationProblemPlusJSONResponse) VisitGetAdvancedBooksInstrumentIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedBooksInstrumentIdDepthRequestObject struct {
+	InstrumentId InstrumentId `json:"instrumentId"`
+	Params       GetAdvancedBooksInstrumentIdDepthParams
+}
+
+type GetAdvancedBooksInstrumentIdDepthResponseObject interface {
+	VisitGetAdvancedBooksInstrumentIdDepthResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedBooksInstrumentIdDepth200JSONResponse AdvancedBookDepth
+
+func (response GetAdvancedBooksInstrumentIdDepth200JSONResponse) VisitGetAdvancedBooksInstrumentIdDepthResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedBooksInstrumentIdDepth400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedBooksInstrumentIdDepth400ApplicationProblemPlusJSONResponse) VisitGetAdvancedBooksInstrumentIdDepthResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedBooksInstrumentIdDepth404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedBooksInstrumentIdDepth404ApplicationProblemPlusJSONResponse) VisitGetAdvancedBooksInstrumentIdDepthResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedBooksInstrumentIdJournalVerificationRequestObject struct {
+	InstrumentId InstrumentId `json:"instrumentId"`
+}
+
+type GetAdvancedBooksInstrumentIdJournalVerificationResponseObject interface {
+	VisitGetAdvancedBooksInstrumentIdJournalVerificationResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedBooksInstrumentIdJournalVerification200JSONResponse AdvancedBookJournalVerification
+
+func (response GetAdvancedBooksInstrumentIdJournalVerification200JSONResponse) VisitGetAdvancedBooksInstrumentIdJournalVerificationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedBooksInstrumentIdJournalVerification403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedBooksInstrumentIdJournalVerification403ApplicationProblemPlusJSONResponse) VisitGetAdvancedBooksInstrumentIdJournalVerificationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedBooksInstrumentIdJournalVerification404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedBooksInstrumentIdJournalVerification404ApplicationProblemPlusJSONResponse) VisitGetAdvancedBooksInstrumentIdJournalVerificationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedBooksInstrumentIdOrdersRequestObject struct {
+	InstrumentId InstrumentId `json:"instrumentId"`
+	Params       PostAdvancedBooksInstrumentIdOrdersParams
+	Body         *PostAdvancedBooksInstrumentIdOrdersJSONRequestBody
+}
+
+type PostAdvancedBooksInstrumentIdOrdersResponseObject interface {
+	VisitPostAdvancedBooksInstrumentIdOrdersResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedBooksInstrumentIdOrders200JSONResponse AdvancedBookCommandResult
+
+func (response PostAdvancedBooksInstrumentIdOrders200JSONResponse) VisitPostAdvancedBooksInstrumentIdOrdersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedBooksInstrumentIdOrders201JSONResponse AdvancedBookCommandResult
+
+func (response PostAdvancedBooksInstrumentIdOrders201JSONResponse) VisitPostAdvancedBooksInstrumentIdOrdersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedBooksInstrumentIdOrders400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedBooksInstrumentIdOrders400ApplicationProblemPlusJSONResponse) VisitPostAdvancedBooksInstrumentIdOrdersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedBooksInstrumentIdOrders403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedBooksInstrumentIdOrders403ApplicationProblemPlusJSONResponse) VisitPostAdvancedBooksInstrumentIdOrdersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedBooksInstrumentIdOrders404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedBooksInstrumentIdOrders404ApplicationProblemPlusJSONResponse) VisitPostAdvancedBooksInstrumentIdOrdersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedBooksInstrumentIdOrders409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedBooksInstrumentIdOrders409ApplicationProblemPlusJSONResponse) VisitPostAdvancedBooksInstrumentIdOrdersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedBooksInstrumentIdOrders422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedBooksInstrumentIdOrders422ApplicationProblemPlusJSONResponse) VisitPostAdvancedBooksInstrumentIdOrdersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedBooksInstrumentIdStatusRequestObject struct {
+	InstrumentId InstrumentId `json:"instrumentId"`
+	Params       PostAdvancedBooksInstrumentIdStatusParams
+	Body         *PostAdvancedBooksInstrumentIdStatusJSONRequestBody
+}
+
+type PostAdvancedBooksInstrumentIdStatusResponseObject interface {
+	VisitPostAdvancedBooksInstrumentIdStatusResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedBooksInstrumentIdStatus200JSONResponse AdvancedBook
+
+func (response PostAdvancedBooksInstrumentIdStatus200JSONResponse) VisitPostAdvancedBooksInstrumentIdStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedBooksInstrumentIdStatus400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedBooksInstrumentIdStatus400ApplicationProblemPlusJSONResponse) VisitPostAdvancedBooksInstrumentIdStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedBooksInstrumentIdStatus403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedBooksInstrumentIdStatus403ApplicationProblemPlusJSONResponse) VisitPostAdvancedBooksInstrumentIdStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedBooksInstrumentIdStatus404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedBooksInstrumentIdStatus404ApplicationProblemPlusJSONResponse) VisitPostAdvancedBooksInstrumentIdStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedBooksInstrumentIdStatus409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedBooksInstrumentIdStatus409ApplicationProblemPlusJSONResponse) VisitPostAdvancedBooksInstrumentIdStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedBooksInstrumentIdTradesTradeSeqProofRequestObject struct {
+	InstrumentId InstrumentId `json:"instrumentId"`
+	TradeSeq     int64        `json:"tradeSeq"`
+}
+
+type GetAdvancedBooksInstrumentIdTradesTradeSeqProofResponseObject interface {
+	VisitGetAdvancedBooksInstrumentIdTradesTradeSeqProofResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedBooksInstrumentIdTradesTradeSeqProof200JSONResponse AdvancedBookTradeProof
+
+func (response GetAdvancedBooksInstrumentIdTradesTradeSeqProof200JSONResponse) VisitGetAdvancedBooksInstrumentIdTradesTradeSeqProofResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedBooksInstrumentIdTradesTradeSeqProof400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedBooksInstrumentIdTradesTradeSeqProof400ApplicationProblemPlusJSONResponse) VisitGetAdvancedBooksInstrumentIdTradesTradeSeqProofResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedBooksInstrumentIdTradesTradeSeqProof404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedBooksInstrumentIdTradesTradeSeqProof404ApplicationProblemPlusJSONResponse) VisitGetAdvancedBooksInstrumentIdTradesTradeSeqProofResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -22691,6 +27515,1198 @@ type GetAdvancedEffects403ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetAdvancedEffects403ApplicationProblemPlusJSONResponse) VisitGetAdvancedEffectsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedEquitiesCalendarRequestObject struct {
+}
+
+type GetAdvancedEquitiesCalendarResponseObject interface {
+	VisitGetAdvancedEquitiesCalendarResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedEquitiesCalendar200JSONResponse AdvancedEquityCalendar
+
+func (response GetAdvancedEquitiesCalendar200JSONResponse) VisitGetAdvancedEquitiesCalendarResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesCalendarHolidaysRequestObject struct {
+	Params PostAdvancedEquitiesCalendarHolidaysParams
+	Body   *PostAdvancedEquitiesCalendarHolidaysJSONRequestBody
+}
+
+type PostAdvancedEquitiesCalendarHolidaysResponseObject interface {
+	VisitPostAdvancedEquitiesCalendarHolidaysResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedEquitiesCalendarHolidays200JSONResponse AdvancedEquityCalendar
+
+func (response PostAdvancedEquitiesCalendarHolidays200JSONResponse) VisitPostAdvancedEquitiesCalendarHolidaysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesCalendarHolidays400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedEquitiesCalendarHolidays400ApplicationProblemPlusJSONResponse) VisitPostAdvancedEquitiesCalendarHolidaysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesCalendarHolidays403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedEquitiesCalendarHolidays403ApplicationProblemPlusJSONResponse) VisitPostAdvancedEquitiesCalendarHolidaysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesCalendarHolidays409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedEquitiesCalendarHolidays409ApplicationProblemPlusJSONResponse) VisitPostAdvancedEquitiesCalendarHolidaysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedEquitiesCorporateActionApplicationsRequestObject struct {
+	Params GetAdvancedEquitiesCorporateActionApplicationsParams
+}
+
+type GetAdvancedEquitiesCorporateActionApplicationsResponseObject interface {
+	VisitGetAdvancedEquitiesCorporateActionApplicationsResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedEquitiesCorporateActionApplications200JSONResponse AdvancedEquityApplicationPage
+
+func (response GetAdvancedEquitiesCorporateActionApplications200JSONResponse) VisitGetAdvancedEquitiesCorporateActionApplicationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedEquitiesCorporateActionApplications400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedEquitiesCorporateActionApplications400ApplicationProblemPlusJSONResponse) VisitGetAdvancedEquitiesCorporateActionApplicationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedEquitiesCorporateActionApplications403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedEquitiesCorporateActionApplications403ApplicationProblemPlusJSONResponse) VisitGetAdvancedEquitiesCorporateActionApplicationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedEquitiesCorporateActionsRequestObject struct {
+	Params GetAdvancedEquitiesCorporateActionsParams
+}
+
+type GetAdvancedEquitiesCorporateActionsResponseObject interface {
+	VisitGetAdvancedEquitiesCorporateActionsResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedEquitiesCorporateActions200JSONResponse AdvancedEquityCorporateActionPage
+
+func (response GetAdvancedEquitiesCorporateActions200JSONResponse) VisitGetAdvancedEquitiesCorporateActionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedEquitiesCorporateActions400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedEquitiesCorporateActions400ApplicationProblemPlusJSONResponse) VisitGetAdvancedEquitiesCorporateActionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesCorporateActionsRequestObject struct {
+	Params PostAdvancedEquitiesCorporateActionsParams
+	Body   *PostAdvancedEquitiesCorporateActionsJSONRequestBody
+}
+
+type PostAdvancedEquitiesCorporateActionsResponseObject interface {
+	VisitPostAdvancedEquitiesCorporateActionsResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedEquitiesCorporateActions200JSONResponse AdvancedEquityCorporateAction
+
+func (response PostAdvancedEquitiesCorporateActions200JSONResponse) VisitPostAdvancedEquitiesCorporateActionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesCorporateActions201JSONResponse AdvancedEquityCorporateAction
+
+func (response PostAdvancedEquitiesCorporateActions201JSONResponse) VisitPostAdvancedEquitiesCorporateActionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesCorporateActions400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedEquitiesCorporateActions400ApplicationProblemPlusJSONResponse) VisitPostAdvancedEquitiesCorporateActionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesCorporateActions403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedEquitiesCorporateActions403ApplicationProblemPlusJSONResponse) VisitPostAdvancedEquitiesCorporateActionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesCorporateActions404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedEquitiesCorporateActions404ApplicationProblemPlusJSONResponse) VisitPostAdvancedEquitiesCorporateActionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesCorporateActions409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedEquitiesCorporateActions409ApplicationProblemPlusJSONResponse) VisitPostAdvancedEquitiesCorporateActionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedEquitiesCorporateActionsActionIdRequestObject struct {
+	ActionId UUID `json:"actionId"`
+}
+
+type GetAdvancedEquitiesCorporateActionsActionIdResponseObject interface {
+	VisitGetAdvancedEquitiesCorporateActionsActionIdResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedEquitiesCorporateActionsActionId200JSONResponse AdvancedEquityCorporateAction
+
+func (response GetAdvancedEquitiesCorporateActionsActionId200JSONResponse) VisitGetAdvancedEquitiesCorporateActionsActionIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedEquitiesCorporateActionsActionId400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedEquitiesCorporateActionsActionId400ApplicationProblemPlusJSONResponse) VisitGetAdvancedEquitiesCorporateActionsActionIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedEquitiesCorporateActionsActionId404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedEquitiesCorporateActionsActionId404ApplicationProblemPlusJSONResponse) VisitGetAdvancedEquitiesCorporateActionsActionIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesCorporateActionsActionIdApplyRequestObject struct {
+	ActionId UUID `json:"actionId"`
+	Params   PostAdvancedEquitiesCorporateActionsActionIdApplyParams
+}
+
+type PostAdvancedEquitiesCorporateActionsActionIdApplyResponseObject interface {
+	VisitPostAdvancedEquitiesCorporateActionsActionIdApplyResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedEquitiesCorporateActionsActionIdApply200JSONResponse AdvancedEquityCorporateActionResult
+
+func (response PostAdvancedEquitiesCorporateActionsActionIdApply200JSONResponse) VisitPostAdvancedEquitiesCorporateActionsActionIdApplyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesCorporateActionsActionIdApply400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedEquitiesCorporateActionsActionIdApply400ApplicationProblemPlusJSONResponse) VisitPostAdvancedEquitiesCorporateActionsActionIdApplyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesCorporateActionsActionIdApply403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedEquitiesCorporateActionsActionIdApply403ApplicationProblemPlusJSONResponse) VisitPostAdvancedEquitiesCorporateActionsActionIdApplyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesCorporateActionsActionIdApply404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedEquitiesCorporateActionsActionIdApply404ApplicationProblemPlusJSONResponse) VisitPostAdvancedEquitiesCorporateActionsActionIdApplyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesCorporateActionsActionIdApply409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedEquitiesCorporateActionsActionIdApply409ApplicationProblemPlusJSONResponse) VisitPostAdvancedEquitiesCorporateActionsActionIdApplyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesCorporateActionsActionIdCancelRequestObject struct {
+	ActionId UUID `json:"actionId"`
+	Params   PostAdvancedEquitiesCorporateActionsActionIdCancelParams
+	Body     *PostAdvancedEquitiesCorporateActionsActionIdCancelJSONRequestBody
+}
+
+type PostAdvancedEquitiesCorporateActionsActionIdCancelResponseObject interface {
+	VisitPostAdvancedEquitiesCorporateActionsActionIdCancelResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedEquitiesCorporateActionsActionIdCancel200JSONResponse AdvancedEquityCorporateAction
+
+func (response PostAdvancedEquitiesCorporateActionsActionIdCancel200JSONResponse) VisitPostAdvancedEquitiesCorporateActionsActionIdCancelResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesCorporateActionsActionIdCancel400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedEquitiesCorporateActionsActionIdCancel400ApplicationProblemPlusJSONResponse) VisitPostAdvancedEquitiesCorporateActionsActionIdCancelResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesCorporateActionsActionIdCancel403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedEquitiesCorporateActionsActionIdCancel403ApplicationProblemPlusJSONResponse) VisitPostAdvancedEquitiesCorporateActionsActionIdCancelResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesCorporateActionsActionIdCancel404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedEquitiesCorporateActionsActionIdCancel404ApplicationProblemPlusJSONResponse) VisitPostAdvancedEquitiesCorporateActionsActionIdCancelResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesCorporateActionsActionIdCancel409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedEquitiesCorporateActionsActionIdCancel409ApplicationProblemPlusJSONResponse) VisitPostAdvancedEquitiesCorporateActionsActionIdCancelResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedEquitiesFillsRequestObject struct {
+	Params GetAdvancedEquitiesFillsParams
+}
+
+type GetAdvancedEquitiesFillsResponseObject interface {
+	VisitGetAdvancedEquitiesFillsResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedEquitiesFills200JSONResponse AdvancedEquityFillPage
+
+func (response GetAdvancedEquitiesFills200JSONResponse) VisitGetAdvancedEquitiesFillsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedEquitiesFills400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedEquitiesFills400ApplicationProblemPlusJSONResponse) VisitGetAdvancedEquitiesFillsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedEquitiesFills403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedEquitiesFills403ApplicationProblemPlusJSONResponse) VisitGetAdvancedEquitiesFillsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedEquitiesListingsRequestObject struct {
+	Params GetAdvancedEquitiesListingsParams
+}
+
+type GetAdvancedEquitiesListingsResponseObject interface {
+	VisitGetAdvancedEquitiesListingsResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedEquitiesListings200JSONResponse AdvancedEquityListingList
+
+func (response GetAdvancedEquitiesListings200JSONResponse) VisitGetAdvancedEquitiesListingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedEquitiesListings400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedEquitiesListings400ApplicationProblemPlusJSONResponse) VisitGetAdvancedEquitiesListingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesListingsRequestObject struct {
+	Params PostAdvancedEquitiesListingsParams
+	Body   *PostAdvancedEquitiesListingsJSONRequestBody
+}
+
+type PostAdvancedEquitiesListingsResponseObject interface {
+	VisitPostAdvancedEquitiesListingsResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedEquitiesListings200JSONResponse AdvancedEquityListing
+
+func (response PostAdvancedEquitiesListings200JSONResponse) VisitPostAdvancedEquitiesListingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesListings201JSONResponse AdvancedEquityListing
+
+func (response PostAdvancedEquitiesListings201JSONResponse) VisitPostAdvancedEquitiesListingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesListings400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedEquitiesListings400ApplicationProblemPlusJSONResponse) VisitPostAdvancedEquitiesListingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesListings403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedEquitiesListings403ApplicationProblemPlusJSONResponse) VisitPostAdvancedEquitiesListingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesListings404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedEquitiesListings404ApplicationProblemPlusJSONResponse) VisitPostAdvancedEquitiesListingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesListings409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedEquitiesListings409ApplicationProblemPlusJSONResponse) VisitPostAdvancedEquitiesListingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedEquitiesListingsInstrumentIdRequestObject struct {
+	InstrumentId InstrumentId `json:"instrumentId"`
+}
+
+type GetAdvancedEquitiesListingsInstrumentIdResponseObject interface {
+	VisitGetAdvancedEquitiesListingsInstrumentIdResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedEquitiesListingsInstrumentId200JSONResponse AdvancedEquityListing
+
+func (response GetAdvancedEquitiesListingsInstrumentId200JSONResponse) VisitGetAdvancedEquitiesListingsInstrumentIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedEquitiesListingsInstrumentId400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedEquitiesListingsInstrumentId400ApplicationProblemPlusJSONResponse) VisitGetAdvancedEquitiesListingsInstrumentIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedEquitiesListingsInstrumentId404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedEquitiesListingsInstrumentId404ApplicationProblemPlusJSONResponse) VisitGetAdvancedEquitiesListingsInstrumentIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedEquitiesOrdersRequestObject struct {
+	Params GetAdvancedEquitiesOrdersParams
+}
+
+type GetAdvancedEquitiesOrdersResponseObject interface {
+	VisitGetAdvancedEquitiesOrdersResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedEquitiesOrders200JSONResponse AdvancedEquityOrderPage
+
+func (response GetAdvancedEquitiesOrders200JSONResponse) VisitGetAdvancedEquitiesOrdersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedEquitiesOrders400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedEquitiesOrders400ApplicationProblemPlusJSONResponse) VisitGetAdvancedEquitiesOrdersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedEquitiesOrders403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedEquitiesOrders403ApplicationProblemPlusJSONResponse) VisitGetAdvancedEquitiesOrdersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesOrdersRequestObject struct {
+	Params PostAdvancedEquitiesOrdersParams
+	Body   *PostAdvancedEquitiesOrdersJSONRequestBody
+}
+
+type PostAdvancedEquitiesOrdersResponseObject interface {
+	VisitPostAdvancedEquitiesOrdersResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedEquitiesOrders200JSONResponse AdvancedEquityOrderSubmission
+
+func (response PostAdvancedEquitiesOrders200JSONResponse) VisitPostAdvancedEquitiesOrdersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesOrders201JSONResponse AdvancedEquityOrderSubmission
+
+func (response PostAdvancedEquitiesOrders201JSONResponse) VisitPostAdvancedEquitiesOrdersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesOrders400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedEquitiesOrders400ApplicationProblemPlusJSONResponse) VisitPostAdvancedEquitiesOrdersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesOrders403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedEquitiesOrders403ApplicationProblemPlusJSONResponse) VisitPostAdvancedEquitiesOrdersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesOrders404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedEquitiesOrders404ApplicationProblemPlusJSONResponse) VisitPostAdvancedEquitiesOrdersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesOrders409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedEquitiesOrders409ApplicationProblemPlusJSONResponse) VisitPostAdvancedEquitiesOrdersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesOrders422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedEquitiesOrders422ApplicationProblemPlusJSONResponse) VisitPostAdvancedEquitiesOrdersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedEquitiesOrdersOrderIdRequestObject struct {
+	OrderId OrderId `json:"orderId"`
+}
+
+type GetAdvancedEquitiesOrdersOrderIdResponseObject interface {
+	VisitGetAdvancedEquitiesOrdersOrderIdResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedEquitiesOrdersOrderId200JSONResponse AdvancedEquityOrder
+
+func (response GetAdvancedEquitiesOrdersOrderId200JSONResponse) VisitGetAdvancedEquitiesOrdersOrderIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedEquitiesOrdersOrderId400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedEquitiesOrdersOrderId400ApplicationProblemPlusJSONResponse) VisitGetAdvancedEquitiesOrdersOrderIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedEquitiesOrdersOrderId404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedEquitiesOrdersOrderId404ApplicationProblemPlusJSONResponse) VisitGetAdvancedEquitiesOrdersOrderIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesOrdersOrderIdCancelRequestObject struct {
+	OrderId OrderId `json:"orderId"`
+	Params  PostAdvancedEquitiesOrdersOrderIdCancelParams
+	Body    *PostAdvancedEquitiesOrdersOrderIdCancelJSONRequestBody
+}
+
+type PostAdvancedEquitiesOrdersOrderIdCancelResponseObject interface {
+	VisitPostAdvancedEquitiesOrdersOrderIdCancelResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedEquitiesOrdersOrderIdCancel200JSONResponse AdvancedEquityOrder
+
+func (response PostAdvancedEquitiesOrdersOrderIdCancel200JSONResponse) VisitPostAdvancedEquitiesOrdersOrderIdCancelResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesOrdersOrderIdCancel400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedEquitiesOrdersOrderIdCancel400ApplicationProblemPlusJSONResponse) VisitPostAdvancedEquitiesOrdersOrderIdCancelResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesOrdersOrderIdCancel403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedEquitiesOrdersOrderIdCancel403ApplicationProblemPlusJSONResponse) VisitPostAdvancedEquitiesOrdersOrderIdCancelResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesOrdersOrderIdCancel404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedEquitiesOrdersOrderIdCancel404ApplicationProblemPlusJSONResponse) VisitPostAdvancedEquitiesOrdersOrderIdCancelResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesOrdersOrderIdCancel409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedEquitiesOrdersOrderIdCancel409ApplicationProblemPlusJSONResponse) VisitPostAdvancedEquitiesOrdersOrderIdCancelResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesSettlementRunsRequestObject struct {
+	Params PostAdvancedEquitiesSettlementRunsParams
+	Body   *PostAdvancedEquitiesSettlementRunsJSONRequestBody
+}
+
+type PostAdvancedEquitiesSettlementRunsResponseObject interface {
+	VisitPostAdvancedEquitiesSettlementRunsResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedEquitiesSettlementRuns200JSONResponse AdvancedEquitySettlementRun
+
+func (response PostAdvancedEquitiesSettlementRuns200JSONResponse) VisitPostAdvancedEquitiesSettlementRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesSettlementRuns400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedEquitiesSettlementRuns400ApplicationProblemPlusJSONResponse) VisitPostAdvancedEquitiesSettlementRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesSettlementRuns403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedEquitiesSettlementRuns403ApplicationProblemPlusJSONResponse) VisitPostAdvancedEquitiesSettlementRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesSettlementRuns409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedEquitiesSettlementRuns409ApplicationProblemPlusJSONResponse) VisitPostAdvancedEquitiesSettlementRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedEquitiesSettlementsRequestObject struct {
+	Params GetAdvancedEquitiesSettlementsParams
+}
+
+type GetAdvancedEquitiesSettlementsResponseObject interface {
+	VisitGetAdvancedEquitiesSettlementsResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedEquitiesSettlements200JSONResponse AdvancedEquitySettlementPage
+
+func (response GetAdvancedEquitiesSettlements200JSONResponse) VisitGetAdvancedEquitiesSettlementsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedEquitiesSettlements400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedEquitiesSettlements400ApplicationProblemPlusJSONResponse) VisitGetAdvancedEquitiesSettlementsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedEquitiesSettlements403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedEquitiesSettlements403ApplicationProblemPlusJSONResponse) VisitGetAdvancedEquitiesSettlementsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesVenueRunsRequestObject struct {
+	Params PostAdvancedEquitiesVenueRunsParams
+	Body   *PostAdvancedEquitiesVenueRunsJSONRequestBody
+}
+
+type PostAdvancedEquitiesVenueRunsResponseObject interface {
+	VisitPostAdvancedEquitiesVenueRunsResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedEquitiesVenueRuns200JSONResponse AdvancedEquityVenueRun
+
+func (response PostAdvancedEquitiesVenueRuns200JSONResponse) VisitPostAdvancedEquitiesVenueRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesVenueRuns400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedEquitiesVenueRuns400ApplicationProblemPlusJSONResponse) VisitPostAdvancedEquitiesVenueRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedEquitiesVenueRuns403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedEquitiesVenueRuns403ApplicationProblemPlusJSONResponse) VisitPostAdvancedEquitiesVenueRunsResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -30747,6 +36763,45 @@ type StrictServerInterface interface {
 	// PostAdminReconciliationRecordsRecordIdResolve Resolve a mismatch (reason + evidence; material resolutions require an approved admin action; corrections post a compensating journal transaction)
 	// (POST /admin/reconciliation/records/{recordId}/resolve)
 	PostAdminReconciliationRecordsRecordIdResolve(ctx context.Context, request PostAdminReconciliationRecordsRecordIdResolveRequestObject) (PostAdminReconciliationRecordsRecordIdResolveResponseObject, error)
+	// GetAdvancedBooks Internal books, oldest first, with their terms, disclosed fee schedules and the crossing rule in force
+	// (GET /advanced/books)
+	GetAdvancedBooks(ctx context.Context, request GetAdvancedBooksRequestObject) (GetAdvancedBooksResponseObject, error)
+	// PostAdvancedBooks Open the internal book of an instrument (operator; requires step-up)
+	// (POST /advanced/books)
+	PostAdvancedBooks(ctx context.Context, request PostAdvancedBooksRequestObject) (PostAdvancedBooksResponseObject, error)
+	// GetAdvancedBooksOrders An account's orders on the internal books, newest first
+	// (GET /advanced/books/orders)
+	GetAdvancedBooksOrders(ctx context.Context, request GetAdvancedBooksOrdersRequestObject) (GetAdvancedBooksOrdersResponseObject, error)
+	// GetAdvancedBooksOrdersOrderId One order, to its owner or an operator who may read any account; anyone else is told it does not exist
+	// (GET /advanced/books/orders/{orderId})
+	GetAdvancedBooksOrdersOrderId(ctx context.Context, request GetAdvancedBooksOrdersOrderIdRequestObject) (GetAdvancedBooksOrdersOrderIdResponseObject, error)
+	// PostAdvancedBooksOrdersOrderIdCancel Cancel one of your own orders
+	// (POST /advanced/books/orders/{orderId}/cancel)
+	PostAdvancedBooksOrdersOrderIdCancel(ctx context.Context, request PostAdvancedBooksOrdersOrderIdCancelRequestObject) (PostAdvancedBooksOrdersOrderIdCancelResponseObject, error)
+	// PostAdvancedBooksOrdersOrderIdReplace Change the price and total quantity of one of your own resting orders
+	// (POST /advanced/books/orders/{orderId}/replace)
+	PostAdvancedBooksOrdersOrderIdReplace(ctx context.Context, request PostAdvancedBooksOrdersOrderIdReplaceRequestObject) (PostAdvancedBooksOrdersOrderIdReplaceResponseObject, error)
+	// GetAdvancedBooksTrades An account's fills on the internal books, newest first, each seen from the account's own side
+	// (GET /advanced/books/trades)
+	GetAdvancedBooksTrades(ctx context.Context, request GetAdvancedBooksTradesRequestObject) (GetAdvancedBooksTradesResponseObject, error)
+	// GetAdvancedBooksInstrumentId One internal book
+	// (GET /advanced/books/{instrumentId})
+	GetAdvancedBooksInstrumentId(ctx context.Context, request GetAdvancedBooksInstrumentIdRequestObject) (GetAdvancedBooksInstrumentIdResponseObject, error)
+	// GetAdvancedBooksInstrumentIdDepth The resting book as persisted, aggregated by price level, best level first
+	// (GET /advanced/books/{instrumentId}/depth)
+	GetAdvancedBooksInstrumentIdDepth(ctx context.Context, request GetAdvancedBooksInstrumentIdDepthRequestObject) (GetAdvancedBooksInstrumentIdDepthResponseObject, error)
+	// GetAdvancedBooksInstrumentIdJournalVerification Prove from the database alone that the book's journal replays to its recorded state (operator; read-only)
+	// (GET /advanced/books/{instrumentId}/journal-verification)
+	GetAdvancedBooksInstrumentIdJournalVerification(ctx context.Context, request GetAdvancedBooksInstrumentIdJournalVerificationRequestObject) (GetAdvancedBooksInstrumentIdJournalVerificationResponseObject, error)
+	// PostAdvancedBooksInstrumentIdOrders Submit a limit or market order to an internal book from one of your own accounts
+	// (POST /advanced/books/{instrumentId}/orders)
+	PostAdvancedBooksInstrumentIdOrders(ctx context.Context, request PostAdvancedBooksInstrumentIdOrdersRequestObject) (PostAdvancedBooksInstrumentIdOrdersResponseObject, error)
+	// PostAdvancedBooksInstrumentIdStatus Halt, resume or close a book (operator; requires step-up)
+	// (POST /advanced/books/{instrumentId}/status)
+	PostAdvancedBooksInstrumentIdStatus(ctx context.Context, request PostAdvancedBooksInstrumentIdStatusRequestObject) (PostAdvancedBooksInstrumentIdStatusResponseObject, error)
+	// GetAdvancedBooksInstrumentIdTradesTradeSeqProof The audit proof of one trade, to one of its parties or an operator who may read any account
+	// (GET /advanced/books/{instrumentId}/trades/{tradeSeq}/proof)
+	GetAdvancedBooksInstrumentIdTradesTradeSeqProof(ctx context.Context, request GetAdvancedBooksInstrumentIdTradesTradeSeqProofRequestObject) (GetAdvancedBooksInstrumentIdTradesTradeSeqProofResponseObject, error)
 	// GetAdvancedBuyingPower Universal buying power V2 for an account's simulated holdings, with an explanation of every number
 	// (GET /advanced/buying-power)
 	GetAdvancedBuyingPower(ctx context.Context, request GetAdvancedBuyingPowerRequestObject) (GetAdvancedBuyingPowerResponseObject, error)
@@ -30810,6 +36865,63 @@ type StrictServerInterface interface {
 	// GetAdvancedEffects Economic effects of an account (the exactly-once register), newest first
 	// (GET /advanced/effects)
 	GetAdvancedEffects(ctx context.Context, request GetAdvancedEffectsRequestObject) (GetAdvancedEffectsResponseObject, error)
+	// GetAdvancedEquitiesCalendar The XNYS calendar now -- session, trade date, T+1 settlement date -- and its recorded holidays
+	// (GET /advanced/equities/calendar)
+	GetAdvancedEquitiesCalendar(ctx context.Context, request GetAdvancedEquitiesCalendarRequestObject) (GetAdvancedEquitiesCalendarResponseObject, error)
+	// PostAdvancedEquitiesCalendarHolidays Record a full-day XNYS closure (operator; requires step-up)
+	// (POST /advanced/equities/calendar/holidays)
+	PostAdvancedEquitiesCalendarHolidays(ctx context.Context, request PostAdvancedEquitiesCalendarHolidaysRequestObject) (PostAdvancedEquitiesCalendarHolidaysResponseObject, error)
+	// GetAdvancedEquitiesCorporateActionApplications What corporate actions did to an account, newest first
+	// (GET /advanced/equities/corporate-action-applications)
+	GetAdvancedEquitiesCorporateActionApplications(ctx context.Context, request GetAdvancedEquitiesCorporateActionApplicationsRequestObject) (GetAdvancedEquitiesCorporateActionApplicationsResponseObject, error)
+	// GetAdvancedEquitiesCorporateActions Corporate actions, newest effective date first
+	// (GET /advanced/equities/corporate-actions)
+	GetAdvancedEquitiesCorporateActions(ctx context.Context, request GetAdvancedEquitiesCorporateActionsRequestObject) (GetAdvancedEquitiesCorporateActionsResponseObject, error)
+	// PostAdvancedEquitiesCorporateActions Announce a corporate action (operator; requires step-up)
+	// (POST /advanced/equities/corporate-actions)
+	PostAdvancedEquitiesCorporateActions(ctx context.Context, request PostAdvancedEquitiesCorporateActionsRequestObject) (PostAdvancedEquitiesCorporateActionsResponseObject, error)
+	// GetAdvancedEquitiesCorporateActionsActionId One corporate action
+	// (GET /advanced/equities/corporate-actions/{actionId})
+	GetAdvancedEquitiesCorporateActionsActionId(ctx context.Context, request GetAdvancedEquitiesCorporateActionsActionIdRequestObject) (GetAdvancedEquitiesCorporateActionsActionIdResponseObject, error)
+	// PostAdvancedEquitiesCorporateActionsActionIdApply Apply an announced corporate action on or after the day it takes effect (operator; requires step-up)
+	// (POST /advanced/equities/corporate-actions/{actionId}/apply)
+	PostAdvancedEquitiesCorporateActionsActionIdApply(ctx context.Context, request PostAdvancedEquitiesCorporateActionsActionIdApplyRequestObject) (PostAdvancedEquitiesCorporateActionsActionIdApplyResponseObject, error)
+	// PostAdvancedEquitiesCorporateActionsActionIdCancel Withdraw an announced corporate action that has not been applied (operator; requires step-up)
+	// (POST /advanced/equities/corporate-actions/{actionId}/cancel)
+	PostAdvancedEquitiesCorporateActionsActionIdCancel(ctx context.Context, request PostAdvancedEquitiesCorporateActionsActionIdCancelRequestObject) (PostAdvancedEquitiesCorporateActionsActionIdCancelResponseObject, error)
+	// GetAdvancedEquitiesFills An account's equity fills, newest first, each with its disclosed charges and its settlement
+	// (GET /advanced/equities/fills)
+	GetAdvancedEquitiesFills(ctx context.Context, request GetAdvancedEquitiesFillsRequestObject) (GetAdvancedEquitiesFillsResponseObject, error)
+	// GetAdvancedEquitiesListings Equity and ETF listings with their terms, the latest fresh mark and the calendar's session now
+	// (GET /advanced/equities/listings)
+	GetAdvancedEquitiesListings(ctx context.Context, request GetAdvancedEquitiesListingsRequestObject) (GetAdvancedEquitiesListingsResponseObject, error)
+	// PostAdvancedEquitiesListings List a simulated equity or ETF (operator; requires step-up)
+	// (POST /advanced/equities/listings)
+	PostAdvancedEquitiesListings(ctx context.Context, request PostAdvancedEquitiesListingsRequestObject) (PostAdvancedEquitiesListingsResponseObject, error)
+	// GetAdvancedEquitiesListingsInstrumentId One listing
+	// (GET /advanced/equities/listings/{instrumentId})
+	GetAdvancedEquitiesListingsInstrumentId(ctx context.Context, request GetAdvancedEquitiesListingsInstrumentIdRequestObject) (GetAdvancedEquitiesListingsInstrumentIdResponseObject, error)
+	// GetAdvancedEquitiesOrders An account's equity orders, newest first, each with its fill and settlement
+	// (GET /advanced/equities/orders)
+	GetAdvancedEquitiesOrders(ctx context.Context, request GetAdvancedEquitiesOrdersRequestObject) (GetAdvancedEquitiesOrdersResponseObject, error)
+	// PostAdvancedEquitiesOrders Submit an equity order from one of your own accounts, and place it at the simulated venue
+	// (POST /advanced/equities/orders)
+	PostAdvancedEquitiesOrders(ctx context.Context, request PostAdvancedEquitiesOrdersRequestObject) (PostAdvancedEquitiesOrdersResponseObject, error)
+	// GetAdvancedEquitiesOrdersOrderId One equity order, to its owner or an operator who may read any account; anyone else is told it does not exist
+	// (GET /advanced/equities/orders/{orderId})
+	GetAdvancedEquitiesOrdersOrderId(ctx context.Context, request GetAdvancedEquitiesOrdersOrderIdRequestObject) (GetAdvancedEquitiesOrdersOrderIdResponseObject, error)
+	// PostAdvancedEquitiesOrdersOrderIdCancel Ask the simulated venue to cancel one of your own ACCEPTED or OPEN orders
+	// (POST /advanced/equities/orders/{orderId}/cancel)
+	PostAdvancedEquitiesOrdersOrderIdCancel(ctx context.Context, request PostAdvancedEquitiesOrdersOrderIdCancelRequestObject) (PostAdvancedEquitiesOrdersOrderIdCancelResponseObject, error)
+	// PostAdvancedEquitiesSettlementRuns Run due T+1 settlements now (operator; requires step-up)
+	// (POST /advanced/equities/settlement-runs)
+	PostAdvancedEquitiesSettlementRuns(ctx context.Context, request PostAdvancedEquitiesSettlementRunsRequestObject) (PostAdvancedEquitiesSettlementRunsResponseObject, error)
+	// GetAdvancedEquitiesSettlements An account's T+1 settlements, by due date, newest first
+	// (GET /advanced/equities/settlements)
+	GetAdvancedEquitiesSettlements(ctx context.Context, request GetAdvancedEquitiesSettlementsRequestObject) (GetAdvancedEquitiesSettlementsResponseObject, error)
+	// PostAdvancedEquitiesVenueRuns Run the venue worker once (operator; requires step-up)
+	// (POST /advanced/equities/venue-runs)
+	PostAdvancedEquitiesVenueRuns(ctx context.Context, request PostAdvancedEquitiesVenueRunsRequestObject) (PostAdvancedEquitiesVenueRunsResponseObject, error)
 	// GetAdvancedInstruments Instruments of the canonical model with their current terms
 	// (GET /advanced/instruments)
 	GetAdvancedInstruments(ctx context.Context, request GetAdvancedInstrumentsRequestObject) (GetAdvancedInstrumentsResponseObject, error)
@@ -31840,6 +37952,385 @@ func (sh *strictHandler) PostAdminReconciliationRecordsRecordIdResolve(w http.Re
 	}
 }
 
+// GetAdvancedBooks operation middleware
+func (sh *strictHandler) GetAdvancedBooks(w http.ResponseWriter, r *http.Request, params GetAdvancedBooksParams) {
+	var request GetAdvancedBooksRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedBooks(ctx, request.(GetAdvancedBooksRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedBooks")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedBooksResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedBooksResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedBooks operation middleware
+func (sh *strictHandler) PostAdvancedBooks(w http.ResponseWriter, r *http.Request, params PostAdvancedBooksParams) {
+	var request PostAdvancedBooksRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedBooksJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedBooks(ctx, request.(PostAdvancedBooksRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedBooks")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedBooksResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedBooksResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedBooksOrders operation middleware
+func (sh *strictHandler) GetAdvancedBooksOrders(w http.ResponseWriter, r *http.Request, params GetAdvancedBooksOrdersParams) {
+	var request GetAdvancedBooksOrdersRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedBooksOrders(ctx, request.(GetAdvancedBooksOrdersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedBooksOrders")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedBooksOrdersResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedBooksOrdersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedBooksOrdersOrderId operation middleware
+func (sh *strictHandler) GetAdvancedBooksOrdersOrderId(w http.ResponseWriter, r *http.Request, orderId OrderId) {
+	var request GetAdvancedBooksOrdersOrderIdRequestObject
+
+	request.OrderId = orderId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedBooksOrdersOrderId(ctx, request.(GetAdvancedBooksOrdersOrderIdRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedBooksOrdersOrderId")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedBooksOrdersOrderIdResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedBooksOrdersOrderIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedBooksOrdersOrderIdCancel operation middleware
+func (sh *strictHandler) PostAdvancedBooksOrdersOrderIdCancel(w http.ResponseWriter, r *http.Request, orderId OrderId, params PostAdvancedBooksOrdersOrderIdCancelParams) {
+	var request PostAdvancedBooksOrdersOrderIdCancelRequestObject
+
+	request.OrderId = orderId
+	request.Params = params
+
+	var body PostAdvancedBooksOrdersOrderIdCancelJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedBooksOrdersOrderIdCancel(ctx, request.(PostAdvancedBooksOrdersOrderIdCancelRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedBooksOrdersOrderIdCancel")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedBooksOrdersOrderIdCancelResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedBooksOrdersOrderIdCancelResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedBooksOrdersOrderIdReplace operation middleware
+func (sh *strictHandler) PostAdvancedBooksOrdersOrderIdReplace(w http.ResponseWriter, r *http.Request, orderId OrderId, params PostAdvancedBooksOrdersOrderIdReplaceParams) {
+	var request PostAdvancedBooksOrdersOrderIdReplaceRequestObject
+
+	request.OrderId = orderId
+	request.Params = params
+
+	var body PostAdvancedBooksOrdersOrderIdReplaceJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedBooksOrdersOrderIdReplace(ctx, request.(PostAdvancedBooksOrdersOrderIdReplaceRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedBooksOrdersOrderIdReplace")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedBooksOrdersOrderIdReplaceResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedBooksOrdersOrderIdReplaceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedBooksTrades operation middleware
+func (sh *strictHandler) GetAdvancedBooksTrades(w http.ResponseWriter, r *http.Request, params GetAdvancedBooksTradesParams) {
+	var request GetAdvancedBooksTradesRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedBooksTrades(ctx, request.(GetAdvancedBooksTradesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedBooksTrades")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedBooksTradesResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedBooksTradesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedBooksInstrumentId operation middleware
+func (sh *strictHandler) GetAdvancedBooksInstrumentId(w http.ResponseWriter, r *http.Request, instrumentId InstrumentId) {
+	var request GetAdvancedBooksInstrumentIdRequestObject
+
+	request.InstrumentId = instrumentId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedBooksInstrumentId(ctx, request.(GetAdvancedBooksInstrumentIdRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedBooksInstrumentId")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedBooksInstrumentIdResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedBooksInstrumentIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedBooksInstrumentIdDepth operation middleware
+func (sh *strictHandler) GetAdvancedBooksInstrumentIdDepth(w http.ResponseWriter, r *http.Request, instrumentId InstrumentId, params GetAdvancedBooksInstrumentIdDepthParams) {
+	var request GetAdvancedBooksInstrumentIdDepthRequestObject
+
+	request.InstrumentId = instrumentId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedBooksInstrumentIdDepth(ctx, request.(GetAdvancedBooksInstrumentIdDepthRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedBooksInstrumentIdDepth")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedBooksInstrumentIdDepthResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedBooksInstrumentIdDepthResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedBooksInstrumentIdJournalVerification operation middleware
+func (sh *strictHandler) GetAdvancedBooksInstrumentIdJournalVerification(w http.ResponseWriter, r *http.Request, instrumentId InstrumentId) {
+	var request GetAdvancedBooksInstrumentIdJournalVerificationRequestObject
+
+	request.InstrumentId = instrumentId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedBooksInstrumentIdJournalVerification(ctx, request.(GetAdvancedBooksInstrumentIdJournalVerificationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedBooksInstrumentIdJournalVerification")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedBooksInstrumentIdJournalVerificationResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedBooksInstrumentIdJournalVerificationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedBooksInstrumentIdOrders operation middleware
+func (sh *strictHandler) PostAdvancedBooksInstrumentIdOrders(w http.ResponseWriter, r *http.Request, instrumentId InstrumentId, params PostAdvancedBooksInstrumentIdOrdersParams) {
+	var request PostAdvancedBooksInstrumentIdOrdersRequestObject
+
+	request.InstrumentId = instrumentId
+	request.Params = params
+
+	var body PostAdvancedBooksInstrumentIdOrdersJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedBooksInstrumentIdOrders(ctx, request.(PostAdvancedBooksInstrumentIdOrdersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedBooksInstrumentIdOrders")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedBooksInstrumentIdOrdersResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedBooksInstrumentIdOrdersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedBooksInstrumentIdStatus operation middleware
+func (sh *strictHandler) PostAdvancedBooksInstrumentIdStatus(w http.ResponseWriter, r *http.Request, instrumentId InstrumentId, params PostAdvancedBooksInstrumentIdStatusParams) {
+	var request PostAdvancedBooksInstrumentIdStatusRequestObject
+
+	request.InstrumentId = instrumentId
+	request.Params = params
+
+	var body PostAdvancedBooksInstrumentIdStatusJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedBooksInstrumentIdStatus(ctx, request.(PostAdvancedBooksInstrumentIdStatusRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedBooksInstrumentIdStatus")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedBooksInstrumentIdStatusResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedBooksInstrumentIdStatusResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedBooksInstrumentIdTradesTradeSeqProof operation middleware
+func (sh *strictHandler) GetAdvancedBooksInstrumentIdTradesTradeSeqProof(w http.ResponseWriter, r *http.Request, instrumentId InstrumentId, tradeSeq int64) {
+	var request GetAdvancedBooksInstrumentIdTradesTradeSeqProofRequestObject
+
+	request.InstrumentId = instrumentId
+	request.TradeSeq = tradeSeq
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedBooksInstrumentIdTradesTradeSeqProof(ctx, request.(GetAdvancedBooksInstrumentIdTradesTradeSeqProofRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedBooksInstrumentIdTradesTradeSeqProof")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedBooksInstrumentIdTradesTradeSeqProofResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedBooksInstrumentIdTradesTradeSeqProofResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetAdvancedBuyingPower operation middleware
 func (sh *strictHandler) GetAdvancedBuyingPower(w http.ResponseWriter, r *http.Request, params GetAdvancedBuyingPowerParams) {
 	var request GetAdvancedBuyingPowerRequestObject
@@ -32446,6 +38937,557 @@ func (sh *strictHandler) GetAdvancedEffects(w http.ResponseWriter, r *http.Reque
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetAdvancedEffectsResponseObject); ok {
 		if err := validResponse.VisitGetAdvancedEffectsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedEquitiesCalendar operation middleware
+func (sh *strictHandler) GetAdvancedEquitiesCalendar(w http.ResponseWriter, r *http.Request) {
+	var request GetAdvancedEquitiesCalendarRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedEquitiesCalendar(ctx, request.(GetAdvancedEquitiesCalendarRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedEquitiesCalendar")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedEquitiesCalendarResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedEquitiesCalendarResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedEquitiesCalendarHolidays operation middleware
+func (sh *strictHandler) PostAdvancedEquitiesCalendarHolidays(w http.ResponseWriter, r *http.Request, params PostAdvancedEquitiesCalendarHolidaysParams) {
+	var request PostAdvancedEquitiesCalendarHolidaysRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedEquitiesCalendarHolidaysJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedEquitiesCalendarHolidays(ctx, request.(PostAdvancedEquitiesCalendarHolidaysRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedEquitiesCalendarHolidays")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedEquitiesCalendarHolidaysResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedEquitiesCalendarHolidaysResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedEquitiesCorporateActionApplications operation middleware
+func (sh *strictHandler) GetAdvancedEquitiesCorporateActionApplications(w http.ResponseWriter, r *http.Request, params GetAdvancedEquitiesCorporateActionApplicationsParams) {
+	var request GetAdvancedEquitiesCorporateActionApplicationsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedEquitiesCorporateActionApplications(ctx, request.(GetAdvancedEquitiesCorporateActionApplicationsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedEquitiesCorporateActionApplications")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedEquitiesCorporateActionApplicationsResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedEquitiesCorporateActionApplicationsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedEquitiesCorporateActions operation middleware
+func (sh *strictHandler) GetAdvancedEquitiesCorporateActions(w http.ResponseWriter, r *http.Request, params GetAdvancedEquitiesCorporateActionsParams) {
+	var request GetAdvancedEquitiesCorporateActionsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedEquitiesCorporateActions(ctx, request.(GetAdvancedEquitiesCorporateActionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedEquitiesCorporateActions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedEquitiesCorporateActionsResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedEquitiesCorporateActionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedEquitiesCorporateActions operation middleware
+func (sh *strictHandler) PostAdvancedEquitiesCorporateActions(w http.ResponseWriter, r *http.Request, params PostAdvancedEquitiesCorporateActionsParams) {
+	var request PostAdvancedEquitiesCorporateActionsRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedEquitiesCorporateActionsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedEquitiesCorporateActions(ctx, request.(PostAdvancedEquitiesCorporateActionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedEquitiesCorporateActions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedEquitiesCorporateActionsResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedEquitiesCorporateActionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedEquitiesCorporateActionsActionId operation middleware
+func (sh *strictHandler) GetAdvancedEquitiesCorporateActionsActionId(w http.ResponseWriter, r *http.Request, actionId UUID) {
+	var request GetAdvancedEquitiesCorporateActionsActionIdRequestObject
+
+	request.ActionId = actionId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedEquitiesCorporateActionsActionId(ctx, request.(GetAdvancedEquitiesCorporateActionsActionIdRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedEquitiesCorporateActionsActionId")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedEquitiesCorporateActionsActionIdResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedEquitiesCorporateActionsActionIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedEquitiesCorporateActionsActionIdApply operation middleware
+func (sh *strictHandler) PostAdvancedEquitiesCorporateActionsActionIdApply(w http.ResponseWriter, r *http.Request, actionId UUID, params PostAdvancedEquitiesCorporateActionsActionIdApplyParams) {
+	var request PostAdvancedEquitiesCorporateActionsActionIdApplyRequestObject
+
+	request.ActionId = actionId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedEquitiesCorporateActionsActionIdApply(ctx, request.(PostAdvancedEquitiesCorporateActionsActionIdApplyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedEquitiesCorporateActionsActionIdApply")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedEquitiesCorporateActionsActionIdApplyResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedEquitiesCorporateActionsActionIdApplyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedEquitiesCorporateActionsActionIdCancel operation middleware
+func (sh *strictHandler) PostAdvancedEquitiesCorporateActionsActionIdCancel(w http.ResponseWriter, r *http.Request, actionId UUID, params PostAdvancedEquitiesCorporateActionsActionIdCancelParams) {
+	var request PostAdvancedEquitiesCorporateActionsActionIdCancelRequestObject
+
+	request.ActionId = actionId
+	request.Params = params
+
+	var body PostAdvancedEquitiesCorporateActionsActionIdCancelJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedEquitiesCorporateActionsActionIdCancel(ctx, request.(PostAdvancedEquitiesCorporateActionsActionIdCancelRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedEquitiesCorporateActionsActionIdCancel")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedEquitiesCorporateActionsActionIdCancelResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedEquitiesCorporateActionsActionIdCancelResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedEquitiesFills operation middleware
+func (sh *strictHandler) GetAdvancedEquitiesFills(w http.ResponseWriter, r *http.Request, params GetAdvancedEquitiesFillsParams) {
+	var request GetAdvancedEquitiesFillsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedEquitiesFills(ctx, request.(GetAdvancedEquitiesFillsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedEquitiesFills")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedEquitiesFillsResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedEquitiesFillsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedEquitiesListings operation middleware
+func (sh *strictHandler) GetAdvancedEquitiesListings(w http.ResponseWriter, r *http.Request, params GetAdvancedEquitiesListingsParams) {
+	var request GetAdvancedEquitiesListingsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedEquitiesListings(ctx, request.(GetAdvancedEquitiesListingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedEquitiesListings")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedEquitiesListingsResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedEquitiesListingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedEquitiesListings operation middleware
+func (sh *strictHandler) PostAdvancedEquitiesListings(w http.ResponseWriter, r *http.Request, params PostAdvancedEquitiesListingsParams) {
+	var request PostAdvancedEquitiesListingsRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedEquitiesListingsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedEquitiesListings(ctx, request.(PostAdvancedEquitiesListingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedEquitiesListings")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedEquitiesListingsResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedEquitiesListingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedEquitiesListingsInstrumentId operation middleware
+func (sh *strictHandler) GetAdvancedEquitiesListingsInstrumentId(w http.ResponseWriter, r *http.Request, instrumentId InstrumentId) {
+	var request GetAdvancedEquitiesListingsInstrumentIdRequestObject
+
+	request.InstrumentId = instrumentId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedEquitiesListingsInstrumentId(ctx, request.(GetAdvancedEquitiesListingsInstrumentIdRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedEquitiesListingsInstrumentId")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedEquitiesListingsInstrumentIdResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedEquitiesListingsInstrumentIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedEquitiesOrders operation middleware
+func (sh *strictHandler) GetAdvancedEquitiesOrders(w http.ResponseWriter, r *http.Request, params GetAdvancedEquitiesOrdersParams) {
+	var request GetAdvancedEquitiesOrdersRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedEquitiesOrders(ctx, request.(GetAdvancedEquitiesOrdersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedEquitiesOrders")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedEquitiesOrdersResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedEquitiesOrdersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedEquitiesOrders operation middleware
+func (sh *strictHandler) PostAdvancedEquitiesOrders(w http.ResponseWriter, r *http.Request, params PostAdvancedEquitiesOrdersParams) {
+	var request PostAdvancedEquitiesOrdersRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedEquitiesOrdersJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedEquitiesOrders(ctx, request.(PostAdvancedEquitiesOrdersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedEquitiesOrders")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedEquitiesOrdersResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedEquitiesOrdersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedEquitiesOrdersOrderId operation middleware
+func (sh *strictHandler) GetAdvancedEquitiesOrdersOrderId(w http.ResponseWriter, r *http.Request, orderId OrderId) {
+	var request GetAdvancedEquitiesOrdersOrderIdRequestObject
+
+	request.OrderId = orderId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedEquitiesOrdersOrderId(ctx, request.(GetAdvancedEquitiesOrdersOrderIdRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedEquitiesOrdersOrderId")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedEquitiesOrdersOrderIdResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedEquitiesOrdersOrderIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedEquitiesOrdersOrderIdCancel operation middleware
+func (sh *strictHandler) PostAdvancedEquitiesOrdersOrderIdCancel(w http.ResponseWriter, r *http.Request, orderId OrderId, params PostAdvancedEquitiesOrdersOrderIdCancelParams) {
+	var request PostAdvancedEquitiesOrdersOrderIdCancelRequestObject
+
+	request.OrderId = orderId
+	request.Params = params
+
+	var body PostAdvancedEquitiesOrdersOrderIdCancelJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedEquitiesOrdersOrderIdCancel(ctx, request.(PostAdvancedEquitiesOrdersOrderIdCancelRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedEquitiesOrdersOrderIdCancel")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedEquitiesOrdersOrderIdCancelResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedEquitiesOrdersOrderIdCancelResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedEquitiesSettlementRuns operation middleware
+func (sh *strictHandler) PostAdvancedEquitiesSettlementRuns(w http.ResponseWriter, r *http.Request, params PostAdvancedEquitiesSettlementRunsParams) {
+	var request PostAdvancedEquitiesSettlementRunsRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedEquitiesSettlementRunsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedEquitiesSettlementRuns(ctx, request.(PostAdvancedEquitiesSettlementRunsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedEquitiesSettlementRuns")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedEquitiesSettlementRunsResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedEquitiesSettlementRunsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedEquitiesSettlements operation middleware
+func (sh *strictHandler) GetAdvancedEquitiesSettlements(w http.ResponseWriter, r *http.Request, params GetAdvancedEquitiesSettlementsParams) {
+	var request GetAdvancedEquitiesSettlementsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedEquitiesSettlements(ctx, request.(GetAdvancedEquitiesSettlementsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedEquitiesSettlements")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedEquitiesSettlementsResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedEquitiesSettlementsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedEquitiesVenueRuns operation middleware
+func (sh *strictHandler) PostAdvancedEquitiesVenueRuns(w http.ResponseWriter, r *http.Request, params PostAdvancedEquitiesVenueRunsParams) {
+	var request PostAdvancedEquitiesVenueRunsRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedEquitiesVenueRunsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedEquitiesVenueRuns(ctx, request.(PostAdvancedEquitiesVenueRunsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedEquitiesVenueRuns")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedEquitiesVenueRunsResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedEquitiesVenueRunsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -36476,829 +43518,1010 @@ func (sh *strictHandler) PostWithdrawals(w http.ResponseWriter, r *http.Request,
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
-	"y4keC5U4uHAcD2bAJ7/+9Ov/fwA=",
+	"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",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

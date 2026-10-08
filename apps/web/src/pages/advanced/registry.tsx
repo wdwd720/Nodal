@@ -32,8 +32,10 @@ import { MarginSection } from "./margin/MarginSection.tsx";
 import { DerivativesSection } from "./derivatives/DerivativesSection.tsx";
 
 // >>> advanced:equities import
+import { EquitiesSection } from "./equities/EquitiesSection.tsx";
 
 // >>> advanced:orders import
+import { OrderBooksSection } from "./orders/OrderBooksSection.tsx";
 
 // >>> advanced:transfers import
 import { TransfersSection } from "./transfers/Transfers.tsx";
@@ -118,8 +120,22 @@ export const ADVANCED_SECTIONS: readonly AdvancedSection[] = [
   },
 
   // >>> advanced:equities section
+  {
+    path: "equities",
+    title: "Equities",
+    description:
+      "Equities and ETFs in paper and sandbox mode: listings with the session in force, orders filled by a deterministic paper venue, every disclosed charge, T+1 settlement and corporate actions.",
+    element: <EquitiesSection />,
+  },
 
   // >>> advanced:orders section
+  {
+    path: "order-books",
+    title: "Order books",
+    description:
+      "The internal order books: disclosed fee schedules and crossing rule, depth, limit and market orders between accounts, the account's orders and trades, and each trade's audit proof.",
+    element: <OrderBooksSection />,
+  },
 
   // >>> advanced:transfers section
   {
