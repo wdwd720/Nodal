@@ -21,6 +21,9 @@ import { randomUUID } from "node:crypto";
 
 import { expect, test, type Browser, type BrowserContext, type Page, type Request, type Response } from "@playwright/test";
 
+import { goto } from "./pace.ts";
+import { signIn } from "./sign-in.ts";
+
 const NOTICE = "Simulated value — sandbox only";
 
 const MARGIN_PAGES: ReadonlyArray<{ readonly path: string; readonly heading: string }> = [
@@ -116,7 +119,7 @@ async function visit(page: Page, path: string): Promise<Map<string, unknown>> {
     );
   };
   page.on("response", listener);
-  await page.goto(path);
+  await goto(page, path);
   await settle(page);
   page.off("response", listener);
   return new Map(await Promise.all(pending));
@@ -141,7 +144,7 @@ function keyOf(request: Request): string {
 test.describe("the margin section", () => {
   for (const { path, heading } of MARGIN_PAGES) {
     test(`${heading} renders under the simulated-value notice`, async ({ page }) => {
-      await page.goto(path);
+      await goto(page, path);
       await expect(page.getByRole("heading", { level: 1, name: heading, exact: true })).toBeVisible();
       const notice = page.getByRole("note", { name: NOTICE, exact: true });
       await expect(notice).toBeVisible();
@@ -153,7 +156,7 @@ test.describe("the margin section", () => {
   }
 
   test("the section is reachable from the advanced area's navigation", async ({ page }) => {
-    await page.goto("/advanced/overview");
+    await goto(page, "/advanced/overview");
     await expect(page.locator("h1")).toHaveCount(1);
     await page
       .getByRole("navigation", { name: "Advanced area", exact: true })
@@ -171,7 +174,7 @@ test("the margin account is the engine's evaluation figure for figure, its absen
   const response = await page.request.get(`/v1/advanced/margin/account?account_id=${id}`);
   const body: unknown = await response.json();
 
-  await page.goto("/advanced/margin");
+  await goto(page, "/advanced/margin");
   await settle(page);
 
   if (response.ok()) {
@@ -203,8 +206,11 @@ test("the margin account is the engine's evaluation figure for figure, its absen
 
 test("opening a margin account: the key is created at confirmation and a retry reuses it", async ({ page }) => {
   const id = await accountId(page);
+  // A margin account is denominated in the sandbox dollar; make sure it
+  // exists here rather than relying on another spec's faucet grant.
+  await ensureSandboxDollar(page);
   const before = await page.request.get(`/v1/advanced/margin/account?account_id=${id}`);
-  await page.goto("/advanced/margin");
+  await goto(page, "/advanced/margin");
   await settle(page);
 
   if (before.status() !== 404) {
@@ -237,23 +243,26 @@ test("opening a margin account: the key is created at confirmation and a retry r
   await form.getByRole("button", { name: "Confirm: Open the margin account", exact: true }).click();
   const key = keyOf(await firstRequest);
   const answer = await firstResponse;
-  await expect(form.getByText(`idempotency key ${key}`, { exact: true })).toBeVisible();
 
   if (answer.ok()) {
     // Opened: the page reads the account again and now shows the margin
-    // account the backend answered with, in place of the open form.
+    // account the backend answered with, in place of the open form. The form
+    // -- and the attempt's key with it -- goes as soon as that read lands, so
+    // the key is asserted on the request that carried it, not on the page.
     const opened = (await answer.json()) as { id: string; status: string };
     await expect(page.getByText(`margin account ${opened.id}`, { exact: true })).toBeVisible();
     await expect(page.locator('[data-field="status"]')).toHaveText(opened.status);
+    await expect(page.getByRole("region", { name: "Open a margin account", exact: true })).toHaveCount(0);
     expect(sent, "confirming sent exactly one request").toBe(1);
     page.off("request", counter);
     return;
   }
 
   // The backend refused (for instance UNSUPPORTED while the sandbox dollar is
-  // not provisioned). The refusal is shown with its code, and trying again
-  // sends the same request with the same key, which the backend answers the
-  // same way.
+  // not provisioned). The form stays, showing the attempt's key and the
+  // refusal with its code, and trying again sends the same request with the
+  // same key, which the backend answers the same way.
+  await expect(form.getByText(`idempotency key ${key}`, { exact: true })).toBeVisible();
   const problem = (await answer.json()) as Problem;
   await expect(form.locator(".explain-meta")).toContainText(`code ${problem.code}`);
   const retryRequest = page.waitForRequest(
@@ -275,8 +284,18 @@ test("opening a margin account: the key is created at confirmation and a retry r
 
 test("a borrow the backend refuses is shown with its code, and retried with the same key", async ({ page }) => {
   const id = await accountId(page);
+  // A borrow needs a margin account. This test opens one through the API when
+  // the account has none, rather than relying on the test above to have done
+  // it; a deployment that refuses to open one says so with its code.
+  await ensureSandboxDollar(page);
+  if ((await page.request.get(`/v1/advanced/margin/account?account_id=${id}`)).status() === 404) {
+    const opened = await command(page, "/v1/advanced/margin/account", { account_id: id, margin_mode: "CROSS", mode: "PAPER" });
+    if (opened.status !== 201 && opened.status !== 200) {
+      expect(isProblem(opened.body), `an open the backend refuses is a problem document: ${JSON.stringify(opened.body)}`).toBe(true);
+    }
+  }
   const read = await page.request.get(`/v1/advanced/margin/account?account_id=${id}`);
-  await page.goto("/advanced/margin");
+  await goto(page, "/advanced/margin");
   await settle(page);
   if (!read.ok()) {
     // No margin account to borrow against: the page offers no borrow form.
@@ -337,7 +356,7 @@ test("the operator's pages are refused to a customer, with the code on screen", 
   const queueProblem = (await queue.json()) as Problem;
   const callsProblem = (await calls.json()) as Problem;
 
-  await page.goto("/advanced/margin/operator");
+  await goto(page, "/advanced/margin/operator");
   await settle(page);
   await expect(
     page.getByRole("region", { name: "Liquidation queue", exact: true }).locator(".explain-meta"),
@@ -377,7 +396,7 @@ test("an unknown liquidation case is answered NOT_FOUND", async ({ page }) => {
   const unknown = `${v4.slice(0, 14)}7${v4.slice(15)}`;
   const response = await page.request.get(`/v1/advanced/margin/cases/${unknown}`);
   expect(response.status()).toBe(404);
-  await page.goto(`/advanced/margin/cases/${unknown}`);
+  await goto(page, `/advanced/margin/cases/${unknown}`);
   await expect(page.getByRole("heading", { level: 1, name: "Liquidation case", exact: true })).toBeVisible();
   await settle(page);
   await expect(page.getByRole("note", { name: NOTICE, exact: true })).toBeVisible();
@@ -399,7 +418,7 @@ for (const { path } of MARGIN_PAGES) {
 
 test("no dead controls in the margin section", async ({ page }) => {
   for (const { path } of MARGIN_PAGES) {
-    await page.goto(path);
+    await goto(page, path);
     await settle(page);
     const buttons = page.locator("main button");
     const count = await buttons.count();
@@ -424,7 +443,7 @@ test("no dead controls in the margin section", async ({ page }) => {
 test("the margin pages reflow at 390px without sideways scrolling", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   for (const { path } of MARGIN_PAGES) {
-    await page.goto(path);
+    await goto(page, path);
     await settle(page);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow, `${path} does not scroll horizontally at 390px`).toBeLessThanOrEqual(1);
@@ -450,16 +469,14 @@ async function command(page: Page, path: string, body: unknown): Promise<{ reado
   return { status: response.status(), body: (await response.json().catch(() => undefined)) as unknown };
 }
 
-/** Signs a development identity in, in a fresh context, through the real OIDC flow. */
-async function signIn(browser: Browser, identity: string, mfa: boolean): Promise<{ context: BrowserContext; page: Page }> {
-  const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
-  const page = await context.newPage();
-  await page.goto("/v1/auth/login");
-  await expect(page.getByRole("heading", { name: "Choose an identity" })).toBeVisible();
-  const row = page.locator("li", { has: page.locator("code", { hasText: new RegExp(`^${identity}$`) }) });
-  await row.getByRole("link", { name: mfa ? "sign in with MFA" : "sign in", exact: true }).first().click();
-  await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
-  return { context, page };
+/**
+ * Makes sure the deployment's one sandbox dollar exists: the faucet creates it
+ * on its first grant. A grant beyond the faucet's rolling cap is RATE_LIMITED,
+ * which also means the dollar exists.
+ */
+async function ensureSandboxDollar(page: Page): Promise<void> {
+  const grant = await command(page, "/v1/advanced/transfers/faucet/grants", { account_id: await accountId(page), amount: "1" });
+  expect([201, 429], `the faucet runs in this deployment: ${JSON.stringify(grant.body)}`).toContain(grant.status);
 }
 
 interface DeficitBody {
@@ -484,7 +501,7 @@ test("the covered deficit is the backend's answer, and a repayment it cannot tak
     expect([404, 409]).toContain(refused.status);
     return;
   }
-  await page.goto("/advanced/margin");
+  await goto(page, "/advanced/margin");
   await settle(page);
   const panel = page.getByRole("region", { name: "Covered deficit", exact: true });
   await expect(panel).toBeVisible();
@@ -522,7 +539,7 @@ test("a customer is refused the review queue and every resolution command, with 
     reason: "a customer may not decide",
   });
   expect(decide.status).toBe(403);
-  await page.goto("/advanced/margin/operator");
+  await goto(page, "/advanced/margin/operator");
   await settle(page);
   await expect(
     page.getByRole("region", { name: "Manual review queue", exact: true }).locator(".explain-meta"),

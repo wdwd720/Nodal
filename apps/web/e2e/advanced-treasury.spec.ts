@@ -25,6 +25,9 @@ import { randomBytes, randomUUID } from "node:crypto";
 
 import { expect, test, type Browser, type BrowserContext, type Locator, type Page } from "@playwright/test";
 
+import { goto } from "./pace.ts";
+import { signIn } from "./sign-in.ts";
+
 const NOTICE = "Simulated value — sandbox only";
 const SECTION = "/advanced/treasury";
 const BOOKS = "/v1/advanced/treasury/books";
@@ -84,17 +87,24 @@ async function ownAccount(page: Page): Promise<string> {
   return id as string;
 }
 
-/** Signs a development identity in, in a fresh context, through the real OIDC flow. */
-async function signIn(browser: Browser, identity: string, mfa: boolean): Promise<{ context: BrowserContext; page: Page }> {
-  const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
-  const page = await context.newPage();
-  await page.goto("/v1/auth/login");
-  await expect(page.getByRole("heading", { name: "Choose an identity" })).toBeVisible();
-  const row = page.locator("li", { has: page.locator("code", { hasText: new RegExp(`^${identity}$`) }) });
-  await row.getByRole("link", { name: mfa ? "sign in with MFA" : "sign in", exact: true }).first().click();
-  await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
-  return { context, page };
+/**
+ * The operator's strong session this file's tests share. Signing in is rate
+ * limited -- CP_API_RATE_LIMIT_AUTH allows 30 requests a minute from one
+ * address by default, and a sign-in is four of them -- and the suite signs in
+ * far more often than a person would, so the operator signs in with MFA once
+ * for the file. A strong sign-in stays recent far longer than this file takes.
+ */
+let operatorSession: { context: BrowserContext; page: Page } | undefined;
+
+async function strongOperator(browser: Browser): Promise<Page> {
+  operatorSession ??= await signIn(browser, "admin", true);
+  return operatorSession.page;
 }
+
+test.afterAll(async () => {
+  await operatorSession?.context.close();
+  operatorSession = undefined;
+});
 
 /** A command as the browser would send it: same-origin, with an idempotency key. */
 async function post(page: Page, path: string, body: unknown, key: string = randomUUID()): Promise<{ status: number; body: unknown }> {
@@ -122,7 +132,7 @@ async function ensureSandboxDollar(page: Page): Promise<void> {
 
 test.describe("the treasury section", () => {
   test("renders under the simulated-value notice, is reachable from the area, and shows a customer the backend's refusal", async ({ page }) => {
-    await page.goto("/advanced/overview");
+    await goto(page, "/advanced/overview");
     await expect(page.locator("h1")).toHaveCount(1);
     await page
       .getByRole("navigation", { name: "Advanced area", exact: true })
@@ -194,7 +204,7 @@ test.describe("the treasury section", () => {
     expect(foreign.status()).toBe(403);
     expect(((await foreign.json()) as Problem).code).toBe("FORBIDDEN");
 
-    await page.goto("/advanced/fees/house-trades");
+    await goto(page, "/advanced/fees/house-trades");
     await settle(page);
     await expect(page.getByRole("note", { name: NOTICE, exact: true })).toBeVisible();
     const panel = page.getByRole("region", { name: "House trades against this account — simulated", exact: true });
@@ -209,137 +219,132 @@ test.describe("the treasury section", () => {
 test.describe("an operator's house book", () => {
   test("is registered, refused a fill without limits, given limits and funded, and reads back exactly that", async ({ browser, page }) => {
     await ensureSandboxDollar(page);
-    const operator = await signIn(browser, "admin", true);
-    try {
-      const op = operator.page;
-      const name = `e2e house ${hex(6)}`;
-      const registered = await post(op, BOOKS, {
-        name,
-        strategy: "MARKET_MAKING",
-        service_actor_id: "e2e-house-service",
-        operators_allowed: true,
-        reason: "e2e: a house book for the treasury suite",
-      });
-      expect(registered.status, JSON.stringify(registered.body)).toBe(200);
-      const book = registered.body as BookDetail;
-      expect(book.value_domain).toBe("SIMULATED");
-      expect(book.name).toBe(name);
-      expect(book.class).toBe("PRINCIPAL");
-      expect(book.signing_policy.operators_allowed).toBe(true);
-      expect(book.signing_policy.key_custody).toBe("NONE_SANDBOX");
-      expect(book.risk_policy, "a new book has no limits yet").toBeUndefined();
-      const id = book.house_account_id;
+    const op = await strongOperator(browser);
+    const name = `e2e house ${hex(6)}`;
+    const registered = await post(op, BOOKS, {
+      name,
+      strategy: "MARKET_MAKING",
+      service_actor_id: "e2e-house-service",
+      operators_allowed: true,
+      reason: "e2e: a house book for the treasury suite",
+    });
+    expect(registered.status, JSON.stringify(registered.body)).toBe(200);
+    const book = registered.body as BookDetail;
+    expect(book.value_domain).toBe("SIMULATED");
+    expect(book.name).toBe(name);
+    expect(book.class).toBe("PRINCIPAL");
+    expect(book.signing_policy.operators_allowed).toBe(true);
+    expect(book.signing_policy.key_custody).toBe("NONE_SANDBOX");
+    expect(book.risk_policy, "a new book has no limits yet").toBeUndefined();
+    const id = book.house_account_id;
 
-      // Without limits every fill is refused: the treasury records the refusal
-      // and answers with its stable reason and the action that recorded it.
-      const hedge = await post(op, `${BOOKS}/${id}/hedges`, { asset_id: unknownId(), side: "BUY", quantity: "1000000" });
-      if (hedge.status === 422 && isProblem(hedge.body) && hedge.body.code === "CAPABILITY_NOT_APPROVED") {
-        // This deployment does not run principal trading at all; that refusal is the answer.
-        return;
-      }
-      expect(hedge.status, JSON.stringify(hedge.body)).toBe(400);
-      expect(isProblem(hedge.body) && hedge.body.code).toBe("VALIDATION_FAILED");
-      const refusal = hedge.body as Problem;
-      expect(refusal.fields?.["reason"]).toBe("TREASURY_POLICY_MISSING");
-      expect(typeof refusal.fields?.["action_id"]).toBe("string");
-
-      const limits = await post(op, `${BOOKS}/${id}/limits`, {
-        label: `e2e-${hex(3)}`,
-        daily_loss_limit: "1000000000",
-        max_mark_age_ms: 60000,
-        max_inventory: [],
-        max_instrument_exposure: [],
-        paper_spread_bps: 0,
-        paper_fee_bps: 0,
-        reason: "e2e: limits that name nothing, so nothing risky can be bought",
-      });
-      expect(limits.status, JSON.stringify(limits.body)).toBe(200);
-      expect((limits.body as { version: number }).version).toBe(1);
-
-      const fundingKey = randomUUID();
-      const funding = await post(
-        op,
-        `${BOOKS}/${id}/fundings`,
-        { asset_id: book.valuation_asset.asset_id, quantity: "5000000000", reason: "e2e: seed the house book" },
-        fundingKey,
-      );
-      expect(funding.status, JSON.stringify(funding.body)).toBe(200);
-      const funded = funding.body as { id: string; quantity: string; value_domain: string; action: { kind: string; outcome: string } };
-      expect(funded.quantity).toBe("5000000000");
-      expect(funded.value_domain).toBe("SIMULATED");
-      expect(funded.action.kind).toBe("FUND");
-      expect(funded.action.outcome).toBe("APPLIED");
-
-      // The same key and body replay the first answer; the same key with
-      // another body is refused.
-      const again = await post(
-        op,
-        `${BOOKS}/${id}/fundings`,
-        { asset_id: book.valuation_asset.asset_id, quantity: "5000000000", reason: "e2e: seed the house book" },
-        fundingKey,
-      );
-      expect(again.status).toBe(200);
-      expect((again.body as { id: string }).id).toBe(funded.id);
-      const reused = await post(
-        op,
-        `${BOOKS}/${id}/fundings`,
-        { asset_id: book.valuation_asset.asset_id, quantity: "5000000001", reason: "e2e: seed the house book" },
-        fundingKey,
-      );
-      expect(reused.status).toBe(409);
-      expect(isProblem(reused.body) && reused.body.code).toBe("INVALID_IDEMPOTENCY_REUSE");
-
-      // The valuation asset is the book's unit of account, never something the paper venue sells it.
-      const valuationHedge = await post(op, `${BOOKS}/${id}/hedges`, { asset_id: book.valuation_asset.asset_id, side: "BUY", quantity: "1000000" });
-      expect(valuationHedge.status).toBe(400);
-      expect(isProblem(valuationHedge.body) && valuationHedge.body.fields?.["reason"]).toBe("TREASURY_VALUATION_ASSET");
-
-      const report = (await (await op.request.get(`${BOOKS}/${id}/report`)).json()) as {
-        value_domain: string;
-        risk_policy_version?: number;
-        loss_measure: string;
-        limits?: Array<{ kind: string; cap?: string; codes: string[] }>;
-      };
-      expect(report.value_domain).toBe("SIMULATED");
-      expect(report.risk_policy_version).toBe(1);
-      const daily = report.limits?.find((limit) => limit.kind === "DAILY_LOSS");
-      expect(daily?.cap).toBe("1000000000");
-
-      const balances = (await (await op.request.get(`${BOOKS}/${id}/balances`)).json()) as {
-        items: Array<{ asset: AssetRef; inventory: string; funded: string }>;
-      };
-      const dollar = balances.items.find((item) => item.asset.asset_id === book.valuation_asset.asset_id);
-      expect(dollar?.inventory).toBe("5000000000");
-      expect(dollar?.funded).toBe("5000000000");
-
-      const reconciliation = (await (await op.request.get(`${BOOKS}/${id}/reconciliation`)).json()) as { agrees: boolean };
-      expect(reconciliation.agrees).toBe(true);
-
-      const actions = (await (await op.request.get(`${BOOKS}/${id}/actions`)).json()) as { items: Array<{ kind: string; outcome: string }> };
-      const kinds = actions.items.map((action) => `${action.kind}:${action.outcome}`);
-      expect(kinds).toContain("REGISTER:APPLIED");
-      expect(kinds).toContain("PAPER_FILL:REJECTED");
-      expect(kinds).toContain("SET_POLICY:APPLIED");
-      expect(kinds).toContain("FUND:APPLIED");
-
-      // The pages read the same answers back.
-      await op.goto(`${SECTION}/books/${id}`);
-      await expect(op.getByRole("heading", { level: 1, name: "House book", exact: true })).toBeVisible();
-      await settle(op);
-      await expect(op.getByRole("note", { name: NOTICE, exact: true })).toBeVisible();
-      await expect(op.getByRole("region", { name, exact: true })).toBeVisible();
-      await expect(op.locator('[data-limit="DAILY_LOSS"]')).toHaveCount(1);
-      await expect(op.locator('[data-field="reconciliation"]')).toContainText("the register and the ledger agree");
-      await expect(op.locator(`[data-balance="${book.valuation_asset.asset_id}"]`)).toHaveCount(1);
-      await expect(op.locator(".malformed")).toHaveCount(0);
-
-      await op.goto(`${SECTION}/books/${id}/activity`);
-      await settle(op);
-      await expect(op.getByRole("note", { name: NOTICE, exact: true })).toBeVisible();
-      await expect(op.getByRole("table", { name: "House actions", exact: true }).locator("tbody tr")).toHaveCount(actions.items.length);
-    } finally {
-      await operator.context.close();
+    // Without limits every fill is refused: the treasury records the refusal
+    // and answers with its stable reason and the action that recorded it.
+    const hedge = await post(op, `${BOOKS}/${id}/hedges`, { asset_id: unknownId(), side: "BUY", quantity: "1000000" });
+    if (hedge.status === 422 && isProblem(hedge.body) && hedge.body.code === "CAPABILITY_NOT_APPROVED") {
+      // This deployment does not run principal trading at all; that refusal is the answer.
+      return;
     }
+    expect(hedge.status, JSON.stringify(hedge.body)).toBe(400);
+    expect(isProblem(hedge.body) && hedge.body.code).toBe("VALIDATION_FAILED");
+    const refusal = hedge.body as Problem;
+    expect(refusal.fields?.["reason"]).toBe("TREASURY_POLICY_MISSING");
+    expect(typeof refusal.fields?.["action_id"]).toBe("string");
+
+    const limits = await post(op, `${BOOKS}/${id}/limits`, {
+      label: `e2e-${hex(3)}`,
+      daily_loss_limit: "1000000000",
+      max_mark_age_ms: 60000,
+      max_inventory: [],
+      max_instrument_exposure: [],
+      paper_spread_bps: 0,
+      paper_fee_bps: 0,
+      reason: "e2e: limits that name nothing, so nothing risky can be bought",
+    });
+    expect(limits.status, JSON.stringify(limits.body)).toBe(200);
+    expect((limits.body as { version: number }).version).toBe(1);
+
+    const fundingKey = randomUUID();
+    const funding = await post(
+      op,
+      `${BOOKS}/${id}/fundings`,
+      { asset_id: book.valuation_asset.asset_id, quantity: "5000000000", reason: "e2e: seed the house book" },
+      fundingKey,
+    );
+    expect(funding.status, JSON.stringify(funding.body)).toBe(200);
+    const funded = funding.body as { id: string; quantity: string; value_domain: string; action: { kind: string; outcome: string } };
+    expect(funded.quantity).toBe("5000000000");
+    expect(funded.value_domain).toBe("SIMULATED");
+    expect(funded.action.kind).toBe("FUND");
+    expect(funded.action.outcome).toBe("APPLIED");
+
+    // The same key and body replay the first answer; the same key with
+    // another body is refused.
+    const again = await post(
+      op,
+      `${BOOKS}/${id}/fundings`,
+      { asset_id: book.valuation_asset.asset_id, quantity: "5000000000", reason: "e2e: seed the house book" },
+      fundingKey,
+    );
+    expect(again.status).toBe(200);
+    expect((again.body as { id: string }).id).toBe(funded.id);
+    const reused = await post(
+      op,
+      `${BOOKS}/${id}/fundings`,
+      { asset_id: book.valuation_asset.asset_id, quantity: "5000000001", reason: "e2e: seed the house book" },
+      fundingKey,
+    );
+    expect(reused.status).toBe(409);
+    expect(isProblem(reused.body) && reused.body.code).toBe("INVALID_IDEMPOTENCY_REUSE");
+
+    // The valuation asset is the book's unit of account, never something the paper venue sells it.
+    const valuationHedge = await post(op, `${BOOKS}/${id}/hedges`, { asset_id: book.valuation_asset.asset_id, side: "BUY", quantity: "1000000" });
+    expect(valuationHedge.status).toBe(400);
+    expect(isProblem(valuationHedge.body) && valuationHedge.body.fields?.["reason"]).toBe("TREASURY_VALUATION_ASSET");
+
+    const report = (await (await op.request.get(`${BOOKS}/${id}/report`)).json()) as {
+      value_domain: string;
+      risk_policy_version?: number;
+      loss_measure: string;
+      limits?: Array<{ kind: string; cap?: string; codes: string[] }>;
+    };
+    expect(report.value_domain).toBe("SIMULATED");
+    expect(report.risk_policy_version).toBe(1);
+    const daily = report.limits?.find((limit) => limit.kind === "DAILY_LOSS");
+    expect(daily?.cap).toBe("1000000000");
+
+    const balances = (await (await op.request.get(`${BOOKS}/${id}/balances`)).json()) as {
+      items: Array<{ asset: AssetRef; inventory: string; funded: string }>;
+    };
+    const dollar = balances.items.find((item) => item.asset.asset_id === book.valuation_asset.asset_id);
+    expect(dollar?.inventory).toBe("5000000000");
+    expect(dollar?.funded).toBe("5000000000");
+
+    const reconciliation = (await (await op.request.get(`${BOOKS}/${id}/reconciliation`)).json()) as { agrees: boolean };
+    expect(reconciliation.agrees).toBe(true);
+
+    const actions = (await (await op.request.get(`${BOOKS}/${id}/actions`)).json()) as { items: Array<{ kind: string; outcome: string }> };
+    const kinds = actions.items.map((action) => `${action.kind}:${action.outcome}`);
+    expect(kinds).toContain("REGISTER:APPLIED");
+    expect(kinds).toContain("PAPER_FILL:REJECTED");
+    expect(kinds).toContain("SET_POLICY:APPLIED");
+    expect(kinds).toContain("FUND:APPLIED");
+
+    // The pages read the same answers back.
+    await op.goto(`${SECTION}/books/${id}`);
+    await expect(op.getByRole("heading", { level: 1, name: "House book", exact: true })).toBeVisible();
+    await settle(op);
+    await expect(op.getByRole("note", { name: NOTICE, exact: true })).toBeVisible();
+    await expect(op.getByRole("region", { name, exact: true })).toBeVisible();
+    await expect(op.locator('[data-limit="DAILY_LOSS"]')).toHaveCount(1);
+    await expect(op.locator('[data-field="reconciliation"]')).toContainText("the register and the ledger agree");
+    await expect(op.locator(`[data-balance="${book.valuation_asset.asset_id}"]`)).toHaveCount(1);
+    await expect(op.locator(".malformed")).toHaveCount(0);
+
+    await op.goto(`${SECTION}/books/${id}/activity`);
+    await settle(op);
+    await expect(op.getByRole("note", { name: NOTICE, exact: true })).toBeVisible();
+    await expect(op.getByRole("table", { name: "House actions", exact: true }).locator("tbody tr")).toHaveCount(actions.items.length);
   });
 
   test("needs a recent strong sign-in to register or fund, and none to cancel", async ({ browser }) => {
@@ -371,27 +376,22 @@ test.describe("an operator's house book", () => {
 
   test("the register form creates its idempotency key when the operator confirms", async ({ browser, page }) => {
     await ensureSandboxDollar(page);
-    const operator = await signIn(browser, "admin", true);
-    try {
-      const op = operator.page;
-      await op.goto(SECTION);
-      await settle(op);
-      const form = op.getByRole("form", { name: "Register a house book" });
-      await form.getByLabel("Name", { exact: true }).fill(`e2e form ${hex(6)}`);
-      await form.getByLabel("House service id", { exact: true }).fill("e2e-house-service");
-      await form.getByLabel("Reason", { exact: true }).fill("e2e: registered through the page");
-      await form.getByRole("button", { name: "Review: Register the house book", exact: true }).click();
-      await expect(form.getByText("Review what will be sent")).toBeVisible();
-      const [request] = await Promise.all([
-        op.waitForRequest((r) => new URL(r.url()).pathname === BOOKS && r.method() === "POST"),
-        form.getByRole("button", { name: "Confirm: Register the house book", exact: true }).click(),
-      ]);
-      const key = request.headers()["idempotency-key"];
-      expect(key, "the confirmed command carries its key").toBeTruthy();
-      await expect(form.getByText(`idempotency key ${key as string}`)).toBeVisible();
-      await expect(form.getByRole("status", { name: "The backend's answer: Register the house book" })).toBeVisible();
-    } finally {
-      await operator.context.close();
-    }
+    const op = await strongOperator(browser);
+    await op.goto(SECTION);
+    await settle(op);
+    const form = op.getByRole("form", { name: "Register a house book" });
+    await form.getByLabel("Name", { exact: true }).fill(`e2e form ${hex(6)}`);
+    await form.getByLabel("House service id", { exact: true }).fill("e2e-house-service");
+    await form.getByLabel("Reason", { exact: true }).fill("e2e: registered through the page");
+    await form.getByRole("button", { name: "Review: Register the house book", exact: true }).click();
+    await expect(form.getByText("Review what will be sent")).toBeVisible();
+    const [request] = await Promise.all([
+      op.waitForRequest((r) => new URL(r.url()).pathname === BOOKS && r.method() === "POST"),
+      form.getByRole("button", { name: "Confirm: Register the house book", exact: true }).click(),
+    ]);
+    const key = request.headers()["idempotency-key"];
+    expect(key, "the confirmed command carries its key").toBeTruthy();
+    await expect(form.getByText(`idempotency key ${key as string}`)).toBeVisible();
+    await expect(form.getByRole("status", { name: "The backend's answer: Register the house book" })).toBeVisible();
   });
 });
