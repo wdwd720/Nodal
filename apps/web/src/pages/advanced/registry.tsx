@@ -26,6 +26,7 @@ import { InstrumentsSection } from "./core/Instruments.tsx";
 import { Overview } from "./core/Overview.tsx";
 
 // >>> advanced:margin import
+import { MarginSection } from "./margin/MarginSection.tsx";
 
 // >>> advanced:derivatives import
 
@@ -94,6 +95,13 @@ export const ADVANCED_SECTIONS: readonly AdvancedSection[] = [
   },
 
   // >>> advanced:margin section
+  {
+    path: "margin",
+    title: "Margin",
+    description:
+      "The account's margin account as the margin engine evaluates it — collateral and haircuts, equity, margin, leverage, loans, calls and liquidation cases — its commands, and the operator's liquidation queue.",
+    element: <MarginSection />,
+  },
 
   // >>> advanced:derivatives section
 
