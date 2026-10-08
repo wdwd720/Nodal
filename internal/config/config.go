@@ -78,6 +78,7 @@ type Config struct {
 	Seed              SeedConfig
 	Capability        CapabilityConfig
 	Retention         RetentionConfig
+	Sandbox           SandboxConfig
 }
 
 // HTTPConfig configures the public HTTP listener.
@@ -493,6 +494,21 @@ type SeedConfig struct {
 // memory.
 type CapabilityConfig struct {
 	StoreConfigured bool
+}
+
+// SandboxConfig configures the simulated chains the sandbox stable asset and
+// the bridge run on (internal/sandboxchain): the persistent devnet host's
+// network and the seed every platform sandbox key derives from. Both empty
+// leaves those capabilities unwired, and their routes answer UNSUPPORTED.
+// Every binary that opens the chain must be given the same two values: the
+// host's genesis pins the bridge attester's key, and every simulated asset
+// minted on the network is controlled by keys derived from the seed.
+type SandboxConfig struct {
+	// DevnetNetwork names the host's journal: 1..63 of [a-z0-9-], starting
+	// with a letter or digit.
+	DevnetNetwork string
+	// DevnetSeedRef resolves to 64 hexadecimal characters (32 bytes).
+	DevnetSeedRef SecretRef
 }
 
 // RetentionConfig holds retention in days for each retention class (goal

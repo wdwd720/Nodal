@@ -149,9 +149,9 @@ func ComputeSplit(old money.Quantity, ratio Ratio, t CorporateActionType, shareD
 	}
 	if cashInLieu == nil {
 		return SplitOutcome{}, errs.New(errs.CodeValidationFailed,
-			"equities: this holding leaves a fractional share and the action states no cash-in-lieu price")
+			"equities: this holding leaves a fractional share and the action states no fractional-share price")
 	}
-	if err := cashInLieu.validate("a cash-in-lieu price"); err != nil {
+	if err := cashInLieu.validate("a fractional-share price"); err != nil {
 		return SplitOutcome{}, err
 	}
 	// remainder/D new base units × (m / 10^s per whole share) / 10^sd whole
@@ -159,7 +159,7 @@ func ComputeSplit(old money.Quantity, ratio Ratio, t CorporateActionType, shareD
 	out.CashExactNum = remainder.Mul(cashInLieu.Mantissa).Mul(pow10(int(cashDecimals)))
 	out.CashExactDen = d.Mul(pow10(int(cashInLieu.Scale) + int(shareDecimals)))
 	if out.CashInLieu, err = out.CashExactNum.Div(out.CashExactDen, cashMode); err != nil {
-		return SplitOutcome{}, errs.Wrap(err, errs.CodeInternal, "equities: cash-in-lieu")
+		return SplitOutcome{}, errs.Wrap(err, errs.CodeInternal, "equities: the fractional-share payment")
 	}
 	return out, nil
 }

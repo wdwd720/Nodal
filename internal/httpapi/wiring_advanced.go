@@ -50,8 +50,13 @@ type AdvancedDeps struct {
 	Derivatives DerivativesDeps
 
 	// >>> advanced:equities deps
+	// Equities holds the equities service; nil leaves its routes UNSUPPORTED.
+	Equities EquitiesDeps
 
 	// >>> advanced:orders deps
+	// Orders holds the internal order book and its pipeline; either nil
+	// leaves the book routes UNSUPPORTED.
+	Orders OrdersDeps
 
 	// >>> advanced:transfers deps
 	// Transfers holds the transfer service and the sandbox faucet; each that is
@@ -75,6 +80,10 @@ type AdvancedDeps struct {
 	PredictionOracle *PredictionSandboxOracle
 
 	// >>> advanced:marketplace deps
+	// Marketplace holds the strategy marketplace and the sandbox runtime
+	// behind it; leaving either nil leaves only the /advanced/strategies
+	// routes UNSUPPORTED.
+	Marketplace MarketplaceDeps
 
 	// >>> advanced:delegation deps
 
@@ -102,8 +111,10 @@ func wireAdvanced(p *Ports, d WireDeps) {
 	wireDerivatives(p, d)
 
 	// >>> advanced:equities wire
+	wireEquities(p, d)
 
 	// >>> advanced:orders wire
+	wireOrders(p, d)
 
 	// >>> advanced:transfers wire
 	wireTransfers(p, d)
@@ -120,6 +131,7 @@ func wireAdvanced(p *Ports, d WireDeps) {
 	}
 
 	// >>> advanced:marketplace wire
+	wireMarketplace(p, d)
 
 	// >>> advanced:delegation wire
 

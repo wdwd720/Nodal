@@ -246,8 +246,59 @@ var operationPolicies = map[string]operationPolicy{
 	"PostAdvancedDerivativesClearingHouseReconciliations": {AnyOf: perms(security.PermSandboxOperate), Mutating: true},
 
 	// >>> advanced:equities operations
+	//
+	// Paper and sandbox equities. Listings, the calendar and corporate actions
+	// are reference data, read under the instrument catalogue's permissions;
+	// an account's orders, fills, settlements and corporate-action
+	// applications are tenant-scoped per request, and an order by id answers
+	// NOT_FOUND to anyone but its owner. Submitting and cancelling are the
+	// customer's own writes (ownership-only scoping). Every operator command
+	// -- listing, holidays, corporate actions, and the venue and settlement
+	// workers' steps, which move value -- needs a recent step-up.
+	"GetAdvancedEquitiesListings":                        {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedEquitiesListingsInstrumentId":            {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedEquitiesCalendar":                        {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedEquitiesCorporateActions":                {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedEquitiesCorporateActionsActionId":        {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedEquitiesOrders":                          {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedEquitiesOrdersOrderId":                   {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedEquitiesFills":                           {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedEquitiesSettlements":                     {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedEquitiesCorporateActionApplications":     {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"PostAdvancedEquitiesOrders":                         {AnyOf: perms(security.PermSandboxTrade), Mutating: true},
+	"PostAdvancedEquitiesOrdersOrderIdCancel":            {AnyOf: perms(security.PermSandboxTrade), Mutating: true},
+	"PostAdvancedEquitiesListings":                       {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedEquitiesCalendarHolidays":               {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedEquitiesCorporateActions":               {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedEquitiesCorporateActionsActionIdCancel": {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedEquitiesCorporateActionsActionIdApply":  {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedEquitiesSettlementRuns":                 {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedEquitiesVenueRuns":                      {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
 
 	// >>> advanced:orders operations
+	//
+	// The internal order book. Books and their depth are reference data, read
+	// under the instrument catalogue's permissions; an account's orders and
+	// fills are tenant-scoped per request; an order by id and a trade's audit
+	// proof answer NOT_FOUND to anyone but a party (or account:read_any).
+	// Submitting, cancelling and replacing are the customer's own writes
+	// (ownership-only scoping). Opening a book and halting or closing it are
+	// operator commands with step-up; verifying a book's journal reads only.
+	// House orders and the crossing rule have no route here: they go through
+	// the treasury service, which enforces the house book's limits.
+	"GetAdvancedBooks":                                {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedBooksInstrumentId":                    {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedBooksInstrumentIdDepth":               {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedBooksOrders":                          {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedBooksOrdersOrderId":                   {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedBooksTrades":                          {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedBooksInstrumentIdTradesTradeSeqProof": {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"PostAdvancedBooksInstrumentIdOrders":             {AnyOf: perms(security.PermSandboxTrade), Mutating: true},
+	"PostAdvancedBooksOrdersOrderIdCancel":            {AnyOf: perms(security.PermSandboxTrade), Mutating: true},
+	"PostAdvancedBooksOrdersOrderIdReplace":           {AnyOf: perms(security.PermSandboxTrade), Mutating: true},
+	"PostAdvancedBooks":                               {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedBooksInstrumentIdStatus":             {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"GetAdvancedBooksInstrumentIdJournalVerification": {AnyOf: perms(security.PermSandboxOperate, security.PermReconciliationRead)},
 
 	// >>> advanced:transfers operations
 	//
@@ -311,6 +362,50 @@ var operationPolicies = map[string]operationPolicy{
 	"PostAdvancedPredictionMarketsMarketIdSettle":                         {AnyOf: perms(security.PermSandboxResolve), StepUp: true, Mutating: true},
 
 	// >>> advanced:marketplace operations
+	//
+	// The catalogue and a listing are read under the read permissions; what a
+	// reader sees of a listing that is not public is decided per request (its
+	// creator's account, or an operator who may read any account). Creating,
+	// versioning, forking, submitting and simulating one's own strategies,
+	// installing in PAPER, following and recording performance are the
+	// customer's own writes under sandbox:strategy, scoped per request to an
+	// account the principal owns. Validation (a build that holds a lock),
+	// review, moderation and deprecation are operator decisions with step-up;
+	// the service additionally refuses a reviewer who created the strategy.
+	"GetAdvancedStrategiesCatalog":                       {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedStrategiesListings":                      {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"PostAdvancedStrategiesListings":                     {AnyOf: perms(security.PermSandboxStrategy), Mutating: true},
+	"GetAdvancedStrategiesListingsListingId":             {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"PostAdvancedStrategiesListingsListingIdVersions":    {AnyOf: perms(security.PermSandboxStrategy), Mutating: true},
+	"PostAdvancedStrategiesVersionsVersionIdForks":       {AnyOf: perms(security.PermSandboxStrategy), Mutating: true},
+	"PostAdvancedStrategiesVersionsVersionIdSubmit":      {AnyOf: perms(security.PermSandboxStrategy), Mutating: true},
+	"PostAdvancedStrategiesVersionsVersionIdSimulations": {AnyOf: perms(security.PermSandboxStrategy), Mutating: true},
+	"PostAdvancedStrategiesVersionsVersionIdValidate": {
+		AnyOf: perms(security.PermSandboxOperate, security.PermSandboxResolve), StepUp: true, Mutating: true,
+	},
+	"PostAdvancedStrategiesVersionsVersionIdReview": {
+		AnyOf: perms(security.PermSandboxOperate, security.PermSandboxResolve), StepUp: true, Mutating: true,
+	},
+	"PostAdvancedStrategiesVersionsVersionIdApprove": {
+		AnyOf: perms(security.PermSandboxOperate, security.PermSandboxResolve), StepUp: true, Mutating: true,
+	},
+	"PostAdvancedStrategiesVersionsVersionIdReject": {
+		AnyOf: perms(security.PermSandboxOperate, security.PermSandboxResolve), StepUp: true, Mutating: true,
+	},
+	"PostAdvancedStrategiesVersionsVersionIdModeration": {
+		AnyOf: perms(security.PermSandboxOperate, security.PermSandboxResolve), StepUp: true, Mutating: true,
+	},
+	"PostAdvancedStrategiesVersionsVersionIdDeprecate": {
+		AnyOf: perms(security.PermSandboxOperate, security.PermSandboxResolve), StepUp: true, Mutating: true,
+	},
+	"GetAdvancedStrategiesReviewQueue":                   {AnyOf: perms(security.PermSandboxOperate, security.PermSandboxResolve)},
+	"GetAdvancedStrategiesInstalls":                      {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"PostAdvancedStrategiesInstalls":                     {AnyOf: perms(security.PermSandboxStrategy), Mutating: true},
+	"PostAdvancedStrategiesInstallsInstallIdRemove":      {AnyOf: perms(security.PermSandboxStrategy), Mutating: true},
+	"PostAdvancedStrategiesInstallsInstallIdFollows":     {AnyOf: perms(security.PermSandboxStrategy), Mutating: true},
+	"PostAdvancedStrategiesInstallsInstallIdPerformance": {AnyOf: perms(security.PermSandboxStrategy), Mutating: true},
+	"GetAdvancedStrategiesFollows":                       {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedStrategiesRuns":                          {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
 
 	// >>> advanced:delegation operations
 
