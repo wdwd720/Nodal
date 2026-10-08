@@ -49,7 +49,10 @@ packages named; `go run ./scripts/inttest -pkg '^\./internal/<pkg>$'` runs a pac
 - **Privilege needed:** `sandbox:stable` for a customer mint; process access for the signer.
 - **Attack:** mint more than the reserve backs or the cap allows; mint without the reserve payment; get the
   issuer to sign a transaction other than the planned one; submit twice; mint with keys the chain does not
-  know.
+  know; create units outside an issuance -- a faucet grant, a facility or house book funded in the asset, a
+  paper fill against no counterparty -- or let units leave the books outside a redemption (a withdrawal); put
+  the asset where a risk-reducing process must later post a kind that can never post it (a margin account's
+  numeraire or collateral, whose liquidation would then never complete).
 - **Controls:** the mint authority key lives only in `IssuerSigner`, which signs exactly the hashed mint plan
   after `InspectMintTransaction` verifies the transaction is that plan (instruction, mint, recipient, amount,
   memo = plan hash, signer set, fee payer); admission is fully reserved under the asset's row lock and again in
@@ -59,7 +62,21 @@ packages named; `go run ./scripts/inttest -pkg '^\./internal/<pkg>$'` runs a pac
   the submission is recorded before it happens, so a timeout is UNKNOWN and reconciled, never resubmitted;
   every key derives from one configured seed through `internal/sandboxchain`, and a binary with another seed
   fails closed when it opens the network (the host's genesis pins the attester). Out-of-band mints are caught
-  by supply reconciliation, which trips the breaker.
+  by supply reconciliation, which trips the breaker. The stable asset is supply-controlled (00763): the
+  database moves it only in its issuer's kinds, in the reserve, bridge-source and prediction-collateral kinds
+  where it has those roles, and in five customer movements (SU001), never in a transaction that changes its
+  holdings by other than what it changes the issuer's outstanding (SU002), and no asset value already moved
+  in can become one (SU003). In Go one shared check, `econ.RefuseSupplyControlled`, refuses it by name --
+  `ASSET_RESTRICTED`, refusal `SUPPLY_CONTROLLED_ASSET`, its controller -- before anything is written, at every
+  entry point that would lead it into a refused kind: the faucet; a margin account's numeraire, isolated
+  asset, policy rule, collateral and leveraged buy, and the lending pool's and insurance fund's funding; a
+  contract settled in it and the clearing house's funding; an equity listing, order or corporate action
+  booking it; a house book's funding and its paper-venue fills; the orders paper venue and a marketplace
+  install or follow trading it; a performance-fee period accounted in it; a delegated withdrawal of it, and a
+  swap that would need its venue funded in it. A table of every advanced journal kind proves from the source
+  that each kind the database refuses is guarded at its entry points or unreachable for such an asset, and
+  is held against the database's own rule. Its ordinary movements -- the internal book, transfers and their
+  reversals, prediction markets collateralised in it, a bridge from it -- are left alone and still reconcile.
 - **Residual risk:** the issuer signer is in-process: a compromise of the process that holds the seed can sign
   planned-looking mints, which reconciliation detects after the fact rather than prevents (an HSM or a remote
   signer is the production answer, ADR-0020). Values are SIMULATED.
@@ -67,9 +84,28 @@ packages named; `go run ./scripts/inttest -pkg '^\./internal/<pkg>$'` runs a pac
   `TestSigners_NeverRevealTheirKeys`, `TestIntegration_SupplyCannotExceedThePolicyCap`,
   `TestIntegration_TheDatabaseRefusesUnderReservedIssuanceAndOverpayingRedemption`,
   `TestIntegration_ConcurrentMintsPreserveTheInvariants`, `TestIntegration_ADuplicateMintRequestIsIdempotent`,
-  `TestIntegration_AnUnknownSubmissionIsReconciledNotRetried`, `TestIntegration_ReconciliationDetectsAnOutOfBandMint`
-  (`internal/stableasset`); `TestIntegration_AWrongSeedFailsClosedOnAnExistingNetwork`,
-  `TestDerive_TheDerivationIsPinned` (`internal/sandboxchain`); demo Scenarios A and I.
+  `TestIntegration_AnUnknownSubmissionIsReconciledNotRetried`, `TestIntegration_ReconciliationDetectsAnOutOfBandMint`,
+  `TestIntegration_AStableAssetIssuesAndRedeemsAndItsSupplyReconciles` (`internal/stableasset`);
+  `TestIntegration_AWrongSeedFailsClosedOnAnExistingNetwork`, `TestDerive_TheDerivationIsPinned`
+  (`internal/sandboxchain`); `TestIntegration_AStableAssetsUnitsExistOnlyAsItsIssuerIssuesThem`,
+  `TestIntegration_TheFaucetNeverGrantsAnAssetWhoseSupplyAControllerOwns`,
+  `TestIntegration_AnAssetWithLedgerAccountsNeverBecomesSupplyControlled` (`internal/sandboxfund`);
+  `TestSupplyKinds_EveryKindHasARow`, `TestSupplyKinds_EveryGuardRefusesSupplyControlledAssets`,
+  `TestIntegration_SupplyKindsAgreeWithTheDatabase`, `TestIntegration_TheSharedCheckNamesEachController`
+  (`internal/econ`); `TestIntegration_AMarginAccountNeverBooksASupplyControlledAsset` (`internal/margin`);
+  `TestIntegration_NoContractSettlesInASupplyControlledAsset` (`internal/derivatives`);
+  `TestIntegration_NoListingBooksASupplyControlledAsset` (`internal/equities`);
+  `TestIntegration_AHouseBookIsNeverFundedInASupplyControlledAsset`,
+  `TestIntegration_TheHousePaperVenueNeverFillsASupplyControlledAsset` (`internal/treasury`);
+  `TestIntegration_ThePaperVenueRefusesASupplyControlledInstrument`,
+  `TestIntegration_AnInternalBookQuotedInAStableAssetTradesAndSupplyReconciles` (`internal/orders`);
+  `TestIntegration_NoFollowTradesAnInstrumentNamingASupplyControlledAsset` (`internal/marketplace`);
+  `TestIntegration_APerformancePeriodIsNeverAccountedInASupplyControlledAsset` (`internal/feeledger`);
+  `TestIntegration_ASupplyControlledAssetIsNeverWithdrawn`,
+  `TestIntegration_AVenueHoldingNoneOfASupplyControlledAssetNeverDeliversIt` (`internal/delegation`);
+  `TestIntegration_AStableAssetTransfersAndReversesAndSupplyReconciles` (`internal/transfers`);
+  `TestIntegration_AMarketCollateralisedInAStableAssetSettlesAndSupplyReconciles` (`internal/predmarket`);
+  demo Scenarios A and I.
 
 ## 2. Reserve falsification
 
@@ -466,7 +502,10 @@ packages named; `go run ./scripts/inttest -pkg '^\./internal/<pkg>$'` runs a pac
 - **Entry point:** the bridge workflow (`bridge.Service.Bridge`, release attempts, refunds) and buying power V2.
 - **Privilege needed:** `sandbox:bridge` for a customer; process access for the attester.
 - **Attack:** spend source value that is locked and in flight; get a release minted twice or after a refund;
-  count in-flight value as final collateral; release on a lock a reorg removed.
+  count in-flight value as final collateral; release on a lock a reorg removed; create twins outside a
+  release -- a faucet grant, a facility or house book funded in the twin, a paper fill against no
+  counterparty -- or destroy them outside the bridge (a withdrawal), so the destination counts units no lock
+  backs, or none where a lock still stands.
 - **Controls:** the leg moves AVAILABLE → RESERVED → BRIDGE_REQUESTED → SOURCE_FINALIZED → MESSAGE_IN_FLIGHT →
   DESTINATION_FINALIZED → RECONCILED along a status machine the database enforces (BR001) with frozen
   identity (BR002); every bridge journal is bound to exactly one leg (BR005) and preserves the route's
@@ -475,16 +514,32 @@ packages named; `go run ./scripts/inttest -pkg '^\./internal/<pkg>$'` runs a pac
   after the lock is final, and finality never reverts; in-flight value is BRIDGE_IN_FLIGHT, which buying power
   counts only at the policy's haircut (zero by default) and which `ledger.HoldingCodes` treats as a mirror of
   the bridge's BRIDGE_LOCKED, so supply reconciliation counts the units once; route reconciliation compares the
-  ledger with both chains and pauses the route on a mismatch.
+  ledger with both chains and pauses the route on a mismatch. A twin is supply-controlled from the moment its
+  route exists (00763): the database moves it only in its bridge's release, in the bridge's own kinds where it
+  is itself a route's source, and in five customer movements (SU001), never in a transaction that changes its
+  holdings by other than what it changes the bridge's outstanding (SU002). In Go the shared check that guards
+  a stable asset, `econ.RefuseSupplyControlled`, refuses a twin by name (`ASSET_RESTRICTED`, refusal
+  `SUPPLY_CONTROLLED_ASSET`, controller `BRIDGE`) before anything is written at every entry point that would
+  lead it into a refused kind -- the faucet, a margin, derivative, equity, treasury or performance-fee
+  configuration, the orders paper venue, a marketplace follow, a delegated withdrawal -- while a twin still
+  moves between customers and on the internal book, and its holdings always equal what its bridge released.
 - **Residual risk:** the attester is one key (no multi-party attestation in the sandbox); a release stuck
   beyond its attempt budget goes to manual review.
 - **Tests:** `TestIntegration_ABridgeMovesValueOnceAndReconciles`, `TestIntegration_ADuplicateReleaseMintsNothingTwice`,
   `TestIntegration_ConcurrentDuplicatesSettleOnce`, `TestIntegration_AReorgNeverRevertsFinalityOrDoubleCounts`,
   `TestIntegration_ADelayedBridgeCreatesNoPhantomCapital`, `TestProp_IntegrationNoDoubleCounting`,
   `TestProp_EachLegIsCountedOnceWhereItsValueIs`, `TestIntegration_TheDatabaseRefusesBridgeBookkeepingBypasses`,
-  `TestIntegration_BridgeReconciliationDetectsAnOutOfBandLock`, `TestAttester_SignsExactlyTheExpectedRelease`
-  (`internal/bridge`); `TestIntegration_SupplyReconcilesWhereverTheUnitsAreHeld` (`internal/stableasset`); demo
-  Scenario G.
+  `TestIntegration_BridgeReconciliationDetectsAnOutOfBandLock`, `TestAttester_SignsExactlyTheExpectedRelease`,
+  `TestIntegration_ABridgedTwinMovesOnlyAsItsBridgeReleasesItAndItsSupplyReconciles` (`internal/bridge`);
+  `TestIntegration_SupplyReconcilesWhereverTheUnitsAreHeld` (`internal/stableasset`);
+  `TestIntegration_ABridgedTwinsUnitsExistOnlyAsItsBridgeReleasesThem`,
+  `TestIntegration_TheFaucetNeverGrantsAnAssetWhoseSupplyAControllerOwns`,
+  `TestIntegration_TheSupplyRuleCountsTheLedgersHoldingCodes` (`internal/sandboxfund`);
+  `TestSupplyKinds_EveryGuardRefusesSupplyControlledAssets`, `TestIntegration_SupplyKindsAgreeWithTheDatabase`,
+  `TestIntegration_TheSharedCheckNamesEachController` (`internal/econ`);
+  `TestIntegration_AMarginAccountNeverBooksASupplyControlledAsset` (`internal/margin`);
+  `TestIntegration_ThePaperVenueRefusesASupplyControlledInstrument` (`internal/orders`);
+  `TestIntegration_ASupplyControlledAssetIsNeverWithdrawn` (`internal/delegation`); demo Scenario G.
 
 ## 16. Oracle manipulation (prediction markets and derivatives)
 
