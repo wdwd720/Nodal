@@ -880,6 +880,848 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/advanced/derivatives/clearing-house/funding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Capitalize the clearing house in a sandbox asset (operator; requires step-up)
+         * @description The clearing house is the counterparty of every paper trade, so a one-sided book is paid from its capital. Exactly once per Idempotency-Key and operator. Without asset_id the sandbox dollar is funded.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DerivativeClearingFundingRequest"];
+                };
+            };
+            responses: {
+                /** @description The funding journal (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DerivativeClearingFundingResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/derivatives/clearing-house/reconciliations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reconcile the clearing house's books against the flow register (operator; reconciliation kind CLEARING)
+         * @description CLEARING_RESULT must equal minus the register's net and the clearing house's books must balance. A difference opens (or refreshes) a material MISMATCH record, and while it is unresolved new derivative risk is refused (CLEARING_UNRECONCILED). It writes only that record, which is why it is a command. Without asset_id the sandbox dollar is reconciled.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DerivativeClearingReconcileRequest"];
+                };
+            };
+            responses: {
+                /** @description The reconciliation report */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DerivativeClearingReport"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/derivatives/contracts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Derivative contracts with the canonical terms the service trades them on and their latest mark
+         * @description Futures, perpetuals and options of the canonical instrument model, ordered by canonical name. Without kind every derivative kind is listed, at most limit contracts in all.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    kind?: components["schemas"]["DerivativeKind"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Contracts with their terms in force, latest mark and final settlement */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DerivativeContractList"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/derivatives/contracts/{instrumentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One derivative contract, its terms in force, latest mark and final settlement */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    instrumentId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The contract */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DerivativeContract"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/derivatives/contracts/{instrumentId}/analytics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reference analytics of an option at its latest mark -- model values, never a quote
+         * @description Black-Scholes-Merton price, Greeks and implied volatility of the option at its latest mark, whose index is the spot and whose mark is the premium the implied volatility is solved from. Everything here is a reference model value labelled as such: it is not a quote, not a settlement price and never posted, and it is not advice. The inputs the model used are returned with it.
+         */
+        get: {
+            parameters: {
+                query: {
+                    /** @description Continuous dividend yield in basis points (-10000 to 10000); 0 when absent */
+                    dividend_yield_bps?: number;
+                    /** @description Continuously compounded rate in basis points (-10000 to 10000); 0 when absent */
+                    rate_bps?: number;
+                    /** @description Annualised volatility the model prices with, in basis points (1 to 100000) */
+                    vol_bps: number;
+                };
+                header?: never;
+                path: {
+                    instrumentId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Reference model values and the inputs used */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DerivativeOptionAnalytics"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/derivatives/contracts/{instrumentId}/funding-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Charge one funding interval of a perpetual (operator; requires step-up)
+         * @description The premium index is the exact average of (mark - index) / index over the interval's marks that carry an index, clamped to the policy's maximum; every position open at the interval end pays (longs on a positive rate) or receives through the clearing house. Once per interval; a repeat writes nothing and says replay.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    instrumentId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DerivativeRunRequest"];
+                };
+            };
+            responses: {
+                /** @description What the run did (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DerivativeRunResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/derivatives/contracts/{instrumentId}/marks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The marks recorded for a contract, newest observation first */
+        get: {
+            parameters: {
+                query?: {
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path: {
+                    instrumentId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of marks */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DerivativeMarkPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /**
+         * Record a sandbox mark for a contract (operator)
+         * @description The mark must be exact at the contract's price scale and lie on its tick grid; it is never rounded. Without index the service derives the index from the underlying's fresh spot price, or records the mark without one (and everything that needs an index then refuses). An index given here is recorded under the mark's source. The same observation (contract, source, observed_at) again returns the stored mark; a different mark or index for it is CONFLICT. Without observed_at the mark is observed now.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    instrumentId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DerivativeMarkRequest"];
+                };
+            };
+            responses: {
+                /** @description The mark as recorded */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DerivativeMark"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/derivatives/contracts/{instrumentId}/settlement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Settle an expired future or option once and for all (operator; requires step-up)
+         * @description Without price the service settles a future at the last fresh mark at or before expiry and an option at that mark's index (in-the-money longs are exercised automatically and assigned FIFO to writers). A given price must be exact on the contract's tick grid and names its source. Once per contract; a repeat returns the first settlement and says replay.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    instrumentId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DerivativeSettleRequest"];
+                };
+            };
+            responses: {
+                /** @description The settlement (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DerivativeSettlementResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/derivatives/contracts/{instrumentId}/variation-margin-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Settle one variation-margin interval of a future or perpetual (operator; requires step-up)
+         * @description Every open position receives or pays the move of its value to the latest fresh mark through the clearing house. An interval is settled only after it ends, at most once, and never after a later one; a repeat writes nothing and says replay. A stale mark is refused (STALE_MARKET_DATA): variation margin is never settled on a stale price.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    instrumentId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DerivativeRunRequest"];
+                };
+            };
+            responses: {
+                /** @description What the run did (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DerivativeRunResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/derivatives/flows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The account's register of clearing-house flows (realized, variation margin, funding, premium, settlement), newest first
+         * @description The cash-flow register the clearing house's books reconcile against: every customer <-> clearing house flow, signed from the customer's side, with the journal transaction that posted it. A shortfall is an obligation the customer could not pay and the clearing house absorbed.
+         */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    kind?: components["schemas"]["DerivativeFlowKind"];
+                    limit?: components["parameters"]["Limit"];
+                    position_id?: components["schemas"]["UUID"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of flows */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DerivativeFlowPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/derivatives/funding-accruals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Perpetual funding accrued to the account's positions, one row per position and interval, newest first */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                    position_id?: components["schemas"]["UUID"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of funding accruals */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DerivativeFundingAccrualPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/derivatives/policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The versioned margin, funding and paper-fill policy every derivative decision records */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The policy in force and its hash */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DerivativePolicy"];
+                    };
+                };
+                422: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/derivatives/positions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * An account's derivative positions with the service's valuation of its open book, oldest first
+         * @description Each open position carries its average entry price, unrealized PnL and initial and maintenance requirement at its latest mark, exactly as the service values the account's book. The service values the book as a whole and fails closed: when any open position cannot be valued (a stale or missing mark) no position is valued and the refusal is returned instead (valuation_status REFUSED), never a figure that would understate the risk. Funding paid or received is funding_pnl; every interval is in /advanced/derivatives/funding-accruals.
+         */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                    status?: components["schemas"]["DerivativePositionStatus"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of positions with the book's valuation */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DerivativePositionPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /**
+         * Open a position or add to one in one of your own accounts (paper fill at the mark plus disclosed slippage)
+         * @description A refusal the service reaches after recording the intent is RECORDED: the answer is the stable code (RISK_REJECTED, INSUFFICIENT_BUYING_POWER, CAPABILITY_NOT_APPROVED, FORBIDDEN, CONFLICT, ...) with fields intent_id, reasons and, for a risk refusal, risk_decision_id, and the intent stays readable as REJECTED at /advanced/intents/{intentId}. A stale or missing mark refuses a risk-increasing open.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DerivativeOpenRequest"];
+                };
+            };
+            responses: {
+                /** @description Replay of an intent the service had already carried out */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DerivativeTradeResult"];
+                    };
+                };
+                /** @description The position was opened or increased (value domain SIMULATED) */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DerivativeTradeResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/derivatives/positions/{positionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One derivative position, to its account's owner or an operator; anyone else is told it does not exist */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    positionId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The position, valued when it is open */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DerivativePosition"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/derivatives/positions/{positionId}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reduce or close one of your own open positions (paper fill; never refused for a stale mark)
+         * @description Without quantity the whole position is closed. Closing never increases risk: a stale mark does not prevent it (it is priced at the last mark there is) and no margin is reserved. A refusal the service reaches is recorded and answered as for opening. Only the account's owner closes; anyone else is told the position does not exist.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    positionId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DerivativeCloseRequest"];
+                };
+            };
+            responses: {
+                /** @description The position after the close (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DerivativeTradeResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/derivatives/positions/{positionId}/exercise": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Exercise held American options before expiry (settled at the fresh index, assigned FIFO to writers)
+         * @description Without quantity every held contract is exercised. A European option is exercised automatically at expiry and is refused here (UNSUPPORTED); an out-of-the-money option, an expired one or a stale index is refused and the refusal recorded. Only the account's owner exercises; anyone else is told the position does not exist.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    positionId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DerivativeExerciseRequest"];
+                };
+            };
+            responses: {
+                /** @description The holder's position after the exercise (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DerivativeTradeResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/advanced/effects": {
         parameters: {
             query?: never;
@@ -5915,6 +6757,465 @@ export interface components {
         DepositPage: components["schemas"]["Page"] & {
             items: components["schemas"]["Deposit"][];
         };
+        DerivativeAnalyticsInputs: {
+            /** Format: int64 */
+            dividend_yield_bps: number;
+            /** Format: int64 */
+            rate_bps: number;
+            /** Format: int64 */
+            vol_bps: number;
+        };
+        /** @description The asset amounts are counted in, so base units can be read as the decimal they denote. */
+        DerivativeAsset: {
+            decimals: number;
+            id: components["schemas"]["UUID"];
+            symbol: string;
+        };
+        /** @description The account's open derivative book as the service values it, in USD of the valuation asset with conservative rounding */
+        DerivativeBook: {
+            as_of: components["schemas"]["Timestamp"];
+            equity_adjustment: components["schemas"]["USD"];
+            gross_notional: components["schemas"]["USD"];
+            initial_margin: components["schemas"]["USD"];
+            maintenance_margin: components["schemas"]["USD"];
+            /** Format: int64 */
+            max_initial_bps: number;
+            policy_hash: string;
+            policy_version: string;
+            /** @description Open positions valued */
+            positions: number;
+            quote_asset: components["schemas"]["DerivativeAsset"];
+            unrealized_pnl: components["schemas"]["USD"];
+        };
+        /** @enum {string} */
+        DerivativeBookStatus: "VALUED" | "REFUSED";
+        DerivativeClassRates: {
+            /** Format: int64 */
+            initial_bps: number;
+            /** Format: int64 */
+            maintenance_bps: number;
+            risk_class: string;
+        };
+        DerivativeClearingFundingRequest: {
+            asset_id?: components["schemas"]["UUID"];
+            /** @description Base units of the asset; positive */
+            quantity: components["schemas"]["Quantity"];
+        };
+        DerivativeClearingFundingResult: {
+            asset: components["schemas"]["DerivativeAsset"];
+            journal_transaction_ids: components["schemas"]["UUID"][];
+            quantity: components["schemas"]["Quantity"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        DerivativeClearingReconcileRequest: {
+            asset_id?: components["schemas"]["UUID"];
+        };
+        DerivativeClearingReport: {
+            asset: components["schemas"]["DerivativeAsset"];
+            /** @description The clearing house's CLEARING_CAPITAL ledger balance */
+            capital: components["schemas"]["Quantity"];
+            clearing_house_id: components["schemas"]["UUID"];
+            /** @description result minus expected_result */
+            difference: components["schemas"]["Quantity"];
+            /** @description Minus register_net: what CLEARING_RESULT must be */
+            expected_result: components["schemas"]["Quantity"];
+            /** Format: int64 */
+            flows: number;
+            /** @description The clearing house's CLEARING_CASH ledger balance */
+            holdings: components["schemas"]["Quantity"];
+            internally_matched: boolean;
+            /** @description The books agree with the register and balance */
+            matched: boolean;
+            net_open_interest: components["schemas"]["DerivativeOpenInterest"][];
+            /** @description The CLEARING reconciliation record opened or refreshed for a mismatch */
+            record_id?: components["schemas"]["UUID"];
+            /** @description The sum of the register's customer-side amounts */
+            register_net: components["schemas"]["Quantity"];
+            register_shortfall: components["schemas"]["Quantity"];
+            /** @description The clearing house's CLEARING_RESULT ledger balance */
+            result: components["schemas"]["Quantity"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        DerivativeCloseRequest: {
+            mode: components["schemas"]["AdvancedMode"];
+            /** @description Contracts to close; absent closes the position */
+            quantity?: components["schemas"]["Quantity"];
+        };
+        DerivativeContract: {
+            canonical_name: string;
+            id: components["schemas"]["UUID"];
+            kind: components["schemas"]["DerivativeKind"];
+            latest_mark?: components["schemas"]["DerivativeMark"];
+            /** @description False when the contract has never been marked; latest_mark is then absent */
+            marked: boolean;
+            risk_class: string;
+            /** @description True once the contract has been finally settled; settlement is then present */
+            settled: boolean;
+            settlement?: components["schemas"]["DerivativeSettlement"];
+            settlement_asset: components["schemas"]["DerivativeAsset"];
+            status: string;
+            terms: components["schemas"]["InstrumentTerms"];
+            /** @description hex sha256 of the canonical terms in force */
+            terms_hash: string;
+            terms_version: number;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        DerivativeContractList: {
+            items: components["schemas"]["DerivativeContract"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /**
+         * @description A non-negative decimal written out exactly. It is never rounded; one that is not exact where it is used is refused.
+         * @example 2500.50
+         */
+        DerivativeDecimal: string;
+        DerivativeExerciseRequest: {
+            mode: components["schemas"]["AdvancedMode"];
+            /** @description Contracts to exercise; absent exercises every one held */
+            quantity?: components["schemas"]["Quantity"];
+        };
+        DerivativeFill: {
+            account_id: components["schemas"]["UUID"];
+            /** @description What the customer received (> 0) or paid (< 0) the clearing house for this fill */
+            amount_settled: components["schemas"]["Quantity"];
+            id: components["schemas"]["UUID"];
+            instrument_id: components["schemas"]["UUID"];
+            intent_id?: components["schemas"]["UUID"];
+            mark_id?: components["schemas"]["UUID"];
+            occurred_at: components["schemas"]["Timestamp"];
+            position_id: components["schemas"]["UUID"];
+            price_mantissa: components["schemas"]["Quantity"];
+            price_scale: number;
+            /** @description Signed contracts the fill moved the position by */
+            quantity: components["schemas"]["Quantity"];
+            realized_pnl: components["schemas"]["Quantity"];
+            risk_decision_id?: components["schemas"]["UUID"];
+            side: components["schemas"]["DerivativeFillSide"];
+            /** Format: int64 */
+            slippage_bps: number;
+            source: components["schemas"]["DerivativeFillSource"];
+            value: components["schemas"]["Quantity"];
+        };
+        /** @enum {string} */
+        DerivativeFillSide: "BUY" | "SELL";
+        /** @enum {string} */
+        DerivativeFillSource: "PAPER" | "BOOK" | "EXERCISE" | "ASSIGNMENT" | "EXPIRY";
+        DerivativeFlow: {
+            account_id: components["schemas"]["UUID"];
+            /** @description Signed from the customer's side: > 0 received from the clearing house, < 0 paid to it */
+            amount: components["schemas"]["Quantity"];
+            id: components["schemas"]["UUID"];
+            instrument_id: components["schemas"]["UUID"];
+            journal_transaction_id?: components["schemas"]["UUID"];
+            kind: components["schemas"]["DerivativeFlowKind"];
+            occurred_at: components["schemas"]["Timestamp"];
+            position_id: components["schemas"]["UUID"];
+            reference_id: string;
+            reference_type: string;
+            settlement_asset: components["schemas"]["DerivativeAsset"];
+            /** @description What the customer owed and could not pay; the clearing house absorbed it */
+            shortfall: components["schemas"]["Quantity"];
+            symbol: string;
+        };
+        /** @enum {string} */
+        DerivativeFlowKind: "REALIZED" | "VARIATION_MARGIN" | "FUNDING" | "FUTURE_SETTLEMENT" | "OPTION_PREMIUM" | "OPTION_EXERCISE" | "OPTION_ASSIGNMENT";
+        DerivativeFlowPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["DerivativeFlow"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        DerivativeFundingAccrual: {
+            /** @description What the position paid or received for the interval (never negative; direction says which) */
+            amount: components["schemas"]["Quantity"];
+            clamped: boolean;
+            direction: components["schemas"]["DerivativeFundingDirection"];
+            flow_id?: components["schemas"]["UUID"];
+            funding_rate_id: components["schemas"]["UUID"];
+            id: components["schemas"]["UUID"];
+            instrument_id: components["schemas"]["UUID"];
+            interval_end: components["schemas"]["Timestamp"];
+            interval_start: components["schemas"]["Timestamp"];
+            /** @description The last mark of the interval */
+            mark_mantissa: components["schemas"]["Quantity"];
+            per_contract_amount: components["schemas"]["Quantity"];
+            position_id: components["schemas"]["UUID"];
+            /** Format: int64 */
+            premium_index_e8: number;
+            price_scale: number;
+            /** @description The position's signed contracts at the funding time (the interval end) */
+            quantity: components["schemas"]["Quantity"];
+            /**
+             * Format: int64
+             * @description The clamped funding rate in 10^-8 per interval
+             */
+            rate_e8: number;
+            settlement_asset: components["schemas"]["DerivativeAsset"];
+            symbol: string;
+        };
+        DerivativeFundingAccrualPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["DerivativeFundingAccrual"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @enum {string} */
+        DerivativeFundingDirection: "PAY" | "RECEIVE";
+        /** @enum {string} */
+        DerivativeKind: "FUTURE" | "PERPETUAL" | "OPTION";
+        DerivativeMark: {
+            /** @description False when the mark was recorded without an index (the underlying's spot) */
+            has_index: boolean;
+            id: components["schemas"]["UUID"];
+            index_mantissa?: components["schemas"]["Quantity"];
+            index_scale?: number;
+            index_source?: string;
+            instrument_id: components["schemas"]["UUID"];
+            mark_mantissa: components["schemas"]["Quantity"];
+            observed_at: components["schemas"]["Timestamp"];
+            /** @description The mark is mark_mantissa at this many decimal places (the contract's price scale) */
+            price_scale: number;
+            recorded_at: components["schemas"]["Timestamp"];
+            source: string;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        DerivativeMarkPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["DerivativeMark"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        DerivativeMarkRequest: {
+            index?: components["schemas"]["DerivativeDecimal"];
+            mark: components["schemas"]["DerivativeDecimal"];
+            observed_at?: components["schemas"]["Timestamp"];
+            source: string;
+        };
+        /** @description A model value as an exact decimal string (rounded half-even to 18 places by the model where it says so) */
+        DerivativeModelDecimal: string;
+        DerivativeOpenInterest: {
+            instrument_id: components["schemas"]["UUID"];
+            quantity: components["schemas"]["Quantity"];
+        };
+        DerivativeOpenRequest: {
+            account_id: components["schemas"]["UUID"];
+            instrument_id: components["schemas"]["UUID"];
+            mode: components["schemas"]["AdvancedMode"];
+            /** @description Contracts; positive and a whole number of lots */
+            quantity: components["schemas"]["Quantity"];
+            side: components["schemas"]["DerivativeSide"];
+        };
+        /** @description Reference values of a model, labelled as such by the service. Not a quote, not a settlement price, never posted, and not advice. */
+        DerivativeOptionAnalytics: {
+            as_of: components["schemas"]["Timestamp"];
+            delta: components["schemas"]["DerivativeModelDecimal"];
+            gamma: components["schemas"]["DerivativeModelDecimal"];
+            implied_vol?: components["schemas"]["DerivativeModelDecimal"];
+            /** @description Why no implied volatility could be solved from the mark (a stable reason code) */
+            implied_vol_reason?: string;
+            inputs: components["schemas"]["DerivativeAnalyticsInputs"];
+            instrument_id: components["schemas"]["UUID"];
+            intrinsic: components["schemas"]["DerivativeModelDecimal"];
+            /** @description The service's own label: a reference model value, not a quote */
+            label: string;
+            mark: components["schemas"]["DerivativeMark"];
+            model: string;
+            price: components["schemas"]["DerivativeModelDecimal"];
+            regime: string;
+            right: string;
+            spot: components["schemas"]["DerivativeModelDecimal"];
+            strike: components["schemas"]["DerivativeModelDecimal"];
+            style: string;
+            theta_per_day: components["schemas"]["DerivativeModelDecimal"];
+            theta_per_year: components["schemas"]["DerivativeModelDecimal"];
+            time_value?: components["schemas"]["DerivativeModelDecimal"];
+            time_years: components["schemas"]["DerivativeModelDecimal"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            vega: components["schemas"]["DerivativeModelDecimal"];
+            vega_per_vol_point: components["schemas"]["DerivativeModelDecimal"];
+            vol: components["schemas"]["DerivativeModelDecimal"];
+        };
+        DerivativePolicy: {
+            /** Format: int64 */
+            expiry_gap_shock_bps: number;
+            /** Format: int64 */
+            expiry_gap_window_ms: number;
+            /** Format: int64 */
+            funding_buffer_intervals: number;
+            /**
+             * Format: int64
+             * @description The denominator of every *_e8 rate (10^8)
+             */
+            funding_rate_scale: number;
+            /** @description hex sha256 of the policy's canonical JSON */
+            hash: string;
+            /** @description Initial and maintenance rates of futures and perpetuals by the underlying's risk class; an unlisted class cannot be traded */
+            linear: components["schemas"]["DerivativeClassRates"][];
+            /**
+             * Format: int64
+             * @description Funding is clamped to plus or minus this many 10^-8 per interval
+             */
+            max_funding_rate_e8: number;
+            /** Format: int64 */
+            option_maintenance_ratio_bps: number;
+            /** Format: int64 */
+            option_min_margin_bps: number;
+            /** @description The scenario grid a written option's worst loss is computed over */
+            option_shocks_bps: number[];
+            /**
+             * Format: int64
+             * @description A paper buy fills this far above the mark and a sell this far below
+             */
+            paper_slippage_bps: number;
+            /** Format: int64 */
+            variation_margin_interval_ms: number;
+            version: string;
+        };
+        DerivativePosition: {
+            account_id: components["schemas"]["UUID"];
+            closed_at?: components["schemas"]["Timestamp"];
+            cost_value: components["schemas"]["Quantity"];
+            /** @description Funding received (> 0) or paid (< 0) over the position's life */
+            funding_pnl: components["schemas"]["Quantity"];
+            id: components["schemas"]["UUID"];
+            instrument_id: components["schemas"]["UUID"];
+            kind: components["schemas"]["DerivativeKind"];
+            margin_posted: components["schemas"]["Quantity"];
+            opened_at: components["schemas"]["Timestamp"];
+            price_scale: number;
+            /** @description Signed contracts: long > 0, short < 0 */
+            quantity: components["schemas"]["Quantity"];
+            realized_pnl: components["schemas"]["Quantity"];
+            settled_value: components["schemas"]["Quantity"];
+            settlement_asset: components["schemas"]["DerivativeAsset"];
+            shortfall: components["schemas"]["Quantity"];
+            /** @description Absent once the position is flat */
+            side?: components["schemas"]["DerivativeSide"];
+            status: components["schemas"]["DerivativePositionStatus"];
+            symbol: string;
+            valuation?: components["schemas"]["DerivativePositionValuation"];
+            valuation_refusal?: components["schemas"]["DerivativeRefusal"];
+            valuation_status: components["schemas"]["DerivativeValuationStatus"];
+            /** Format: int64 */
+            version: number;
+        };
+        DerivativePositionPage: components["schemas"]["Page"] & {
+            book?: components["schemas"]["DerivativeBook"];
+            book_refusal?: components["schemas"]["DerivativeRefusal"];
+            book_status: components["schemas"]["DerivativeBookStatus"];
+            items: components["schemas"]["DerivativePosition"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @enum {string} */
+        DerivativePositionStatus: "OPEN" | "CLOSED" | "SETTLED";
+        DerivativePositionValuation: {
+            /** @description Exact cost over quantity at the price scale, rounded half-even once (display only) */
+            average_entry_price_mantissa: components["schemas"]["Quantity"];
+            /** @description What the position adds to equity beyond the ledger balances buying power counts */
+            equity_adjustment: components["schemas"]["Quantity"];
+            mark_id: components["schemas"]["UUID"];
+            mark_mantissa: components["schemas"]["Quantity"];
+            mark_observed_at: components["schemas"]["Timestamp"];
+            requirement: components["schemas"]["DerivativeRequirement"];
+            /** @description Quantity times the contract value at the mark, less the cost value */
+            unrealized_pnl: components["schemas"]["Quantity"];
+        };
+        DerivativeRefusal: {
+            /** @description The stable code the service refused with */
+            code: string;
+            detail: string;
+        };
+        /** @description The margin requirement at the mark, in base units of the settlement asset (every rounding up) */
+        DerivativeRequirement: {
+            funding_buffer: components["schemas"]["Quantity"];
+            initial: components["schemas"]["Quantity"];
+            maintenance: components["schemas"]["Quantity"];
+            notional: components["schemas"]["Quantity"];
+            scenario_loss: components["schemas"]["Quantity"];
+        };
+        /** @enum {string} */
+        DerivativeRunKind: "VARIATION_MARGIN" | "FUNDING";
+        DerivativeRunRequest: {
+            /** @description On the interval grid: a whole number of intervals since the Unix epoch */
+            interval_start: components["schemas"]["Timestamp"];
+        };
+        DerivativeRunResult: {
+            clamped?: boolean;
+            instrument_id: components["schemas"]["UUID"];
+            interval_end: components["schemas"]["Timestamp"];
+            interval_start: components["schemas"]["Timestamp"];
+            journal_transaction_ids: components["schemas"]["UUID"][];
+            kind: components["schemas"]["DerivativeRunKind"];
+            mark_id?: components["schemas"]["UUID"];
+            /** @description Collected from payers; absent on a replay */
+            paid?: components["schemas"]["Quantity"];
+            per_contract_amount?: components["schemas"]["Quantity"];
+            /** @description Positions the run covered */
+            positions?: number;
+            /** Format: int64 */
+            premium_index_e8?: number;
+            /** Format: int64 */
+            rate_e8?: number;
+            /** @description Paid to receivers; absent on a replay */
+            received?: components["schemas"]["Quantity"];
+            /** @description True when the interval had already been run; nothing was written and its flows are in the register */
+            replay: boolean;
+            run_id: components["schemas"]["UUID"];
+            settlement_asset: components["schemas"]["DerivativeAsset"];
+            /** @description What payers could not pay; absent on a replay */
+            shortfall?: components["schemas"]["Quantity"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        DerivativeSettlement: {
+            id: components["schemas"]["UUID"];
+            kind: components["schemas"]["DerivativeSettlementKind"];
+            positions: number;
+            /** @description A future's final price, or the underlying's price an option settled at */
+            price_mantissa: components["schemas"]["Quantity"];
+            price_scale: number;
+            price_source: string;
+            settled_at: components["schemas"]["Timestamp"];
+        };
+        /** @enum {string} */
+        DerivativeSettlementKind: "FUTURE" | "OPTION";
+        DerivativeSettlementResult: {
+            exercise_ids: components["schemas"]["UUID"][];
+            instrument_id: components["schemas"]["UUID"];
+            /** @description Options only; absent on a replay */
+            intrinsic_per_contract?: components["schemas"]["Quantity"];
+            journal_transaction_ids: components["schemas"]["UUID"][];
+            kind: components["schemas"]["DerivativeSettlementKind"];
+            /** @description Absent on a replay */
+            paid?: components["schemas"]["Quantity"];
+            positions: number;
+            price_mantissa: components["schemas"]["Quantity"];
+            price_scale: number;
+            /** @description Absent on a replay */
+            received?: components["schemas"]["Quantity"];
+            replay: boolean;
+            settlement_asset: components["schemas"]["DerivativeAsset"];
+            settlement_id: components["schemas"]["UUID"];
+            /** @description Absent on a replay */
+            shortfall?: components["schemas"]["Quantity"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        DerivativeSettleRequest: {
+            price?: components["schemas"]["DerivativeDecimal"];
+            /** @description Required with price */
+            price_source?: string;
+        };
+        /** @enum {string} */
+        DerivativeSide: "LONG" | "SHORT";
+        DerivativeTradeResult: {
+            exercise_id?: components["schemas"]["UUID"];
+            fill?: components["schemas"]["DerivativeFill"];
+            intent: components["schemas"]["EconomicIntent"];
+            journal_transaction_ids: components["schemas"]["UUID"][];
+            position?: components["schemas"]["DerivativePosition"];
+            /** @description True when the service had already carried out this idempotency key; nothing was written this time */
+            replay: boolean;
+            risk_decision_id?: components["schemas"]["UUID"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /**
+         * @description VALUED: valuation is present. REFUSED: the service could not value the account's open book and valuation_refusal says why; no figure is given in its place. NOT_APPLICABLE: the position is not open. NOT_COMPUTED: this answer (a trade result) does not value the position; read it to.
+         * @enum {string}
+         */
+        DerivativeValuationStatus: "VALUED" | "REFUSED" | "NOT_APPLICABLE" | "NOT_COMPUTED";
         EconomicEffect: {
             account_id?: components["schemas"]["UUID"];
             compensation_journal_transaction_id?: components["schemas"]["UUID"];

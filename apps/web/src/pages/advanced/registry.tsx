@@ -29,6 +29,7 @@ import { Overview } from "./core/Overview.tsx";
 import { MarginSection } from "./margin/MarginSection.tsx";
 
 // >>> advanced:derivatives import
+import { DerivativesSection } from "./derivatives/DerivativesSection.tsx";
 
 // >>> advanced:equities import
 
@@ -106,6 +107,13 @@ export const ADVANCED_SECTIONS: readonly AdvancedSection[] = [
   },
 
   // >>> advanced:derivatives section
+  {
+    path: "derivatives",
+    title: "Derivatives",
+    description:
+      "Futures, perpetuals and options in paper and sandbox mode: contracts and marks, positions valued by the backend, the clearing-house flow register, funding, and reference option analytics.",
+    element: <DerivativesSection />,
+  },
 
   // >>> advanced:equities section
 

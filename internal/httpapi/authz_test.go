@@ -173,6 +173,7 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		"{marginStressRunId}": testDepositID.String(),
 
 		// >>> advanced:derivatives path parameters
+		"{positionId}": testSessionID,
 
 		// >>> advanced:equities path parameters
 
@@ -217,6 +218,10 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		"/v1/advanced/margin/stress-runs": "account_id=" + testAccountID.String(),
 
 		// >>> advanced:derivatives required query
+		"/v1/advanced/derivatives/positions":                          "account_id=" + testAccountID.String(),
+		"/v1/advanced/derivatives/flows":                              "account_id=" + testAccountID.String(),
+		"/v1/advanced/derivatives/funding-accruals":                   "account_id=" + testAccountID.String(),
+		"/v1/advanced/derivatives/contracts/{instrumentId}/analytics": "vol_bps=5000",
 
 		// >>> advanced:equities required query
 

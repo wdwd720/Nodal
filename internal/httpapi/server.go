@@ -73,6 +73,9 @@ type Ports struct {
 	Margin MarginPort
 
 	// >>> advanced:derivatives port
+	// Derivatives serves futures, perpetuals and options in PAPER and SANDBOX
+	// mode (internal/derivatives). A nil port answers UNSUPPORTED.
+	Derivatives DerivativesPort
 
 	// >>> advanced:equities port
 
