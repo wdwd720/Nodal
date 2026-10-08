@@ -207,3 +207,38 @@ export const PROVENANCE_NOTE =
 export const PAYOUT_NOT_APPROVED =
   "No payout path is approved in this deployment. That is a decision about the product, not about " +
   "your account, and no amount of Credits changes it.";
+
+/* --------------------------------------------------------------------------
+ * The advanced (sandbox) area (ADR-0020)
+ * ------------------------------------------------------------------------ */
+
+/** The accessible name and visible title of the notice below. */
+export const SANDBOX_NOTICE_TITLE = "Simulated value — sandbox only";
+
+/**
+ * The standing notice of the advanced area, rendered by <SimulatedNotice />
+ * at the top of every one of its pages, before any figure.
+ *
+ * Every figure the advanced API reports is value domain SIMULATED: paper,
+ * sandbox or simulated-chain value that exists nowhere outside this
+ * deployment. The notice says that first, and then says the other half
+ * plainly: LIVE is not switched off here, it is not implemented, and no gate,
+ * setting or operator can turn it on.
+ */
+export const SANDBOX_NOTICE =
+  "Everything in this area is simulated value with no economic substance. It runs only in PAPER, " +
+  "SANDBOX and DEVNET modes: the balances, prices, margin and buying power shown here are records of " +
+  "a simulation, not money, and nothing here moves real money or reaches a real venue or chain. " +
+  "LIVE is not implemented in this build and is refused for every advanced capability.";
+
+/** The four advanced modes as the API reports them, each with an honest description. */
+export const ADVANCED_MODE_DESCRIPTIONS: Readonly<Record<string, string>> = {
+  PAPER: "A simulated fill against a reference price or an internal simulated book. Simulated value only.",
+  SANDBOX: "A full simulated workflow against a deterministic simulated provider. Simulated value only.",
+  DEVNET:
+    "Signed and submitted to a simulated local chain, with real signatures and finality states over " +
+    "value that exists nowhere outside it.",
+  LIVE:
+    "Would move real value. Not implemented in this build, so it is refused for every advanced " +
+    "capability whatever a gate, a setting or an operator says.",
+};

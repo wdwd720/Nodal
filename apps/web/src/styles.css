@@ -895,6 +895,151 @@ textarea.input {
   padding-left: 0;
 }
 
+/* ------------------------------------------------------- advanced area --- */
+
+/* The advanced (sandbox) area: a second navigation row under the main one,
+   a line saying which account is read, and the notice every page opens with. */
+.advanced-area {
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+.subnav {
+  overflow-x: auto;
+  border-bottom: 1px solid var(--line);
+  margin: -8px 0 12px;
+}
+.subnav ul {
+  display: flex;
+  gap: 2px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.subnav-link {
+  display: block;
+  padding: 8px 12px;
+  color: var(--ink-soft);
+  text-decoration: none;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  font-size: 0.87rem;
+}
+.subnav-link:hover {
+  color: var(--ink);
+}
+.subnav-link-active {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+.account-scope {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin: 0 0 16px;
+  color: var(--ink-soft);
+  font-size: 0.87rem;
+}
+.account-scope-line {
+  margin: 0;
+}
+.inspect-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-end;
+}
+.inspect-form .input {
+  width: 40ch;
+  max-width: 100%;
+}
+.field-error {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--bad);
+  font-size: 0.8rem;
+}
+
+.filter {
+  display: grid;
+  gap: 4px;
+}
+.filter > label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+}
+
+.sim-notice-title {
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+.sim-notice-body {
+  margin: 0;
+}
+
+.codes {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+}
+.cell-note {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.78rem;
+  color: var(--ink-faint);
+  overflow-wrap: anywhere;
+}
+.cap-name {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+.meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  align-items: center;
+  margin: 4px 0 0;
+}
+.pager {
+  align-items: center;
+}
+.pager-position {
+  color: var(--ink-faint);
+  font-size: 0.85rem;
+}
+.section-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+.section-description {
+  margin: 2px 0 0;
+  color: var(--ink-soft);
+  font-size: 0.87rem;
+}
+.raw-block {
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  max-height: 420px;
+  margin: 8px 0 0;
+}
+
 /* -------------------------------------------------------------- signin --- */
 
 .signin {
