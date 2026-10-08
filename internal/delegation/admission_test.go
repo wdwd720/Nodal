@@ -164,10 +164,16 @@ var keyMaterial = []reflect.Type{
 }
 
 // keyMaterialIn returns the key-material types (keyMaterial) among types,
-// whether held directly or behind a pointer.
+// whether held directly or behind a pointer, and every unnamed byte array:
+// the shape a seed is passed in ([32]byte, as the facade's configuration
+// once took the signer's and the venues' seeds). A named one -- a public
+// key, a hash -- says what it is.
 func keyMaterialIn(types map[reflect.Type]bool) []string {
 	var out []string
 	for t := range types {
+		if t.Kind() == reflect.Array && t.Elem().Kind() == reflect.Uint8 && t.Name() == "" {
+			out = append(out, t.String())
+		}
 		for _, k := range keyMaterial {
 			if t == k || t == reflect.PointerTo(k) {
 				out = append(out, t.String())
@@ -256,11 +262,13 @@ func heldTypes(v reflect.Value) map[reflect.Type]bool {
 
 // TestTheAgentAdmissionHoldsNoKeyMaterial proves what the agent runtime's
 // facade holds: no delegated signer, no venue co-signer, no key pair and no
-// seed. By its type -- the admitter it wraps declares no field, at any
-// depth, that could hold one -- and by its value: everything reachable from
-// the facade NewAgentAdmission builds, through every pointer, interface,
-// struct, slice and map, is free of them. The walk can see them: a Service,
-// which does sign, shows its signer and its co-signers to the same walk.
+// seed -- neither a sandbox chain seed nor an unnamed byte array, the shape
+// the signer's and the venues' seeds were once handed to it in. By its type
+// -- the admitter it wraps declares no field, at any depth, that could hold
+// one -- and by its value: everything reachable from the facade
+// NewAgentAdmission builds, through every pointer, interface, struct, slice
+// and map, is free of them. The walk can see them: a Service, which does
+// sign, shows its signer and its co-signers to the same walk.
 func TestTheAgentAdmissionHoldsNoKeyMaterial(t *testing.T) {
 	t.Parallel()
 	assert.Empty(t, keyMaterialIn(declaredTypes(reflect.TypeOf(AgentAdmission{}))),
@@ -282,7 +290,7 @@ func TestTheAgentAdmissionHoldsNoKeyMaterial(t *testing.T) {
 	svc := &Service{admitter: *a.adm, signer: signer, venues: map[devnet.PublicKey]*VenueSigner{venue.PublicKey(): venue}}
 	signers := []string{"*delegation.DelegatedSigner", "delegation.DelegatedSigner", "*delegation.VenueSigner", "delegation.VenueSigner"}
 	assert.ElementsMatch(t, signers, keyMaterialIn(heldTypes(reflect.ValueOf(svc))))
-	assert.ElementsMatch(t, signers, keyMaterialIn(declaredTypes(reflect.TypeOf(Service{}))))
+	assert.Subset(t, keyMaterialIn(declaredTypes(reflect.TypeOf(Service{}))), signers)
 }
 
 // TestNewAgentAdmissionTakesNoSeedAndNoSigner pins what the agent runtime
