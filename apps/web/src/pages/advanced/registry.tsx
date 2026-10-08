@@ -25,6 +25,9 @@ import { EconomicActivitySection } from "./core/EconomicActivity.tsx";
 import { InstrumentsSection } from "./core/Instruments.tsx";
 import { Overview } from "./core/Overview.tsx";
 
+// >>> advanced:portfolio import
+import { PortfolioPage } from "./portfolio/PortfolioPage.tsx";
+
 // >>> advanced:margin import
 import { MarginSection } from "./margin/MarginSection.tsx";
 
@@ -74,10 +77,19 @@ export interface AdvancedSection {
   readonly element: ReactElement;
 }
 
-/** The section `/advanced` opens on. */
-export const ADVANCED_DEFAULT_SECTION = "overview";
+/** The section `/advanced` opens on: a customer's own portfolio. */
+export const ADVANCED_DEFAULT_SECTION = "portfolio";
 
 export const ADVANCED_SECTIONS: readonly AdvancedSection[] = [
+  // >>> advanced:portfolio section
+  {
+    path: "portfolio",
+    title: "Portfolio",
+    description:
+      "Everything the account holds in the sandbox in one read — balances by asset and chain with what is reserved and why, capital not yet free to use, buying power and equity, positions in every subsystem and what stands in the way of new risk — each linking to the page it summarises.",
+    element: <PortfolioPage />,
+  },
+
   {
     path: "overview",
     title: "Overview",
