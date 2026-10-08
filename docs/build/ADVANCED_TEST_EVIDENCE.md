@@ -54,9 +54,10 @@ the advanced packages. Subtests and rapid cases are not counted separately.
 | 2026-10-07 | `c4defed` | `make perf-advanced` (smoke, shared machine) | every measured target met; a recorded run on an idle machine is pending |
 
 Each domain lane ran its package's unit, race and integration suites green before it was merged, and each
-API lane ran its handler tests, its over-HTTP integration test, the IDOR probe and, against a live API on
-separate ports, its Playwright spec (margin, prediction markets, derivatives 11/11, marketplace 19/19); those
-runs are recorded in the lanes' reports, not repeated here.
+API lane ran its handler tests, its over-HTTP integration test and the IDOR probe. Playwright specs were run
+against a live API on separate ports by the prediction-market (with the core spec), derivatives (11/11) and
+marketplace (19/19) lanes; the margin lane's spec was typechecked but not run against a live API. Those runs
+are recorded in the lanes' reports, not repeated here.
 
 ## Not yet run as a whole
 
