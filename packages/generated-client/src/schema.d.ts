@@ -5188,6 +5188,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/advanced/prediction-markets/{marketId}/held-payouts/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Claim the payout a settled or voided market holds for your account
+         * @description A payout or refund the platform could not deliver at settlement (a frozen or closed account, an unverified identity) is held in the market's escrow for its holder. Once the account is eligible, its owner claims it here: the claim is evaluated by the risk kernel with the account as it is now, delivers exactly the held amount, and happens once.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    marketId: components["parameters"]["MarketId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["PredictionClaimRequest"];
+                };
+            };
+            responses: {
+                /** @description The held payout, now claimed, and the economic action that delivered it */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PredictionClaimResult"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/advanced/prediction-markets/{marketId}/issuances": {
         parameters: {
             query?: never;
@@ -5291,7 +5343,7 @@ export interface paths {
         put?: never;
         /**
          * Record what the sandbox oracle observed for a market (operator; sandbox oracle only)
-         * @description The sandbox oracle is the stand-in for the world a market asks about. An observation is what it will sign when a resolution asks it for a report; a later observation replaces an earlier one. Observations live in the API process's memory. Without a sandbox oracle this answers PROVIDER_UNAVAILABLE.
+         * @description The sandbox oracle is the stand-in for the world a market asks about. The observation is signed with the sandbox oracle's key and stored durably, with an audit event naming the operator who recorded it; a resolution reads the latest stored observation back and verifies it. Recording the identical observation again is a replay. The operator who records an observation for a market can never resolve that market. Only a market that registered the sandbox oracle can be observed; without a sandbox oracle this answers PROVIDER_UNAVAILABLE.
          */
         post: {
             parameters: {
@@ -5517,8 +5569,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Resolve from the configured oracle's report, verified against the market's oracle key (operator)
-         * @description RESOLVING: the report resolves the market. DISPUTED: a report closes the dispute (DISPUTE_OVERTURNED when its outcome differs, DISPUTE_UPHELD when it does not). Replaying an accepted report changes nothing. The market's creator, and for a dispute the operator who raised it, are refused. With no oracle configured this answers PROVIDER_UNAVAILABLE.
+         * Resolve from the oracle's report, verified against the market's oracle key (operator)
+         * @description The report is the latest stored sandbox oracle observation (verified when it is read and again when it is accepted), or the configured external oracle's. RESOLVING: the report resolves the market. DISPUTED: a report closes the dispute (DISPUTE_OVERTURNED when its outcome differs, DISPUTE_UPHELD when it does not). Replaying an accepted report changes nothing. The market's creator, an operator who recorded an oracle observation for it, and for a dispute the operator who raised it and the one whose resolution is disputed, are refused. With no observation and no oracle this answers NOT_FOUND or PROVIDER_UNAVAILABLE.
          */
         post: {
             parameters: {
@@ -5570,7 +5622,7 @@ export interface paths {
         put?: never;
         /**
          * Settle a RESOLVED market from its escrow once its dispute window has passed (operator)
-         * @description Every winning share pays exactly one collateral unit and every share is retired; the escrow is empty afterwards. Settling a SETTLED market returns its record and pays nothing (replay true).
+         * @description Every winning share pays exactly one collateral unit and every share is retired. A holder whose payout cannot be delivered (a frozen or closed account, an unverified identity) does not block anyone: their shares are retired and their payout is held in the escrow, to claim once eligible, so afterwards the escrow holds exactly the held payouts. Settling a SETTLED market returns its record and pays nothing (replay true).
          */
         post: {
             parameters: {
@@ -5614,7 +5666,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Close a dispute keeping the disputed outcome (operator; not the creator, not the disputer) */
+        /** Close a dispute keeping the disputed outcome (operator; not the creator, the disputer, the disputed resolution's author or an observation recorder) */
         post: {
             parameters: {
                 query?: never;
@@ -5653,7 +5705,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/advanced/prediction-markets/{marketId}/void": {
+    "/advanced/prediction-markets/{marketId}/void-proposals": {
         parameters: {
             query?: never;
             header?: never;
@@ -5662,7 +5714,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Void a market that has not settled and refund every share (operator; not the creator) */
+        /**
+         * Propose voiding a market that has not settled (operator; not the creator, not the author of its resolution)
+         * @description A void is dual-controlled. This records one operator's proposal, with its reason and archived evidence, against the market as it stands -- its status and its resolution in force -- and refunds nothing: a different operator approves it. A RESOLVED market inside its dispute window is disputed, not voided.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -5677,11 +5732,64 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/json": components["schemas"]["PredictionVoidRequest"];
+                    "application/json": components["schemas"]["PredictionVoidProposalRequest"];
                 };
             };
             responses: {
-                /** @description The refund record, with the residual it discloses */
+                /** @description The proposal, awaiting a second operator's approval */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PredictionVoidProposalResult"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/prediction-markets/{marketId}/void-proposals/{proposalId}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve a void proposal, which voids the market and refunds every share (operator; not the proposer)
+         * @description The approver is neither the proposer, nor the market's creator, nor the author of its resolution in force, nor -- for a DISPUTED market, whose dispute the void rules on -- the operator who raised the dispute. A proposal made before another resolution came into force is refused (409). A holder whose refund cannot be delivered (a frozen or closed account, an unverified identity) has it held in the escrow, to claim once eligible. Approving the proposal that voided the market again returns its refund record (replay true).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    marketId: components["parameters"]["MarketId"];
+                    proposalId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["PredictionVoidApprovalRequest"];
+                };
+            };
+            responses: {
+                /** @description The refund record, with the residual it discloses and what it held */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -13124,6 +13232,21 @@ export interface components {
             shares_outstanding: components["schemas"]["Quantity"];
             symbol: string;
         };
+        PredictionClaimRequest: {
+            account_id: components["schemas"]["UUID"];
+        };
+        PredictionClaimResult: {
+            account_id: components["schemas"]["UUID"];
+            effect?: components["schemas"]["EconomicEffect"];
+            held_payout: components["schemas"]["PredictionHeldPayout"];
+            intent: components["schemas"]["EconomicIntent"];
+            journal_transaction_id?: components["schemas"]["UUID"];
+            market_id: components["schemas"]["UUID"];
+            /** @description True when this request had already claimed the payout; nothing new happened */
+            replay: boolean;
+            risk_decision_hash?: string;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
         PredictionDispute: {
             evidence_ref: string;
             evidence_sha256: string;
@@ -13152,10 +13275,12 @@ export interface components {
             collateral_decimals: number;
             collateral_symbol: string;
             escrow: components["schemas"]["Quantity"];
+            /** @description Payouts the escrow holds for holders who have not claimed them yet */
+            held: components["schemas"]["Quantity"];
             market_id: components["schemas"]["UUID"];
             market_status: components["schemas"]["PredictionMarketStatus"];
             outcomes: components["schemas"]["PredictionBookOutcome"][];
-            /** @description True when the books satisfy escrow = collateral = outstanding(i) + residual and issued(i) = outstanding(i) = held(i) */
+            /** @description True when the books satisfy escrow = collateral = outstanding(i) + residual + held and issued(i) = outstanding(i) = held_by_customers(i) */
             reconciles: boolean;
             /** @description The residual the market's settlement record discloses; zero without one */
             residual: components["schemas"]["Quantity"];
@@ -13187,6 +13312,33 @@ export interface components {
             /** @description OPEN, MATCHED, MISMATCH, INVESTIGATING, RESOLVED_AUTOMATIC, RESOLVED_MANUAL or ESCALATED */
             status: string;
             value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        PredictionHeldPayout: {
+            account_id: components["schemas"]["UUID"];
+            /** @description Collateral base units the escrow holds for the account */
+            amount: components["schemas"]["Quantity"];
+            /** @description Present once claimed */
+            claim?: components["schemas"]["PredictionHeldPayoutClaim"];
+            claimed: boolean;
+            held_at: components["schemas"]["Timestamp"];
+            id: components["schemas"]["UUID"];
+            /** @description The journal that retired the account's shares */
+            journal_transaction_id: components["schemas"]["UUID"];
+            kind: components["schemas"]["PredictionSettlementKind"];
+            market_id: components["schemas"]["UUID"];
+            /** @description Why the payout could not be delivered at settlement */
+            reason_codes: string[];
+            /** @description The payout intent the route or risk kernel refused */
+            refused_intent_id: components["schemas"]["UUID"];
+            settlement_id: components["schemas"]["UUID"];
+        };
+        PredictionHeldPayoutClaim: {
+            amount: components["schemas"]["Quantity"];
+            claimed_at: components["schemas"]["Timestamp"];
+            claimed_by: components["schemas"]["PredictionActor"];
+            id: components["schemas"]["UUID"];
+            intent_id: components["schemas"]["UUID"];
+            journal_transaction_id: components["schemas"]["UUID"];
         };
         PredictionMarket: {
             close_at: components["schemas"]["Timestamp"];
@@ -13228,6 +13380,8 @@ export interface components {
             /** @description Absent until the market settles or is voided */
             settlement?: components["schemas"]["PredictionSettlement"];
             value_domain: components["schemas"]["ValueDomainSimulated"];
+            /** @description Oldest first; an approved one voided the market */
+            void_proposals: components["schemas"]["PredictionVoidProposal"][];
         };
         PredictionMarketList: {
             items: components["schemas"]["PredictionMarket"][];
@@ -13246,6 +13400,12 @@ export interface components {
             source: string;
         };
         PredictionOracleObservation: {
+            observation_id: components["schemas"]["UUID"];
+            recorded_at: components["schemas"]["Timestamp"];
+            /** @description The operator who recorded it */
+            recorded_by: components["schemas"]["PredictionActor"];
+            /** @description True when the identical observation was already recorded; nothing new was stored */
+            replay: boolean;
             report: components["schemas"]["PredictionOracleReport"];
             report_hash: string;
             value_domain: components["schemas"]["ValueDomainSimulated"];
@@ -13277,7 +13437,10 @@ export interface components {
         PredictionPayoutLine: {
             account_id: components["schemas"]["UUID"];
             amount: components["schemas"]["Quantity"];
+            /** @description True when the amount could not be delivered and is held in the escrow for the holder */
+            held: boolean;
             intent_id: components["schemas"]["UUID"];
+            /** @description The journal that paid the holder, or that retired their shares when held */
             journal_transaction_id?: components["schemas"]["UUID"];
             shares: components["schemas"]["PredictionShareCount"][];
         };
@@ -13290,6 +13453,8 @@ export interface components {
         };
         PredictionPositionList: {
             account_id: components["schemas"]["UUID"];
+            /** @description The payout the market holds for this account, claimed or not; absent when it holds none */
+            held_payout?: components["schemas"]["PredictionHeldPayout"];
             items: components["schemas"]["PredictionPosition"][];
             market_id: components["schemas"]["UUID"];
             share_decimals: number;
@@ -13370,6 +13535,9 @@ export interface components {
             rounding_policy: components["schemas"]["PredictionRoundingPolicy"];
             settled_at: components["schemas"]["Timestamp"];
             settled_by: components["schemas"]["PredictionActor"];
+            /** @description Of total_paid, what stays in the escrow for holders it could not be delivered to */
+            total_held: components["schemas"]["Quantity"];
+            /** @description Allotted to holders: delivered, or held for them (total_held of it) */
             total_paid: components["schemas"]["Quantity"];
             unit_quantity: components["schemas"]["Quantity"];
             winning_outcome_index?: number;
@@ -13378,6 +13546,8 @@ export interface components {
         /** @description PAYOUT (a resolved market paid its winners) or REFUND (a void refunded every share); no enum, see PredictionMarketStatus */
         PredictionSettlementKind: string;
         PredictionSettlementResult: {
+            /** @description The payouts this call held for their holders; empty on a replay */
+            held_payouts: components["schemas"]["PredictionHeldPayout"][];
             /** @description What this call paid, one line per holder; empty on a replay */
             lines: components["schemas"]["PredictionPayoutLine"][];
             market: components["schemas"]["PredictionMarket"];
@@ -13390,12 +13560,42 @@ export interface components {
             outcome_symbol: string;
             quantity: components["schemas"]["Quantity"];
         };
-        PredictionVoidRequest: {
-            evidence?: {
+        PredictionVoidApproval: {
+            approved_at: components["schemas"]["Timestamp"];
+            approved_by: components["schemas"]["PredictionActor"];
+            id: components["schemas"]["UUID"];
+            reason: string;
+        };
+        PredictionVoidApprovalRequest: {
+            /** @description The approver's note, at most 2000 characters; the proposal's reason when absent */
+            reason?: string;
+        };
+        PredictionVoidProposal: {
+            /** @description Present once a second operator approved it, which voided the market */
+            approval?: components["schemas"]["PredictionVoidApproval"];
+            evidence_ref: string;
+            evidence_sha256: string;
+            id: components["schemas"]["UUID"];
+            market_id: components["schemas"]["UUID"];
+            /** @description The market's status when the void was proposed */
+            market_status: components["schemas"]["PredictionMarketStatus"];
+            proposed_at: components["schemas"]["Timestamp"];
+            proposed_by: components["schemas"]["PredictionActor"];
+            reason: string;
+            /** @description The resolution in force when it was proposed; absent before resolution */
+            resolution_id?: components["schemas"]["UUID"];
+        };
+        PredictionVoidProposalRequest: {
+            evidence: {
                 [key: string]: unknown;
             };
             /** @description 8..2000 characters */
             reason: string;
+        };
+        PredictionVoidProposalResult: {
+            market: components["schemas"]["PredictionMarket"];
+            proposal: components["schemas"]["PredictionVoidProposal"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
         };
         Principal: {
             account_ids: components["schemas"]["UUID"][];

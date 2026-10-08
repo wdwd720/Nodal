@@ -66,6 +66,10 @@ type action struct {
 	request  func(it econ.Intent) any
 	posting  func(it econ.Intent) (ledger.Posting, error)
 	evidence func(it econ.Intent, d risk.AdvancedDecision, r settlement.Route, reservations []string, journal ledger.TransactionID) any
+	// afterApply runs inside the savepoint once the effect is APPLIED and the
+	// intent COMPLETED, with what the action did: it records what the action
+	// is for (a held payout's claim). A failure undoes the action.
+	afterApply func(tx pgx.Tx, res ActionResult) error
 	// postcheck runs last inside the savepoint; a failure undoes the action.
 	postcheck func(tx pgx.Tx) error
 }
@@ -127,7 +131,8 @@ func (s *Service) decide(ctx context.Context, tx pgx.Tx, res *ActionResult, a ac
 	}
 	if !route.Permitted {
 		*res, err = s.refuse(ctx, tx, *res, a.mover,
-			errs.New(errs.CodeForbidden, "predmarket: the settlement compiler refused the intent").WithField("reasons", route.Reasons),
+			errs.New(errs.CodeForbidden, "predmarket: the settlement compiler refused the intent").
+				WithField("reasons", route.Reasons).WithField("refusal_stage", "route"),
 			"route refused: "+strings.Join(route.Reasons, ", "))
 		return settlement.Route{}, risk.AdvancedDecision{}, err
 	}
@@ -264,6 +269,11 @@ func (s *Service) execute(ctx context.Context, tx pgx.Tx, res ActionResult, a ac
 	res.Effect = applied
 	if err := move(econ.StatusCompleted, a.effectKind+" applied at "+now.Format(time.RFC3339Nano)); err != nil {
 		return res, err
+	}
+	if a.afterApply != nil {
+		if err := a.afterApply(tx, res); err != nil {
+			return res, err
+		}
 	}
 	if a.postcheck != nil {
 		if err := a.postcheck(tx); err != nil {

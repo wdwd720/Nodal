@@ -2,6 +2,7 @@ package orders
 
 import (
 	"context"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/nodal/controlplane/internal/capital"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
+	"github.com/nodal/controlplane/internal/instruments"
 	"github.com/nodal/controlplane/internal/matching"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/risk"
@@ -367,4 +369,58 @@ func replayOutcome(c *bookConfig, o orderRow) CommandOutcome {
 		out.Rejection = rejection(o.RejectReason, "the order was rejected: "+o.RejectReason)
 	}
 	return out
+}
+
+// CancelResting cancels every working order -- on the book or not yet on it,
+// customer or house -- on the books of the given instruments, in the caller's
+// transaction. It is what a market that stops trading needs before it settles
+// or is voided (predmarket.OutcomeBooks): no reservation may still hold its
+// shares. Each cancel is a book command like any other, serialized by the
+// book's lock, journaled and exactly once; an instrument without a book is
+// skipped. Only a person or a service cancels in bulk, never an agent. The
+// caller records why in its own audit event (the reason must be stated);
+// CancelResting returns how many orders it cancelled.
+func (s *Service) CancelResting(ctx context.Context, tx pgx.Tx, insts []instruments.InstrumentID, by econ.Actor, reason string) (int, error) {
+	if !isServiceActor(by) {
+		return 0, errs.New(errs.CodeForbidden, "orders: working orders are cancelled in bulk by a person or a service, never an agent")
+	}
+	if r := strings.TrimSpace(reason); r == "" || len(r) > 1000 {
+		return 0, errs.New(errs.CodeValidationFailed, "orders: a bulk cancel states its reason (1..1000 bytes)")
+	}
+	n := 0
+	for _, iid := range insts {
+		rows, err := tx.Query(ctx, `SELECT id FROM book_orders WHERE instrument_id = $1
+			AND status IN ('PENDING','OPEN','PARTIALLY_FILLED') ORDER BY id`, iid)
+		if err != nil {
+			return n, dbErr("list working orders", err)
+		}
+		var ids []OrderID
+		for rows.Next() {
+			var oid OrderID
+			if err := rows.Scan(&oid); err != nil {
+				rows.Close()
+				return n, dbErr("scan working order", err)
+			}
+			ids = append(ids, oid)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return n, dbErr("list working orders", err)
+		}
+		for _, oid := range ids {
+			o0, err := loadOrder(ctx, tx, oid, false)
+			if err != nil {
+				return n, err
+			}
+			out, err := s.cancelLocked(ctx, tx, o0, by)
+			if err != nil {
+				return n, err
+			}
+			if out.Rejection != nil {
+				return n, out.Rejection
+			}
+			n++
+		}
+	}
+	return n, nil
 }

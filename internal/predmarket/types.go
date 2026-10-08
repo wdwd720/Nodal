@@ -1,8 +1,11 @@
 package predmarket
 
 import (
+	"context"
 	"crypto/ed25519"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/assets"
@@ -14,6 +17,26 @@ import (
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/security"
 )
+
+// OutcomeBooks is the internal order book as a market needs it, implemented
+// by an adapter over the order book that the deployment wires in (this
+// package never imports internal/orders). CancelResting cancels every resting
+// order on the given outcome instruments, releasing the shares and collateral
+// those orders reserve, in the caller's transaction, and returns how many it
+// cancelled. It must be safe to call again: a second call finds nothing left
+// to cancel. Everything it does must live in tx, because the caller may roll
+// it back: a close, void or settlement that is refused afterwards undoes the
+// cancellations together with everything else.
+//
+// Close and CloseDue call it after halting the outcome instruments, so no
+// order rests on a closed market; a void calls it after halting them too, and
+// a settlement calls it once more before checking that no share is still
+// reserved. Without it, a settlement or void that finds an outcome share still
+// reserved is refused, naming every reservation, until the orders holding them
+// are cancelled through the order book.
+type OutcomeBooks interface {
+	CancelResting(ctx context.Context, tx pgx.Tx, outcomeInstruments []instruments.InstrumentID, by econ.Actor, reason string) (int, error)
+}
 
 // Fixed parameters of every market in this build.
 const (
@@ -105,6 +128,26 @@ func CanTransition(from, to MarketStatus) bool {
 	return false
 }
 
+// VoidableStatuses returns the statuses a market can be voided from: every
+// status but SETTLED and VOIDED, in lifecycle order. It is the Go twin of
+// prediction_void_proposals_market_status_check.
+func VoidableStatuses() []MarketStatus {
+	out := make([]MarketStatus, 0, len(allMarketStatuses))
+	for _, s := range allMarketStatuses {
+		if !s.Terminal() {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// ClaimActorTypes returns who may claim a held payout: the holder (USER) or
+// a service acting for them. Never an agent or an operator. It is the Go twin
+// of prediction_held_payout_claims_claimed_by_actor_type_check.
+func ClaimActorTypes() []security.ActorType {
+	return []security.ActorType{security.ActorUser, security.ActorService}
+}
+
 // SupportedModes returns the modes a prediction market can run in. LIVE is
 // absent here, in gates.AdvancedSpecs and in prediction_markets_mode_check.
 func SupportedModes() []gates.Mode { return []gates.Mode{gates.ModePaper, gates.ModeSandbox} }
@@ -185,10 +228,15 @@ func AllRoundingPolicies() []RoundingPolicy {
 }
 
 type (
-	marketKind     struct{}
-	resolutionKind struct{}
-	disputeKind    struct{}
-	settlementKind struct{}
+	marketKind       struct{}
+	resolutionKind   struct{}
+	disputeKind      struct{}
+	settlementKind   struct{}
+	voidProposalKind struct{}
+	voidApprovalKind struct{}
+	heldPayoutKind   struct{}
+	heldClaimKind    struct{}
+	observationKind  struct{}
 )
 
 // MarketID identifies a prediction market.
@@ -203,11 +251,29 @@ type DisputeID = id.ID[disputeKind]
 // SettlementID identifies a prediction_settlements row.
 type SettlementID = id.ID[settlementKind]
 
+// VoidProposalID identifies a prediction_void_proposals row.
+type VoidProposalID = id.ID[voidProposalKind]
+
+// VoidApprovalID identifies a prediction_void_approvals row.
+type VoidApprovalID = id.ID[voidApprovalKind]
+
+// HeldPayoutID identifies a prediction_held_payouts row.
+type HeldPayoutID = id.ID[heldPayoutKind]
+
+// HeldPayoutClaimID identifies a prediction_held_payout_claims row.
+type HeldPayoutClaimID = id.ID[heldClaimKind]
+
+// ObservationID identifies a prediction_oracle_observations row.
+type ObservationID = id.ID[observationKind]
+
 // NewMarketID returns a fresh market id.
 func NewMarketID() MarketID { return id.New[marketKind]() }
 
 // ParseMarketID parses the canonical form.
 func ParseMarketID(s string) (MarketID, error) { return id.Parse[marketKind](s) }
+
+// ParseVoidProposalID parses the canonical form.
+func ParseVoidProposalID(s string) (VoidProposalID, error) { return id.Parse[voidProposalKind](s) }
 
 // Outcome is one outcome of a market: its symbol, the SIMULATED share asset
 // that represents it, and the instrument the internal book trades it on.
@@ -303,13 +369,104 @@ type Settlement struct {
 	RefundRatePerShare  *money.Quantity
 	RoundingPolicy      RoundingPolicy
 	EscrowBefore        money.Quantity
-	TotalPaid           money.Quantity
-	Residual            money.Quantity
-	HolderCount         int
-	EvidenceRef         string
-	EvidenceSHA256      []byte
-	SettledBy           econ.Actor
-	SettledAt           time.Time
+	// TotalPaid is everything the settlement allotted to holders: delivered
+	// to their wallets, or HELD in the escrow for a holder it could not be
+	// delivered to (TotalHeld of it). escrow_before = TotalPaid + Residual.
+	TotalPaid      money.Quantity
+	TotalHeld      money.Quantity
+	Residual       money.Quantity
+	HolderCount    int
+	EvidenceRef    string
+	EvidenceSHA256 []byte
+	SettledBy      econ.Actor
+	SettledAt      time.Time
+}
+
+// VoidProposal is a prediction_void_proposals row: one operator's proposal
+// to void a market, with the reason and the archived evidence, made against
+// the market as it stood (its status and its resolution in force). A void
+// happens only when a different operator approves it.
+type VoidProposal struct {
+	ID             VoidProposalID
+	MarketID       MarketID
+	MarketStatus   MarketStatus
+	ResolutionID   *ResolutionID
+	Reason         string
+	EvidenceRef    string
+	EvidenceSHA256 []byte
+	ProposedBy     econ.Actor
+	ProposedAt     time.Time
+	// Approval is set once a second operator approved the proposal, which
+	// voided the market.
+	Approval *VoidApproval
+}
+
+// VoidApproval is a prediction_void_approvals row.
+type VoidApproval struct {
+	ID         VoidApprovalID
+	ProposalID VoidProposalID
+	MarketID   MarketID
+	Reason     string
+	ApprovedBy econ.Actor
+	ApprovedAt time.Time
+}
+
+// HeldPayout is a prediction_held_payouts row: a payout (or void refund) the
+// settlement allotted to a holder it could not deliver to -- the route or
+// Risk V2 refused the holder's own payout for the holder's own reasons (a
+// frozen or closed account, an unverified identity). The holder's shares
+// were retired like everyone else's and the amount stays in the market's
+// PREDICTION_ESCROW until the holder claims it.
+type HeldPayout struct {
+	ID                   HeldPayoutID
+	MarketID             MarketID
+	SettlementID         SettlementID
+	AccountID            accounts.AccountID
+	Kind                 SettlementKind
+	CollateralAssetID    assets.AssetID
+	Amount               money.Quantity
+	ReasonCodes          []string
+	RefusedIntentID      econ.IntentID
+	EffectID             econ.EffectID
+	JournalTransactionID ledger.TransactionID
+	EvidenceRef          string
+	EvidenceSHA256       []byte
+	HeldAt               time.Time
+	// Claim is set once the holder claimed the payout.
+	Claim *HeldPayoutClaim
+}
+
+// Claimed reports whether the held payout has been delivered.
+func (h HeldPayout) Claimed() bool { return h.Claim != nil }
+
+// HeldPayoutClaim is a prediction_held_payout_claims row: the delivery of a
+// held payout to its holder's wallet.
+type HeldPayoutClaim struct {
+	ID                   HeldPayoutClaimID
+	HeldPayoutID         HeldPayoutID
+	MarketID             MarketID
+	AccountID            accounts.AccountID
+	Amount               money.Quantity
+	IntentID             econ.IntentID
+	EffectID             econ.EffectID
+	JournalTransactionID ledger.TransactionID
+	ClaimedBy            econ.Actor
+	EvidenceRef          string
+	EvidenceSHA256       []byte
+	ClaimedAt            time.Time
+}
+
+// OracleObservation is a prediction_oracle_observations row: one signed
+// sandbox oracle report and the operator who recorded it.
+type OracleObservation struct {
+	ID             ObservationID
+	MarketID       MarketID
+	OutcomeIndex   int
+	Report         OracleReport
+	ReportHash     []byte
+	EvidenceSHA256 []byte
+	RecordedBy     econ.Actor
+	RecordedAt     time.Time
 }
 
 // Position is one row of the prediction_positions projection: a customer's

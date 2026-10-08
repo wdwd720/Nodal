@@ -445,11 +445,24 @@ packages named; `go run ./scripts/inttest -pkg '^\./internal/<pkg>$'` runs a pac
 - **Attack:** resolve one's own market, rule on one's own dispute, settle before resolution, pay out more or
   less than the escrow.
 - **Controls:** the creator can never resolve or void their market and a disputer never rules on their
-  dispute; settlement needs a resolution and no open dispute; the settlement row checks its own conservation in
-  SQL (escrow before = total paid + residual); positions are a view over the ledger; concurrent settlements
-  settle once; escrow reconciliation detects divergence.
-- **Residual risk:** one resolver (not two) decides a resolution; collusion between two roles is out of scope
-  for the sandbox.
-- **Tests:** `TestProp_SettlementPaysExactlyTheEscrow`, `TestProp_PayoutConservation`, `TestIntegration_NoSettlementBeforeResolution`,
+  dispute; the author of a disputed resolution can neither uphold nor overturn it, and the operator who recorded
+  the sandbox oracle's observation cannot resolve the market (PM006); a void is proposed by one operator and
+  approved by a different one, neither the creator nor the author of the resolution in force, and a RESOLVED
+  market inside its dispute window is voided only through a dispute (PM007); oracle observations are stored,
+  signed, append-only and audited, so every replica resolves from the same verified report (PM010);
+  settlement needs a resolution and no open dispute; the settlement row checks its own conservation in SQL
+  (escrow before = total paid + total held + residual); one frozen or unverified holder cannot block a
+  settlement — their payout is held in escrow and claimed once eligible, exactly once (PM009); an outcome share
+  exists only as its market issued it — no faucet grant, house or facility holding, or foreign journal kind can
+  move one (PM008); working orders on the outcome books are cancelled at close, void and settlement;
+  concurrent settlements settle once; escrow reconciliation detects divergence.
+- **Residual risk:** one resolver decides a resolution (two operators are required to void, not to resolve);
+  the sandbox oracle's observation is entered by an operator, so the oracle is only as independent as the
+  separation between the recorder and the resolver; collusion between two roles is out of scope for the
+  sandbox.
+- **Tests:** `TestIntegration_AVoidNeedsTwoDistinctOperators`, `TestIntegration_TheResolverCannotRuleOnTheDisputeOfTheirOwnResolution`,
+  `TestIntegration_TheObservationRecorderCannotResolveTheMarket`, `TestIntegration_SandboxObservationsAreDurableAuditedAndSharedAcrossReplicas`,
+  `TestIntegration_AFrozenHolderCannotBlockSettlementAndClaimsOnceEligible`, `TestIntegration_AnOutcomeShareExistsOnlyAsItsMarketIssuedIt`,
+  `TestIntegration_TheOrderBookCancelsRestingOrdersAtCloseVoidAndSettlement`, `TestProp_SettlementPaysExactlyTheEscrow`, `TestProp_PayoutConservation`, `TestIntegration_NoSettlementBeforeResolution`,
   `TestIntegration_ConcurrentSettlementsSettleOnce`, `TestIntegration_ReconciliationDetectsAnEscrowDivergence`,
   `TestIntegration_ADisputeCanBeUpheldOrEndInAVoid` (`internal/predmarket`).

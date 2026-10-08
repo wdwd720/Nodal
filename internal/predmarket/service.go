@@ -97,9 +97,20 @@ type Config struct {
 	Audit          audit.Writer
 	// Accounts defaults to DBAccountFacts.
 	Accounts AccountFactsReader
-	// Oracle is the provider FetchReport asks. Optional: a deployment that
-	// receives reports by push decodes them with DecodeOracleReport instead.
+	// Oracle is the external provider FetchReport asks for a market whose
+	// oracle is not the sandbox oracle. Optional: a deployment that receives
+	// reports by push decodes them with DecodeOracleReport instead.
 	Oracle PredictionOracleProvider
+	// SandboxOracle signs the observations operators record with
+	// RecordObservation; every observation is stored, and FetchReport reads
+	// the latest stored one back, verified. Optional: without it no
+	// observation can be recorded.
+	SandboxOracle *SandboxOracle
+	// Books cancels resting orders on a market's outcome instruments at
+	// close, void and settlement. Optional: without it a settlement or void
+	// that finds outcome shares still reserved is refused, naming the
+	// reservations.
+	Books OutcomeBooks
 }
 
 // Service runs prediction markets. It holds no mutable state: every method
@@ -122,6 +133,8 @@ type Service struct {
 	audit    audit.Writer
 	facts    AccountFactsReader
 	oracle   PredictionOracleProvider
+	sandbox  *SandboxOracle
+	books    OutcomeBooks
 }
 
 // NewService validates the configuration and returns a Service.
@@ -160,21 +173,11 @@ func NewService(cfg Config) (*Service, error) {
 		clk: cfg.Clock, intents: cfg.Intents, effects: cfg.Effects, authz: cfg.Authorizer, registry: cfg.Registry,
 		kills: cfg.KillSwitches, ledger: cfg.Ledger, capital: cfg.Capital, risk: cfg.Risk, policy: cfg.RiskPolicy,
 		router: cfg.Router, instr: cfg.Instruments, assets: cfg.Assets, recon: cfg.Reconciliation, audit: cfg.Audit,
-		facts: facts, oracle: cfg.Oracle,
+		facts: facts, oracle: cfg.Oracle, sandbox: cfg.SandboxOracle, books: cfg.Books,
 	}, nil
 }
 
 func (s *Service) now() time.Time { return s.clk.Now().UTC() }
-
-// FetchReport asks the configured oracle for a market's report. It is the
-// external step of a resolution and runs outside any transaction; the report
-// it returns is verified by Resolve, never here.
-func (s *Service) FetchReport(ctx context.Context, marketID MarketID) (OracleReport, error) {
-	if s.oracle == nil {
-		return OracleReport{}, errs.New(errs.CodeProviderUnavailable, "predmarket: no oracle provider is configured")
-	}
-	return s.oracle.Report(ctx, marketID)
-}
 
 // atomically runs fn in a savepoint of tx and keeps what fn did only when it
 // returns nil. It is what makes an operation all-or-nothing whatever the
@@ -293,12 +296,16 @@ func dbErr(op string, err error) error {
 		return ee
 	}
 	switch db.SQLState(err) {
-	case "PM001", "PM003":
+	case "PM001", "PM003", "PM007":
 		return errs.Wrap(err, errs.CodeInvalidStateTransition, "predmarket: "+op)
 	case "PM002", "PM005":
 		return errs.Wrap(err, errs.CodeConflict, "predmarket: "+op)
-	case "PM004":
+	case "PM004", "PM006", "PM008":
 		return errs.Wrap(err, errs.CodeForbidden, "predmarket: "+op)
+	case "PM009":
+		return errs.Wrap(err, errs.CodeReconciliationRequired, "predmarket: "+op)
+	case "PM010":
+		return errs.Wrap(err, errs.CodeValidationFailed, "predmarket: "+op)
 	}
 	if db.IsUniqueViolation(err) {
 		return errs.Wrap(err, errs.CodeConflict, "predmarket: "+op)
