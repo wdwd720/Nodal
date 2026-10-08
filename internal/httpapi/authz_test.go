@@ -178,6 +178,7 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		// >>> advanced:equities path parameters
 
 		// >>> advanced:orders path parameters
+		"{tradeSeq}": "1",
 
 		// >>> advanced:transfers path parameters
 		"{transferId}": testSessionID,
@@ -185,8 +186,14 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		// >>> advanced:treasury path parameters
 
 		// >>> advanced:stable path parameters
+		"{stableAssetId}":      testInstrument.String(),
+		"{stableIssuanceId}":   testOrderID.String(),
+		"{stableRedemptionId}": testDepositID.String(),
 
 		// >>> advanced:bridge path parameters
+		"{bridgeRouteId}": testInstrument.String(),
+		"{bridgeLegId}":   testOrderID.String(),
+		"{bridgeChainId}": "sbx-solana",
 
 		// >>> advanced:predmarket path parameters
 		// {marketId} is mapped above (the native markets declared it first).
@@ -227,8 +234,14 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		"/v1/advanced/derivatives/contracts/{instrumentId}/analytics": "vol_bps=5000",
 
 		// >>> advanced:equities required query
+		"/v1/advanced/equities/orders":                        "account_id=" + testAccountID.String(),
+		"/v1/advanced/equities/fills":                         "account_id=" + testAccountID.String(),
+		"/v1/advanced/equities/settlements":                   "account_id=" + testAccountID.String(),
+		"/v1/advanced/equities/corporate-action-applications": "account_id=" + testAccountID.String(),
 
 		// >>> advanced:orders required query
+		"/v1/advanced/books/orders": "account_id=" + testAccountID.String(),
+		"/v1/advanced/books/trades": "account_id=" + testAccountID.String(),
 
 		// >>> advanced:transfers required query
 		"/v1/advanced/transfers":                  "account_id=" + testAccountID.String(),
@@ -237,8 +250,13 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		// >>> advanced:treasury required query
 
 		// >>> advanced:stable required query
+		"/v1/advanced/stable-assets/holdings":    "account_id=" + testAccountID.String(),
+		"/v1/advanced/stable-assets/issuances":   "account_id=" + testAccountID.String(),
+		"/v1/advanced/stable-assets/redemptions": "account_id=" + testAccountID.String(),
 
 		// >>> advanced:bridge required query
+		"/v1/advanced/bridge/legs":     "account_id=" + testAccountID.String(),
+		"/v1/advanced/bridge/holdings": "account_id=" + testAccountID.String(),
 
 		// >>> advanced:predmarket required query
 		"/v1/advanced/prediction-markets":                      "status=OPEN",

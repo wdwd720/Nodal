@@ -32,8 +32,10 @@ import { MarginSection } from "./margin/MarginSection.tsx";
 import { DerivativesSection } from "./derivatives/DerivativesSection.tsx";
 
 // >>> advanced:equities import
+import { EquitiesSection } from "./equities/EquitiesSection.tsx";
 
 // >>> advanced:orders import
+import { OrderBooksSection } from "./orders/OrderBooksSection.tsx";
 
 // >>> advanced:transfers import
 import { TransfersSection } from "./transfers/Transfers.tsx";
@@ -41,8 +43,10 @@ import { TransfersSection } from "./transfers/Transfers.tsx";
 // >>> advanced:treasury import
 
 // >>> advanced:stable import
+import { StableAssetsSection } from "./stable/StableSection.tsx";
 
 // >>> advanced:bridge import
+import { BridgeSection } from "./bridge/BridgeSection.tsx";
 
 // >>> advanced:predmarket import
 import { PredictionMarketsSection } from "./predmarket/PredictionMarkets.tsx";
@@ -117,8 +121,22 @@ export const ADVANCED_SECTIONS: readonly AdvancedSection[] = [
   },
 
   // >>> advanced:equities section
+  {
+    path: "equities",
+    title: "Equities",
+    description:
+      "Equities and ETFs in paper and sandbox mode: listings with the session in force, orders filled by a deterministic paper venue, every disclosed charge, T+1 settlement and corporate actions.",
+    element: <EquitiesSection />,
+  },
 
   // >>> advanced:orders section
+  {
+    path: "order-books",
+    title: "Order books",
+    description:
+      "The internal order books: disclosed fee schedules and crossing rule, depth, limit and market orders between accounts, the account's orders and trades, and each trade's audit proof.",
+    element: <OrderBooksSection />,
+  },
 
   // >>> advanced:transfers section
   {
@@ -132,8 +150,22 @@ export const ADVANCED_SECTIONS: readonly AdvancedSection[] = [
   // >>> advanced:treasury section
 
   // >>> advanced:stable section
+  {
+    path: "stable-assets",
+    title: "Stable assets",
+    description:
+      "The platform's sandbox stable assets on a simulated chain: issuing and redeeming against a fully reserved policy in the sandbox dollar, the reserve and its coverage, signed reserve snapshots anyone can verify, and the operator's controls.",
+    element: <StableAssetsSection />,
+  },
 
   // >>> advanced:bridge section
+  {
+    path: "bridge",
+    title: "Bridge",
+    description:
+      "Simulated holdings by chain, value in flight between the simulated chains and the haircut it counts at, bridge routes and transfers with every leg's progress on both chains, the chains' state, and the operator's controls.",
+    element: <BridgeSection />,
+  },
 
   // >>> advanced:predmarket section
   {

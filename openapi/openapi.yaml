@@ -1796,8 +1796,628 @@ paths:
         "422": { $ref: "#/components/responses/Problem" }
 
   # >>> advanced:equities paths (insert this subsystem's paths directly below; keep the marker)
+  #
+  # Equities and ETFs in PAPER and SANDBOX mode (internal/equities): listings
+  # over canonical EQUITY and ETF instruments, the XNYS calendar in
+  # America/New_York (pre-market 04:00-09:30, regular 09:30-16:00,
+  # after-hours 16:00-20:00, weekends and recorded holidays closed), a
+  # deterministic paper venue, trade-date accounting with T+1 settlement and
+  # corporate actions. No adapter in this build reaches a real broker: the
+  # venue is SIMULATED and provider mode live is refused unconditionally. The
+  # service decides every rule -- the EQUITIES gate and kill switches, the
+  # session, lots and the limit grid, pending corporate actions, Risk Kernel
+  # V2, the capital reservation -- and these routes carry its answer.
+  /advanced/equities/listings:
+    get:
+      tags: [advanced]
+      summary: Equity and ETF listings with their terms, the latest fresh mark and the calendar's session now
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Listings (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityListingList" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: List a simulated equity or ETF (operator; requires step-up)
+      description: >-
+        Creates the listing's share asset (one SIMULATED asset per listing, its
+        decimals the fractional-share precision) and the EQUITY or ETF
+        instrument that trades it on the XNYS calendar, settling in
+        settlement_asset_id -- by default the sandbox dollar, which must have
+        a fee schedule in this deployment.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityListingRequest" } } }
+      responses:
+        "201":
+          description: The listing
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityListing" } } }
+        "200":
+          description: Idempotent replay of the original answer
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityListing" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/equities/listings/{instrumentId}:
+    get:
+      tags: [advanced]
+      summary: One listing
+      parameters:
+        - { $ref: "#/components/parameters/InstrumentId" }
+      responses:
+        "200":
+          description: The listing
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityListing" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/equities/calendar:
+    get:
+      tags: [advanced]
+      summary: The XNYS calendar now -- session, trade date, T+1 settlement date -- and its recorded holidays
+      responses:
+        "200":
+          description: The calendar
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityCalendar" } } }
+  /advanced/equities/calendar/holidays:
+    post:
+      tags: [advanced]
+      summary: Record a full-day XNYS closure (operator; requires step-up)
+      description: >-
+        Recording the same closure twice is a replay; a different name for a
+        recorded date is a CONFLICT. A weekend is closed already.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityHolidayRequest" } } }
+      responses:
+        "200":
+          description: The calendar with the closure recorded
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityCalendar" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/equities/orders:
+    get:
+      tags: [advanced]
+      summary: An account's equity orders, newest first, each with its fill and settlement
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of orders
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityOrderPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Submit an equity order from one of your own accounts, and place it at the simulated venue
+      description: >-
+        The order is recorded as an economic intent and routed
+        (SubmitOrderIntent), then accepted (AcceptOrder: capability gate,
+        session, lots and limit grid, pending corporate actions, mark and fee
+        quote, Risk Kernel V2, capital reservation), each in its own
+        transaction. An ACCEPTED order is then placed at the paper venue at
+        once (PlaceAtVenue, outside any transaction) and the venue's answer
+        applied in a transaction of its own (ApplyOrderReport): it rests
+        OPEN, fills (posted on the trade date, settling T+1) or is refused.
+        placement says what happened; when placement could not complete, the
+        order stays ACCEPTED with its submission PENDING and an operator's
+        venue run places it. A market order is accepted only in the regular
+        session; a limit order also in pre-market and after-hours when
+        extended_hours is set. Every refusal is recorded: the answer is its
+        stable code (fields carry order_id, rejection_code and reason_codes)
+        and the REJECTED order stays readable.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityOrderRequest" } } }
+      responses:
+        "201":
+          description: The order and what its placement did
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityOrderSubmission" } } }
+        "200":
+          description: Idempotent replay of the original answer
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityOrderSubmission" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/equities/orders/{orderId}:
+    get:
+      tags: [advanced]
+      summary: One equity order, to its owner or an operator who may read any account; anyone else is told it does not exist
+      parameters:
+        - { $ref: "#/components/parameters/OrderId" }
+      responses:
+        "200":
+          description: The order with its fill and settlement
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityOrder" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/equities/orders/{orderId}/cancel:
+    post:
+      tags: [advanced]
+      summary: Ask the simulated venue to cancel one of your own ACCEPTED or OPEN orders
+      description: >-
+        The venue answers CANCELLED, or with the fill that beat the cancel,
+        and that answer is applied exactly once. Another account's order is
+        NOT_FOUND.
+      parameters:
+        - { $ref: "#/components/parameters/OrderId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityOrderCancelRequest" } } }
+      responses:
+        "200":
+          description: The order after the venue's answer
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityOrder" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/equities/fills:
+    get:
+      tags: [advanced]
+      summary: An account's equity fills, newest first, each with its disclosed charges and its settlement
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of fills
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityFillPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/equities/settlements:
+    get:
+      tags: [advanced]
+      summary: An account's T+1 settlements, by due date, newest first
+      description: >-
+        A PENDING settlement is value bought or sold on its trade date that
+        waits in UNSETTLED_RECEIVABLE: neither spendable nor withdrawable
+        until an operator's settlement run settles it on its due date.
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - in: query
+          name: state
+          schema: { $ref: "#/components/schemas/AdvancedEquitySettlementFilter" }
+          description: PENDING, SETTLED or ALL (the default)
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of settlements
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquitySettlementPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/equities/settlement-runs:
+    post:
+      tags: [advanced]
+      summary: Run due T+1 settlements now (operator; requires step-up)
+      description: >-
+        The settlement worker's step, run on request rather than in the
+        background: it settles every settlement due on or before today's New
+        York trade date, one account per transaction, posting
+        EQUITY_SETTLEMENT once per fill, until nothing due is left or the
+        limit is reached.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquitySettlementRunRequest" } } }
+      responses:
+        "200":
+          description: What the run settled
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquitySettlementRun" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/equities/venue-runs:
+    post:
+      tags: [advanced]
+      summary: Run the venue worker once (operator; requires step-up)
+      description: >-
+        The placement and polling worker's step, run on request rather than
+        in the background. For every order the venue still owes an answer,
+        oldest first: an ACCEPTED order whose submission is PENDING is placed;
+        one whose submission outcome is UNKNOWN is never sent again and is
+        polled instead; an OPEN order is polled (a resting limit order fills
+        when the mark crosses, and every order expires at the end of its
+        day). Each answer is applied in its own transaction, exactly once.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityVenueRunRequest" } } }
+      responses:
+        "200":
+          description: What the run did to each order
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityVenueRun" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/equities/corporate-actions:
+    get:
+      tags: [advanced]
+      summary: Corporate actions, newest effective date first
+      parameters:
+        - { in: query, name: instrument_id, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of corporate actions
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityCorporateActionPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Announce a corporate action (operator; requires step-up)
+      description: >-
+        Each type carries exactly its own fields: a split or reverse split a
+        ratio (and an in-lieu price when the ratio can leave fractional
+        shares), a dividend its per-share amount and ex, record and pay dates
+        (the ex-date the settlement cycle implies), a symbol change its new
+        symbol, a delisting its final date. Announcing the same action twice
+        is a replay; a different action for the same instrument, type and
+        effective date is a CONFLICT while the first is live.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityCorporateActionRequest" } } }
+      responses:
+        "201":
+          description: The announced action
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityCorporateAction" } } }
+        "200":
+          description: Idempotent replay of the original answer
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityCorporateAction" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/equities/corporate-actions/{actionId}:
+    get:
+      tags: [advanced]
+      summary: One corporate action
+      parameters:
+        - { in: path, name: actionId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The action
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityCorporateAction" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/equities/corporate-actions/{actionId}/cancel:
+    post:
+      tags: [advanced]
+      summary: Withdraw an announced corporate action that has not been applied (operator; requires step-up)
+      parameters:
+        - { in: path, name: actionId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityCorporateActionCancelRequest" } } }
+      responses:
+        "200":
+          description: The action, CANCELLED
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityCorporateAction" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/equities/corporate-actions/{actionId}/apply:
+    post:
+      tags: [advanced]
+      summary: Apply an announced corporate action on or after the day it takes effect (operator; requires step-up)
+      description: >-
+        One transaction under the instrument's exclusive lock: a split or
+        reverse split adjusts every settled holding (paying any fractional
+        remainder at the in-lieu price under the action's rounding policy), a
+        dividend pays the holders of record on its pay date, a symbol change
+        writes a new terms version, a delisting moves the instrument to
+        DELISTING and, on a second call on its final date, DELISTED. Applying
+        an applied action is a replay that posts nothing.
+      parameters:
+        - { in: path, name: actionId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: What the application did, account by account
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityCorporateActionResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/equities/corporate-action-applications:
+    get:
+      tags: [advanced]
+      summary: What corporate actions did to an account, newest first
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of applications
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedEquityApplicationPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
 
   # >>> advanced:orders paths (insert this subsystem's paths directly below; keep the marker)
+  #
+  # The internal order book (internal/orders): one persistent, journalled book
+  # per instrument; every customer order is the execution of one economic
+  # intent; every fill is a SIM_TRADE between the two parties with the book's
+  # disclosed maker and taker fees and no spread. Venue label
+  # SIMULATED_INTERNAL_BOOK, value domain SIMULATED throughout. The service
+  # decides every rule -- the INTERNAL_MATCHING gate and kill switches, Risk
+  # Kernel V2, the capital reservation, self-trade prevention and the
+  # house-versus-customer crossing policy -- and these routes carry its answer.
+  # House orders and the crossing rule are changed only through the treasury
+  # service (internal/treasury), which enforces the house book's limits and
+  # disclosures; these routes read the rule in force and never change it.
+  /advanced/books:
+    get:
+      tags: [advanced]
+      summary: Internal books, oldest first, with their terms, disclosed fee schedules and the crossing rule in force
+      parameters:
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of books (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBookPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Open the internal book of an instrument (operator; requires step-up)
+      description: >-
+        A SPOT_PAIR states its terms here (it has no canonical terms row); any
+        other instrument trades on its current canonical terms and refuses
+        spot_terms. The quote asset must be a USD-pegged simulated asset, and
+        each fee schedule is quoted in it and may carry only a percentage fee,
+        a strategy fee, a subscription discount and a basis-point cap
+        (ORDER_SCHEDULE_NOT_ALLOWED_ON_INTERNAL_BOOK otherwise). Opening the
+        same book again with the same terms returns it; different terms are a
+        CONFLICT.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBookOpenRequest" } } }
+      responses:
+        "201":
+          description: The book is open
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBook" } } }
+        "200":
+          description: Idempotent replay of the original answer
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBook" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/books/orders:
+    get:
+      tags: [advanced]
+      summary: An account's orders on the internal books, newest first
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - in: query
+          name: scope
+          schema: { $ref: "#/components/schemas/AdvancedBookOrderScope" }
+          description: WORKING (the default) lists orders still PENDING, OPEN or PARTIALLY_FILLED; ALL lists every order
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of orders
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBookOrderPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/books/orders/{orderId}:
+    get:
+      tags: [advanced]
+      summary: One order, to its owner or an operator who may read any account; anyone else is told it does not exist
+      parameters:
+        - { $ref: "#/components/parameters/OrderId" }
+      responses:
+        "200":
+          description: The order
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBookOrder" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/books/orders/{orderId}/cancel:
+    post:
+      tags: [advanced]
+      summary: Cancel one of your own orders
+      description: >-
+        A resting order is cancelled on the book, serialized with every other
+        command, so a cancel racing a fill has exactly one outcome; an order
+        that has not reached the book is cancelled with its intent. Cancelling
+        a cancelled order returns it unchanged; a filled or rejected order
+        answers ORDER_NOT_OPEN. Another account's order is NOT_FOUND.
+      parameters:
+        - { $ref: "#/components/parameters/OrderId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBookOrderCancelRequest" } } }
+      responses:
+        "200":
+          description: The order after the command
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBookCommandResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/books/orders/{orderId}/replace:
+    post:
+      tags: [advanced]
+      summary: Change the price and total quantity of one of your own resting orders
+      description: >-
+        quantity is the new TOTAL quantity, fills included. Everything that
+        could refuse the replace -- Risk Kernel V2 for a replace that adds
+        risk, the book's own rules and the crossing policy (both by a dry run),
+        and the resized reservation -- is decided before anything moves; the
+        replace may then trade. A refusal is recorded and answered with its
+        stable reason.
+      parameters:
+        - { $ref: "#/components/parameters/OrderId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBookOrderReplaceRequest" } } }
+      responses:
+        "200":
+          description: The order after the command, with any fills it made
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBookCommandResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/books/trades:
+    get:
+      tags: [advanced]
+      summary: An account's fills on the internal books, newest first, each seen from the account's own side
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of fills
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBookFillPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/books/{instrumentId}:
+    get:
+      tags: [advanced]
+      summary: One internal book
+      parameters:
+        - { $ref: "#/components/parameters/InstrumentId" }
+      responses:
+        "200":
+          description: The book (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBook" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/books/{instrumentId}/depth:
+    get:
+      tags: [advanced]
+      summary: The resting book as persisted, aggregated by price level, best level first
+      parameters:
+        - { $ref: "#/components/parameters/InstrumentId" }
+        - in: query
+          name: levels
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+          description: Price levels per side
+      responses:
+        "200":
+          description: Bids and asks with the journal cursor they were read at
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBookDepth" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/books/{instrumentId}/orders:
+    post:
+      tags: [advanced]
+      summary: Submit a limit or market order to an internal book from one of your own accounts
+      description: >-
+        The order runs through the staged pipeline -- Accept (intent and
+        settlement compiler), Approve (capability gate and Risk Kernel V2),
+        Reserve (capital), Execute (the book) and Complete -- each stage its
+        own transaction. price is the limit price, or a market order's
+        protection price, which this book requires. A refusal at any stage is
+        recorded before it is answered: the answer is the stable reason
+        (fields carry reason and order_id) and the REJECTED order stays
+        readable. A client order id the account already used is refused
+        (DUPLICATE_CLIENT_ORDER_ID).
+      parameters:
+        - { $ref: "#/components/parameters/InstrumentId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBookOrderRequest" } } }
+      responses:
+        "201":
+          description: The order as the pipeline left it, with every fill it made
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBookCommandResult" } } }
+        "200":
+          description: Idempotent replay of the original answer
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBookCommandResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/books/{instrumentId}/status:
+    post:
+      tags: [advanced]
+      summary: Halt, resume or close a book (operator; requires step-up)
+      description: >-
+        A HALTED book accepts cancels only; a CLOSED book accepts nothing and
+        can be closed only once no order works on it. Every change is
+        recorded with its reason and actor.
+      parameters:
+        - { $ref: "#/components/parameters/InstrumentId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBookStatusRequest" } } }
+      responses:
+        "200":
+          description: The book in its new status
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBook" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/books/{instrumentId}/journal-verification:
+    get:
+      tags: [advanced]
+      summary: Prove from the database alone that the book's journal replays to its recorded state (operator; read-only)
+      description: >-
+        Replays every journalled command from the empty book, comparing every
+        event byte for byte and every state hash, replays the latest snapshot
+        and the tail to the same state, and compares every order that reached
+        the book with the replayed engine's record of it. It reads one
+        consistent snapshot and changes nothing. A divergence is an INTERNAL
+        error: the journal is the book's truth and must never disagree.
+      parameters:
+        - { $ref: "#/components/parameters/InstrumentId" }
+      responses:
+        "200":
+          description: What the replay proved
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBookJournalVerification" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/books/{instrumentId}/trades/{tradeSeq}/proof:
+    get:
+      tags: [advanced]
+      summary: The audit proof of one trade, to one of its parties or an operator who may read any account
+      description: >-
+        The trade's SIM_TRADE journal transaction, the APPLIED effect that
+        names it, the archived evidence document and its digest, the fee
+        schedules that priced it, and the book's journal cursor and latest
+        snapshot. Anyone who is not a party is told the trade does not exist.
+      parameters:
+        - { $ref: "#/components/parameters/InstrumentId" }
+        - in: path
+          name: tradeSeq
+          required: true
+          schema: { type: integer, format: int64, minimum: 1 }
+      responses:
+        "200":
+          description: The trade's audit proof
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedBookTradeProof" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
 
   # >>> advanced:transfers paths (insert this subsystem's paths directly below; keep the marker)
   #
@@ -2007,8 +2627,578 @@ paths:
   # >>> advanced:treasury paths (insert this subsystem's paths directly below; keep the marker)
 
   # >>> advanced:stable paths (insert this subsystem's paths directly below; keep the marker)
+  #
+  # The sandbox stable asset (internal/stableasset): a platform stable asset that exists only as
+  # SIMULATED value on the simulated chain sbx-solana, issued by a STABLE_ISSUER facility against a
+  # fully reserved policy whose peg is quoted in the sandbox dollar. An issuance (a mint) posts only once
+  # its chain transaction is FINALIZED; a redemption (a burn) is its exact inverse. Quantities are exact
+  # base units of the asset named; supply_value, eligible and eligible_reserve are exact decimals of the
+  # peg's quote unit, never rounded. A reserve snapshot is a signed, hash-linked record of the sandbox
+  # books and the simulated chain; it is not an attestation and says so in its body. A submission whose
+  # outcome is unknown is shown as SUBMISSION_UNKNOWN with its reconciliation state, never as a success
+  # or a failure. Every route answers UNSUPPORTED where no sandbox chain is configured.
+  /advanced/stable-assets:
+    get:
+      tags: [advanced]
+      summary: The registered sandbox stable assets with their status, peg, issuance cap and reserve policy
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Stable assets, oldest first (the service does not page; the list is bounded by limit)
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableAssetList" } } }
+        "422": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Operator — register a sandbox stable asset pegged in the sandbox dollar (step-up)
+      description: >-
+        Creates the devnet mint (its authority is the platform issuer signer alone), the SIMULATED asset,
+        the STABLE_ISSUER facility and the reserve policy. The peg is quoted in the sandbox dollar, which is
+        not the caller's choice. Registering an identical definition again returns the existing asset; a
+        different definition under the same name is CONFLICT.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/StableAssetDefinition" } } }
+      responses:
+        "200":
+          description: The registered stable asset
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableAssetDetail" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/stable-assets/holdings:
+    get:
+      tags: [advanced]
+      summary: An account's holdings of every stable asset, on the books and on the simulated chain, and what it can pay a mint with
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The account's stable asset holdings (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableHoldings" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/stable-assets/issuances:
+    get:
+      tags: [advanced]
+      summary: An account's issuance (mint) requests, newest first
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { in: query, name: stable_asset_id, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of issuance requests (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableIssuancePage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/stable-assets/issuances/{stableIssuanceId}:
+    get:
+      tags: [advanced]
+      summary: One issuance request with its chain transaction and reconciliation state
+      parameters:
+        - { in: path, name: stableIssuanceId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The issuance request (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableIssuance" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/stable-assets/redemptions:
+    get:
+      tags: [advanced]
+      summary: An account's redemption (burn) requests, newest first
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { in: query, name: stable_asset_id, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of redemption requests (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableRedemptionPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/stable-assets/redemptions/{stableRedemptionId}:
+    get:
+      tags: [advanced]
+      summary: One redemption request with its chain transaction and reconciliation state
+      parameters:
+        - { in: path, name: stableRedemptionId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The redemption request (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableRedemption" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/stable-assets/ops/resolve-unknown:
+    post:
+      tags: [advanced]
+      summary: Operator — settle every issuance and redemption whose submission outcome is unknown, from the chain by transaction id (step-up)
+      description: >-
+        Requests in SUBMISSION_UNKNOWN, and requests still SUBMITTING past the grace period, are settled from
+        the simulated chain's status of their own transaction: FINALIZED posts and applies, FAILED or expired
+        fails and releases, anything else waits. Nothing is ever resubmitted. In SANDBOX mode the platform
+        produces the blocks, so a landed transaction finalizes only after blocks are produced.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        content: { application/json: { schema: { $ref: "#/components/schemas/StableBatchRequest" } } }
+      responses:
+        "200":
+          description: What the pass examined and how each request ended
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableSettleReport" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/stable-assets/{stableAssetId}:
+    get:
+      tags: [advanced]
+      summary: One stable asset with its status history and recent peg-monitor alerts
+      parameters:
+        - { in: path, name: stableAssetId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The stable asset (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableAssetDetail" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/stable-assets/{stableAssetId}/reserve:
+    get:
+      tags: [advanced]
+      summary: The issuer's reserve ledger for one stable asset and its coverage of issued supply at the peg
+      description: >-
+        Issued supply and the reserve are the STABLE_ISSUER facility's ledger balances; pending figures are
+        derived from request states and never booked. Each reserve asset is counted at its verified price
+        (a cash equivalent at most par) times its eligibility factor; one with no fresh price counts zero and
+        is listed as unverified.
+      parameters:
+        - { in: path, name: stableAssetId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The reserve position (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableReserve" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/stable-assets/{stableAssetId}/snapshots:
+    get:
+      tags: [advanced]
+      summary: The signed reserve snapshot chain and its verification against the snapshot signer's public key
+      description: >-
+        The whole chain is verified from the snapshots and the snapshot signer's public key alone: each body
+        re-encodes to exactly its canonical bytes, hashes to its hash, carries a valid Ed25519 signature by
+        that key, names the previous snapshot's hash and carries the disclaimer. The newest `limit`
+        snapshots are returned, oldest first; `verified` on each says whether it and every snapshot before
+        it verify.
+      parameters:
+        - { in: path, name: stableAssetId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: The snapshot chain and its verification (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableSnapshotChain" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Operator — record the next signed reserve and supply snapshot (moves no value)
+      parameters:
+        - { in: path, name: stableAssetId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: The snapshot as recorded, and the chain's verification after it
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableSnapshotResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/stable-assets/{stableAssetId}/issuances:
+    post:
+      tags: [advanced]
+      summary: Issue (mint) stable units into your sandbox wallet, paid in an eligible cash-equivalent reserve asset at the peg
+      description: >-
+        The service admits the issuance against the cap and the reserve, evaluates Risk Kernel V2, reserves
+        the payment, signs the planned TOKEN_MINT_TO and submits it exactly once. 200 when the request is
+        final (ISSUED, or FAILED with its failure code); 202 when it is recorded and not final: awaiting the
+        chain in DEVNET mode, or SUBMISSION_UNKNOWN when the submission's outcome is unknown, in which case
+        it is reconciled from the chain by transaction id and never resubmitted.
+      parameters:
+        - { in: path, name: stableAssetId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/StableIssueRequest" } } }
+      responses:
+        "200":
+          description: The issuance request, final
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableIssuanceResult" } } }
+        "202":
+          description: The issuance request, recorded and not final (see reconciliation for an unknown outcome)
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableIssuanceResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/stable-assets/{stableAssetId}/redemptions:
+    post:
+      tags: [advanced]
+      summary: Redeem (burn) stable units from your sandbox wallet for the policy's cash-equivalent reserve asset at par
+      description: >-
+        The holder's units are reserved, the custodied key signs the planned TOKEN_BURN, it is submitted
+        exactly once, and the redemption posts only after the burn is FINALIZED (or is queued in redemption
+        mode QUEUED). 200 when final; 202 when recorded and not final, including SUBMISSION_UNKNOWN.
+      parameters:
+        - { in: path, name: stableAssetId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/StableRedeemRequest" } } }
+      responses:
+        "200":
+          description: The redemption request, final
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableRedemptionResult" } } }
+        "202":
+          description: The redemption request, recorded and not final (see reconciliation for an unknown outcome)
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableRedemptionResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/stable-assets/{stableAssetId}/pause:
+    post:
+      tags: [advanced]
+      summary: Operator — pause issuance and redemption of a stable asset, with a reason (step-up)
+      parameters:
+        - { in: path, name: stableAssetId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/StableReasonRequest" } } }
+      responses:
+        "200":
+          description: The stable asset after the change
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableAssetDetail" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/stable-assets/{stableAssetId}/resume:
+    post:
+      tags: [advanced]
+      summary: Operator — resume a paused stable asset, with a reason (step-up; the circuit breaker never resumes)
+      parameters:
+        - { in: path, name: stableAssetId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/StableReasonRequest" } } }
+      responses:
+        "200":
+          description: The stable asset after the change
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableAssetDetail" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/stable-assets/{stableAssetId}/monitor-runs:
+    post:
+      tags: [advanced]
+      summary: Operator — run the peg monitor (market price against the peg, reserve coverage, supply against the chain)
+      description: >-
+        Moves no value. A deviation above the threshold, coverage under 100% or a supply mismatch trips the
+        circuit breaker, which pauses the asset; it never resumes it.
+      parameters:
+        - { in: path, name: stableAssetId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: The monitor's findings
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableMonitorReport" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/stable-assets/{stableAssetId}/reconciliations:
+    post:
+      tags: [advanced]
+      summary: Operator — reconcile the stable asset's supply (ledger, every holding, the chain, the reserve)
+      description: >-
+        Moves no value. A mismatch opens a material STABLE_RESERVE reconciliation record that blocks new risk
+        and trips the circuit breaker; a match is recorded.
+      parameters:
+        - { in: path, name: stableAssetId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: The supply reconciliation
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableSupplyReconciliation" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/stable-assets/{stableAssetId}/redemption-queue/run:
+    post:
+      tags: [advanced]
+      summary: Operator — pay out the queued redemptions of a stable asset, oldest first (step-up)
+      parameters:
+        - { in: path, name: stableAssetId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        content: { application/json: { schema: { $ref: "#/components/schemas/StableBatchRequest" } } }
+      responses:
+        "200":
+          description: What the run examined and paid
+          content: { application/json: { schema: { $ref: "#/components/schemas/StableSettleReport" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
 
   # >>> advanced:bridge paths (insert this subsystem's paths directly below; keep the marker)
+  #
+  # Cross-chain capital (internal/bridge) over the persistent simulated chain host (internal/devnethost):
+  # routes join a SIMULATED asset on one simulated chain to its bridged twin on another; a leg moves an
+  # account's units through BRIDGE_REQUESTED → SOURCE_FINALIZED → MESSAGE_IN_FLIGHT → DESTINATION_FINALIZED
+  # → RECONCILED, each posting made only once the chain transaction it records is FINALIZED. The chains are
+  # a simulation the books are reconciled against; every unit is SIMULATED value. The chain routes are the
+  # host's (shared with the stable asset): status for display, and in LOCAL, TEST and DEV only, block
+  # production and fault injection. Every route answers UNSUPPORTED where no sandbox chain is configured.
+  /advanced/bridge/routes:
+    get:
+      tags: [advanced]
+      summary: The bridge routes between the simulated chains
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Routes, oldest first (the service does not page; the list is bounded by limit)
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeRouteList" } } }
+        "422": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Operator — open a route from a SIMULATED asset on its simulated chain to a bridged twin on another (step-up)
+      description: >-
+        Creates the destination mint (whose authority no key holds, so only an attested release mints it),
+        the destination asset and the route's BRIDGE facility. Creating an identical route again returns it;
+        another route under the same name is CONFLICT.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/BridgeRouteDefinition" } } }
+      responses:
+        "200":
+          description: The route
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeRoute" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/bridge/routes/{bridgeRouteId}:
+    get:
+      tags: [advanced]
+      summary: One bridge route
+      parameters:
+        - { in: path, name: bridgeRouteId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The route (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeRoute" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/bridge/routes/{bridgeRouteId}/pause:
+    post:
+      tags: [advanced]
+      summary: Operator — pause a route, with a reason; legs already in flight still complete (step-up)
+      parameters:
+        - { in: path, name: bridgeRouteId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/BridgeReasonRequest" } } }
+      responses:
+        "200":
+          description: The route after the change
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeRoute" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/bridge/routes/{bridgeRouteId}/resume:
+    post:
+      tags: [advanced]
+      summary: Operator — resume a paused route, with a reason (step-up; the circuit breaker never resumes)
+      parameters:
+        - { in: path, name: bridgeRouteId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/BridgeReasonRequest" } } }
+      responses:
+        "200":
+          description: The route after the change
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeRoute" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/bridge/routes/{bridgeRouteId}/reconciliations:
+    post:
+      tags: [advanced]
+      summary: Operator — reconcile a route's books with both chains (moves no value)
+      description: >-
+        A mismatch opens a material BRIDGE reconciliation record that blocks new risk and pauses the route
+        (its circuit breaker); a match is recorded.
+      parameters:
+        - { in: path, name: bridgeRouteId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: The route reconciliation
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeRouteReconciliation" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/bridge/legs:
+    get:
+      tags: [advanced]
+      summary: An account's bridge legs, newest first
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of legs (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeLegPage" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Bridge units of a route's source asset from your sandbox wallet on its chain to your wallet on the destination chain
+      description: >-
+        The service checks the route, the holder's balance on the source chain, Risk Kernel V2 and the
+        units' reservation, has the holder's custodied key sign the planned BRIDGE_LOCK, and submits it
+        exactly once. 200 when the leg is final (RECONCILED, or FAILED with its failure code); 202 when it is
+        recorded and not final: in flight, in manual review, awaiting the chain in DEVNET mode, or with a
+        submission whose outcome is unknown (reconciliation state AWAITING), which is reconciled from the
+        chain by transaction id and never resubmitted.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/BridgeLegRequest" } } }
+      responses:
+        "200":
+          description: The leg, final
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeLegResult" } } }
+        "202":
+          description: The leg, recorded and not final
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeLegResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/bridge/legs/{bridgeLegId}:
+    get:
+      tags: [advanced]
+      summary: One leg with its lock and release transactions on the chains and every state it passed through
+      parameters:
+        - { in: path, name: bridgeLegId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The leg (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeLegDetail" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/bridge/legs/{bridgeLegId}/reconcile:
+    post:
+      tags: [advanced]
+      summary: Operator — settle a leg from both chains by transaction id and reconcile it (step-up)
+      description: >-
+        Drives the leg as far as the chains allow now — never resubmitting a lock and never racing a release
+        that can still land; a SANDBOX leg is driven by producing blocks — and, once its destination is
+        final, checks the lock, the release and both postings against the chains.
+      parameters:
+        - { in: path, name: bridgeLegId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: The leg, final
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeLegResult" } } }
+        "202":
+          description: The leg, not final yet
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeLegResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /advanced/bridge/holdings:
+    get:
+      tags: [advanced]
+      summary: An account's simulated holdings by chain, its value in flight between chains, and the haircut it counts at
+      description: >-
+        Holdings are the account's ledger WALLET balances of SIMULATED assets, grouped by each asset's chain.
+        In flight is the bridge's part of buying power under the deployment's haircut policy: each open leg,
+        where its value is held, and the factor it counts at with the reason. Refused with
+        RECONCILIATION_REQUIRED when the legs and the ledger disagree.
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: Holdings by chain and value in flight (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeHoldings" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /advanced/bridge/chains:
+    get:
+      tags: [advanced]
+      summary: The simulated chains' tips, finality and parameters, for display
+      responses:
+        "200":
+          description: Both chains of the host
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeChains" } } }
+        "422": { $ref: "#/components/responses/Problem" }
+  /advanced/bridge/chains/{bridgeChainId}/blocks:
+    post:
+      tags: [advanced]
+      summary: Operator — produce blocks on a simulated chain (step-up)
+      description: >-
+        The platform is the block producer of SANDBOX mode: producing blocks lets submitted transactions be
+        included and finalize. It never submits or settles anything itself.
+      parameters:
+        - { in: path, name: bridgeChainId, required: true, schema: { $ref: "#/components/schemas/BridgeChainId" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/BridgeBlocksRequest" } } }
+      responses:
+        "200":
+          description: The chain after the blocks
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeBlocksResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /advanced/bridge/chains/{bridgeChainId}/faults:
+    post:
+      tags: [advanced]
+      summary: Operator — inject a submission fault on a simulated chain (LOCAL, TEST and DEV only; step-up)
+      description: >-
+        Arms the chain to answer the next submission with a timeout that lands (TIMEOUT_BUT_LAND) or does
+        not (TIMEOUT_AND_DROP), to drop the next `count` submissions (DROP_NEXT), to hold every accepted
+        transaction for `count` blocks (DELAY_INCLUSION), or disarms every fault (CLEAR_FAULTS). Refused with
+        FORBIDDEN (reason FAULT_INJECTION_FORBIDDEN) outside LOCAL, TEST and DEV.
+      parameters:
+        - { in: path, name: bridgeChainId, required: true, schema: { $ref: "#/components/schemas/BridgeChainId" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/BridgeFaultRequest" } } }
+      responses:
+        "200":
+          description: The fault armed, and the chain
+          content: { application/json: { schema: { $ref: "#/components/schemas/BridgeFaultResult" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
 
   # >>> advanced:predmarket paths (insert this subsystem's paths directly below; keep the marker)
   # Prediction markets (internal/predmarket): complete sets of outcome shares against the sandbox dollar,
@@ -5561,8 +6751,933 @@ components:
         record_id: { $ref: "#/components/schemas/UUID", description: The CLEARING reconciliation record opened or refreshed for a mismatch, or still unresolved }
 
     # >>> advanced:equities schemas (insert this subsystem's schemas directly below; keep the marker)
+    #
+    # Equities. A price is an exact decimal string per whole share in the
+    # listing's settlement asset (never a JSON number, never rounded); a share
+    # quantity is base units of the listing's share asset (fractional shares
+    # at its decimals); an amount of value -- a notional, a fee, a settlement,
+    # a reservation for a buy -- is base units of the settlement asset. Every
+    # enum carries x-enum-varnames prefixed Equity so its Go constants cannot
+    # collide.
+    AdvancedEquityPrice:
+      type: string
+      maxLength: 64
+      pattern: '^[0-9]+(\.[0-9]+)?$'
+      description: An exact decimal amount of the settlement asset per whole share
+      examples: ["150.25"]
+    AdvancedEquityDate:
+      type: string
+      pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+      description: A calendar day, YYYY-MM-DD, with no time and no zone
+      examples: ["2026-10-08"]
+    AdvancedEquityKind:
+      type: string
+      enum: [EQUITY, ETF]
+      x-enum-varnames: [EquityKindEquity, EquityKindETF]
+    AdvancedEquityMode:
+      type: string
+      enum: [PAPER, SANDBOX]
+      x-enum-varnames: [EquityModePaper, EquityModeSandbox]
+    AdvancedEquitySide:
+      type: string
+      enum: [BUY, SELL]
+      x-enum-varnames: [EquitySideBuy, EquitySideSell]
+    AdvancedEquityOrderType:
+      type: string
+      enum: [MARKET, LIMIT]
+      x-enum-varnames: [EquityOrderTypeMarket, EquityOrderTypeLimit]
+    AdvancedEquityOrderStatus:
+      type: string
+      enum: [ACCEPTED, REJECTED, OPEN, FILLED, CANCELLED, EXPIRED]
+      x-enum-varnames: [EquityOrderAccepted, EquityOrderRejected, EquityOrderOpen, EquityOrderFilled, EquityOrderCancelled,
+                        EquityOrderExpired]
+      description: ACCEPTED is recorded and reserved and not yet answered by the venue; OPEN rests at the venue
+    AdvancedEquitySession:
+      type: string
+      enum: [CLOSED, PRE_MARKET, REGULAR, AFTER_HOURS]
+      x-enum-varnames: [EquitySessionClosed, EquitySessionPreMarket, EquitySessionRegular, EquitySessionAfterHours]
+    AdvancedEquityRiskClass:
+      type: string
+      enum: [MAJOR, STANDARD, SPECULATIVE]
+      x-enum-varnames: [EquityRiskMajor, EquityRiskStandard, EquityRiskSpeculative]
+    AdvancedEquityActionType:
+      type: string
+      enum: [SPLIT, REVERSE_SPLIT, CASH_DIVIDEND, SYMBOL_CHANGE, DELISTING]
+      x-enum-varnames: [EquityActionSplit, EquityActionReverseSplit, EquityActionDividend, EquityActionSymbolChange,
+                        EquityActionDelisting]
+    AdvancedEquityActionStatus:
+      type: string
+      enum: [ANNOUNCED, APPLYING, APPLIED, CANCELLED]
+      x-enum-varnames: [EquityActionAnnounced, EquityActionApplying, EquityActionApplied, EquityActionCancelled]
+      description: APPLYING is used only by a delisting, between DELISTING and DELISTED
+    AdvancedEquityRounding:
+      type: string
+      enum: [SHARES_DOWN_CASH_DOWN, SHARES_DOWN_CASH_HALF_EVEN]
+      x-enum-varnames: [EquityRoundingSharesDownAmountDown, EquityRoundingSharesDownAmountHalfEven]
+      description: >-
+        Shares always round down to a whole base unit; the amount paid for a
+        fractional remainder, and a dividend, round down (the default, never
+        paying more than the exact amount) or half-even.
+    AdvancedEquitySettlementState:
+      type: string
+      enum: [PENDING, SETTLED]
+      x-enum-varnames: [EquitySettlementPending, EquitySettlementSettled]
+    AdvancedEquitySettlementFilter:
+      type: string
+      enum: [PENDING, SETTLED, ALL]
+      x-enum-varnames: [EquitySettlementFilterPending, EquitySettlementFilterSettled, EquitySettlementFilterAll]
+    AdvancedEquityVenueStatus:
+      type: string
+      enum: [OPEN, FILLED, REJECTED, CANCELLED, EXPIRED]
+      x-enum-varnames: [EquityVenueOpen, EquityVenueFilled, EquityVenueRejected, EquityVenueCancelled, EquityVenueExpired]
+    AdvancedEquityPlacementStatus:
+      type: string
+      enum: [PLACED, NOT_PLACED]
+      x-enum-varnames: [EquityPlacementPlaced, EquityPlacementNotPlaced]
+    AdvancedEquityVenueAction:
+      type: string
+      enum: [PLACE, POLL]
+      x-enum-varnames: [EquityVenueActionPlace, EquityVenueActionPoll]
+    AdvancedEquityMark:
+      type: object
+      description: A reference price of one whole share in the settlement asset, as the price store observed it
+      required: [price, source, observed_at]
+      properties:
+        price: { $ref: "#/components/schemas/AdvancedEquityPrice" }
+        source: { type: string }
+        observed_at: { $ref: "#/components/schemas/Timestamp" }
+    AdvancedEquitySessionState:
+      type: object
+      description: >-
+        The calendar at as_of: the session in force, the New York trade date
+        (every session of a day shares it) and the T+1 settlement date of a
+        trade made on it, when it is a trading day.
+      required: [calendar, timezone, as_of, session, trade_date, trading_day, next_trading_day]
+      properties:
+        calendar: { type: string }
+        timezone: { type: string }
+        as_of: { $ref: "#/components/schemas/Timestamp" }
+        session: { $ref: "#/components/schemas/AdvancedEquitySession" }
+        trade_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        trading_day: { type: boolean }
+        holiday_name: { type: string }
+        next_trading_day: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        settlement_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+    AdvancedEquityHoliday:
+      type: object
+      required: [date, name]
+      properties:
+        date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        name: { type: string }
+    AdvancedEquityCalendar:
+      type: object
+      required: [state, settlement_cycle_days, holidays]
+      properties:
+        state: { $ref: "#/components/schemas/AdvancedEquitySessionState" }
+        settlement_cycle_days: { type: integer }
+        holidays: { type: array, items: { $ref: "#/components/schemas/AdvancedEquityHoliday" } }
+    AdvancedEquityListing:
+      type: object
+      required: [instrument_id, kind, symbol, exchange_mic, name, status, terms_version, terms_hash, venue, share_asset_id,
+                 share_symbol, share_decimals, settlement_asset_id, settlement_symbol, settlement_decimals, price_scale,
+                 tick_price, lot_size, min_quantity, oracle_max_age_ms, trading_calendar, value_domain]
+      properties:
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        kind: { $ref: "#/components/schemas/AdvancedEquityKind" }
+        symbol: { type: string }
+        exchange_mic: { type: string }
+        name: { type: string, description: The share asset's name }
+        status: { type: string, description: The instrument's status (ACTIVE, HALTED, CLOSE_ONLY, DELISTING, DELISTED, ...) }
+        terms_version: { type: integer }
+        terms_hash: { type: string }
+        venue: { type: string, description: The simulated venue the listing trades at }
+        share_asset_id: { $ref: "#/components/schemas/UUID" }
+        share_symbol: { type: string }
+        share_decimals: { type: integer, minimum: 0, maximum: 18 }
+        settlement_asset_id: { $ref: "#/components/schemas/UUID" }
+        settlement_symbol: { type: string }
+        settlement_decimals: { type: integer, minimum: 0, maximum: 18 }
+        price_scale: { type: integer }
+        tick_price: { $ref: "#/components/schemas/AdvancedEquityPrice" }
+        lot_size: { $ref: "#/components/schemas/Quantity" }
+        min_quantity: { $ref: "#/components/schemas/Quantity" }
+        oracle_max_age_ms: { type: integer, format: int64 }
+        trading_calendar: { type: string }
+        mark: { $ref: "#/components/schemas/AdvancedEquityMark" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedEquityListingList:
+      type: object
+      required: [items, session, value_domain]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/AdvancedEquityListing" } }
+        session: { $ref: "#/components/schemas/AdvancedEquitySessionState" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedEquityListingRequest:
+      type: object
+      description: >-
+        tick_size is in price units at price_scale (at scale 2 a tick of 1 is
+        one hundredth); lot_size and min_quantity are base units of the share
+        asset, whose decimals are share_decimals. settlement_asset_id defaults
+        to the sandbox dollar.
+      required: [kind, symbol, name, exchange_mic, share_decimals, price_scale, tick_size, lot_size, min_quantity,
+                 oracle_max_age_ms, oracle_sources, risk_class]
+      properties:
+        kind: { $ref: "#/components/schemas/AdvancedEquityKind" }
+        symbol: { type: string, minLength: 1, maxLength: 64 }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        exchange_mic: { type: string, pattern: '^[A-Z0-9]{4}$' }
+        settlement_asset_id: { $ref: "#/components/schemas/UUID" }
+        share_decimals: { type: integer, minimum: 0, maximum: 18 }
+        price_scale: { type: integer, minimum: 0, maximum: 18 }
+        tick_size: { $ref: "#/components/schemas/Quantity" }
+        lot_size: { $ref: "#/components/schemas/Quantity" }
+        min_quantity: { $ref: "#/components/schemas/Quantity" }
+        oracle_max_age_ms: { type: integer, format: int64, minimum: 1 }
+        oracle_sources: { type: array, items: { type: string } }
+        risk_class: { $ref: "#/components/schemas/AdvancedEquityRiskClass" }
+    AdvancedEquityHolidayRequest:
+      type: object
+      required: [date, name]
+      properties:
+        date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        name: { type: string, minLength: 1, maxLength: 200 }
+    AdvancedEquityOrderRequest:
+      type: object
+      description: >-
+        quantity is base units of the listing's share asset; limit_price is
+        required for a LIMIT order and refused for a MARKET order, which never
+        trades outside regular hours.
+      required: [account_id, instrument_id, side, order_type, quantity, mode]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        side: { $ref: "#/components/schemas/AdvancedEquitySide" }
+        order_type: { $ref: "#/components/schemas/AdvancedEquityOrderType" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        limit_price: { $ref: "#/components/schemas/AdvancedEquityPrice" }
+        extended_hours: { type: boolean }
+        mode: { $ref: "#/components/schemas/AdvancedEquityMode" }
+    AdvancedEquitySettlement:
+      type: object
+      description: >-
+        One fill's T+1 settlement: what the account receives (shares for a
+        buy, proceeds net of the disclosed charges for a sell) waits in
+        UNSETTLED_RECEIVABLE from the trade date until it is SETTLED into the
+        WALLET on the due date.
+      required: [id, fill_id, order_id, account_id, instrument_id, asset_id, asset_symbol, asset_decimals, quantity, trade_date,
+                 due_date, state, value_domain]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        fill_id: { $ref: "#/components/schemas/UUID" }
+        order_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        asset_symbol: { type: string }
+        asset_decimals: { type: integer, minimum: 0, maximum: 18 }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        trade_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        due_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        state: { $ref: "#/components/schemas/AdvancedEquitySettlementState" }
+        settled_at: { $ref: "#/components/schemas/Timestamp" }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedEquityFill:
+      type: object
+      description: >-
+        One execution at the simulated venue, with every charge it carried as
+        disclosed and verified before posting: notional at the fill price,
+        the disclosed spread, platform and venue fees, and the total the
+        buyer paid or the seller receives, all in base units of the
+        settlement asset.
+      required: [id, order_id, account_id, instrument_id, side, quantity, share_decimals, price, mark, slippage_bps, venue,
+                 venue_fill_id, executed_at, trade_date, settlement_date, notional, spread, platform_fees, venue_fees, total,
+                 settlement_asset_id, settlement_symbol, settlement_decimals, fee_schedule_version, fee_schedule_hash,
+                 fee_disclosure_hash, journal_transaction_id, effect_id, value_domain]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        order_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        side: { $ref: "#/components/schemas/AdvancedEquitySide" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        share_decimals: { type: integer, minimum: 0, maximum: 18 }
+        price: { $ref: "#/components/schemas/AdvancedEquityPrice" }
+        mark: { $ref: "#/components/schemas/AdvancedEquityMark" }
+        slippage_bps: { type: integer }
+        venue: { type: string }
+        venue_fill_id: { type: string }
+        executed_at: { $ref: "#/components/schemas/Timestamp" }
+        trade_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        settlement_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        notional: { $ref: "#/components/schemas/Quantity" }
+        spread: { $ref: "#/components/schemas/Quantity" }
+        platform_fees: { $ref: "#/components/schemas/Quantity" }
+        venue_fees: { $ref: "#/components/schemas/Quantity" }
+        total: { $ref: "#/components/schemas/Quantity" }
+        settlement_asset_id: { $ref: "#/components/schemas/UUID" }
+        settlement_symbol: { type: string }
+        settlement_decimals: { type: integer, minimum: 0, maximum: 18 }
+        fee_schedule_version: { type: string }
+        fee_schedule_hash: { type: string }
+        fee_disclosure_hash: { type: string }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        effect_id: { $ref: "#/components/schemas/UUID" }
+        settlement: { $ref: "#/components/schemas/AdvancedEquitySettlement" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedEquityOrder:
+      type: object
+      description: >-
+        An equity order. reserved_quantity is what the order holds reserved
+        on the WALLET it draws from: base units of the settlement asset for a
+        buy, of the share asset for a sell. Every order is a DAY order and
+        expires at expires_at.
+      required: [id, account_id, instrument_id, intent_id, symbol, exchange_mic, share_asset_id, settlement_asset_id, side,
+                 order_type, mode, quantity, share_decimals, price_scale, tick_price, extended_hours, session, trade_date,
+                 expires_at, status, rejection_reasons, venue, created_at, updated_at, value_domain]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        intent_id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        exchange_mic: { type: string }
+        share_asset_id: { $ref: "#/components/schemas/UUID" }
+        settlement_asset_id: { $ref: "#/components/schemas/UUID" }
+        side: { $ref: "#/components/schemas/AdvancedEquitySide" }
+        order_type: { $ref: "#/components/schemas/AdvancedEquityOrderType" }
+        mode: { $ref: "#/components/schemas/AdvancedEquityMode" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        share_decimals: { type: integer, minimum: 0, maximum: 18 }
+        price_scale: { type: integer }
+        tick_price: { $ref: "#/components/schemas/AdvancedEquityPrice" }
+        limit_price: { $ref: "#/components/schemas/AdvancedEquityPrice" }
+        protection_price: { $ref: "#/components/schemas/AdvancedEquityPrice" }
+        extended_hours: { type: boolean }
+        session: { $ref: "#/components/schemas/AdvancedEquitySession" }
+        trade_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        expires_at: { $ref: "#/components/schemas/Timestamp" }
+        status: { $ref: "#/components/schemas/AdvancedEquityOrderStatus" }
+        rejection_code: { type: string }
+        rejection_reasons: { type: array, items: { type: string } }
+        reservation_id: { $ref: "#/components/schemas/UUID" }
+        reserved_quantity: { $ref: "#/components/schemas/Quantity" }
+        risk_decision_id: { $ref: "#/components/schemas/UUID" }
+        venue: { type: string }
+        venue_order_id: { type: string }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+        fill: { $ref: "#/components/schemas/AdvancedEquityFill" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedEquityOrderPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items, value_domain]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/AdvancedEquityOrder" } }
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedEquityFillPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items, value_domain]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/AdvancedEquityFill" } }
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedEquitySettlementPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items, value_domain]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/AdvancedEquitySettlement" } }
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedEquityPlacement:
+      type: object
+      description: >-
+        What placing the order at the simulated venue did. PLACED carries the
+        venue's answer; NOT_PLACED says why nothing was sent (the order stays
+        ACCEPTED with its submission PENDING, for an operator's venue run).
+      required: [status, detail]
+      properties:
+        status: { $ref: "#/components/schemas/AdvancedEquityPlacementStatus" }
+        venue_status: { $ref: "#/components/schemas/AdvancedEquityVenueStatus" }
+        venue_reason: { type: string }
+        error_code: { type: string }
+        detail: { type: string }
+    AdvancedEquityOrderSubmission:
+      type: object
+      required: [order, placement, value_domain]
+      properties:
+        order: { $ref: "#/components/schemas/AdvancedEquityOrder" }
+        placement: { $ref: "#/components/schemas/AdvancedEquityPlacement" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedEquityOrderCancelRequest:
+      type: object
+      required: [account_id]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+    AdvancedEquitySettlementRunRequest:
+      type: object
+      properties:
+        limit: { type: integer, minimum: 1, maximum: 500, description: The most settlements to settle in this run (default 500) }
+    AdvancedEquitySettlementRun:
+      type: object
+      required: [as_of, trade_date, batches, settled, value_domain]
+      properties:
+        as_of: { $ref: "#/components/schemas/Timestamp" }
+        trade_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        batches: { type: integer, description: Transactions the run used, one account each }
+        settled: { type: array, items: { $ref: "#/components/schemas/AdvancedEquitySettlement" } }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedEquityVenueRunRequest:
+      type: object
+      properties:
+        limit: { type: integer, minimum: 1, maximum: 500, description: The most orders to work in this run (default 100) }
+    AdvancedEquityVenueRunItem:
+      type: object
+      required: [order_id, action, status_before]
+      properties:
+        order_id: { $ref: "#/components/schemas/UUID" }
+        action: { $ref: "#/components/schemas/AdvancedEquityVenueAction" }
+        status_before: { $ref: "#/components/schemas/AdvancedEquityOrderStatus" }
+        status_after: { $ref: "#/components/schemas/AdvancedEquityOrderStatus" }
+        venue_status: { $ref: "#/components/schemas/AdvancedEquityVenueStatus" }
+        venue_reason: { type: string }
+        error_code: { type: string }
+        detail: { type: string }
+    AdvancedEquityVenueRun:
+      type: object
+      required: [as_of, items, value_domain]
+      properties:
+        as_of: { $ref: "#/components/schemas/Timestamp" }
+        items: { type: array, items: { $ref: "#/components/schemas/AdvancedEquityVenueRunItem" } }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedEquityRatio:
+      type: object
+      description: New shares per old share, numerator/denominator (4/1 is a 4-for-1 split, 1/10 a 1-for-10 reverse split)
+      required: [numerator, denominator]
+      properties:
+        numerator: { type: integer, format: int64, minimum: 1 }
+        denominator: { type: integer, format: int64, minimum: 1 }
+    AdvancedEquityCorporateActionRequest:
+      type: object
+      description: >-
+        effective_date is the first trading day of a split, reverse split or
+        symbol change, or the day a delisting begins; a dividend's is its
+        ex-date and may be left out. dividend_per_share and in_lieu_price are
+        exact amounts of the settlement asset per whole share (in_lieu_price
+        per whole new share).
+      required: [instrument_id, type, reason]
+      properties:
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        type: { $ref: "#/components/schemas/AdvancedEquityActionType" }
+        effective_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        ratio: { $ref: "#/components/schemas/AdvancedEquityRatio" }
+        dividend_per_share: { $ref: "#/components/schemas/AdvancedEquityPrice" }
+        in_lieu_price: { $ref: "#/components/schemas/AdvancedEquityPrice" }
+        ex_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        record_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        pay_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        final_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        new_symbol: { type: string, maxLength: 64 }
+        rounding: { $ref: "#/components/schemas/AdvancedEquityRounding" }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    AdvancedEquityCorporateAction:
+      type: object
+      required: [id, instrument_id, type, status, effective_date, share_asset_id, settlement_asset_id, rounding, reason,
+                 content_hash, announced_by_actor_type, announced_by_actor_id, created_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        type: { $ref: "#/components/schemas/AdvancedEquityActionType" }
+        status: { $ref: "#/components/schemas/AdvancedEquityActionStatus" }
+        effective_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        share_asset_id: { $ref: "#/components/schemas/UUID" }
+        settlement_asset_id: { $ref: "#/components/schemas/UUID" }
+        ratio: { $ref: "#/components/schemas/AdvancedEquityRatio" }
+        dividend_per_share: { $ref: "#/components/schemas/AdvancedEquityPrice" }
+        in_lieu_price: { $ref: "#/components/schemas/AdvancedEquityPrice" }
+        ex_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        record_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        pay_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        final_date: { $ref: "#/components/schemas/AdvancedEquityDate" }
+        new_symbol: { type: string }
+        rounding: { $ref: "#/components/schemas/AdvancedEquityRounding" }
+        reason: { type: string }
+        content_hash: { type: string }
+        announced_by_actor_type: { type: string }
+        announced_by_actor_id: { type: string }
+        applied_at: { $ref: "#/components/schemas/Timestamp" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+    AdvancedEquityCorporateActionPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/AdvancedEquityCorporateAction" } }
+    AdvancedEquityCorporateActionCancelRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    AdvancedEquityApplication:
+      type: object
+      description: >-
+        One account's share of one corporate action, applied once. shares_delta
+        is base units of the share asset (negative for a reverse split);
+        settlement_amount is base units of the settlement asset paid for a
+        fractional remainder or as a dividend, exactly
+        exact_amount_numerator / exact_amount_denominator before rounding.
+      required: [id, action_id, account_id, entitled_quantity, shares_delta, settlement_amount, exact_amount_numerator,
+                 exact_amount_denominator, rounding, share_symbol, share_decimals, settlement_symbol, settlement_decimals,
+                 created_at, value_domain]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        action_id: { $ref: "#/components/schemas/UUID" }
+        action_type: { $ref: "#/components/schemas/AdvancedEquityActionType" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        entitled_quantity: { $ref: "#/components/schemas/Quantity" }
+        shares_delta: { $ref: "#/components/schemas/Quantity" }
+        settlement_amount: { $ref: "#/components/schemas/Quantity" }
+        exact_amount_numerator: { $ref: "#/components/schemas/Quantity" }
+        exact_amount_denominator: { $ref: "#/components/schemas/Quantity" }
+        rounding: { $ref: "#/components/schemas/AdvancedEquityRounding" }
+        share_symbol: { type: string }
+        share_decimals: { type: integer, minimum: 0, maximum: 18 }
+        settlement_symbol: { type: string }
+        settlement_decimals: { type: integer, minimum: 0, maximum: 18 }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        effect_id: { $ref: "#/components/schemas/UUID" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedEquityApplicationPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items, value_domain]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/AdvancedEquityApplication" } }
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedEquityCorporateActionResult:
+      type: object
+      required: [action, applications, replayed, value_domain]
+      properties:
+        action: { $ref: "#/components/schemas/AdvancedEquityCorporateAction" }
+        applications: { type: array, items: { $ref: "#/components/schemas/AdvancedEquityApplication" } }
+        replayed: { type: boolean, description: True when the action had been applied already and nothing was posted }
+        terms_version: { type: integer, description: The terms version a symbol change wrote }
+        instrument_status: { type: string, description: The instrument's status after a delisting step }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
 
     # >>> advanced:orders schemas (insert this subsystem's schemas directly below; keep the marker)
+    #
+    # The internal order book. A price is an exact decimal string in the
+    # book's quote asset per whole base unit (never a JSON number, never
+    # rounded); a quantity is base units of the base asset; an amount of value
+    # (a notional, a fee) is base units of the quote asset. Every enum carries
+    # x-enum-varnames prefixed Book so its Go constants cannot collide.
+    AdvancedBookPrice:
+      type: string
+      maxLength: 64
+      pattern: '^[0-9]+(\.[0-9]+)?$'
+      description: An exact decimal price in the book's quote asset per whole base unit
+      examples: ["2500.00"]
+    AdvancedBookMode:
+      type: string
+      enum: [PAPER, SANDBOX]
+      x-enum-varnames: [BookModePaper, BookModeSandbox]
+    AdvancedBookStatus:
+      type: string
+      enum: [OPEN, HALTED, CLOSED]
+      x-enum-varnames: [BookStatusOpen, BookStatusHalted, BookStatusClosed]
+    AdvancedBookVenueLabel:
+      type: string
+      enum: [SIMULATED_INTERNAL_BOOK]
+      x-enum-varnames: [BookVenueSimulatedInternalBook]
+    AdvancedBookTermsSource:
+      type: string
+      enum: [CANONICAL, BOOK_SPOT]
+      x-enum-varnames: [BookTermsCanonical, BookTermsSpot]
+      description: CANONICAL is the instrument's versioned terms; BOOK_SPOT is spot-pair terms stated when the book was opened
+    AdvancedBookSide:
+      type: string
+      enum: [BUY, SELL]
+      x-enum-varnames: [BookSideBuy, BookSideSell]
+    AdvancedBookOrderType:
+      type: string
+      enum: [LIMIT, MARKET]
+      x-enum-varnames: [BookOrderTypeLimit, BookOrderTypeMarket]
+    AdvancedBookTimeInForce:
+      type: string
+      enum: [GTC, IOC, FOK]
+      x-enum-varnames: [BookTimeInForceGTC, BookTimeInForceIOC, BookTimeInForceFOK]
+    AdvancedBookSTP:
+      type: string
+      enum: [CANCEL_TAKER, CANCEL_MAKER, CANCEL_BOTH]
+      x-enum-varnames: [BookSTPCancelTaker, BookSTPCancelMaker, BookSTPCancelBoth]
+      description: Self-trade prevention when the order takes liquidity; two orders of one account never trade
+    AdvancedBookLiquidityIntent:
+      type: string
+      enum: [TAKE_LIQUIDITY, PROVIDE_LIQUIDITY]
+      x-enum-varnames: [BookTakeLiquidity, BookProvideLiquidity]
+    AdvancedBookOrderStatus:
+      type: string
+      enum: [PENDING, OPEN, PARTIALLY_FILLED, FILLED, CANCELLED, REJECTED]
+      x-enum-varnames: [BookOrderPending, BookOrderOpen, BookOrderPartiallyFilled, BookOrderFilled, BookOrderCancelled, BookOrderRejected]
+    AdvancedBookOrderScope:
+      type: string
+      enum: [WORKING, ALL]
+      x-enum-varnames: [BookOrderScopeWorking, BookOrderScopeAll]
+    AdvancedBookLiquidity:
+      type: string
+      enum: [MAKER, TAKER]
+      x-enum-varnames: [BookLiquidityMaker, BookLiquidityTaker]
+      description: The role the account's order played in the fill
+    AdvancedBookOwnerType:
+      type: string
+      enum: [CUSTOMER, HOUSE]
+      x-enum-varnames: [BookOwnerCustomer, BookOwnerHouse]
+    AdvancedBookFeeScheduleRequest:
+      type: object
+      description: >-
+        The explicit fee one side of every fill pays, in the book's quote
+        asset: a percentage of the fill's notional, an extra percentage for a
+        strategy-originated order, a subscription discount on the percentage
+        fee, and a cap in basis points of notional (0 disables it). The
+        internal book charges nothing else -- no spread, no fixed or minimum
+        fee, no venue pass-through -- and rounds in the customer's favour.
+      required: [version, quote_asset_id, quote_decimals, percentage_fee_bps]
+      properties:
+        version: { type: string, minLength: 1, maxLength: 64 }
+        quote_asset_id: { $ref: "#/components/schemas/UUID" }
+        quote_decimals: { type: integer, minimum: 0, maximum: 18 }
+        percentage_fee_bps: { $ref: "#/components/schemas/BPS" }
+        strategy_fee_bps: { $ref: "#/components/schemas/BPS" }
+        subscription_discount_bps: { $ref: "#/components/schemas/BPS" }
+        max_total_fee_bps: { $ref: "#/components/schemas/BPS" }
+    AdvancedBookFeeSchedule:
+      type: object
+      description: The fee schedule a book prices one side of every fill with, as recorded on the book, and its hash
+      required: [version, quote_asset_id, quote_decimals, percentage_fee_bps, strategy_fee_bps, subscription_discount_bps,
+                 max_total_fee_bps, hash]
+      properties:
+        version: { type: string }
+        quote_asset_id: { $ref: "#/components/schemas/UUID" }
+        quote_decimals: { type: integer, minimum: 0, maximum: 18 }
+        percentage_fee_bps: { $ref: "#/components/schemas/BPS" }
+        strategy_fee_bps: { $ref: "#/components/schemas/BPS" }
+        subscription_discount_bps: { $ref: "#/components/schemas/BPS" }
+        max_total_fee_bps: { $ref: "#/components/schemas/BPS" }
+        hash: { type: string, description: The schedule's hash, as recorded on the book and on every fill it priced }
+    AdvancedBookCrossingRule:
+      type: object
+      description: >-
+        The house-versus-customer crossing rule in force. Version 0 is the
+        default, in force until a rule is recorded: a house (principal) book
+        never trades with a customer.
+      required: [book_id, version, allow_house_customer_crossing, is_default]
+      properties:
+        book_id: { $ref: "#/components/schemas/UUID" }
+        version: { type: integer }
+        allow_house_customer_crossing: { type: boolean }
+        is_default: { type: boolean, description: True when no rule was ever recorded and the default applies }
+        reason: { type: string }
+        actor_type: { type: string }
+        actor_id: { type: string }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+    AdvancedBook:
+      type: object
+      description: >-
+        One internal book: its instrument and assets, the exact grid it trades
+        on, the fee schedules that price every fill, the crossing rule in
+        force and its journal cursor.
+      required: [id, instrument_id, venue_label, mode, status, instrument_kind, base_asset_id, base_symbol, base_decimals,
+                 quote_asset_id, quote_symbol, quote_decimals, price_scale, tick_price, lot_size, min_quantity, max_price,
+                 trading_calendar, terms_source, maker_fee, taker_fee, crossing_rule, snapshot_interval, last_command_seq,
+                 last_event_seq, last_trade_seq, state_hash, value_domain]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        venue_label: { $ref: "#/components/schemas/AdvancedBookVenueLabel" }
+        mode: { $ref: "#/components/schemas/AdvancedBookMode" }
+        status: { $ref: "#/components/schemas/AdvancedBookStatus" }
+        instrument_kind: { $ref: "#/components/schemas/InstrumentKind" }
+        base_asset_id: { $ref: "#/components/schemas/UUID" }
+        base_symbol: { type: string }
+        base_decimals: { type: integer, minimum: 0, maximum: 18 }
+        quote_asset_id: { $ref: "#/components/schemas/UUID" }
+        quote_symbol: { type: string }
+        quote_decimals: { type: integer, minimum: 0, maximum: 18 }
+        price_scale: { type: integer }
+        tick_price: { $ref: "#/components/schemas/AdvancedBookPrice" }
+        lot_size: { $ref: "#/components/schemas/Quantity" }
+        min_quantity: { $ref: "#/components/schemas/Quantity" }
+        max_price: { $ref: "#/components/schemas/AdvancedBookPrice" }
+        trading_calendar: { type: string }
+        terms_source: { $ref: "#/components/schemas/AdvancedBookTermsSource" }
+        terms_version: { type: integer, description: The canonical terms version the book was opened on (absent for BOOK_SPOT) }
+        maker_fee: { $ref: "#/components/schemas/AdvancedBookFeeSchedule" }
+        taker_fee: { $ref: "#/components/schemas/AdvancedBookFeeSchedule" }
+        crossing_rule: { $ref: "#/components/schemas/AdvancedBookCrossingRule" }
+        snapshot_interval: { type: integer, format: int64 }
+        last_command_seq: { type: integer, format: int64 }
+        last_event_seq: { type: integer, format: int64 }
+        last_trade_seq: { type: integer, format: int64 }
+        state_hash: { type: string, description: hex sha256 of the book's state after its last command }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedBookPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items, value_domain]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/AdvancedBook" } }
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedBookOpenRequest:
+      type: object
+      description: spot_terms is required for a SPOT_PAIR and refused for every other instrument.
+      required: [instrument_id, mode, maker_fee, taker_fee]
+      properties:
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        mode: { $ref: "#/components/schemas/AdvancedBookMode" }
+        spot_terms: { $ref: "#/components/schemas/InstrumentTerms" }
+        maker_fee: { $ref: "#/components/schemas/AdvancedBookFeeScheduleRequest" }
+        taker_fee: { $ref: "#/components/schemas/AdvancedBookFeeScheduleRequest" }
+        snapshot_interval: { type: integer, minimum: 1, maximum: 100000, description: Commands between snapshots (default 64) }
+    AdvancedBookStatusRequest:
+      type: object
+      required: [status, reason]
+      properties:
+        status: { $ref: "#/components/schemas/AdvancedBookStatus" }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    AdvancedBookDepthLevel:
+      type: object
+      required: [price, price_ticks, quantity, orders]
+      properties:
+        price: { $ref: "#/components/schemas/AdvancedBookPrice" }
+        price_ticks: { type: integer, format: int64 }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        orders: { type: integer }
+    AdvancedBookDepth:
+      type: object
+      required: [book_id, instrument_id, status, base_decimals, quote_decimals, bids, asks, last_command_seq, state_hash, value_domain]
+      properties:
+        book_id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        status: { $ref: "#/components/schemas/AdvancedBookStatus" }
+        base_decimals: { type: integer, minimum: 0, maximum: 18 }
+        quote_decimals: { type: integer, minimum: 0, maximum: 18 }
+        bids: { type: array, items: { $ref: "#/components/schemas/AdvancedBookDepthLevel" } }
+        asks: { type: array, items: { $ref: "#/components/schemas/AdvancedBookDepthLevel" } }
+        last_command_seq: { type: integer, format: int64 }
+        state_hash: { type: string }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedBookOrderRequest:
+      type: object
+      description: >-
+        price is the limit price, or a market order's protection price, which
+        this book requires; quantity is base units of the base asset.
+      required: [account_id, side, order_type, time_in_force, price, quantity]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        side: { $ref: "#/components/schemas/AdvancedBookSide" }
+        order_type: { $ref: "#/components/schemas/AdvancedBookOrderType" }
+        time_in_force: { $ref: "#/components/schemas/AdvancedBookTimeInForce" }
+        price: { $ref: "#/components/schemas/AdvancedBookPrice" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        post_only: { type: boolean }
+        reduce_only: { type: boolean }
+        stp: { $ref: "#/components/schemas/AdvancedBookSTP" }
+        client_order_id: { type: string, minLength: 1, maxLength: 128 }
+        mode: { $ref: "#/components/schemas/AdvancedBookMode" }
+    AdvancedBookOrder:
+      type: object
+      required: [id, book_id, instrument_id, venue_label, account_id, side, order_type, time_in_force, stp, liquidity_intent,
+                 post_only, reduce_only, strategy_originated, mode, price, price_ticks, quantity, filled_quantity,
+                 remaining_quantity, cancelled_quantity, base_decimals, quote_decimals, status, created_at, updated_at, value_domain]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        book_id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        venue_label: { $ref: "#/components/schemas/AdvancedBookVenueLabel" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        intent_id: { $ref: "#/components/schemas/UUID" }
+        client_order_id: { type: string }
+        side: { $ref: "#/components/schemas/AdvancedBookSide" }
+        order_type: { $ref: "#/components/schemas/AdvancedBookOrderType" }
+        time_in_force: { $ref: "#/components/schemas/AdvancedBookTimeInForce" }
+        stp: { $ref: "#/components/schemas/AdvancedBookSTP" }
+        liquidity_intent: { $ref: "#/components/schemas/AdvancedBookLiquidityIntent" }
+        post_only: { type: boolean }
+        reduce_only: { type: boolean }
+        strategy_originated: { type: boolean }
+        mode: { $ref: "#/components/schemas/AdvancedBookMode" }
+        price: { $ref: "#/components/schemas/AdvancedBookPrice" }
+        price_ticks: { type: integer, format: int64 }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        filled_quantity: { $ref: "#/components/schemas/Quantity" }
+        remaining_quantity: { $ref: "#/components/schemas/Quantity" }
+        cancelled_quantity: { $ref: "#/components/schemas/Quantity" }
+        base_symbol: { type: string }
+        base_decimals: { type: integer, minimum: 0, maximum: 18 }
+        quote_symbol: { type: string }
+        quote_decimals: { type: integer, minimum: 0, maximum: 18 }
+        status: { $ref: "#/components/schemas/AdvancedBookOrderStatus" }
+        reject_reason: { type: string }
+        cancel_reason: { type: string }
+        reservation_id: { $ref: "#/components/schemas/UUID" }
+        accepted_command_seq: { type: integer, format: int64 }
+        last_command_seq: { type: integer, format: int64 }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedBookOrderPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items, value_domain]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/AdvancedBookOrder" } }
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedBookFill:
+      type: object
+      description: >-
+        One trade seen from one account's side: the account's own order, side,
+        role and fee. The counterparty is named only by its owner type; its
+        account is never shown.
+      required: [trade_seq, book_id, instrument_id, order_id, side, liquidity, price, price_ticks, quantity, quote_notional, fee,
+                 counterparty_owner_type, crossing_rule_version, command_seq, journal_transaction_id, effect_id, evidence_ref,
+                 evidence_sha256, executed_at, base_decimals, quote_decimals, value_domain]
+      properties:
+        trade_seq: { type: integer, format: int64 }
+        book_id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        order_id: { $ref: "#/components/schemas/UUID" }
+        side: { $ref: "#/components/schemas/AdvancedBookSide" }
+        liquidity: { $ref: "#/components/schemas/AdvancedBookLiquidity" }
+        price: { $ref: "#/components/schemas/AdvancedBookPrice" }
+        price_ticks: { type: integer, format: int64 }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        quote_notional: { $ref: "#/components/schemas/Quantity" }
+        fee: { $ref: "#/components/schemas/Quantity" }
+        counterparty_owner_type: { $ref: "#/components/schemas/AdvancedBookOwnerType" }
+        crossing_rule_version: { type: integer }
+        command_seq: { type: integer, format: int64 }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        effect_id: { $ref: "#/components/schemas/UUID" }
+        evidence_ref: { type: string }
+        evidence_sha256: { type: string }
+        executed_at: { $ref: "#/components/schemas/Timestamp" }
+        base_symbol: { type: string }
+        base_decimals: { type: integer, minimum: 0, maximum: 18 }
+        quote_symbol: { type: string }
+        quote_decimals: { type: integer, minimum: 0, maximum: 18 }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedBookFillPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items, value_domain]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/AdvancedBookFill" } }
+            value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedBookCommandResult:
+      type: object
+      description: >-
+        The order after a command, with the fills that command made for it.
+        command_seq and state_hash are absent when the command never reached
+        the book.
+      required: [order, fills, value_domain]
+      properties:
+        order: { $ref: "#/components/schemas/AdvancedBookOrder" }
+        intent_status: { type: string, description: The order's economic intent status after a submission }
+        command_seq: { type: integer, format: int64 }
+        state_hash: { type: string }
+        fills: { type: array, items: { $ref: "#/components/schemas/AdvancedBookFill" } }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedBookOrderCancelRequest:
+      type: object
+      required: [account_id]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+    AdvancedBookOrderReplaceRequest:
+      type: object
+      description: quantity is the new TOTAL quantity in base units, fills included.
+      required: [account_id, price, quantity]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        price: { $ref: "#/components/schemas/AdvancedBookPrice" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+    AdvancedBookTradeProof:
+      type: object
+      description: >-
+        The audit proof of one trade: the SIM_TRADE journal transaction (which
+        the database balances per party), the APPLIED effect that names it,
+        the write-once evidence document and its digest, the hashes of the
+        fee schedules that priced it, and the book's journal cursor and latest
+        snapshot, which the operator's journal verification replays.
+      required: [book_id, instrument_id, venue_label, trade_seq, command_seq, event_seq, price, price_ticks, quantity, quote_notional,
+                 aggressor_side, maker_order_id, taker_order_id, maker_owner_type, taker_owner_type, maker_fee, taker_fee,
+                 maker_schedule_hash, taker_schedule_hash, crossing_rule_version, journal_transaction_id, effect_id, evidence_ref,
+                 evidence_sha256, executed_at, base_decimals, quote_decimals, book_last_command_seq, book_state_hash, snapshot_seq,
+                 value_domain]
+      properties:
+        book_id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        venue_label: { $ref: "#/components/schemas/AdvancedBookVenueLabel" }
+        trade_seq: { type: integer, format: int64 }
+        command_seq: { type: integer, format: int64 }
+        event_seq: { type: integer, format: int64 }
+        price: { $ref: "#/components/schemas/AdvancedBookPrice" }
+        price_ticks: { type: integer, format: int64 }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        quote_notional: { $ref: "#/components/schemas/Quantity" }
+        aggressor_side: { $ref: "#/components/schemas/AdvancedBookSide" }
+        maker_order_id: { $ref: "#/components/schemas/UUID" }
+        taker_order_id: { $ref: "#/components/schemas/UUID" }
+        maker_owner_type: { $ref: "#/components/schemas/AdvancedBookOwnerType" }
+        taker_owner_type: { $ref: "#/components/schemas/AdvancedBookOwnerType" }
+        maker_fee: { $ref: "#/components/schemas/Quantity" }
+        taker_fee: { $ref: "#/components/schemas/Quantity" }
+        maker_schedule_hash: { type: string }
+        taker_schedule_hash: { type: string }
+        crossing_rule_version: { type: integer }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        effect_id: { $ref: "#/components/schemas/UUID" }
+        evidence_ref: { type: string }
+        evidence_sha256: { type: string, description: hex sha256 of the archived canonical evidence document }
+        executed_at: { $ref: "#/components/schemas/Timestamp" }
+        base_symbol: { type: string }
+        base_decimals: { type: integer, minimum: 0, maximum: 18 }
+        quote_symbol: { type: string }
+        quote_decimals: { type: integer, minimum: 0, maximum: 18 }
+        book_last_command_seq: { type: integer, format: int64 }
+        book_state_hash: { type: string }
+        snapshot_seq: { type: integer, format: int64, description: Command sequence of the book's latest snapshot (0 when none) }
+        snapshot_hash: { type: string }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedBookJournalVerification:
+      type: object
+      description: What replaying the book's journal from the database proved. Every hash is hex sha256.
+      required: [book_id, instrument_id, commands, events, trades, genesis_hash, state_hash, full_replay_hash,
+                 snapshot_replay_hash, snapshot_seq, orders_checked, verified_at]
+      properties:
+        book_id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        commands: { type: integer, format: int64 }
+        events: { type: integer, format: int64 }
+        trades: { type: integer, format: int64 }
+        genesis_hash: { type: string }
+        state_hash: { type: string }
+        full_replay_hash: { type: string }
+        snapshot_replay_hash: { type: string }
+        snapshot_seq: { type: integer, format: int64 }
+        orders_checked: { type: integer }
+        verified_at: { $ref: "#/components/schemas/Timestamp" }
 
     # >>> advanced:transfers schemas (insert this subsystem's schemas directly below; keep the marker)
     #
@@ -5792,8 +7907,896 @@ components:
     # >>> advanced:treasury schemas (insert this subsystem's schemas directly below; keep the marker)
 
     # >>> advanced:stable schemas (insert this subsystem's schemas directly below; keep the marker)
+    #
+    # The sandbox stable asset (internal/stableasset). The enums carry x-enum-varnames so their Go constants
+    # never collide with another schema's (ACTIVE, FAILED, SANDBOX and others already exist unprefixed).
+    StableAssetStatus:
+      type: string
+      enum: [ACTIVE, PAUSED, RETIRED]
+      x-enum-varnames: [StableAssetStatusActive, StableAssetStatusPaused, StableAssetStatusRetired]
+      description: ACTIVE issues and redeems; PAUSED (by an operator or the circuit breaker) does neither; RETIRED issues nothing and keeps redeeming.
+    StableReserveKind:
+      type: string
+      enum: [CASH_EQUIVALENT, TOKENIZED]
+      x-enum-varnames: [StableReserveKindCashEquivalent, StableReserveKindTokenized]
+    StableRedemptionMode:
+      type: string
+      enum: [INSTANT, QUEUED]
+      x-enum-varnames: [StableRedemptionModeInstant, StableRedemptionModeQueued]
+    StableRequestMode:
+      type: string
+      enum: [SANDBOX, DEVNET]
+      x-enum-varnames: [StableRequestModeSandbox, StableRequestModeDevnet]
+      description: >-
+        SANDBOX: the platform produces the simulated chain's blocks and drives the request to a final state.
+        DEVNET: the request is only observed, and finalizes as the chain's blocks arrive.
+    StableIssuanceStatus:
+      type: string
+      enum: [SUBMITTING, SUBMITTED, SUBMISSION_UNKNOWN, ISSUED, FAILED]
+      x-enum-varnames: [StableIssuanceStatusSubmitting, StableIssuanceStatusSubmitted, StableIssuanceStatusSubmissionUnknown,
+                        StableIssuanceStatusIssued, StableIssuanceStatusFailed]
+      description: >-
+        SUBMITTING: signed and recorded, about to be (or being) submitted. SUBMITTED: the chain accepted it.
+        SUBMISSION_UNKNOWN: the submission's outcome is unknown; only reconciliation by transaction id
+        settles it. ISSUED: final on chain and STABLE_ISSUANCE posted. FAILED: failed on chain, expired or
+        refused; the payment's reservation was released and nothing was posted.
+    StableRedemptionStatus:
+      type: string
+      enum: [SUBMITTING, SUBMITTED, SUBMISSION_UNKNOWN, REDEMPTION_QUEUED, REDEEMED, FAILED]
+      x-enum-varnames: [StableRedemptionStatusSubmitting, StableRedemptionStatusSubmitted, StableRedemptionStatusSubmissionUnknown,
+                        StableRedemptionStatusRedemptionQueued, StableRedemptionStatusRedeemed, StableRedemptionStatusFailed]
+      description: >-
+        As an issuance; REDEMPTION_QUEUED: the burn is final on chain and its payout waits for the operator's
+        queue run (redemption mode QUEUED); REDEEMED: STABLE_REDEMPTION posted.
+    StableReconciliationState:
+      type: string
+      enum: [NOT_REQUIRED, AWAITING, RESOLVED]
+      x-enum-varnames: [StableReconciliationNotRequired, StableReconciliationAwaiting, StableReconciliationResolved]
+      description: >-
+        NOT_REQUIRED: the submission's outcome was never unknown. AWAITING: it is unknown now, and the
+        request waits to be settled from the chain by transaction id. RESOLVED: it was unknown and has been
+        settled from the chain.
+    StableEffectStatus:
+      type: string
+      enum: [PENDING, APPLIED, UNKNOWN, FAILED, COMPENSATED]
+      x-enum-varnames: [StableEffectStatusPending, StableEffectStatusApplied, StableEffectStatusUnknown, StableEffectStatusFailed,
+                        StableEffectStatusCompensated]
+    StableAlertKind:
+      type: string
+      enum: [PRICE_DEVIATION, PRICE_STALE, RESERVE_SHORTFALL, RESERVE_PRICE_STALE, SUPPLY_MISMATCH]
+      x-enum-varnames: [StableAlertKindPriceDeviation, StableAlertKindPriceStale, StableAlertKindReserveShortfall,
+                        StableAlertKindReservePriceStale, StableAlertKindSupplyMismatch]
+    StableAlertSeverity:
+      type: string
+      enum: [WARNING, CRITICAL]
+      x-enum-varnames: [StableAlertSeverityWarning, StableAlertSeverityCritical]
+    StableSnapshotFailure:
+      type: string
+      enum: [SNAPSHOT_BODY_NOT_CANONICAL, SNAPSHOT_HASH_MISMATCH, SNAPSHOT_SIGNATURE_INVALID, SNAPSHOT_CHAIN_BROKEN,
+             SNAPSHOT_KEY_MISMATCH, SNAPSHOT_DISCLAIMER_MISSING]
+      x-enum-varnames: [StableSnapshotFailureBodyNotCanonical, StableSnapshotFailureHashMismatch, StableSnapshotFailureSignatureInvalid,
+                        StableSnapshotFailureChainBroken, StableSnapshotFailureKeyMismatch, StableSnapshotFailureDisclaimerMissing]
+    StableDecimal:
+      type: string
+      pattern: '^[0-9]+(\.[0-9]+)?$'
+      description: A non-negative decimal written out exactly; it is never rounded, and one that is not exact where it is used is refused.
+    StableValue:
+      type: string
+      pattern: '^-?[0-9]+(\.[0-9]+)?$'
+      description: >-
+        An exact amount of the peg's quote unit (whole sandbox dollars), written out in full: base units times
+        a price times a factor, never rounded.
+    StableActor:
+      type: object
+      required: [actor_type, actor_id]
+      properties:
+        actor_type: { type: string }
+        actor_id: { type: string }
+    StablePrice:
+      type: object
+      required: [mantissa, scale, decimal, quote, source, observed_at]
+      description: The price of one whole unit, exactly mantissa × 10^-scale of the quote asset.
+      properties:
+        mantissa: { $ref: "#/components/schemas/Quantity" }
+        scale: { type: integer }
+        decimal: { $ref: "#/components/schemas/StableDecimal" }
+        quote: { type: string, description: "The quote asset's id" }
+        source: { type: string, description: "The price's source: the asset's oracle source, PAR for the peg's own quote asset, TARGET_PEG for the peg" }
+        observed_at: { $ref: "#/components/schemas/Timestamp" }
+    StableReserveAsset:
+      type: object
+      required: [asset_id, symbol, decimals, kind, factor_bps, accepted_for_mint]
+      properties:
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        decimals: { type: integer }
+        kind: { $ref: "#/components/schemas/StableReserveKind" }
+        factor_bps: { $ref: "#/components/schemas/BPS" }
+        accepted_for_mint: { type: boolean, description: "An issuance may be paid in it (cash equivalents only)" }
+    StableAsset:
+      type: object
+      required: [value_domain, id, name, symbol, peg_currency, asset_id, facility_id, network, chain, mint, decimals, status,
+                 issuance_cap, mint_authority_mode, mint_authority, burn_authority_mode, redemption_mode, peg, oracle_source,
+                 max_price_age_ms, peg_deviation_threshold_bps, attestable, reserves, created_by, created_at, updated_at]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        id: { $ref: "#/components/schemas/UUID" }
+        name: { type: string }
+        symbol: { type: string }
+        peg_currency: { type: string }
+        asset_id: { $ref: "#/components/schemas/UUID", description: "The SIMULATED asset customers hold" }
+        facility_id: { $ref: "#/components/schemas/UUID", description: "The STABLE_ISSUER facility whose books are the reserve" }
+        network: { type: string }
+        chain: { type: string }
+        mint: { type: string, description: "The devnet mint address" }
+        decimals: { type: integer }
+        status: { $ref: "#/components/schemas/StableAssetStatus" }
+        issuance_cap: { $ref: "#/components/schemas/Quantity" }
+        mint_authority_mode: { type: string }
+        mint_authority: { type: string, description: "The issuer signer's public address; no other key can mint" }
+        burn_authority_mode: { type: string }
+        redemption_mode: { $ref: "#/components/schemas/StableRedemptionMode" }
+        peg: { $ref: "#/components/schemas/StablePrice" }
+        oracle_source: { type: string }
+        max_price_age_ms: { type: integer, format: int64 }
+        peg_deviation_threshold_bps: { $ref: "#/components/schemas/BPS" }
+        attestable: { type: boolean, description: "The asset publishes signed reserve snapshots" }
+        reserves: { type: array, items: { $ref: "#/components/schemas/StableReserveAsset" } }
+        created_by: { $ref: "#/components/schemas/StableActor" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+    StableAssetList:
+      type: object
+      required: [value_domain, items]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        items: { type: array, items: { $ref: "#/components/schemas/StableAsset" } }
+    StableAssetTransition:
+      type: object
+      required: [from_status, to_status, actor, reason, occurred_at]
+      properties:
+        from_status: { type: string, description: "The status before, NONE for the registration" }
+        to_status: { $ref: "#/components/schemas/StableAssetStatus" }
+        actor: { $ref: "#/components/schemas/StableActor" }
+        reason: { type: string }
+        occurred_at: { $ref: "#/components/schemas/Timestamp" }
+    StableAlert:
+      type: object
+      required: [id, kind, severity, breaker_tripped, observed, observed_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        kind: { $ref: "#/components/schemas/StableAlertKind" }
+        severity: { $ref: "#/components/schemas/StableAlertSeverity" }
+        breaker_tripped: { type: boolean, description: "This finding paused the asset" }
+        observed: { type: object, additionalProperties: true, description: "What the monitor observed, as it recorded it" }
+        observed_at: { $ref: "#/components/schemas/Timestamp" }
+    StableAssetDetail:
+      type: object
+      required: [value_domain, asset, transitions, alerts]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        asset: { $ref: "#/components/schemas/StableAsset" }
+        transitions: { type: array, items: { $ref: "#/components/schemas/StableAssetTransition" }, description: "Every status change, oldest first" }
+        alerts: { type: array, items: { $ref: "#/components/schemas/StableAlert" }, description: "The newest peg-monitor alerts, newest first" }
+    StableReserveHolding:
+      type: object
+      required: [asset_id, symbol, decimals, kind, quantity, factor_bps, eligible]
+      properties:
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        decimals: { type: integer }
+        kind: { $ref: "#/components/schemas/StableReserveKind" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        factor_bps: { $ref: "#/components/schemas/BPS" }
+        price: { $ref: "#/components/schemas/StablePrice", description: "The verified price it is counted at; absent: no fresh price, so it counts zero" }
+        eligible: { $ref: "#/components/schemas/StableValue", description: "quantity × price × factor, exact" }
+    StableReserve:
+      type: object
+      required: [value_domain, stable_asset_id, symbol, decimals, as_of, peg, issued_supply, cash_equivalent_reserve, tokenized_reserve,
+                 pending_mint, receivable, pending_burn, pending_redemption, supply_value, eligible_reserve, coverage_bps, covered,
+                 unverified_reserve_asset_ids]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        stable_asset_id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        decimals: { type: integer }
+        as_of: { $ref: "#/components/schemas/Timestamp" }
+        peg: { $ref: "#/components/schemas/StablePrice" }
+        issued_supply: { $ref: "#/components/schemas/Quantity", description: "The issuer's STABLE_OUTSTANDING (ledger)" }
+        cash_equivalent_reserve: { type: array, items: { $ref: "#/components/schemas/StableReserveHolding" }, description: "The issuer's STABLE_RESERVE in each cash equivalent (ledger)" }
+        tokenized_reserve: { type: array, items: { $ref: "#/components/schemas/StableReserveHolding" }, description: "The issuer's STABLE_RESERVE in each tokenized asset (ledger)" }
+        pending_mint: { $ref: "#/components/schemas/Quantity", description: "Supply reserved by issuances not yet final (request states, never booked)" }
+        receivable: { type: array, items: { $ref: "#/components/schemas/StableReserveHolding" }, description: "Customers' payments held by reservations for those issuances" }
+        pending_burn: { $ref: "#/components/schemas/Quantity", description: "Units of redemptions not yet final on chain" }
+        pending_redemption: { type: array, items: { $ref: "#/components/schemas/StableReserveHolding" }, description: "Payouts of redemptions not yet posted" }
+        supply_value: { $ref: "#/components/schemas/StableValue", description: "Issued supply at the peg" }
+        eligible_reserve: { $ref: "#/components/schemas/StableValue", description: "The eligible value of both reserve lines" }
+        coverage_bps: { type: integer, format: int64, description: "floor(eligible_reserve / supply_value × 10000); 10000 when nothing is issued" }
+        covered: { type: boolean, description: "The eligible reserve covers issued supply at the peg" }
+        unverified_reserve_asset_ids: { type: array, items: { $ref: "#/components/schemas/UUID" }, description: "Reserve assets holding a balance with no fresh price" }
+    StableSnapshotPrice:
+      type: object
+      required: [mantissa, scale, quote, source, at]
+      properties:
+        mantissa: { type: string }
+        scale: { type: integer }
+        quote: { type: string }
+        source: { type: string }
+        at: { $ref: "#/components/schemas/Timestamp" }
+    StableSnapshotReserve:
+      type: object
+      required: [asset_id, kind, balance, decimals, factor_bps, eligible]
+      properties:
+        asset_id: { type: string }
+        kind: { type: string }
+        balance: { type: string }
+        decimals: { type: string }
+        factor_bps: { type: string }
+        price: { $ref: "#/components/schemas/StableSnapshotPrice", description: "Absent where the canonical body has null (no fresh price)" }
+        eligible: { type: string }
+    StableSnapshotComposition:
+      type: object
+      required: [kind, eligible, share_bps]
+      properties:
+        kind: { type: string }
+        eligible: { type: string }
+        share_bps: { type: string }
+    StableSnapshotBody:
+      type: object
+      description: The snapshot's body, field for field as its canonical JSON states it; every number is a string.
+      required: [version, disclaimer, stable_asset_id, asset_id, chain, mint, seq, taken_at, prev_hash, ledger_supply, chain_supply,
+                 pending_mint, pending_burn, peg, reserves, composition, supply_value, eligible_reserve, coverage_bps]
+      properties:
+        version: { type: string }
+        disclaimer: { type: string }
+        stable_asset_id: { type: string }
+        asset_id: { type: string }
+        chain: { type: string }
+        mint: { type: string }
+        seq: { type: string }
+        taken_at: { $ref: "#/components/schemas/Timestamp" }
+        prev_hash: { type: string }
+        ledger_supply: { type: string }
+        chain_supply: { type: string }
+        pending_mint: { type: string }
+        pending_burn: { type: string }
+        peg: { $ref: "#/components/schemas/StableSnapshotPrice" }
+        reserves: { type: array, items: { $ref: "#/components/schemas/StableSnapshotReserve" } }
+        composition: { type: array, items: { $ref: "#/components/schemas/StableSnapshotComposition" } }
+        supply_value: { type: string }
+        eligible_reserve: { type: string }
+        coverage_bps: { type: string }
+    StableSnapshot:
+      type: object
+      required: [seq, taken_at, hash, prev_hash, signature, signer_public_key, evidence_ref, verified, canonical_body, body]
+      properties:
+        seq: { type: integer, format: int64 }
+        taken_at: { $ref: "#/components/schemas/Timestamp" }
+        hash: { type: string, description: "hex SHA-256 of canonical_body" }
+        prev_hash: { type: string, description: "hex hash of the snapshot before; empty for the first" }
+        signature: { type: string, description: "hex Ed25519 signature over the domain-separated hash" }
+        signer_public_key: { type: string, description: "hex Ed25519 public key stored with the snapshot" }
+        evidence_ref: { type: string }
+        verified: { type: boolean, description: "This snapshot and every snapshot before it verify against the snapshot signer's public key" }
+        canonical_body: { type: string, description: "The exact canonical JSON the hash covers" }
+        body: { $ref: "#/components/schemas/StableSnapshotBody" }
+    StableSnapshotVerification:
+      type: object
+      required: [verified, checked, public_key, disclaimer]
+      properties:
+        verified: { type: boolean, description: "Every snapshot of the chain verifies" }
+        checked: { type: integer, description: "How many snapshots the chain holds, all of them checked" }
+        failed_index: { type: integer, description: "Position (from 0, oldest first) of the first snapshot that does not verify" }
+        reason: { $ref: "#/components/schemas/StableSnapshotFailure" }
+        public_key: { type: string, description: "hex Ed25519 public key of the snapshot signer the chain is verified against" }
+        disclaimer: { type: string, description: "What a snapshot is and is not, as every snapshot body states it" }
+    StableSnapshotChain:
+      type: object
+      required: [value_domain, stable_asset_id, verification, total, items]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        stable_asset_id: { $ref: "#/components/schemas/UUID" }
+        verification: { $ref: "#/components/schemas/StableSnapshotVerification" }
+        total: { type: integer }
+        items: { type: array, items: { $ref: "#/components/schemas/StableSnapshot" }, description: "The newest snapshots up to limit, oldest first" }
+    StableSnapshotResult:
+      type: object
+      required: [value_domain, snapshot, verification]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        snapshot: { $ref: "#/components/schemas/StableSnapshot" }
+        verification: { $ref: "#/components/schemas/StableSnapshotVerification" }
+    StableReconciliation:
+      type: object
+      required: [state, effect_status]
+      properties:
+        state: { $ref: "#/components/schemas/StableReconciliationState" }
+        effect_status: { $ref: "#/components/schemas/StableEffectStatus" }
+        unknown_since: { $ref: "#/components/schemas/Timestamp" }
+        resolved_at: { $ref: "#/components/schemas/Timestamp" }
+    StableIssuance:
+      type: object
+      required: [value_domain, id, stable_asset_id, symbol, decimals, account_id, intent_id, effect_id, mode, quantity, reserve_asset_id,
+                 reserve_symbol, reserve_decimals, reserve_quantity, reserve_price, recipient, chain, tx_id, plan_hash, status,
+                 reconciliation, created_at, updated_at]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        id: { $ref: "#/components/schemas/UUID" }
+        stable_asset_id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        decimals: { type: integer }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        intent_id: { $ref: "#/components/schemas/UUID" }
+        effect_id: { $ref: "#/components/schemas/UUID" }
+        mode: { $ref: "#/components/schemas/StableRequestMode" }
+        quantity: { $ref: "#/components/schemas/Quantity", description: "Stable units issued" }
+        reserve_asset_id: { $ref: "#/components/schemas/UUID" }
+        reserve_symbol: { type: string }
+        reserve_decimals: { type: integer }
+        reserve_quantity: { $ref: "#/components/schemas/Quantity", description: "The payment, in the reserve asset's base units" }
+        reserve_price: { $ref: "#/components/schemas/StablePrice", description: "The verified price the plan priced the payment at" }
+        recipient: { type: string, description: "The account's custodied wallet address on the chain" }
+        chain: { type: string }
+        tx_id: { type: string }
+        plan_hash: { type: string, description: "hex hash of the canonical mint plan the transaction's memo binds" }
+        status: { $ref: "#/components/schemas/StableIssuanceStatus" }
+        failure_code: { type: string }
+        reconciliation: { $ref: "#/components/schemas/StableReconciliation" }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        final_slot: { type: integer, format: int64 }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+    StableIssuancePage:
+      type: object
+      required: [value_domain, items, next_cursor]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        items: { type: array, items: { $ref: "#/components/schemas/StableIssuance" } }
+        next_cursor: { type: [string, "null"] }
+    StableIssuanceResult:
+      type: object
+      required: [value_domain, replay, settled, issuance]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        replay: { type: boolean, description: "The key named a request the service already recorded; nothing was submitted again" }
+        settled: { type: boolean, description: "The request is final (ISSUED or FAILED)" }
+        issuance: { $ref: "#/components/schemas/StableIssuance" }
+    StableRedemption:
+      type: object
+      required: [value_domain, id, stable_asset_id, symbol, decimals, account_id, intent_id, effect_id, mode, quantity, payout_asset_id,
+                 payout_symbol, payout_decimals, payout_quantity, redemption_mode, holder, chain, tx_id, plan_hash, status,
+                 reconciliation, created_at, updated_at]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        id: { $ref: "#/components/schemas/UUID" }
+        stable_asset_id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        decimals: { type: integer }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        intent_id: { $ref: "#/components/schemas/UUID" }
+        effect_id: { $ref: "#/components/schemas/UUID" }
+        mode: { $ref: "#/components/schemas/StableRequestMode" }
+        quantity: { $ref: "#/components/schemas/Quantity", description: "Stable units burned" }
+        payout_asset_id: { $ref: "#/components/schemas/UUID" }
+        payout_symbol: { type: string }
+        payout_decimals: { type: integer }
+        payout_quantity: { $ref: "#/components/schemas/Quantity", description: "What the redemption pays, at the peg, rounded down" }
+        redemption_mode: { $ref: "#/components/schemas/StableRedemptionMode" }
+        holder: { type: string, description: "The account's custodied wallet address on the chain" }
+        chain: { type: string }
+        tx_id: { type: string }
+        plan_hash: { type: string }
+        status: { $ref: "#/components/schemas/StableRedemptionStatus" }
+        failure_code: { type: string }
+        reconciliation: { $ref: "#/components/schemas/StableReconciliation" }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        final_slot: { type: integer, format: int64 }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+    StableRedemptionPage:
+      type: object
+      required: [value_domain, items, next_cursor]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        items: { type: array, items: { $ref: "#/components/schemas/StableRedemption" } }
+        next_cursor: { type: [string, "null"] }
+    StableRedemptionResult:
+      type: object
+      required: [value_domain, replay, settled, redemption]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        replay: { type: boolean }
+        settled: { type: boolean, description: "The request is final (REDEEMED or FAILED)" }
+        redemption: { $ref: "#/components/schemas/StableRedemption" }
+    StableHolding:
+      type: object
+      required: [stable_asset_id, asset_id, symbol, decimals, chain, status, wallet, reserved, held, available, chain_balance]
+      properties:
+        stable_asset_id: { $ref: "#/components/schemas/UUID" }
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        decimals: { type: integer }
+        chain: { type: string }
+        status: { $ref: "#/components/schemas/StableAssetStatus" }
+        wallet: { $ref: "#/components/schemas/Quantity", description: "The account's WALLET balance on the books" }
+        reserved: { $ref: "#/components/schemas/Quantity", description: "Held by capital reservations, for instance a redemption in flight" }
+        held: { $ref: "#/components/schemas/Quantity", description: "Under active withdrawal holds" }
+        available: { $ref: "#/components/schemas/Quantity", description: "wallet − reserved − held, never below zero (the capital service's arithmetic)" }
+        chain_balance: { $ref: "#/components/schemas/Quantity", description: "The custodied wallet's balance on the simulated chain, which the books are reconciled against" }
+    StablePaymentAsset:
+      type: object
+      required: [asset_id, symbol, decimals, wallet, reserved, held, available]
+      properties:
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        decimals: { type: integer }
+        wallet: { $ref: "#/components/schemas/Quantity" }
+        reserved: { $ref: "#/components/schemas/Quantity" }
+        held: { $ref: "#/components/schemas/Quantity" }
+        available: { $ref: "#/components/schemas/Quantity" }
+    StableHoldings:
+      type: object
+      required: [value_domain, account_id, holder_address, as_of, items, payment_assets]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        holder_address: { type: string, description: "The account's custodied wallet address on the simulated chains" }
+        as_of: { $ref: "#/components/schemas/Timestamp" }
+        items: { type: array, items: { $ref: "#/components/schemas/StableHolding" }, description: "One line per registered stable asset" }
+        payment_assets: { type: array, items: { $ref: "#/components/schemas/StablePaymentAsset" }, description: "Every reserve asset an issuance may be paid in" }
+    StableSupplyReconciliation:
+      type: object
+      required: [value_domain, stable_asset_id, ledger_outstanding, customer_wallet_sum, held_elsewhere, chain_supply, landed_unposted_mints,
+                 landed_unposted_burns, expected_chain_supply, supply_value, eligible_reserve, coverage_bps, supply_matches,
+                 wallets_match, covered, matched, breaker_tripped]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        stable_asset_id: { $ref: "#/components/schemas/UUID" }
+        ledger_outstanding: { $ref: "#/components/schemas/Quantity", description: "The issuer's STABLE_OUTSTANDING" }
+        customer_wallet_sum: { $ref: "#/components/schemas/Quantity", description: "Every customer WALLET balance of the asset" }
+        held_elsewhere: { $ref: "#/components/schemas/Quantity", description: "Every other holding of the asset on the ledger: a bridge escrow, collateral, a house inventory, collected fees" }
+        chain_supply: { $ref: "#/components/schemas/Quantity", description: "The devnet mint's supply" }
+        landed_unposted_mints: { $ref: "#/components/schemas/Quantity" }
+        landed_unposted_burns: { $ref: "#/components/schemas/Quantity" }
+        expected_chain_supply: { $ref: "#/components/schemas/Quantity", description: "ledger_outstanding + landed_unposted_mints − landed_unposted_burns" }
+        supply_value: { $ref: "#/components/schemas/StableValue" }
+        eligible_reserve: { $ref: "#/components/schemas/StableValue" }
+        coverage_bps: { type: integer, format: int64 }
+        supply_matches: { type: boolean, description: "chain_supply = expected_chain_supply" }
+        wallets_match: { type: boolean, description: "customer_wallet_sum + held_elsewhere = ledger_outstanding" }
+        covered: { type: boolean }
+        matched: { type: boolean, description: "Books, holdings, chain and reserve all agree" }
+        record_id: { $ref: "#/components/schemas/UUID", description: "The STABLE_RESERVE reconciliation record this run opened or refreshed" }
+        breaker_tripped: { type: boolean, description: "This run paused the asset" }
+    StableMonitorReport:
+      type: object
+      required: [value_domain, stable_asset_id, observed_at, price_stale, deviation_bps, alerts, breaker_tripped, status, reserve, supply]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        stable_asset_id: { $ref: "#/components/schemas/UUID" }
+        observed_at: { $ref: "#/components/schemas/Timestamp" }
+        market_price: { $ref: "#/components/schemas/StablePrice", description: "The asset's own oracle price; absent when none is fresh" }
+        price_stale: { type: boolean }
+        deviation_bps: { type: integer, format: int64, description: "ceil(|price − peg| / peg × 10000)" }
+        alerts: { type: array, items: { $ref: "#/components/schemas/StableAlertKind" } }
+        breaker_tripped: { type: boolean, description: "This run paused the asset" }
+        status: { $ref: "#/components/schemas/StableAssetStatus" }
+        reserve: { $ref: "#/components/schemas/StableReserve" }
+        supply: { $ref: "#/components/schemas/StableSupplyReconciliation" }
+    StableSettleReport:
+      type: object
+      required: [value_domain, examined, issued, redeemed, queued, failed, waiting]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        examined: { type: integer }
+        issued: { type: integer }
+        redeemed: { type: integer }
+        queued: { type: integer }
+        failed: { type: integer }
+        waiting: { type: integer, description: "Requests whose transaction is not final yet" }
+    StableReserveSpec:
+      type: object
+      required: [asset_id, kind, factor_bps, accepted_for_mint]
+      properties:
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        kind: { $ref: "#/components/schemas/StableReserveKind" }
+        factor_bps: { $ref: "#/components/schemas/BPS" }
+        accepted_for_mint: { type: boolean }
+    StableAssetDefinition:
+      type: object
+      required: [name, symbol, peg_currency, decimals, issuance_cap, redemption_mode, peg, oracle_source, max_price_age_ms,
+                 peg_deviation_threshold_bps, attestable, reserves]
+      properties:
+        name: { type: string, description: "1..63 bytes of [a-z0-9-]; generic, never a public brand" }
+        symbol: { type: string }
+        peg_currency: { type: string }
+        decimals: { type: integer, minimum: 0, maximum: 18 }
+        issuance_cap: { $ref: "#/components/schemas/Quantity" }
+        redemption_mode: { $ref: "#/components/schemas/StableRedemptionMode" }
+        peg: { $ref: "#/components/schemas/StableDecimal", description: "The target price of one whole unit in the sandbox dollar" }
+        oracle_source: { type: string }
+        max_price_age_ms: { type: integer, format: int64, minimum: 1 }
+        peg_deviation_threshold_bps: { type: integer, minimum: 1, maximum: 10000 }
+        attestable: { type: boolean }
+        reserves: { type: array, items: { $ref: "#/components/schemas/StableReserveSpec" } }
+    StableIssueRequest:
+      type: object
+      required: [account_id, quantity, reserve_asset_id, mode]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        quantity: { $ref: "#/components/schemas/Quantity", description: "Stable units to issue, in base units" }
+        reserve_asset_id: { $ref: "#/components/schemas/UUID", description: "The cash-equivalent reserve asset that pays" }
+        mode: { $ref: "#/components/schemas/StableRequestMode" }
+    StableRedeemRequest:
+      type: object
+      required: [account_id, quantity, mode]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        quantity: { $ref: "#/components/schemas/Quantity", description: "Stable units to redeem, in base units" }
+        mode: { $ref: "#/components/schemas/StableRequestMode" }
+    StableReasonRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string }
+    StableBatchRequest:
+      type: object
+      properties:
+        limit: { type: integer, minimum: 1, maximum: 500, description: "At most this many requests; 100 when absent" }
 
     # >>> advanced:bridge schemas (insert this subsystem's schemas directly below; keep the marker)
+    #
+    # Cross-chain capital (internal/bridge) and the simulated chain host (internal/devnethost). The enums
+    # carry x-enum-varnames so their Go constants never collide with another schema's.
+    BridgeChainId:
+      type: string
+      enum: [sbx-solana, sbx-ethereum]
+      x-enum-varnames: [BridgeChainIdSbxSolana, BridgeChainIdSbxEthereum]
+    BridgeRouteStatus:
+      type: string
+      enum: [ACTIVE, PAUSED, CLOSED]
+      x-enum-varnames: [BridgeRouteStatusActive, BridgeRouteStatusPaused, BridgeRouteStatusClosed]
+      description: ACTIVE takes new legs; PAUSED (by an operator or the reconciliation breaker) takes none while legs in flight complete.
+    BridgeLegStatus:
+      type: string
+      enum: [AVAILABLE, RESERVED, BRIDGE_REQUESTED, SOURCE_FINALIZED, MESSAGE_IN_FLIGHT, DESTINATION_OBSERVED, DESTINATION_FINALIZED,
+             RECONCILED, FAILED, MANUAL_REVIEW]
+      x-enum-varnames: [BridgeLegStatusAvailable, BridgeLegStatusReserved, BridgeLegStatusBridgeRequested, BridgeLegStatusSourceFinalized,
+                        BridgeLegStatusMessageInFlight, BridgeLegStatusDestinationObserved, BridgeLegStatusDestinationFinalized,
+                        BridgeLegStatusReconciled, BridgeLegStatusFailed, BridgeLegStatusManualReview]
+    BridgeLegHolding:
+      type: string
+      enum: [WALLET_SOURCE_RESERVED, BRIDGE_IN_FLIGHT, WALLET_DESTINATION, NONE]
+      x-enum-varnames: [BridgeLegHoldingWalletSourceReserved, BridgeLegHoldingBridgeInFlight, BridgeLegHoldingWalletDestination,
+                        BridgeLegHoldingNone]
+      description: >-
+        Which ledger account holds the leg's value now: still in the source wallet under a reservation, in
+        BRIDGE_IN_FLIGHT, in the destination wallet, or nowhere (it moved nothing, or was refunded).
+    BridgeLegMode:
+      type: string
+      enum: [SANDBOX, DEVNET]
+      x-enum-varnames: [BridgeLegModeSandbox, BridgeLegModeDevnet]
+    BridgeAttemptKind:
+      type: string
+      enum: [RELEASE, REFUND]
+      x-enum-varnames: [BridgeAttemptKindRelease, BridgeAttemptKindRefund]
+    BridgeTxState:
+      type: string
+      enum: [NOT_FOUND, PENDING, CONFIRMED, FINALIZED, FAILED]
+      x-enum-varnames: [BridgeTxStateNotFound, BridgeTxStatePending, BridgeTxStateConfirmed, BridgeTxStateFinalized, BridgeTxStateFailed]
+    BridgeFaultKind:
+      type: string
+      enum: [TIMEOUT_BUT_LAND, TIMEOUT_AND_DROP, DROP_NEXT, DELAY_INCLUSION, CLEAR_FAULTS]
+      x-enum-varnames: [BridgeFaultKindTimeoutButLand, BridgeFaultKindTimeoutAndDrop, BridgeFaultKindDropNext, BridgeFaultKindDelayInclusion,
+                        BridgeFaultKindClearFaults]
+    BridgeReconciliationState:
+      type: string
+      enum: [NOT_REQUIRED, AWAITING, RESOLVED]
+      x-enum-varnames: [BridgeReconciliationNotRequired, BridgeReconciliationAwaiting, BridgeReconciliationResolved]
+      description: >-
+        NOT_REQUIRED: no submission of the leg had an unknown outcome. AWAITING: one does now, and the leg waits
+        to be settled from the chains by transaction id. RESOLVED: one did, and it has been settled from the chains.
+    BridgeEffectStatus:
+      type: string
+      enum: [PENDING, APPLIED, UNKNOWN, FAILED, COMPENSATED]
+      x-enum-varnames: [BridgeEffectStatusPending, BridgeEffectStatusApplied, BridgeEffectStatusUnknown, BridgeEffectStatusFailed,
+                        BridgeEffectStatusCompensated]
+    BridgeDecimal:
+      type: string
+      pattern: '^[0-9]+(\.[0-9]+)?$'
+      description: A non-negative decimal written out exactly; it is never rounded.
+    BridgePrice:
+      type: object
+      required: [mantissa, scale, decimal, quote]
+      description: The value of one whole unit, exactly mantissa × 10^-scale of the quote.
+      properties:
+        mantissa: { $ref: "#/components/schemas/Quantity" }
+        scale: { type: integer }
+        decimal: { $ref: "#/components/schemas/BridgeDecimal" }
+        quote: { type: string }
+    BridgeRoute:
+      type: object
+      required: [value_domain, id, name, status, network, facility_id, source_chain, source_asset_id, source_symbol, source_mint,
+                 destination_chain, destination_asset_id, destination_symbol, destination_mint, decimals, attester, unit_price,
+                 max_release_attempts, created_at]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        id: { $ref: "#/components/schemas/UUID" }
+        name: { type: string }
+        status: { $ref: "#/components/schemas/BridgeRouteStatus" }
+        network: { type: string }
+        facility_id: { $ref: "#/components/schemas/UUID", description: "The route's BRIDGE facility" }
+        source_chain: { type: string }
+        source_asset_id: { $ref: "#/components/schemas/UUID" }
+        source_symbol: { type: string }
+        source_mint: { type: string }
+        destination_chain: { type: string }
+        destination_asset_id: { $ref: "#/components/schemas/UUID" }
+        destination_symbol: { type: string }
+        destination_mint: { type: string, description: "A mint whose authority no key holds; only an attested release mints it" }
+        decimals: { type: integer }
+        attester: { type: string, description: "The bridge authority whose signature a release needs" }
+        unit_price: { $ref: "#/components/schemas/BridgePrice", description: "The route's value of one whole unit, for the risk notional and buying power" }
+        max_release_attempts: { type: integer }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+    BridgeRouteList:
+      type: object
+      required: [value_domain, items]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        items: { type: array, items: { $ref: "#/components/schemas/BridgeRoute" } }
+    BridgeRouteDefinition:
+      type: object
+      required: [name, source_asset_id, destination_chain, destination_symbol, unit_price, max_release_attempts]
+      properties:
+        name: { type: string, description: "1..63 bytes of [a-z0-9-]; generic, never a public brand" }
+        source_asset_id: { $ref: "#/components/schemas/UUID", description: "A SIMULATED asset on a simulated chain whose devnet mint exists" }
+        destination_chain: { $ref: "#/components/schemas/BridgeChainId" }
+        destination_symbol: { type: string }
+        unit_price: { $ref: "#/components/schemas/BridgeDecimal", description: "The value of one whole unit in USD (a paper dollar is 1)" }
+        max_release_attempts: { type: integer, minimum: 1, maximum: 20 }
+    BridgeReasonRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string }
+    BridgeRouteReconciliation:
+      type: object
+      required: [value_domain, route_id, locked, outstanding, in_flight, refunded, escrow, destination_supply, landed_unposted_locks,
+                 landed_unposted_releases, expected_escrow, expected_supply, books_conserve, escrow_matches, supply_matches, matched,
+                 breaker_tripped]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        route_id: { $ref: "#/components/schemas/UUID" }
+        locked: { $ref: "#/components/schemas/Quantity", description: "The facility's BRIDGE_LOCKED of the source asset" }
+        outstanding: { $ref: "#/components/schemas/Quantity", description: "The facility's BRIDGE_OUTSTANDING of the destination asset" }
+        in_flight: { $ref: "#/components/schemas/Quantity", description: "Every customer's BRIDGE_IN_FLIGHT of the source asset" }
+        refunded: { $ref: "#/components/schemas/Quantity" }
+        escrow: { $ref: "#/components/schemas/Quantity", description: "The source chain's escrow balance of the source mint" }
+        destination_supply: { $ref: "#/components/schemas/Quantity", description: "The destination mint's supply" }
+        landed_unposted_locks: { $ref: "#/components/schemas/Quantity" }
+        landed_unposted_releases: { $ref: "#/components/schemas/Quantity" }
+        expected_escrow: { $ref: "#/components/schemas/Quantity", description: "locked + refunded + landed_unposted_locks" }
+        expected_supply: { $ref: "#/components/schemas/Quantity", description: "outstanding + landed_unposted_releases" }
+        books_conserve: { type: boolean, description: "locked = outstanding + in_flight" }
+        escrow_matches: { type: boolean }
+        supply_matches: { type: boolean }
+        matched: { type: boolean }
+        record_id: { $ref: "#/components/schemas/UUID", description: "The BRIDGE reconciliation record this run opened or refreshed" }
+        breaker_tripped: { type: boolean, description: "This run paused the route" }
+    BridgeLegRequest:
+      type: object
+      required: [account_id, route_id, quantity, mode]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        route_id: { $ref: "#/components/schemas/UUID" }
+        quantity: { $ref: "#/components/schemas/Quantity", description: "Units of the route's source asset, in base units" }
+        mode: { $ref: "#/components/schemas/BridgeLegMode" }
+    BridgeReconciliation:
+      type: object
+      required: [state]
+      properties:
+        state: { $ref: "#/components/schemas/BridgeReconciliationState" }
+        unknown_since: { $ref: "#/components/schemas/Timestamp" }
+        resolved_at: { $ref: "#/components/schemas/Timestamp" }
+    BridgeLeg:
+      type: object
+      required: [value_domain, id, route_id, account_id, intent_id, mode, quantity, decimals, source_chain, source_asset_id, source_symbol,
+                 destination_chain, destination_asset_id, destination_symbol, source_owner, destination_owner, nonce, plan_hash,
+                 status, holding, reconciliation, created_at, updated_at]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        id: { $ref: "#/components/schemas/UUID" }
+        route_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        intent_id: { $ref: "#/components/schemas/UUID" }
+        mode: { $ref: "#/components/schemas/BridgeLegMode" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        decimals: { type: integer }
+        source_chain: { type: string }
+        source_asset_id: { $ref: "#/components/schemas/UUID" }
+        source_symbol: { type: string }
+        destination_chain: { type: string }
+        destination_asset_id: { $ref: "#/components/schemas/UUID" }
+        destination_symbol: { type: string }
+        source_owner: { type: string }
+        destination_owner: { type: string }
+        nonce: { type: string, description: "The lock's single-use nonce, a decimal string" }
+        plan_hash: { type: string, description: "hex hash of the bridge plan the lock's memo binds" }
+        status: { $ref: "#/components/schemas/BridgeLegStatus" }
+        holding: { $ref: "#/components/schemas/BridgeLegHolding" }
+        failure_code: { type: string }
+        lock_tx_id: { type: string }
+        source_effect_status: { $ref: "#/components/schemas/BridgeEffectStatus" }
+        destination_effect_status: { $ref: "#/components/schemas/BridgeEffectStatus" }
+        refund_effect_status: { $ref: "#/components/schemas/BridgeEffectStatus" }
+        reconciliation: { $ref: "#/components/schemas/BridgeReconciliation" }
+        source_journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        destination_journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        refund_journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+    BridgeChainTx:
+      type: object
+      required: [chain, tx_id, state, final]
+      description: What the simulated chain says of one transaction at the instant of the read.
+      properties:
+        chain: { type: string }
+        tx_id: { type: string }
+        state: { $ref: "#/components/schemas/BridgeTxState" }
+        final: { type: boolean, description: "The block that included it is finalized, so this status can never change" }
+        height: { type: integer, format: int64, description: "The block height it was included at, when included" }
+        error: { type: string, description: "The chain's error code of a failed transaction" }
+    BridgeLegAttempt:
+      type: object
+      required: [number, kind, chain, tx_id, blockhash_height, created_at, on_chain]
+      properties:
+        number: { type: integer }
+        kind: { $ref: "#/components/schemas/BridgeAttemptKind" }
+        chain: { type: string }
+        tx_id: { type: string }
+        blockhash_height: { type: integer, format: int64 }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        on_chain: { $ref: "#/components/schemas/BridgeChainTx" }
+    BridgeLegTransition:
+      type: object
+      required: [from_status, to_status, actor_type, actor_id, reason, occurred_at]
+      properties:
+        from_status: { type: string, description: "The state before, NONE for the leg's birth" }
+        to_status: { $ref: "#/components/schemas/BridgeLegStatus" }
+        actor_type: { type: string }
+        actor_id: { type: string }
+        reason: { type: string }
+        occurred_at: { $ref: "#/components/schemas/Timestamp" }
+    BridgeLegDetail:
+      type: object
+      required: [value_domain, leg, attempts, transitions]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        leg: { $ref: "#/components/schemas/BridgeLeg" }
+        lock: { $ref: "#/components/schemas/BridgeChainTx", description: "The lock on the source chain; absent before it is signed" }
+        attempts: { type: array, items: { $ref: "#/components/schemas/BridgeLegAttempt" }, description: "Release and refund attempts, in order" }
+        transitions: { type: array, items: { $ref: "#/components/schemas/BridgeLegTransition" }, description: "Every state the leg passed through, oldest first" }
+    BridgeLegPage:
+      type: object
+      required: [value_domain, items, next_cursor]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        items: { type: array, items: { $ref: "#/components/schemas/BridgeLeg" } }
+        next_cursor: { type: [string, "null"] }
+    BridgeLegResult:
+      type: object
+      required: [value_domain, replay, settled, leg]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        replay: { type: boolean, description: "The key named a leg the service already recorded; nothing was submitted again" }
+        settled: { type: boolean, description: "The leg is final (RECONCILED or FAILED)" }
+        leg: { $ref: "#/components/schemas/BridgeLeg" }
+    BridgeChain:
+      type: object
+      required: [id, tip_slot, tip_height, tip_hash, finalized_height, blockhash_window, finality_depth, fee_per_tx]
+      properties:
+        id: { $ref: "#/components/schemas/BridgeChainId" }
+        tip_slot: { type: integer, format: int64 }
+        tip_height: { type: integer, format: int64 }
+        tip_hash: { type: string }
+        finalized_height: { type: integer, format: int64, description: "A transaction at or below it is final" }
+        blockhash_window: { type: integer, format: int64 }
+        finality_depth: { type: integer, format: int64 }
+        fee_per_tx: { $ref: "#/components/schemas/Quantity", description: "Native units each transaction pays" }
+        bridge_authority: { type: string, description: "The attester the chain's bridge programs accept" }
+    BridgeChains:
+      type: object
+      required: [value_domain, network, fault_injection_allowed, chains]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        network: { type: string }
+        fault_injection_allowed: { type: boolean, description: "True in LOCAL, TEST and DEV only" }
+        chains: { type: array, items: { $ref: "#/components/schemas/BridgeChain" } }
+    BridgeBlocksRequest:
+      type: object
+      required: [count]
+      properties:
+        count: { type: integer, minimum: 1, maximum: 1000 }
+    BridgeBlocksResult:
+      type: object
+      required: [value_domain, produced, chain]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        produced: { type: integer, description: "How many blocks were produced" }
+        chain: { $ref: "#/components/schemas/BridgeChain" }
+    BridgeFaultRequest:
+      type: object
+      required: [kind]
+      properties:
+        kind: { $ref: "#/components/schemas/BridgeFaultKind" }
+        count: { type: integer, minimum: 0, maximum: 1000, description: "DROP_NEXT: submissions to drop; DELAY_INCLUSION: blocks to hold each transaction (0 restores immediate inclusion)" }
+    BridgeFaultResult:
+      type: object
+      required: [value_domain, kind, chain]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        kind: { $ref: "#/components/schemas/BridgeFaultKind" }
+        count: { type: integer }
+        chain: { $ref: "#/components/schemas/BridgeChain" }
+    BridgeHolding:
+      type: object
+      required: [asset_id, symbol, decimals, quantity]
+      properties:
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        decimals: { type: integer }
+        quantity: { $ref: "#/components/schemas/Quantity", description: "The account's WALLET balance on the books" }
+    BridgeChainHoldings:
+      type: object
+      required: [chain, holdings]
+      properties:
+        chain: { type: string, description: "The chain the assets live on" }
+        holdings: { type: array, items: { $ref: "#/components/schemas/BridgeHolding" } }
+    BridgeInFlightHolding:
+      type: object
+      required: [asset_id, symbol, decimals, quantity, marked_usd, factor_bps, reason]
+      properties:
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        decimals: { type: integer }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        marked_usd: { $ref: "#/components/schemas/USD", description: "The quantity at the route's unit price, rounded down" }
+        factor_bps: { $ref: "#/components/schemas/BPS", description: "The share of it that counts toward buying power" }
+        reason: { type: string }
+    BridgeInFlightLeg:
+      type: object
+      required: [leg_id, route_id, asset_id, symbol, decimals, status, holding, quantity, factor_bps, reason]
+      properties:
+        leg_id: { $ref: "#/components/schemas/UUID" }
+        route_id: { $ref: "#/components/schemas/UUID" }
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        decimals: { type: integer }
+        status: { $ref: "#/components/schemas/BridgeLegStatus" }
+        holding: { $ref: "#/components/schemas/BridgeLegHolding" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        factor_bps: { $ref: "#/components/schemas/BPS" }
+        reason: { type: string }
+    BridgeHaircutPolicy:
+      type: object
+      required: [version, in_flight_bps, observed_bps]
+      properties:
+        version: { type: string }
+        in_flight_bps: { $ref: "#/components/schemas/BPS", description: "The factor of value whose lock is final and whose release is not observed" }
+        observed_bps: { $ref: "#/components/schemas/BPS", description: "The factor once a release is confirmed, not final, on the destination" }
+    BridgeHoldings:
+      type: object
+      required: [value_domain, account_id, as_of, chains, in_flight, legs, pending_locks_usd, policy]
+      properties:
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        as_of: { $ref: "#/components/schemas/Timestamp" }
+        chains: { type: array, items: { $ref: "#/components/schemas/BridgeChainHoldings" }, description: "WALLET balances of SIMULATED assets, by chain" }
+        in_flight: { type: array, items: { $ref: "#/components/schemas/BridgeInFlightHolding" }, description: "Value in BRIDGE_IN_FLIGHT, by asset and factor" }
+        legs: { type: array, items: { $ref: "#/components/schemas/BridgeInFlightLeg" }, description: "Every open leg, where its value is held, and the factor it counts at" }
+        pending_locks_usd: { $ref: "#/components/schemas/USD", description: "Units still in a source wallet under a reservation whose lock is not final, at the route's unit price" }
+        policy: { $ref: "#/components/schemas/BridgeHaircutPolicy" }
 
     # >>> advanced:predmarket schemas (insert this subsystem's schemas directly below; keep the marker)
     PredictionMarketStatus:

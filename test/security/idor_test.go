@@ -255,8 +255,11 @@ func TestIDOR_QueryParameterSmuggling(t *testing.T) {
 		"/v1/advanced/derivatives/positions", "/v1/advanced/derivatives/flows", "/v1/advanced/derivatives/funding-accruals",
 
 		// >>> advanced:equities account-scoped list routes
+		"/v1/advanced/equities/orders", "/v1/advanced/equities/fills", "/v1/advanced/equities/settlements",
+		"/v1/advanced/equities/corporate-action-applications",
 
 		// >>> advanced:orders account-scoped list routes
+		"/v1/advanced/books/orders", "/v1/advanced/books/trades",
 
 		// >>> advanced:transfers account-scoped list routes
 		"/v1/advanced/transfers", "/v1/advanced/transfers/faucet/allowance",
@@ -264,8 +267,13 @@ func TestIDOR_QueryParameterSmuggling(t *testing.T) {
 		// >>> advanced:treasury account-scoped list routes
 
 		// >>> advanced:stable account-scoped list routes
+		// Served where a sandbox chain is configured (CP_SANDBOX_DEVNET_NETWORK
+		// and CP_SANDBOX_DEVNET_SEED_REF); elsewhere they answer UNSUPPORTED to
+		// everyone, which this probe reports as a failure rather than a pass.
+		"/v1/advanced/stable-assets/holdings", "/v1/advanced/stable-assets/issuances", "/v1/advanced/stable-assets/redemptions",
 
 		// >>> advanced:bridge account-scoped list routes
+		"/v1/advanced/bridge/legs", "/v1/advanced/bridge/holdings",
 
 		// >>> advanced:predmarket account-scoped list routes
 		// An account's shares in one market. The route reads a market, so the

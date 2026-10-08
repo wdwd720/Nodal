@@ -27,13 +27,13 @@ packages named; `go run ./scripts/inttest -pkg '^\./internal/<pkg>$'` runs a pac
 | 5 | Mark-price manipulation | valuation, `internal/margin`, `internal/derivatives` | below |
 | 6 | Matching-engine race | `internal/matching`, `internal/orders` | below (engine and persistent book) |
 | 7 | Transfer replay | `internal/transfers` | below |
-| 8 | House/customer asset commingling | ledger, `internal/econ` | below (treasury book when it merges) |
-| 9 | Fee manipulation | `internal/fees`, fee ledger | written when the fee ledger merges |
+| 8 | House/customer asset commingling | ledger, `internal/econ`, `internal/treasury` | below |
+| 9 | Fee manipulation | `internal/fees`, `internal/feeledger` | below |
 | 10 | Marketplace malicious strategy | `internal/marketplace` | below |
 | 11 | Sandbox escape | `internal/sandboxrt` | below |
-| 12 | Agent capability escalation | kernel, settlement compiler, delegation | kernel below; delegation when it merges |
-| 13 | Signing transaction substitution | delegation | written when delegated signing merges |
-| 14 | Withdrawal address substitution | delegation | written when delegated withdrawals merge |
+| 12 | Agent capability escalation | kernel, settlement compiler, `internal/delegation` | below |
+| 13 | Signing transaction substitution | `internal/delegation` | below |
+| 14 | Withdrawal address substitution | `internal/delegation` | below |
 | 15 | Bridge double counting | `internal/bridge`, buying power V2 | below |
 | 16 | Oracle manipulation | `internal/predmarket`, `internal/derivatives` | below |
 | 17 | Prediction resolution corruption | `internal/predmarket` | below |
@@ -229,12 +229,51 @@ packages named; `go run ./scripts/inttest -pkg '^\./internal/<pkg>$'` runs a pac
   must balance per party (SM002), so no party gains what another did not give; house and facility books may
   hold only SIMULATED value (segregated-books constraint); a facility code must match its facility's kind
   (FA001); value domains never mix (VD002).
-- **Residual risk:** the principal/treasury book (house trading) is added to this entry when it merges.
-- **Tests:** `TestIntegration_HouseAndFacilityBooksCannotHoldRealValue`, `TestIntegration_FacilityBooksAreSegregatedByKind`,
+- **Controls (principal/treasury book, `internal/treasury`):** the house trades only from its own HOUSE
+  segment — treasury postings stay in it (TY004) and no customer fund is reachable by a house strategy; only
+  the house service or an operator acts for the house (TY002); every house order is evaluated against the book's
+  loss, inventory and exposure limits, including concurrently; a house fill against a customer needs a disclosed
+  sandbox crossing rule (TY006); the kill switch stops new house orders.
+- **Residual risk:** a direct call of the order book's house-order entry point bypasses the treasury's limits;
+  the treasury API lane adds a database binding that a house order exists only as a treasury action (00759).
+- **Tests:** `TestIntegration_HouseAndCustomerLedgersAreSegregated`, `TestIntegration_NoCustomerFundsAreAvailableToTheHouseStrategy`,
+  `TestIntegration_OnlyTheHouseServiceOrAnOperatorActsForTheHouse`, `TestIntegration_ConcurrentHouseOrdersCannotBreachALimitTogether`,
+  `TestIntegration_HouseCustomerCrossingNeedsADisclosedSandboxRule`, `TestIntegration_TheDatabaseRefusesInvalidTreasuryStates`
+  (`internal/treasury`); `TestIntegration_HouseAndFacilityBooksCannotHoldRealValue`, `TestIntegration_FacilityBooksAreSegregatedByKind`,
   `TestIntegration_ASimulatedOnlyKindCannotTouchRealCapital`, `TestIntegration_ATransferMustBalancePerParty`
   (`internal/econ`); `TestProp_EveryTemplateBalancesPerPartyAndIsSimulatedOnly` (`internal/margin`);
   `TestIntegration_TheDatabaseRefusesAClearingFlowThatDoesNotBalancePerParty` (`internal/derivatives`);
   `TestIntegration_TheDatabaseRefusesAPredictionPostingThatDoesNotBalancePerParty` (`internal/predmarket`).
+
+## 9. Fee manipulation
+
+- **Asset:** the customer's simulated value, through what is charged as a fee, a spread or a performance fee.
+- **Attacker:** an operator or process that wants to charge more than disclosed, hide a spread, or charge a
+  performance fee on gains that are not gains.
+- **Entry point:** fee schedules, quotes, bookings and performance-fee periods (`internal/feeledger`), and the
+  pure fee engines (`internal/fees`).
+- **Privilege needed:** operator to publish a schedule; process access to book.
+- **Attack:** change a schedule after a quote; charge a component not in the schedule; round against the
+  customer silently; book a fee twice; charge a performance fee on a loss, below the high-water mark, or on a
+  deposit; erase an accrual through a withdrawal.
+- **Controls:** schedules are versioned, immutable and hashed (FE001, FE002), and a quote names the version
+  and hash it was priced from; every quote is a stored disclosure that can be re-verified (FE003); every charge
+  is booked component by component against its journal and effect exactly once (FE004), and a refund is a
+  compensating reversal (FE005); a fee is never negative and never above the schedule's maximum; rounding is in
+  the customer's favour unless the schedule allows otherwise and says so; every spread charged is discoverable
+  from the audit record; performance fees crystallize only above the high-water mark, deposits generate no
+  performance, a withdrawal does not erase the accrual, and the period, flow and line chains are bound in SQL
+  (FE006-FE008).
+- **Residual risk:** performance-fee NAVs are supplied by the caller; the subsystems that charge fees call the
+  fee ledger at their own integration points, which are being wired in.
+- **Tests:** `TestProp_FeeConservation`, `TestProp_NoNegativeFeeAndNoFeeAboveTheConfiguredMax`,
+  `TestRounding_IsInTheCustomersFavourUnlessAllowedAndDisclosed`, `TestIntegration_SchedulesAreVersionedImmutableAndHashed`,
+  `TestIntegration_QuoteDisclosuresAreStoredAndVerifiable`, `TestIntegration_ChargesAreBookedComponentByComponentExactlyOnce`,
+  `TestIntegration_EveryChargedSpreadIsDiscoverableFromTheAuditRecord`, `TestIntegration_TheDatabaseRefusesInvalidFeeStates`,
+  `TestIntegration_ALosingPeriodChargesNoFee`, `TestIntegration_AGainBelowTheHighWaterMarkChargesNoFee`,
+  `TestIntegration_DepositsDoNotGeneratePerformance`, `TestIntegration_AWithdrawalDoesNotEraseTheAccrual`,
+  `TestIntegration_ConcurrentAccrualsAndCrystallizationsAreExactlyOnce` (`internal/feeledger`); demo Scenario D
+  (the fees of a trade are exactly the disclosed schedule).
 
 ## 10. Marketplace malicious strategy
 
@@ -277,7 +316,7 @@ packages named; `go run ./scripts/inttest -pkg '^\./internal/<pkg>$'` runs a pac
   `TestSandbox_StrategyCannotConstructALiveSigningCall`, `TestSandbox_SameArtifactSameInputIsByteIdentical`,
   `TestSandbox_DigestMismatchIsRefused` (`internal/sandboxrt`).
 
-## 12. Agent capability escalation (kernel)
+## 12. Agent capability escalation
 
 - **Asset:** customer funds and authority.
 - **Attacker:** an agent, a strategy's output, or a compromised model.
@@ -287,11 +326,71 @@ packages named; `go run ./scripts/inttest -pkg '^\./internal/<pkg>$'` runs a pac
 - **Controls:** agent principals never reach the HTTP surface; the settlement compiler forbids
   `SIMULATED_TRANSFER_VALUE` and `SIMULATED_WITHDRAW` to agents at every authority level; agents only create
   intents and never apply effects; the faucet refuses agents; strategy output becomes only risk-checked intents.
-- **Residual risk:** review finding F5 (an agent requester could post a customer's collateral) is being fixed in
-  the margin hardening work. Delegated signing and withdrawals are added here when they merge.
-- **Tests:** `TestRoute_TheCompilerForbidsAgentTransfersAtEveryLevel`, `TestIntegration_AnAgentNeverTransfersAndTheCompilerAgrees`
+- **Controls (delegated authority, `internal/delegation`):** an agent acts only under a capability its customer
+  granted — scoped to instrument and action classes, chains, limits and a lifetime, hashed over every term — and
+  a capability never expands itself and never crosses an account boundary (DG003); the actors of a grant are
+  never agents; an expired or revoked capability refuses every use.
+- **Residual risk:** review finding F5 (an agent requester could post a customer's collateral) is fixed
+  (`d91ead2`). The delegation API admits agent principals to two routes only (a swap request and a withdrawal
+  proposal); this entry is revised when that surface merges.
+- **Tests:** `TestIntegration_StrategyCannotSelfExpandCapability`, `TestIntegration_CapabilityCannotCrossAccountBoundary`,
+  `TestTheActorsOfAGrantAreNeverAgents`, `TestIntegration_ExpiredTokenRejected`, `TestIntegration_RevokedTokenRejected`,
+  `TestProp_CapabilityLimitsNeverOverspend` (`internal/delegation`); `TestIntegration_AnAgentCannotPostCollateral`
+  (`internal/margin`); `TestRoute_TheCompilerForbidsAgentTransfersAtEveryLevel`, `TestIntegration_AnAgentNeverTransfersAndTheCompilerAgrees`
   (`internal/transfers`); `TestNoOperationAdmitsAnAgent` (`internal/httpapi`); `TestIntegration_AnAgentCannotTouchTheMarketplace`
   (`internal/marketplace`); `TestProp_NoStrategyOutputBecomesATransferOrWithdrawal` (`internal/sandboxrt`).
+
+## 13. Signing transaction substitution
+
+- **Asset:** the delegated wallet's signature: whatever it signs moves the customer's simulated value.
+- **Attacker:** an agent, a compromised relay or venue, or code between approval and signing that swaps the
+  transaction for another.
+- **Entry point:** the delegated signing workflow (`internal/delegation`: request, decide, sign, gate, submit).
+- **Privilege needed:** an agent holding a capability; process access between steps.
+- **Attack:** get a different transaction signed than the plan the capability and the human approved; change
+  the amount, the venue or the recipient after approval; replay a signature; sign beyond the capability.
+- **Controls:** agents never hold or read keys — keys are derived inside the signer from a seed held in a
+  closure, and only public keys are stored; a swap compiles to one delivery-versus-payment transaction whose
+  plan hash covers every field; the inspector accepts exactly the planned transaction and refuses every
+  mutation, checking signatures over the exact bytes; the human approval binds the plan hash; the venue
+  co-signs only the planned transaction; one signature per swap, and the database refuses a signing that is
+  not licensed by an approved decision under a live capability (DG005); usage against the capability's limits
+  is consumed under concurrency control (DG004); an unknown submission is reconciled, never resubmitted.
+- **Residual risk:** a kill switch activated between the final pre-submit check and the chain accepting the
+  transaction is not caught; the signer is in-process (see threat 1).
+- **Tests:** `TestTheInspectorRefusesEveryModifiedSwap`, `TestProp_TheInspectorRefusesEveryMutation`,
+  `TestTheInspectorChecksSignaturesOverTheExactBytes`, `TestTheVenueCoSignsOnlyThePlannedTransaction`,
+  `TestIntegration_ModifiedTransactionRejected`, `TestIntegration_HumanApprovalBindsThePlan`,
+  `TestIntegration_ExactlyOneSignaturePerSwap`, `TestIntegration_ReplayRejected`,
+  `TestIntegration_ConcurrentSigningsCannotExceedDailyNotional`, `TestIntegration_TheDatabaseRefusesUnlicensedSwapStates`,
+  `TestSignersNeverFormatTheirSecrets` (`internal/delegation`).
+
+## 14. Withdrawal address substitution
+
+- **Asset:** the customer's simulated value leaving through a delegated withdrawal.
+- **Attacker:** an agent proposing a withdrawal to its own address, or code that changes the destination or
+  amount after approval.
+- **Entry point:** the delegated withdrawal workflow (`internal/delegation`: destinations, policy, propose,
+  decide, sign, execute).
+- **Privilege needed:** an agent holding a capability that includes withdrawals.
+- **Attack:** withdraw to an address that is not allow-listed; substitute the address or the amount after the
+  human approved; exceed the daily limit by concurrent proposals; withdraw while the account is frozen; have an
+  agent withdraw without a person.
+- **Controls:** a withdrawal can go only to a destination on the customer's allow list, under the customer's
+  explicit policy; the plan hash covers the destination and the amount and the inspector accepts exactly that
+  one transfer; a human decides every withdrawal, except a low-risk one auto-approved in a test environment —
+  a rule the database also holds (`delegated_withdrawals_auto_only_in_test`); an agent can never withdraw
+  directly; the daily limit holds under concurrency; a frozen account or a kill switch stops a withdrawal at
+  every step (DW005); a cooling period delays execution; the database refuses an unlicensed signing (DW006) and
+  a settlement that does not match (DW007).
+- **Residual risk:** the customer must set a policy explicitly (there is no default); a signed but never
+  submitted withdrawal is resolved only by the reconciler after its quote lifetime.
+- **Tests:** `TestIntegration_WithdrawalAllowlistIsEnforced`, `TestIntegration_NoRawAddressSubstitutionAfterApproval`,
+  `TestIntegration_NoAmountMutationAfterApproval`, `TestIntegration_AnAgentCanNeverWithdrawDirectly`,
+  `TestIntegration_AHumanDecidesEverythingElse`, `TestIntegration_AnAutoApprovedWithdrawalSettlesInTestMode`,
+  `TestIntegration_WithdrawalDailyLimitHoldsUnderConcurrency`, `TestIntegration_AFrozenAccountStopsWithdrawalsAtEveryStep`,
+  `TestIntegration_TheCoolingPeriodDelaysExecution`, `TestIntegration_TheDatabaseRefusesUnlicensedWithdrawalStates`
+  (`internal/delegation`).
 
 ## 15. Bridge double counting
 
