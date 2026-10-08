@@ -507,6 +507,70 @@ locals {
           metrics = [for s in var.ecs_service_names : ["ECS/ContainerInsights", "RunningTaskCount", "ClusterName", var.ecs_cluster_name, "ServiceName", s]]
         }
       },
+      # Advanced capabilities (ADR-0020). Every figure is SIMULATED-domain;
+      # the advanced_ prefix keeps them off every real-capital widget above.
+      # Names match internal/observability/advanced.go.
+      {
+        type = "metric", x = 0, y = 24, width = 12, height = 6
+        properties = {
+          title  = "Advanced: simulated capital (USD minor)"
+          region = var.aws_region
+          stat   = "Maximum"
+          period = 300
+          metrics = [
+            concat([var.custom_metric_namespace, "advanced_customer_liabilities"], local.dims_list),
+            concat([var.custom_metric_namespace, "advanced_house_assets"], local.dims_list),
+            concat([var.custom_metric_namespace, "advanced_margin_exposure"], local.dims_list),
+            concat([var.custom_metric_namespace, "advanced_liquidation_buffer"], local.dims_list),
+          ]
+        }
+      },
+      {
+        type = "metric", x = 12, y = 24, width = 12, height = 6
+        properties = {
+          title  = "Advanced: reserve coverage and leverage (bps)"
+          region = var.aws_region
+          stat   = "Minimum"
+          period = 300
+          metrics = [
+            concat([var.custom_metric_namespace, "advanced_reserve_coverage"], local.dims_list),
+            concat([var.custom_metric_namespace, "advanced_leverage"], local.dims_list),
+          ]
+        }
+      },
+      {
+        type = "metric", x = 0, y = 30, width = 12, height = 6
+        properties = {
+          title  = "Advanced: risk and liquidation events"
+          region = var.aws_region
+          stat   = "Sum"
+          period = 60
+          metrics = [
+            concat([var.custom_metric_namespace, "advanced_risk_denies"], local.dims_list),
+            concat([var.custom_metric_namespace, "advanced_stale_oracle_events"], local.dims_list),
+            concat([var.custom_metric_namespace, "advanced_margin_calls"], local.dims_list),
+            concat([var.custom_metric_namespace, "advanced_liquidation_events"], local.dims_list),
+            concat([var.custom_metric_namespace, "advanced_circuit_breaker_events"], local.dims_list),
+            concat([var.custom_metric_namespace, "advanced_authority_violations"], local.dims_list),
+          ]
+        }
+      },
+      {
+        type = "metric", x = 12, y = 30, width = 12, height = 6
+        properties = {
+          title  = "Advanced: sandbox and reconciliation"
+          region = var.aws_region
+          stat   = "Sum"
+          period = 60
+          metrics = [
+            concat([var.custom_metric_namespace, "advanced_sandbox_killed_runs"], local.dims_list),
+            concat([var.custom_metric_namespace, "advanced_sandbox_network_violations"], local.dims_list),
+            concat([var.custom_metric_namespace, "advanced_unmatched_economic_effects"], local.dims_list),
+            concat([var.custom_metric_namespace, "advanced_reserve_mismatches"], local.dims_list),
+            concat([var.custom_metric_namespace, "advanced_chain_mismatches"], local.dims_list),
+          ]
+        }
+      },
     ]
   }
 }
