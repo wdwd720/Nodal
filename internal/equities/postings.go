@@ -4,6 +4,7 @@ import (
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/errs"
+	"github.com/nodal/controlplane/internal/feeledger"
 	"github.com/nodal/controlplane/internal/fees"
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/money"
@@ -24,7 +25,8 @@ func (e *entries) add(ref ledger.AccountRef, side ledger.Side, q money.Quantity)
 	*e = append(*e, ledger.Entry{Account: ref, Side: side, Quantity: q})
 }
 
-// TradeCharges is how a fee quote's charges are booked.
+// TradeCharges is what a fill records of its fee quote: the notional, each
+// kind of charge and the total.
 type TradeCharges struct {
 	// Notional is the reference notional paid to (BUY) or received from
 	// (SELL) the external venue.
@@ -32,7 +34,8 @@ type TradeCharges struct {
 	// Spread is the disclosed spread: FEES_SPREAD / SPREAD_REVENUE.
 	Spread money.Quantity
 	// PlatformFees are the explicit fixed, percentage, minimum-top-up and
-	// strategy fees: FEES_PLATFORM / PLATFORM_FEE_REVENUE.
+	// strategy fees: FEES_PLATFORM / PLATFORM_FEE_REVENUE, the platform fee
+	// and the strategy fee each on its own pair.
 	PlatformFees money.Quantity
 	// VenueFees are the venue pass-through: FEES_VENUE, paid out to the
 	// external venue like the notional.
@@ -81,26 +84,39 @@ func ChargesOf(q fees.Quote) (TradeCharges, error) {
 	return c, nil
 }
 
-// TradeEntries builds the SIM_TRADE posting of a fill on the trade date.
+// TradeEntries builds the SIM_TRADE posting of a fill on the trade date: the
+// trade at its reference notional, then every disclosed charge on its own
+// pair of accounts -- exactly the fee ledger's entries for the fill's
+// disclosure (feeledger.ChargeEntries), which is what lets the fee ledger
+// register them against this journal (feeledger.RecordEmbedded). charged is
+// the disclosure's charges as the fee ledger reads them; they must be c's,
+// component by component, or nothing is built.
 //
-//	BUY   customer cash    Cr WALLET total
-//	                       Dr TRADING_OUTFLOW notional, Dr FEES_SPREAD spread,
-//	                       Dr FEES_PLATFORM fees, Dr FEES_VENUE venue
+//	BUY   customer cash    Cr WALLET notional / Dr TRADING_OUTFLOW notional
 //	      customer shares  Dr UNSETTLED_RECEIVABLE qty / Cr TRADING_INFLOW qty
 //	SELL  customer shares  Cr WALLET qty / Dr TRADING_OUTFLOW qty
-//	      customer cash    Dr UNSETTLED_RECEIVABLE total, Dr FEES_SPREAD spread,
-//	                       Dr FEES_PLATFORM fees, Dr FEES_VENUE venue
-//	                       Cr TRADING_INFLOW notional
-//	both  platform cash    Dr PLATFORM_FEE_RECEIVABLE spread + fees
-//	                       Cr SPREAD_REVENUE spread, Cr PLATFORM_FEE_REVENUE fees
+//	      customer cash    Cr TRADING_INFLOW notional,
+//	                       Dr UNSETTLED_RECEIVABLE total, Dr WALLET spread + fees
+//	each charge, in cash   C: Dr FEES_SPREAD | FEES_PLATFORM | FEES_VENUE / Cr WALLET
+//	                       P: Dr PLATFORM_FEE_RECEIVABLE / Cr SPREAD_REVENUE | PLATFORM_FEE_REVENUE
 //
-// A seller pays the spread and fees out of the proceeds, so the net proceeds
-// are what waits in UNSETTLED_RECEIVABLE. The venue is external and never
-// booked: the notional leaves (or arrives) through TRADING_OUTFLOW /
-// TRADING_INFLOW, exactly as on the spot venue.
-func TradeEntries(acct accounts.AccountID, side Side, share, cash assets.AssetID, qty money.Quantity, c TradeCharges) ([]ledger.Entry, error) {
+// The platform fee and the strategy fee are each their own pair, and a venue
+// pass-through has no platform side: it is paid on to the venue. A buyer pays
+// the notional and every charge out of WALLET. A seller pays the charges out
+// of the proceeds: the part of the proceeds that pays them arrives in WALLET
+// at the trade date and leaves it with the charges, so WALLET does not move
+// and the net proceeds are what waits in UNSETTLED_RECEIVABLE. The venue is
+// external and never booked: the notional leaves (or arrives) through
+// TRADING_OUTFLOW / TRADING_INFLOW, exactly as on the spot venue.
+func TradeEntries(acct accounts.AccountID, side Side, share, cash assets.AssetID, qty money.Quantity, c TradeCharges,
+	charged feeledger.Charges,
+) ([]ledger.Entry, error) {
 	if !qty.IsPositive() {
 		return nil, errs.New(errs.CodeValidationFailed, "equities: a fill quantity is positive")
+	}
+	if charged.QuoteAsset != cash || !charged.Spread.Equal(c.Spread) || !charged.Platform.Add(charged.Strategy).Equal(c.PlatformFees) ||
+		!charged.Venue.Equal(c.VenueFees) || !charged.Network.IsZero() {
+		return nil, errs.New(errs.CodeInternal, "equities: the disclosed charges are not the fill's charges")
 	}
 	cust := func(code ledger.Code, a assets.AssetID) ledger.AccountRef {
 		return ledger.CustomerAccount(acct, code, a)
@@ -108,25 +124,20 @@ func TradeEntries(acct accounts.AccountID, side Side, share, cash assets.AssetID
 	var e entries
 	switch side {
 	case SideBuy:
-		e.add(cust(ledger.CodeWallet, cash), ledger.Credit, c.Total)
+		e.add(cust(ledger.CodeWallet, cash), ledger.Credit, c.Notional)
 		e.add(cust(ledger.CodeTradingOutflow, cash), ledger.Debit, c.Notional)
 		e.add(cust(ledger.CodeUnsettledReceivable, share), ledger.Debit, qty)
 		e.add(cust(ledger.CodeTradingInflow, share), ledger.Credit, qty)
 	case SideSell:
 		e.add(cust(ledger.CodeWallet, share), ledger.Credit, qty)
 		e.add(cust(ledger.CodeTradingOutflow, share), ledger.Debit, qty)
-		e.add(cust(ledger.CodeUnsettledReceivable, cash), ledger.Debit, c.Total)
 		e.add(cust(ledger.CodeTradingInflow, cash), ledger.Credit, c.Notional)
+		e.add(cust(ledger.CodeUnsettledReceivable, cash), ledger.Debit, c.Total)
+		e.add(cust(ledger.CodeWallet, cash), ledger.Debit, charged.InQuoteAsset())
 	default:
 		return nil, errs.New(errs.CodeValidationFailed, "equities: unknown side")
 	}
-	e.add(cust(ledger.CodeFeesSpread, cash), ledger.Debit, c.Spread)
-	e.add(cust(ledger.CodeFeesPlatform, cash), ledger.Debit, c.PlatformFees)
-	e.add(cust(ledger.CodeFeesVenue, cash), ledger.Debit, c.VenueFees)
-	e.add(ledger.PlatformAccount(ledger.CodePlatformFeeReceivable, cash), ledger.Debit, c.Spread.Add(c.PlatformFees))
-	e.add(ledger.PlatformAccount(ledger.CodeSpreadRevenue, cash), ledger.Credit, c.Spread)
-	e.add(ledger.PlatformAccount(ledger.CodePlatformFeeRevenue, cash), ledger.Credit, c.PlatformFees)
-	return e, nil
+	return append(e, feeledger.ChargeEntries(acct, charged)...), nil
 }
 
 // SettlementEntries builds the EQUITY_SETTLEMENT posting: the asset a trade
