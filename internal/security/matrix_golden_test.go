@@ -31,6 +31,8 @@ var goldenPermissions = []string{
 	"provider:disable", "provider:enable",
 	"reconciliation:approve", "reconciliation:read", "reconciliation:resolve",
 	"risk:policy_write", "risk:read",
+	"sandbox:bridge", "sandbox:delegate", "sandbox:fund", "sandbox:operate", "sandbox:resolve",
+	"sandbox:stable", "sandbox:strategy", "sandbox:trade", "sandbox:transfer",
 	"session:list_own", "session:revoke_any", "session:revoke_own",
 	"strategy:read", "strategy:write",
 	"trade:create", "trade:read",
@@ -52,6 +54,8 @@ var goldenMatrix = map[string][]string{
 		"funding:create", "funding:read",
 		"native_asset:create", "native_asset:read", "native_market:trade",
 		"payout:create", "payout:read",
+		"sandbox:bridge", "sandbox:delegate", "sandbox:fund", "sandbox:stable", "sandbox:strategy",
+		"sandbox:trade", "sandbox:transfer",
 		"session:list_own", "session:revoke_own",
 		"strategy:read", "strategy:write", "trade:create", "trade:read", "withdrawal:create",
 	},
@@ -68,7 +72,7 @@ var goldenMatrix = map[string][]string{
 		"instrument:status_write", "kill:activate", "ledger:read",
 		"native_asset:read", "native_market:halt", "native_market:surveil",
 		"payout:read", "payout:review", "provider:disable",
-		"reconciliation:read", "reconciliation:resolve", "risk:read",
+		"reconciliation:read", "reconciliation:resolve", "risk:read", "sandbox:operate",
 		"session:list_own", "session:revoke_own", "strategy:read", "trade:read",
 	},
 	"RISK": {
@@ -77,7 +81,8 @@ var goldenMatrix = map[string][]string{
 		"funding:read", "gate:propose", "gate:read",
 		"instrument:status_write", "kill:activate", "ledger:read",
 		"native_asset:read", "payout:read", "reconciliation:read",
-		"risk:policy_write", "risk:read", "session:list_own", "session:revoke_own",
+		"risk:policy_write", "risk:read", "sandbox:operate", "sandbox:resolve",
+		"session:list_own", "session:revoke_own",
 		"strategy:read", "trade:read",
 	},
 	// Compliance is the role that judges user-generated content and market
@@ -89,7 +94,7 @@ var goldenMatrix = map[string][]string{
 		"credit:read", "funding:read", "gate:propose", "gate:read", "ledger:read",
 		"native_asset:moderate", "native_asset:read", "native_market:halt", "native_market:surveil",
 		"payout:read", "payout:review",
-		"reconciliation:read", "risk:read",
+		"reconciliation:read", "risk:read", "sandbox:resolve",
 		"session:list_own", "session:revoke_own", "strategy:read", "trade:read", "withdrawal:review",
 	},
 	"FINANCE": {
@@ -121,7 +126,10 @@ var goldenMatrix = map[string][]string{
 		"native_market:halt", "native_market:surveil", "native_market:trade",
 		"payout:create", "payout:read", "payout:review",
 		"provider:disable", "provider:enable", "reconciliation:read", "reconciliation:resolve",
-		"risk:policy_write", "risk:read", "session:list_own", "session:revoke_any", "session:revoke_own",
+		"risk:policy_write", "risk:read",
+		"sandbox:bridge", "sandbox:delegate", "sandbox:fund", "sandbox:operate", "sandbox:resolve",
+		"sandbox:stable", "sandbox:strategy", "sandbox:trade", "sandbox:transfer",
+		"session:list_own", "session:revoke_any", "session:revoke_own",
 		"strategy:read", "strategy:write", "trade:create", "trade:read", "withdrawal:create", "withdrawal:review",
 	},
 	"BREAK_GLASS": {
@@ -188,8 +196,14 @@ func TestGoldenMatrix_PermissionListClosed(t *testing.T) {
 	// 60 after the Domain A admin workflows: native_market:resume, the approve
 	// half of restarting a halted market. Stopping stays one operator;
 	// restarting is the direction that adds exposure.
-	if len(got) != 60 {
-		t.Fatalf("expected 60 permissions, got %d", len(got))
+	//
+	// 69 after the advanced capabilities (ADR-0020): sandbox:{trade, transfer,
+	// fund, strategy, delegate, bridge, stable} for customers, sandbox:operate
+	// for OPERATIONS and RISK, and sandbox:resolve for RISK and COMPLIANCE, so
+	// the role that lists a market is not the role that decides its outcome.
+	// All of them act on value domain SIMULATED only.
+	if len(got) != 69 {
+		t.Fatalf("expected 69 permissions, got %d", len(got))
 	}
 	for _, p := range goldenPermissions {
 		if !Permission(p).Valid() {

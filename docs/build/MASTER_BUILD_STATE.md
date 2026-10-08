@@ -195,7 +195,7 @@ migration.
 
 API surface: 17 Domain A endpoints added to the OpenAPI contract, regenerated, implemented, wired
 into `cmd/api`, and covered by the existing deny-by-default authorization invariants. Permissions:
-60, up from 42 at the baseline; capabilities: 35, of which 33 are high-risk (20 and 18 until migration 00731 added the fifteen advanced capabilities, every one of them high-risk). (Was "59 … of which 9". The high-risk figure had been wrong since F-16 moved MARKETPLACE and the rest of the internal economy across, and nothing checked it — `TestDocs_CountsMatchTheCode` does now.)
+69, up from 42 at the baseline (60 before the nine `sandbox:*` permissions of the advanced capabilities); capabilities: 35, of which 33 are high-risk (20 and 18 until migration 00731 added the fifteen advanced capabilities, every one of them high-risk). (Was "59 … of which 9". The high-risk figure had been wrong since F-16 moved MARKETPLACE and the rest of the internal economy across, and nothing checked it — `TestDocs_CountsMatchTheCode` does now.)
 
 ### Stage 8 as built
 

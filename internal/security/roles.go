@@ -161,6 +161,46 @@ const (
 	// PermCommerceModerate suspends a seller or withdraws a product. It is the
 	// operator side and no customer role holds it.
 	PermCommerceModerate Permission = "commerce:moderate"
+
+	// --- advanced financial capabilities (ADR-0020) ------------------------
+	//
+	// Every one of these acts only on value domain SIMULATED. They are split by
+	// exposure, as everywhere else, so a deployment can open paper trading
+	// without opening transfers between customers or agent delegation. Holding
+	// one means only that this is the role that may ASK: the capability gate,
+	// the kill switches and Risk Kernel V2 decide each request.
+
+	// PermSandboxTrade places and cancels sandbox orders and opens, changes and
+	// closes simulated positions: margin, derivatives, paper equities and
+	// prediction markets.
+	PermSandboxTrade Permission = "sandbox:trade"
+	// PermSandboxTransfer sends simulated value to another customer.
+	PermSandboxTransfer Permission = "sandbox:transfer"
+	// PermSandboxFund requests simulated value from the sandbox faucet into
+	// one's own account.
+	PermSandboxFund Permission = "sandbox:fund"
+	// PermSandboxStrategy uploads, builds and runs sandboxed strategy code and
+	// lists or subscribes to strategies in the marketplace.
+	PermSandboxStrategy Permission = "sandbox:strategy"
+	// PermSandboxDelegate grants, limits and revokes an agent's delegated
+	// authority, and decides the agent's withdrawal proposals.
+	PermSandboxDelegate Permission = "sandbox:delegate"
+	// PermSandboxBridge moves one's own simulated capital between simulated
+	// chains.
+	PermSandboxBridge Permission = "sandbox:bridge"
+	// PermSandboxStable requests issuance or redemption of a sandbox stable
+	// asset against its reserve.
+	PermSandboxStable Permission = "sandbox:stable"
+	// PermSandboxOperate is the operator side of the sandbox: listing markets
+	// and instruments, recording sandbox marks, running liquidation, funding
+	// facilities, corporate actions, and (in LOCAL, TEST and DEV only) devnet
+	// fault injection.
+	PermSandboxOperate Permission = "sandbox:operate"
+	// PermSandboxResolve resolves an outcome: a prediction market's result or a
+	// stable reserve attestation. It is held by different roles from
+	// sandbox:operate, so the role that lists a market is not the role that
+	// decides how it settles.
+	PermSandboxResolve Permission = "sandbox:resolve"
 )
 
 var allPermissions = []Permission{
@@ -187,6 +227,8 @@ var allPermissions = []Permission{
 	PermNativeMarketTrade, PermNativeMarketHalt, PermNativeMarketSurveil, PermNativeMarketResume,
 	PermPayoutCreate, PermPayoutRead, PermPayoutReview, PermPayoutApprove,
 	PermCommerceRead, PermCommerceBuy, PermCommerceSell, PermCommerceModerate,
+	PermSandboxTrade, PermSandboxTransfer, PermSandboxFund, PermSandboxStrategy, PermSandboxDelegate,
+	PermSandboxBridge, PermSandboxStable, PermSandboxOperate, PermSandboxResolve,
 }
 
 var allRoles = []Role{
@@ -269,6 +311,9 @@ var RolePermissions = map[Role][]Permission{
 			// own for sale. Selling is granted here and gated separately,
 			// because becoming a seller is how earning provenance is minted.
 			PermCommerceRead, PermCommerceBuy, PermCommerceSell,
+			// The advanced capabilities, simulated value only (ADR-0020).
+			PermSandboxTrade, PermSandboxTransfer, PermSandboxFund, PermSandboxStrategy,
+			PermSandboxDelegate, PermSandboxBridge, PermSandboxStable,
 		},
 		ownSession,
 	),
@@ -276,13 +321,16 @@ var RolePermissions = map[Role][]Permission{
 	RoleOperations: union(operatorBase, []Permission{
 		PermAgentPause, PermAgentPromote, PermProviderDisable, PermKillActivate, PermInstrumentStatusWrite, PermReconciliationResolve,
 		PermNativeMarketHalt, PermNativeMarketSurveil, PermPayoutReview, PermCommerceModerate,
+		PermSandboxOperate,
 	}),
 	RoleRisk: union(operatorBase, []Permission{
 		PermRiskPolicyWrite, PermKillActivate, PermInstrumentStatusWrite, PermGatePropose, PermEnvelopeAuthorityWrite, PermAgentPromote,
+		PermSandboxOperate, PermSandboxResolve,
 	}),
 	RoleCompliance: union(operatorBase, []Permission{
 		PermNativeAssetModerate, PermNativeMarketSurveil, PermNativeMarketHalt, PermPayoutReview,
 		PermAccountFreeze, PermGatePropose, PermWithdrawalReview, PermCommerceModerate,
+		PermSandboxResolve,
 	}),
 	RoleFinance: union(operatorBase, []Permission{
 		PermLedgerPostCorrection, PermReconciliationResolve, PermWithdrawalReview,
