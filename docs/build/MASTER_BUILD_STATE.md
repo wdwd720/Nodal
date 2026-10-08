@@ -113,21 +113,31 @@ are not running here; nothing in the advanced work depends on them.
 - A full run of every integration package (72) passed on 2026-10-08; it was not pinned to one commit, so the run of
   record is still to be made.
 
-## In flight (isolated worktrees, merged by the integrator)
+## Paused on 2026-10-08 (work stopped at the owner's request; main at `32cb4de`)
 
-The gaps the live Playwright run found (an unvalued holding shown as $0.00, no route to define a derivative
-contract, no second seeded operator, CI without the sandbox chain); the provider layer of goal §27
-(`StableAssetProvider`, `DerivativesExecutionAdapter`, `SandboxRuntimeProvider`) and the sandbox budget charged
-outside the run's transaction; the observability metrics §29 still lacks; equity fees booked through the fee ledger
-(00764).
+Since the entries above also merged: the observability metrics of goal §29 (`c1c4982`, every metric recorded but
+provider mismatches) and equity fees booked through the fee ledger (`32cb4de`, 00764, FW001 now binds four charge
+points). Two lanes were stopped before they merged; their committed work is on branches, unmerged and unreviewed:
+
+- `worktree-agent-acaef5b979a4c1d22` (the gaps the live Playwright run found): the LOCAL seed makes "finance" a
+  FINANCE operator so a reversal can be approved by a second operator in the browser; CI's web-e2e job runs the
+  sandbox chain on a seed made for the run; holdings state their valuation honestly rather than as $0.00. Not
+  finished: the derivative-contract route, and the suite's final runs.
+- `worktree-agent-ab39a31d12a460038` (goal §27 and the sandbox budget): `StableAssetProvider`,
+  `DerivativesExecutionAdapter` and `SandboxRuntimeProvider`, each with its mode; a strategy run's budget reserved
+  and charged with no lock held while the code runs (a pool of its own). Three files uncommitted in its worktree;
+  its checks had not finished.
 
 ## Next exact work
 
-1. Merge the four lanes; format the tree with the pinned gofumpt CI enforces and clear staticcheck's findings.
-2. `docs/reviews/PORTFOLIO_CLAIMS_REVIEW.md` (an independent reviewer), then the README from its A and B claims.
-3. The run of record, from a worktree pinned to one commit: every integration package, the census, the demo, the
-   restore drill, the Playwright suite and `make perf-advanced` on an otherwise idle machine; then
-   `ADVANCED_TEST_EVIDENCE.md` from it.
+1. Review and merge (or redo) the two branches above.
+2. CI parity before any push: the tree is not gofumpt-formatted (332 files, `make fmt`), staticcheck reports 24
+   findings (unused code, comment forms, two deprecated calls), and golangci-lint has not been run here.
+3. `docs/reviews/PORTFOLIO_CLAIMS_REVIEW.md` (an independent reviewer; the brief is ready), then rewrite the README
+   from its A and B claims — the README still describes the advanced capabilities as not implemented.
+4. The run of record from a worktree pinned to one commit (every integration package, census, demo, restore drill,
+   Playwright, `make perf-advanced` on an idle machine), then `ADVANCED_TEST_EVIDENCE.md` from it.
+5. Local `main` is far ahead of `origin/main` and has not been pushed.
 
 ## Verification commands that matter for this goal
 
