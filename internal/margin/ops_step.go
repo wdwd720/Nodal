@@ -10,6 +10,8 @@ import (
 
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/assets"
+	"github.com/nodal/controlplane/internal/capital"
+	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/gates"
@@ -18,17 +20,18 @@ import (
 )
 
 // planStep plans a case's next step. Interest is accrued to the instant only
-// when the step will act -- sell, apply collateral or declare bankruptcy --
-// so the loans it repays or records are exact; a case that only waits for a
-// price or a venue, or completes, posts nothing at all, however often it is
-// retried.
+// when the step will act -- sell, apply collateral, sweep the wallet, declare
+// bankruptcy -- or the case is about to go to a person (from then on its
+// interest is waived), so the loans it repays or records are exact; a case
+// that only waits for a price or a venue, or completes, posts nothing at
+// all, however often it is retried.
 func (s *Service) planStep(ctx context.Context, tx pgx.Tx, a Account, pool econ.Facility, c Case, now time.Time) (Plan, AccountState, []Lot, error) {
 	plan, state, lots, err := s.planAt(ctx, tx, a, c, now)
 	if err != nil {
 		return Plan{}, AccountState{}, nil, err
 	}
 	switch plan.Decision {
-	case DecisionSell, DecisionSellAll, DecisionApplyCollateral, DecisionBankrupt:
+	case DecisionSell, DecisionSellAll, DecisionApplyCollateral, DecisionSweepWallet, DecisionBankrupt, DecisionManualReview:
 		accrued, err := s.accrue(ctx, tx, a, pool, now, true)
 		if err != nil {
 			return Plan{}, AccountState{}, nil, err
@@ -41,7 +44,8 @@ func (s *Service) planStep(ctx context.Context, tx pgx.Tx, a Account, pool econ.
 }
 
 // planAt loads the account and plans its case's next step against the
-// venue's availability for every risky holding.
+// venue's availability for every risky holding, the trading steps of the
+// case's budget window and the customer's free numeraire cash.
 func (s *Service) planAt(ctx context.Context, tx pgx.Tx, a Account, c Case, now time.Time) (Plan, AccountState, []Lot, error) {
 	state, lots, err := s.loadState(ctx, tx, a, now)
 	if err != nil {
@@ -62,11 +66,38 @@ func (s *Service) planAt(ctx context.Context, tx pgx.Tx, a Account, c Case, now 
 		}
 		venueUp = venueUp && up
 	}
-	plan, err := PlanLiquidation(s.policy, PlanInput{State: state, StepsTaken: c.StepsExecuted, VenueAvailable: venueUp})
+	trading, err := s.st.tradingSteps(ctx, tx, c)
+	if err != nil {
+		return Plan{}, AccountState{}, nil, err
+	}
+	free, err := s.freeNumeraire(ctx, tx, a)
+	if err != nil {
+		return Plan{}, AccountState{}, nil, err
+	}
+	plan, err := PlanLiquidation(s.policy, PlanInput{State: state, StepsTaken: trading, VenueAvailable: venueUp, FreeNumeraire: free})
 	if err != nil {
 		return Plan{}, AccountState{}, nil, err
 	}
 	return plan, state, lots, nil
+}
+
+// freeNumeraire is the customer's numeraire wallet balance that no
+// reservation or withdrawal hold has claimed: what a sweep may take. It is
+// zero when the customer account cannot reserve value at all (FROZEN or
+// CLOSED): margin moves a wallet only through a capital reservation.
+func (s *Service) freeNumeraire(ctx context.Context, q db.Querier, a Account) (money.Quantity, error) {
+	cust, err := s.accounts.Get(ctx, q, a.AccountID)
+	if err != nil {
+		return money.Quantity{}, err
+	}
+	if !cust.Status.AllowsRiskReduction() {
+		return money.Quantity{}, nil
+	}
+	av, err := s.d.Capital.Availability(ctx, q, a.AccountID.String(), a.NumeraireAssetID, s.d.Clock.Now())
+	if err != nil {
+		return money.Quantity{}, err
+	}
+	return av.Available, nil
 }
 
 func (s *Service) loadAfterStep(ctx context.Context, tx pgx.Tx, a Account, now time.Time) (Evaluation, error) {
@@ -80,7 +111,7 @@ func (s *Service) loadAfterStep(ctx context.Context, tx pgx.Tx, a Account, now t
 // executeStep executes the plan's first order in full (the paper venue fills
 // at the price the plan computed), posts it, applies the repayment to the
 // lots and records the step.
-func (s *Service) executeStep(ctx context.Context, tx pgx.Tx, a Account, c *Case, pool, fund econ.Facility, state AccountState,
+func (s *Service) executeStep(ctx context.Context, tx pgx.Tx, a Account, c *Case, pool econ.Facility, state AccountState,
 	lots []Lot, plan Plan, now time.Time) (Step, error) {
 	next, done, err := ExecuteFirst(s.policy, state, plan, 10_000)
 	if err != nil {
@@ -110,8 +141,8 @@ func (s *Service) executeStep(ctx context.Context, tx pgx.Tx, a Account, c *Case
 			return Step{}, errs.Wrap(err, errs.CodeInternal, "margin: liquidation asset id")
 		}
 		step.AssetID, step.Mark, step.ExecutionPrice = asset, done.Mark, done.ExecutionPrice
-		tm := s.meta("margin_liquidation_step", step.ID.String(), "reduce-only liquidation sale")
-		tp, err := LiquidationPosting(tm, acct, fund, asset, done.Quantity, a.NumeraireAssetID, done.Proceeds, done.Fee)
+		tm := s.meta(refLiquidationStep, step.ID.String(), "reduce-only liquidation sale")
+		tp, err := LiquidationPosting(tm, acct, asset, done.Quantity, a.NumeraireAssetID, done.Proceeds, done.Fee)
 		if err != nil {
 			return Step{}, err
 		}
@@ -122,7 +153,7 @@ func (s *Service) executeStep(ctx context.Context, tx pgx.Tx, a Account, c *Case
 		step.TradeJournalID = &trade.Journal
 	case ActionApplyCollateral:
 		step.AssetID = a.NumeraireAssetID
-		rm := s.meta("margin_liquidation_step", step.ID.String(), "numeraire collateral applied to the loans")
+		rm := s.meta(refLiquidationStep, step.ID.String(), "numeraire collateral applied to the loans")
 		rp, err := CollateralMovePosting(rm, acct, a.NumeraireAssetID, done.Quantity, MoveRelease)
 		if err != nil {
 			return Step{}, err
@@ -132,11 +163,38 @@ func (s *Service) executeStep(ctx context.Context, tx pgx.Tx, a Account, c *Case
 			return Step{}, err
 		}
 		step.ReleaseJournal = &released.Journal
+	case ActionSweepWallet:
+		// The customer's free cash repays the loans before any bankruptcy. It
+		// is taken only through a capital reservation, so cash another
+		// operation has reserved (or a withdrawal hold covers) is never swept.
+		step.AssetID = a.NumeraireAssetID
+		res, err := s.d.Capital.Reserve(ctx, tx, capital.ReserveRequest{
+			AccountID: acct.String(), AssetID: a.NumeraireAssetID, Quantity: done.Quantity,
+			ActorType: s.actor.Type, ActorID: s.actor.ID, IdempotencyKey: prefix + ":sweep-reserve", TTL: reservationTTL,
+			Reason: "margin liquidation sweeps the free wallet balance into the loans",
+		})
+		if err != nil {
+			return Step{}, err
+		}
+		sm := s.meta(refLiquidationStep, step.ID.String(), "the free wallet balance repays the loans before bankruptcy")
+		sp, err := RepayPosting(sm, acct, pool, a.NumeraireAssetID, done.Quantity)
+		if err != nil {
+			return Step{}, err
+		}
+		swept, err := s.postOnce(ctx, tx, postSpec{key: prefix + ":sweep", kind: "LIQUIDATION_SWEEP", account: acct, request: req,
+			posting: sp, evidence: evidence, reserve: res.ID.String()})
+		if err != nil {
+			return Step{}, err
+		}
+		if _, err := s.d.Capital.ConsumeFinal(ctx, tx, res.ID, done.Quantity, 0, ""); err != nil {
+			return Step{}, err
+		}
+		step.RepayJournalID = &swept.Journal
 	default:
 		return Step{}, errs.Newf(errs.CodeInternal, "margin: unknown step action %s", done.Action)
 	}
-	if done.Repay.IsPositive() {
-		pm := s.meta("margin_liquidation_step", step.ID.String(), "liquidation proceeds repay the loans")
+	if done.Repay.IsPositive() && done.Action != ActionSweepWallet {
+		pm := s.meta(refLiquidationStep, step.ID.String(), "liquidation proceeds repay the loans")
 		pp, err := RepayPosting(pm, acct, pool, a.NumeraireAssetID, done.Repay)
 		if err != nil {
 			return Step{}, err
@@ -148,7 +206,7 @@ func (s *Service) executeStep(ctx context.Context, tx pgx.Tx, a Account, c *Case
 		step.RepayJournalID = &repaid.Journal
 	}
 	if done.Excess.IsPositive() {
-		xm := s.meta("margin_liquidation_step", step.ID.String(), "liquidation proceeds above the loans stay as collateral")
+		xm := s.meta(refLiquidationStep, step.ID.String(), "liquidation proceeds above the loans stay as collateral")
 		xp, err := CollateralMovePosting(xm, acct, a.NumeraireAssetID, done.Excess, MovePost)
 		if err != nil {
 			return Step{}, err
@@ -189,74 +247,51 @@ type queued struct {
 	deficiency money.Quantity
 }
 
+// Transactor runs a function in a database transaction of its own and
+// commits it; *db.DB satisfies it.
+type Transactor interface {
+	InTx(ctx context.Context, opts db.TxOptions, fn func(ctx context.Context, tx pgx.Tx) error) error
+}
+
+// queueRetries is how often one account's step is re-run after a retryable
+// failure (a deadlock or serialization failure): Liquidate is wholly inside
+// its transaction, so re-running it is safe.
+const queueRetries = 2
+
 // ProcessLiquidationQueue runs one liquidation step for each of up to limit
 // accounts in MARGIN_CALL or with an open case, most under-margined first
 // (maintenance minus equity, descending; ties by margin account id). It is
 // bounded twice: at most MaxQueueScan candidates are considered and at most
-// limit steps executed, one per account, each in its own savepoint so one
-// account's failure does not stop the others. A case in MANUAL_REVIEW is
-// not a candidate: a person owns it.
-func (s *Service) ProcessLiquidationQueue(ctx context.Context, tx pgx.Tx, limit int) (QueueResult, error) {
+// limit steps executed, one per account.
+//
+// It is a driver, not an operation: it owns its transactions. The ranking is
+// read in one read-only transaction, and every account's step then runs and
+// COMMITS in a transaction of its own, so one account's failure -- including
+// a refusal the database makes only at COMMIT -- rolls back that account's
+// step and nothing else. Every operation it runs keeps the (ctx, tx) shape. A
+// case in MANUAL_REVIEW is not a candidate: a person owns it.
+func (s *Service) ProcessLiquidationQueue(ctx context.Context, txr Transactor, limit int) (QueueResult, error) {
+	if txr == nil {
+		return QueueResult{}, errs.New(errs.CodeInternal, "margin: the liquidation queue needs a transactor")
+	}
 	if limit <= 0 || limit > 100 {
 		limit = 100
 	}
-	if err := bindingsImmediate(ctx, tx); err != nil {
+	var out QueueResult
+	var ranked []queued
+	if err := txr.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted, ReadOnly: true}, func(ctx context.Context, tx pgx.Tx) error {
+		var err error
+		ranked, out.Failures, err = s.rankQueue(ctx, tx, limit)
+		return err
+	}); err != nil {
 		return QueueResult{}, err
 	}
-	rows, err := tx.Query(ctx, `SELECT m.account_id, m.id FROM margin_accounts m
-		WHERE m.status IN ('MARGIN_CALL','LIQUIDATING') AND m.policy_version = $1
-		  AND NOT EXISTS (SELECT 1 FROM margin_liquidation_cases c WHERE c.margin_account_id = m.id AND c.status = 'MANUAL_REVIEW')
-		ORDER BY m.id LIMIT $2`, s.policy.Version, s.cfg.MaxQueueScan)
-	if err != nil {
-		return QueueResult{}, dbErr("list liquidation candidates", err)
-	}
-	var cands []queued
-	for rows.Next() {
-		var q queued
-		if err := rows.Scan(&q.acct, &q.mid); err != nil {
-			rows.Close()
-			return QueueResult{}, dbErr("scan liquidation candidate", err)
-		}
-		cands = append(cands, q)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return QueueResult{}, dbErr("list liquidation candidates", err)
-	}
-	var out QueueResult
-	now := s.now()
-	var ranked []queued
-	for _, q := range cands {
-		a, err := s.st.accountByID(ctx, tx, q.mid, false)
-		if err != nil {
-			out.Failures = append(out.Failures, QueueFailure{AccountID: q.acct, Err: err})
-			continue
-		}
-		state, _, err := s.loadState(ctx, tx, a, now)
-		if err != nil {
-			out.Failures = append(out.Failures, QueueFailure{AccountID: q.acct, Err: err})
-			continue
-		}
-		ev, err := Evaluate(s.policy, state)
-		if err != nil {
-			out.Failures = append(out.Failures, QueueFailure{AccountID: q.acct, Err: err})
-			continue
-		}
-		q.deficiency = ev.MaintenanceMargin.Sub(ev.Equity)
-		ranked = append(ranked, q)
-	}
-	sort.Slice(ranked, func(i, j int) bool {
-		if c := ranked[i].deficiency.Cmp(ranked[j].deficiency); c != 0 {
-			return c > 0
-		}
-		return ranked[i].mid.String() < ranked[j].mid.String()
-	})
-	if len(ranked) > limit {
-		ranked = ranked[:limit]
-	}
 	for _, q := range ranked {
-		res, err := withSavepoint(ctx, tx, func(sp pgx.Tx) (LiquidationResult, error) {
-			return s.Liquidate(ctx, sp, LiquidateRequest{AccountID: q.acct})
+		var res LiquidationResult
+		err := txr.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted, MaxRetries: queueRetries}, func(ctx context.Context, tx pgx.Tx) error {
+			var err error
+			res, err = s.Liquidate(ctx, tx, LiquidateRequest{AccountID: q.acct})
+			return err
 		})
 		if err != nil {
 			out.Failures = append(out.Failures, QueueFailure{AccountID: q.acct, Err: err})
@@ -267,12 +302,71 @@ func (s *Service) ProcessLiquidationQueue(ctx context.Context, tx pgx.Tx, limit 
 	return out, nil
 }
 
+// rankQueue lists the candidates and orders them by deficiency.
+func (s *Service) rankQueue(ctx context.Context, q db.Querier, limit int) ([]queued, []QueueFailure, error) {
+	rows, err := q.Query(ctx, `SELECT m.account_id, m.id FROM margin_accounts m
+		WHERE m.status IN ('MARGIN_CALL','LIQUIDATING') AND m.policy_version = $1
+		  AND NOT EXISTS (SELECT 1 FROM margin_liquidation_cases c WHERE c.margin_account_id = m.id AND c.status = 'MANUAL_REVIEW')
+		ORDER BY m.id LIMIT $2`, s.policy.Version, s.cfg.MaxQueueScan)
+	if err != nil {
+		return nil, nil, dbErr("list liquidation candidates", err)
+	}
+	var cands []queued
+	for rows.Next() {
+		var c queued
+		if err := rows.Scan(&c.acct, &c.mid); err != nil {
+			rows.Close()
+			return nil, nil, dbErr("scan liquidation candidate", err)
+		}
+		cands = append(cands, c)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, nil, dbErr("list liquidation candidates", err)
+	}
+	var failures []QueueFailure
+	now := s.now()
+	var ranked []queued
+	for _, c := range cands {
+		a, err := s.st.accountByID(ctx, q, c.mid, false)
+		if err != nil {
+			failures = append(failures, QueueFailure{AccountID: c.acct, Err: err})
+			continue
+		}
+		state, _, err := s.loadState(ctx, q, a, now)
+		if err != nil {
+			failures = append(failures, QueueFailure{AccountID: c.acct, Err: err})
+			continue
+		}
+		ev, err := Evaluate(s.policy, state)
+		if err != nil {
+			failures = append(failures, QueueFailure{AccountID: c.acct, Err: err})
+			continue
+		}
+		c.deficiency = ev.MaintenanceMargin.Sub(ev.Equity)
+		ranked = append(ranked, c)
+	}
+	sort.Slice(ranked, func(i, j int) bool {
+		if c := ranked[i].deficiency.Cmp(ranked[j].deficiency); c != 0 {
+			return c > 0
+		}
+		return ranked[i].mid.String() < ranked[j].mid.String()
+	})
+	if len(ranked) > limit {
+		ranked = ranked[:limit]
+	}
+	return ranked, failures, nil
+}
+
 // DeficitResult is the outcome of covering a bankrupt case's deficit.
 type DeficitResult struct {
 	CaseID               CaseID
 	Deficit              money.Quantity
 	JournalTransactionID ledger.TransactionID
-	Replayed             bool
+	// CustomerRestricted is true when covering the deficit moved the
+	// customer account from ACTIVE to RESTRICTED.
+	CustomerRestricted bool
+	Replayed           bool
 }
 
 // CoverDeficit has the insurance fund cover a bankrupt case's deficit with a
@@ -282,6 +376,18 @@ type DeficitResult struct {
 // the one the case recorded, and it must equal both the loans the books
 // carry and what the lots owe; the fund must hold the cash. Exactly once per
 // case.
+//
+// In the same transaction the customer account, which now owes the fund, is
+// RESTRICTED (accounts.Repository.Transition, ACTIVE -> RESTRICTED): the
+// status every new-risk path refuses (Risk Kernel V2 for risk-increasing
+// intents, the settlement planner, funding, the faucet, margin itself), that
+// withdrawals and customer transfers refuse (they need ACTIVE), and that
+// buying power V2 blocks (no trade buying power, nothing withdrawable),
+// while risk reduction stays open -- including RepayDeficit, which pays the
+// fund back through a capital reservation like any other repayment. An
+// account already RESTRICTED, FROZEN or CLOSED keeps its status: margin only
+// ever tightens one. Lifting the restriction once the deficit is repaid is a
+// person's decision (an accounts status change), not margin's.
 func (s *Service) CoverDeficit(ctx context.Context, tx pgx.Tx, cid CaseID) (DeficitResult, error) {
 	if err := bindingsImmediate(ctx, tx); err != nil {
 		return DeficitResult{}, err
@@ -314,6 +420,9 @@ func (s *Service) CoverDeficit(ctx context.Context, tx pgx.Tx, cid CaseID) (Defi
 	if err != nil {
 		return DeficitResult{}, err
 	}
+	if err := s.lockFacilities(ctx, tx, a, poolBooks|fundBooks); err != nil {
+		return DeficitResult{}, err
+	}
 	loan, err := s.d.Ledger.Balance(ctx, tx, ledger.CustomerAccount(a.AccountID, ledger.CodeMarginLoan, a.NumeraireAssetID))
 	if err != nil {
 		return DeficitResult{}, err
@@ -336,10 +445,10 @@ func (s *Service) CoverDeficit(ctx context.Context, tx pgx.Tx, cid CaseID) (Defi
 	}
 	if cash.Cmp(deficit) < 0 {
 		return DeficitResult{}, errs.New(errs.CodeInsufficientBuyingPower, "margin: the insurance fund cannot cover this deficit").
-			WithField("deficit", deficit.String()).WithField("fund_cash", cash.String())
+			WithField("deficit", deficit.String()).WithField("fund_balance", cash.String())
 	}
 	now := s.now()
-	m := s.meta("margin_liquidation_case", c.ID.String(), "insurance fund covers a liquidation deficit")
+	m := s.meta(refLiquidationCase, c.ID.String(), "insurance fund covers a liquidation deficit")
 	p, err := DeficitCoveragePosting(m, a.AccountID, pool, fund, a.NumeraireAssetID, deficit)
 	if err != nil {
 		return DeficitResult{}, err
@@ -360,7 +469,35 @@ func (s *Service) CoverDeficit(ctx context.Context, tx pgx.Tx, cid CaseID) (Defi
 	if err := s.st.setCoverage(ctx, tx, &c, out.Journal, now); err != nil {
 		return DeficitResult{}, err
 	}
-	return DeficitResult{CaseID: c.ID, Deficit: deficit, JournalTransactionID: out.Journal}, nil
+	restricted, err := s.restrictCustomer(ctx, tx, a, c, deficit, now)
+	if err != nil {
+		return DeficitResult{}, err
+	}
+	return DeficitResult{CaseID: c.ID, Deficit: deficit, JournalTransactionID: out.Journal, CustomerRestricted: restricted}, nil
+}
+
+// restrictCustomer moves a customer account that owes a covered deficit from
+// ACTIVE to RESTRICTED, with its transition row and an audit event. It never
+// loosens a status: a RESTRICTED, FROZEN or CLOSED account is left alone.
+func (s *Service) restrictCustomer(ctx context.Context, tx pgx.Tx, a Account, c Case, deficit money.Quantity, at time.Time) (bool, error) {
+	cust, err := s.accounts.Get(ctx, tx, a.AccountID)
+	if err != nil {
+		return false, err
+	}
+	if cust.Status != accounts.StatusActive {
+		return false, nil
+	}
+	reason := "margin case " + c.ID.String() + " ended with a deficit of " + deficit.String() +
+		" base units that the insurance fund covered and the account owes"
+	if _, err := s.accounts.Transition(ctx, tx, a.AccountID, accounts.StatusChange{To: accounts.StatusRestricted,
+		ActorType: string(s.actor.Type), ActorID: s.actor.ID, Reason: reason}, at); err != nil {
+		return false, err
+	}
+	if err := s.st.auditTransition(ctx, tx, a.AccountID, s.actor, "customer_account", a.AccountID.String(),
+		string(accounts.StatusActive), string(accounts.StatusRestricted), reason, "", at); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // StressRun is a stored stress run.

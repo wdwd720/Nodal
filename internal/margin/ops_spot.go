@@ -78,7 +78,7 @@ func (s *Service) OpenLeveragedSpot(ctx context.Context, tx pgx.Tx, r SpotReques
 		return SpotResult{}, err
 	}
 	if a.MarginMode == ModeCash {
-		return SpotResult{}, errs.New(errs.CodeUnsupported, "margin: a CASH margin account takes no leverage")
+		return SpotResult{}, errs.New(errs.CodeUnsupported, "margin: a fully paid margin account takes no leverage")
 	}
 	if r.AssetID == a.NumeraireAssetID {
 		return SpotResult{}, errs.New(errs.CodeValidationFailed, "margin: the numeraire is not a position")
@@ -145,6 +145,9 @@ func (s *Service) openSpot(ctx context.Context, tx pgx.Tx, a Account, in *econ.I
 		return SpotResult{}, err
 	}
 	if err := pool.RequireActive(); err != nil {
+		return SpotResult{}, err
+	}
+	if err := s.lockFacilities(ctx, tx, a, poolBooks); err != nil {
 		return SpotResult{}, err
 	}
 	now := s.now()
@@ -214,7 +217,7 @@ func (s *Service) openSpot(ctx context.Context, tx pgx.Tx, a Account, in *econ.I
 		return SpotResult{}, err
 	}
 	if poolCash.Cmp(cost) < 0 {
-		return SpotResult{}, errs.New(errs.CodeInsufficientBuyingPower, "margin: the lending pool does not hold that much cash")
+		return SpotResult{}, errs.New(errs.CodeInsufficientBuyingPower, "margin: the lending pool does not hold that much to lend")
 	}
 	if err := s.moveIntent(ctx, tx, in, econ.StatusExecuting, "buying on margin", ""); err != nil {
 		return SpotResult{}, err
@@ -226,7 +229,7 @@ func (s *Service) openSpot(ctx context.Context, tx pgx.Tx, a Account, in *econ.I
 	disclosure := map[string]any{"request": reqBase, "evaluation_after": evAfter}
 
 	// 1. Borrow the cost into the wallet.
-	bm := s.meta("margin_borrow_lot", lotID.String(), "margin borrow for a leveraged buy")
+	bm := s.meta(refBorrowLot, lotID.String(), "margin borrow for a leveraged buy")
 	bp, err := BorrowPosting(bm, a.AccountID, pool, a.NumeraireAssetID, cost)
 	if err != nil {
 		return SpotResult{}, err
@@ -251,7 +254,7 @@ func (s *Service) openSpot(ctx context.Context, tx pgx.Tx, a Account, in *econ.I
 		return SpotResult{}, err
 	}
 	// 3. The paper trade at the disclosed slippage.
-	tm := s.meta("margin_spot_trade", in.ID.String(), "paper buy at mark plus disclosed slippage")
+	tm := s.meta(refSpotTrade, in.ID.String(), "paper buy at mark plus disclosed slippage")
 	tp, err := SpotBuyPosting(tm, a.AccountID, a.NumeraireAssetID, cost, r.AssetID, r.Quantity)
 	if err != nil {
 		return SpotResult{}, err
@@ -265,7 +268,7 @@ func (s *Service) openSpot(ctx context.Context, tx pgx.Tx, a Account, in *econ.I
 		return SpotResult{}, err
 	}
 	// 4. The bought quantity becomes collateral.
-	cm := s.meta("margin_collateral_move", in.ID.String(), "leveraged position into margin collateral")
+	cm := s.meta(refCollateralMove, in.ID.String(), "leveraged position into margin collateral")
 	cp, err := CollateralMovePosting(cm, a.AccountID, r.AssetID, r.Quantity, MovePost)
 	if err != nil {
 		return SpotResult{}, err

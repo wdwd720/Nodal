@@ -291,6 +291,11 @@ func replayIntent(in econ.Intent) error {
 	return errs.New(errs.CodeIdempotencyInProgress, "margin: this request is still in flight").WithField("intent_id", in.ID.String())
 }
 
+// route compiles the intent through the settlement compiler. Margin executes
+// what it routes, so it requires MayExecuteNow, not merely Permitted: a route
+// that is permitted only after a person confirms it (or an operator reviews
+// it) is permission to ask, and margin has nobody to ask. Such an intent is
+// refused, never executed.
 func (s *Service) route(ctx context.Context, tx pgx.Tx, in *econ.Intent, sp intentSpec) error {
 	r, err := econ.Route(econ.RouteRequest{Intent: *in, Subject: sp.subject, AgentAuthority: sp.requester.AgentAuthority}, s.d.Router, s.d.Clock.Now())
 	if err != nil {
@@ -298,6 +303,12 @@ func (s *Service) route(ctx context.Context, tx pgx.Tx, in *econ.Intent, sp inte
 	}
 	if !r.Permitted {
 		return errs.New(errs.CodeForbidden, "margin: the settlement compiler refused this intent").WithField("reasons", r.Reasons)
+	}
+	if !r.MayExecuteNow() {
+		return errs.Newf(errs.CodeForbidden, "margin: the settlement compiler permits this intent only after %s; margin executes nothing awaiting confirmation",
+			r.RequiredConfirmation).
+			WithField("required_confirmation", string(r.RequiredConfirmation)).
+			WithField("reasons", r.Reasons)
 	}
 	return s.moveIntent(ctx, tx, in, econ.StatusRouted, "routed", "")
 }
@@ -380,6 +391,9 @@ type postSpec struct {
 // applies the effect. A replay of an APPLIED effect returns its journal and
 // posts nothing; an UNKNOWN effect is never retried.
 func (s *Service) postOnce(ctx context.Context, tx pgx.Tx, sp postSpec) (posted, error) {
+	if err := checkEffectJournal(sp.kind, sp.posting); err != nil {
+		return posted{}, err
+	}
 	acct := ""
 	if !sp.account.IsZero() {
 		acct = sp.account.String()
@@ -440,6 +454,44 @@ func (s *Service) facilities(ctx context.Context, tx pgx.Tx) (econ.Facility, eco
 		return econ.Facility{}, econ.Facility{}, err
 	}
 	return pool, fund, nil
+}
+
+// facilityBooks names the facility books an operation posts to.
+type facilityBooks int
+
+const (
+	poolBooks facilityBooks = 1 << iota
+	fundBooks
+)
+
+// lockFacilities takes the row locks of the facilities whose books an
+// operation will post to, before it posts anything, and always in one order:
+// the lending pool, then the insurance fund. Every margin operation that
+// posts to a facility's books takes its lock first, so two transactions that
+// share a facility's ledger rows are serialized on its facility row, and no
+// two transactions can hold the two facilities in opposite orders: a
+// liquidation step, a deficit coverage and a deficit repayment cannot
+// deadlock on the pool's and the fund's cash rows. NO KEY UPDATE does not
+// block the foreign-key checks of new margin accounts.
+func (s *Service) lockFacilities(ctx context.Context, tx pgx.Tx, a Account, books facilityBooks) error {
+	return lockFacilityRows(ctx, tx, a.LendingPoolID, a.InsuranceFundID, books)
+}
+
+// lockFacilityRows is lockFacilities for a pool and a fund named directly.
+func lockFacilityRows(ctx context.Context, tx pgx.Tx, pool, fund econ.FacilityID, books facilityBooks) error {
+	for _, f := range []struct {
+		book facilityBooks
+		id   econ.FacilityID
+	}{{poolBooks, pool}, {fundBooks, fund}} {
+		if books&f.book == 0 {
+			continue
+		}
+		var got econ.FacilityID
+		if err := tx.QueryRow(ctx, `SELECT id FROM facilities WHERE id = $1 FOR NO KEY UPDATE`, f.id).Scan(&got); err != nil {
+			return dbErr("lock facility", err)
+		}
+	}
+	return nil
 }
 
 func (s *Service) accountFacilities(ctx context.Context, q db.Querier, a Account) (econ.Facility, econ.Facility, error) {

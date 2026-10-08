@@ -132,8 +132,10 @@ const (
 	CaseCompleted CaseStatus = "COMPLETED"
 	// CaseBankrupt: everything was sold and a deficit remains.
 	CaseBankrupt CaseStatus = "BANKRUPT"
-	// CaseManualReview: the step budget is spent or the planner can make no
-	// further progress. A person takes over; the case never loops.
+	// CaseManualReview: the trading budget is spent or the planner can make
+	// no further progress. Automation stops and a person takes over; the case
+	// never loops. It leaves review only through a resolution two distinct
+	// operators agree on (ProposeCaseResolution, DecideCaseResolution).
 	CaseManualReview CaseStatus = "MANUAL_REVIEW"
 )
 
@@ -153,26 +155,98 @@ func (s CaseStatus) Valid() bool {
 	return false
 }
 
-// Terminal reports whether the case is finished. A MANUAL_REVIEW case is
-// finished for automation: nothing in this package moves it again.
-func (s CaseStatus) Terminal() bool {
-	return s == CaseCompleted || s == CaseBankrupt || s == CaseManualReview
+// Terminal reports whether the case is finished for good: COMPLETED or
+// BANKRUPT. Nothing moves a terminal case again.
+func (s CaseStatus) Terminal() bool { return s == CaseCompleted || s == CaseBankrupt }
+
+// Automated reports whether the liquidation engine moves the case: it is
+// waiting for a price or a venue, or in progress.
+func (s CaseStatus) Automated() bool {
+	return s == CaseAwaitingPrice || s == CaseAwaitingVenue || s == CaseInProgress
 }
+
+// Closed reports whether the case carries closed_at: it is terminal, or held
+// for a person in MANUAL_REVIEW (closed for automation). It is the Go twin of
+// margin_liquidation_cases_closed.
+func (s CaseStatus) Closed() bool { return s.Terminal() || s == CaseManualReview }
 
 // BirthCaseStatuses are the statuses a case may be created in.
 func BirthCaseStatuses() []CaseStatus {
 	return []CaseStatus{CaseInProgress, CaseAwaitingPrice, CaseAwaitingVenue}
 }
 
-// CanTransitionCase reports whether from -> to is legal: an open case
-// (waiting or in progress) may move to any other open status or end
-// COMPLETED, BANKRUPT or MANUAL_REVIEW; an ended case never moves. It mirrors
-// cp_margin_case_transition_legal.
+// CanTransitionCase reports whether from -> to is legal: an automated case
+// (waiting or in progress) may move to any other status; a MANUAL_REVIEW case
+// may move only to IN_PROGRESS (resumed with a fresh trading budget) or
+// BANKRUPT, and only through an approved resolution (ResolutionRequired); a
+// terminal case never moves. It mirrors cp_margin_case_transition_legal.
 func CanTransitionCase(from, to CaseStatus) bool {
-	if from.Terminal() || !from.Valid() || !to.Valid() || from == to {
+	if !from.Valid() || !to.Valid() || from == to {
 		return false
 	}
-	return true
+	switch {
+	case from.Automated():
+		return true
+	case from == CaseManualReview:
+		return to == CaseInProgress || to == CaseBankrupt
+	}
+	return false
+}
+
+// ResolutionRequired reports whether leaving from needs an approved
+// resolution: every exit from MANUAL_REVIEW does, in Go and in SQL
+// (margin_liquidation_case_transitions_review_exit_resolved).
+func ResolutionRequired(from CaseStatus) bool { return from == CaseManualReview }
+
+// ResolutionOutcome is what a MANUAL_REVIEW resolution does with the case.
+type ResolutionOutcome string
+
+// Resolution outcomes.
+const (
+	// ResolveResume returns the case to IN_PROGRESS with a fresh trading
+	// budget window: automation continues where it stopped.
+	ResolveResume ResolutionOutcome = "RESUME"
+	// ResolveDeclareBankrupt declares the case BANKRUPT with the loans the
+	// books carry as its deficit. It is refused while anything is left to
+	// sell, apply or sweep.
+	ResolveDeclareBankrupt ResolutionOutcome = "DECLARE_BANKRUPT"
+)
+
+// AllResolutionOutcomes returns every outcome; it is the Go twin of
+// margin_case_resolutions_outcome_check.
+func AllResolutionOutcomes() []ResolutionOutcome {
+	return []ResolutionOutcome{ResolveResume, ResolveDeclareBankrupt}
+}
+
+// Valid reports whether o is a declared outcome.
+func (o ResolutionOutcome) Valid() bool { return o == ResolveResume || o == ResolveDeclareBankrupt }
+
+// CaseStatus is the status a case moves to when a resolution with this
+// outcome is approved.
+func (o ResolutionOutcome) CaseStatus() CaseStatus {
+	if o == ResolveDeclareBankrupt {
+		return CaseBankrupt
+	}
+	return CaseInProgress
+}
+
+// ResolutionDecision is a second operator's answer to a proposed resolution.
+type ResolutionDecision string
+
+// Resolution decisions.
+const (
+	// ResolutionApproved applies the resolution. The approver must be an
+	// operator other than the proposer.
+	ResolutionApproved ResolutionDecision = "APPROVED"
+	// ResolutionRejected withdraws it; any operator, the proposer included, may
+	// reject a proposal.
+	ResolutionRejected ResolutionDecision = "REJECTED"
+)
+
+// AllResolutionDecisions returns every decision; it is the Go twin of
+// margin_case_resolution_decisions_decision_check.
+func AllResolutionDecisions() []ResolutionDecision {
+	return []ResolutionDecision{ResolutionApproved, ResolutionRejected}
 }
 
 // CallStatus is the status of a margin call.
@@ -314,11 +388,15 @@ const (
 	// DecisionApplyCollateral: nothing risky is left; numeraire collateral
 	// repays the loans.
 	DecisionApplyCollateral PlanDecision = "APPLY_COLLATERAL"
-	// DecisionBankrupt: nothing is left to sell or apply and liabilities
-	// remain.
+	// DecisionSweepWallet: nothing is left in the margin account, loans
+	// remain, and the customer's free numeraire cash (borrowed cash that
+	// never entered the account, say) repays them before any bankruptcy.
+	DecisionSweepWallet PlanDecision = "SWEEP_WALLET"
+	// DecisionBankrupt: nothing is left to sell, apply or sweep and
+	// liabilities remain.
 	DecisionBankrupt PlanDecision = "BANKRUPT"
-	// DecisionManualReview: the step budget is spent or the remaining risk is
-	// not something this planner can reduce.
+	// DecisionManualReview: the trading budget is spent or the remaining
+	// risk is not something this planner can reduce.
 	DecisionManualReview PlanDecision = "MANUAL_REVIEW"
 )
 
@@ -327,13 +405,38 @@ type StepAction string
 
 // Step actions.
 const (
-	ActionSell            StepAction = "SELL"
+	// ActionSell is a reduce-only sale: a TRADING step, counted against the
+	// case's step budget.
+	ActionSell StepAction = "SELL"
+	// ActionApplyCollateral applies numeraire collateral to the loans:
+	// terminal accounting, not counted against the budget.
 	ActionApplyCollateral StepAction = "APPLY_COLLATERAL"
+	// ActionSweepWallet repays the loans from the customer's free numeraire
+	// wallet cash before a bankruptcy: terminal accounting, not counted
+	// against the budget.
+	ActionSweepWallet StepAction = "SWEEP_WALLET"
 )
 
 // AllStepActions returns every step action; it is the Go twin of
 // margin_liquidation_steps_action_check.
-func AllStepActions() []StepAction { return []StepAction{ActionSell, ActionApplyCollateral} }
+func AllStepActions() []StepAction {
+	return []StepAction{ActionSell, ActionApplyCollateral, ActionSweepWallet}
+}
+
+// Trading reports whether a step of this action counts against the case's
+// step budget. Only a sale trades.
+func (a StepAction) Trading() bool { return a == ActionSell }
+
+// decision is the planner decision a recorded step of this action executed.
+func (a StepAction) decision() PlanDecision {
+	switch a {
+	case ActionApplyCollateral:
+		return DecisionApplyCollateral
+	case ActionSweepWallet:
+		return DecisionSweepWallet
+	}
+	return DecisionSell
+}
 
 // MoveDirection is the direction of a collateral move.
 type MoveDirection string
@@ -399,14 +502,16 @@ func AllStressScenarios() []StressScenario {
 func RunModes() []string { return []string{"PAPER", "SANDBOX"} }
 
 type (
-	accountKind struct{}
-	lotKind     struct{}
-	callKind    struct{}
-	caseKind    struct{}
-	stepKind    struct{}
-	stressKind  struct{}
-	moveKind    struct{}
-	accrualKind struct{}
+	accountKind    struct{}
+	lotKind        struct{}
+	callKind       struct{}
+	caseKind       struct{}
+	stepKind       struct{}
+	stressKind     struct{}
+	moveKind       struct{}
+	accrualKind    struct{}
+	resolutionKind struct{}
+	repaymentKind  struct{}
 )
 
 // AccountID identifies a margin account (margin_accounts.id), which is not
@@ -434,6 +539,12 @@ type MoveID = id.ID[moveKind]
 // AccrualID identifies an interest accrual.
 type AccrualID = id.ID[accrualKind]
 
+// ResolutionID identifies a MANUAL_REVIEW resolution.
+type ResolutionID = id.ID[resolutionKind]
+
+// RepaymentID identifies a repayment of a covered deficit.
+type RepaymentID = id.ID[repaymentKind]
+
 func newAccountID() AccountID     { return id.New[accountKind]() }
 func newLotID() LotID             { return id.New[lotKind]() }
 func newCallID() CallID           { return id.New[callKind]() }
@@ -442,9 +553,16 @@ func newStepID() StepID           { return id.New[stepKind]() }
 func newStressRunID() StressRunID { return id.New[stressKind]() }
 func newMoveID() MoveID           { return id.New[moveKind]() }
 func newAccrualID() AccrualID     { return id.New[accrualKind]() }
+func newResolutionID() ResolutionID {
+	return id.New[resolutionKind]()
+}
+func newRepaymentID() RepaymentID { return id.New[repaymentKind]() }
 
 // ParseAccountID parses the canonical form of a margin account id.
 func ParseAccountID(s string) (AccountID, error) { return id.Parse[accountKind](s) }
 
 // ParseCaseID parses the canonical form of a liquidation case id.
 func ParseCaseID(s string) (CaseID, error) { return id.Parse[caseKind](s) }
+
+// ParseResolutionID parses the canonical form of a resolution id.
+func ParseResolutionID(s string) (ResolutionID, error) { return id.Parse[resolutionKind](s) }
