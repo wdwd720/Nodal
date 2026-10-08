@@ -4,9 +4,9 @@
  *
  * Nothing is stubbed: the pages talk to a running api over a seeded database,
  * and every assertion compares what a page shows with what the backend
- * answered — including where it answers no. The seed may or may not list a
- * derivative contract; each test states what it expects in either case and
- * never invents the missing half.
+ * answered — including where it answers no. No LOCAL seed lists a derivative
+ * contract: the contract a position is opened in is one the suite defines
+ * itself, as an operator does, on the derivatives operator page.
  *
  *   - every page renders under the simulated-value notice;
  *   - every derivatives answer is value domain SIMULATED, figures are exact
@@ -14,15 +14,19 @@
  *   - an account's positions are its own: a foreign account is FORBIDDEN and
  *     an absent position NOT_FOUND, on the wire and on the page;
  *   - commands are refused with their stable codes (malformed, foreign,
- *     operator-only), and an open the backend refuses is shown with the very
- *     code the backend sent, linked to the intent it recorded;
+ *     operator-only, defining a contract included), and an open the backend
+ *     refuses is shown with the very code the backend sent, linked to the
+ *     intent it recorded;
+ *   - an operator defines a contract through the operator page's form, and a
+ *     customer opens a position in it once it is marked;
  *   - no money-shaped figure appears that the API did not send.
  */
 import { randomUUID } from "node:crypto";
 
-import { expect, test, type Page, type Response } from "@playwright/test";
+import { expect, test, type Browser, type Page, type Response } from "@playwright/test";
 
 import { goto } from "./pace.ts";
+import { signIn } from "./sign-in.ts";
 
 const NOTICE = "Simulated value — sandbox only";
 
@@ -271,22 +275,112 @@ test("commands are refused with their stable codes", async ({ page }) => {
   expect(contract.status()).toBe(404);
 });
 
-test("an open is confirmed once, and the page shows exactly what the backend answered", async ({ page }) => {
-  const list = (await (await page.request.get("/v1/advanced/derivatives/contracts?limit=200")).json()) as {
-    items: ContractRow[];
-  };
-  const tradable = list.items.find((item) => !item.settled);
-  // What is missing is not in this suite's reach: no route of the API lists a
-  // derivative contract (openapi.yaml has no POST under
-  // /advanced/derivatives/contracts; contracts are created in-process only,
-  // through instruments.CreateAdvanced, as scripts/advanceddemo does on a
-  // database of its own) and no LOCAL seed creates one. So on a seeded
-  // database there is no contract to open a position in.
-  test.skip(
-    tradable === undefined,
-    "no unsettled derivative contract exists: neither the LOCAL seeds nor any API route create one",
+/**
+ * A contract of the suite's own, defined the way an operator defines one: the
+ * strong-signed-in "admin" fills the form on the derivatives operator page,
+ * which sends POST /advanced/derivatives/contracts through the derivatives
+ * service, and then records the contract's first mark. It is a perpetual on
+ * the seeded SOL/USDC spot pair -- one SOL a contract, a $0.01 tick -- settled
+ * in the sandbox dollar, whose marks stay fresh for an hour so a paced
+ * navigation cannot leave it unpriced.
+ */
+async function defineAndMarkAContract(browser: Browser): Promise<ContractRow> {
+  const admin = await signIn(browser, "admin", true);
+  try {
+    const listed = (await (await admin.page.request.get("/v1/instruments")).json()) as Array<{
+      readonly id: string;
+      readonly canonical_name: string;
+      readonly base_asset?: string;
+    }>;
+    const underlying = listed.find((instrument) => instrument.canonical_name === "SOL/USDC" && instrument.base_asset !== undefined);
+    expect(underlying, "the LOCAL seed lists the SOL/USDC spot pair").toBeDefined();
+    const symbol = `E2E${randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}-PERP`;
+
+    await goto(admin.page, "/advanced/derivatives/clearing-house");
+    await settle(admin.page);
+    const panel = admin.page.getByRole("region", { name: "Define a contract", exact: true });
+    await expect(panel.getByRole("button", { name: "Confirm: define the contract" })).toBeDisabled();
+    await panel.getByLabel("Kind", { exact: true }).selectOption("PERPETUAL");
+    await panel.getByLabel("Symbol", { exact: true }).fill(symbol);
+    await panel.getByLabel("Underlying instrument", { exact: true }).selectOption((underlying as { id: string }).id);
+    await panel.getByLabel("Contract size (base units of the underlying)", { exact: true }).fill("1000000000");
+    await panel.getByLabel("Price scale", { exact: true }).fill("2");
+    await panel.getByLabel("Tick", { exact: true }).fill("0.01");
+    await panel.getByLabel("Funding interval (hours)", { exact: true }).fill("8");
+    await panel.getByLabel("Mark maximum age (seconds)", { exact: true }).fill("3600");
+    await panel.getByLabel("Oracle sources", { exact: true }).fill("e2e-operator");
+    // The form shows exactly what it will send before anything is sent.
+    await expect(panel.locator('[data-field="definition"]')).toContainText(`"symbol":"${symbol}"`);
+    await expect(panel.locator('[data-field="definition"]')).toContainText('"tick_size":"1"');
+    await expect(panel).toContainText("created when you confirm");
+
+    const answered: Promise<Response> = admin.page.waitForResponse(
+      (response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/v1/advanced/derivatives/contracts",
+    );
+    await panel.getByRole("button", { name: "Confirm: define the contract" }).click();
+    const response = await answered;
+    expect(response.status(), await response.text()).toBe(201);
+    const defined = (await response.json()) as ContractRow & { value_domain: string; status: string };
+    expect(defined.value_domain).toBe("SIMULATED");
+    expect(defined.kind).toBe("PERPETUAL");
+    expect(defined.status).toBe("ACTIVE");
+    expect(defined.terms.symbol).toBe(symbol);
+    expect(defined.marked, "a new contract is not marked").toBe(false);
+    expect(defined.settlement_asset.symbol).toBe("SBX-USD");
+    const sent = response.request().headers()["idempotency-key"] ?? "";
+    await expect(panel).toContainText(sent);
+    await expect(panel.getByRole("link", { name: symbol, exact: true })).toBeVisible();
+
+    const mark = await command(admin.page, `/advanced/derivatives/contracts/${defined.id}/marks`, {
+      mark: "150.00",
+      index: "150.00",
+      source: "e2e-operator",
+    });
+    expect(mark.status, JSON.stringify(mark.body)).toBe(200);
+    const read = await admin.page.request.get(`/v1/advanced/derivatives/contracts/${defined.id}`);
+    expect(read.status()).toBe(200);
+    return (await read.json()) as ContractRow;
+  } finally {
+    await admin.context.close();
+  }
+}
+
+test("an operator defines a contract through the operator page, and nobody else may", async ({ page }) => {
+  // A customer's definition is refused before anything is read or written.
+  await goto(page, "/advanced/derivatives");
+  await settle(page);
+  await expectCode(
+    await command(page, "/advanced/derivatives/contracts", {
+      kind: "PERPETUAL",
+      symbol: "E2E-CUSTOMER-PERP",
+      underlying_instrument_id: ABSENT,
+      contract_multiplier: "1",
+      price_scale: 2,
+      tick_size: "1",
+      lot_size: "1",
+      min_quantity: "1",
+      funding_interval_ms: 28_800_000,
+      oracle_max_age_ms: 60_000,
+      oracle_sources: ["e2e"],
+      risk_class: "SPECULATIVE",
+    }),
+    403,
+    "FORBIDDEN",
   );
-  const contract = tradable as ContractRow;
+  const list = (await (await page.request.get("/v1/advanced/derivatives/contracts?limit=200")).json()) as { items: ContractRow[] };
+  expect(list.items.some((item) => item.terms.symbol === "E2E-CUSTOMER-PERP")).toBe(false);
+});
+
+test("an open is confirmed once, and the page shows exactly what the backend answered", async ({ page, browser }) => {
+  // The account posts its margin in the sandbox dollar, which the faucet grants;
+  // a grant beyond its rolling cap is RATE_LIMITED, which means it holds some.
+  await goto(page, "/advanced/derivatives");
+  await settle(page);
+  const own = await accountId(page);
+  const grant = await command(page, "/advanced/transfers/faucet/grants", { account_id: own, amount: "100" });
+  expect([201, 429], JSON.stringify(grant.body)).toContain(grant.status);
+  const contract = await defineAndMarkAContract(browser);
+  expect(contract.marked, "the operator marked it").toBe(true);
 
   await goto(page, `/advanced/derivatives/contracts/${contract.id}`);
   await settle(page);
@@ -315,9 +409,15 @@ test("an open is confirmed once, and the page shows exactly what the backend ans
 
   const answer: unknown = await response.json();
   if (response.ok()) {
-    const trade = answer as { value_domain: string; intent: { id: string } };
+    const trade = answer as { value_domain: string; intent: { id: string }; position?: { id: string; quantity: string } };
     expect(trade.value_domain).toBe("SIMULATED");
     await expect(panel.locator(".callout")).toContainText(trade.intent.id);
+    // The account leaves this spec flat, so no later spec meets a position
+    // whose mark has aged: closed at the fresh mark, exactly once.
+    expect(trade.position?.quantity, "one contract long").toBe("1");
+    const closed = await command(page, `/advanced/derivatives/positions/${trade.position?.id ?? ""}/close`, { mode: "PAPER" });
+    expect(closed.status, JSON.stringify(closed.body)).toBe(200);
+    expect((closed.body as { position?: { status: string } }).position?.status).toBe("CLOSED");
   } else {
     expect(isProblem(answer)).toBe(true);
     const problem = answer as Problem;

@@ -1,10 +1,11 @@
 /**
- * THE CLEARING HOUSE (operator): the counterparty of every derivative
- * position. An operator capitalizes it in a sandbox asset, so a one-sided
- * book is paid from its capital, and reconciles its books against the flow
- * register (reconciliation kind CLEARING). A difference opens a material
- * mismatch record, and while that record is unresolved the backend refuses
- * new derivative risk.
+ * THE CLEARING HOUSE (operator): the derivatives section's operator page.
+ * Here an operator defines a contract (DefineContract.tsx), capitalizes the
+ * clearing house -- the counterparty of every derivative position -- in a
+ * sandbox asset, so a one-sided book is paid from its capital, and reconciles
+ * its books against the flow register (reconciliation kind CLEARING). A
+ * difference opens a material mismatch record, and while that record is
+ * unresolved the backend refuses new derivative risk.
  *
  * The page offers the assets contracts settle in, as the backend lists them;
  * the backend decides what may be funded and by whom.
@@ -26,6 +27,7 @@ import { SimulatedNotice } from "../../../components/SimulatedNotice.tsx";
 import { parseQuantityInput } from "../../../lib/money.ts";
 import { useAdvancedAccount } from "../area.ts";
 import { ScrollTable } from "../shared.tsx";
+import { DefineContractForm } from "./DefineContract.tsx";
 import { ActionKey, Amount, CommandFailure, ConfirmButton, DerivativesNav, TextField, derivativesHref, useActionKey } from "./parts.tsx";
 
 export function ClearingHousePage(): ReactNode {
@@ -44,6 +46,12 @@ export function ClearingHousePage(): ReactNode {
           is decided by the page.
         </p>
       )}
+      <Panel
+        title="Define a contract"
+        description="A dated future, a perpetual or an option, defined through the derivatives service. It needs a recent step-up."
+      >
+        <DefineContractForm />
+      </Panel>
       <AsyncPanel
         query={contracts}
         loadingLabel="Loading the assets contracts settle in…"

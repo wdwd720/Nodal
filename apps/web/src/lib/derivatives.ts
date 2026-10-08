@@ -89,6 +89,18 @@ export type OverrideDecisionsMatchContract = Assert<
   Same<(typeof OVERRIDE_DECISIONS)[number], Schemas["DerivativeOverrideDecisionKind"]>
 >;
 
+export type OptionRight = Schemas["DerivativeOptionRight"];
+export const OPTION_RIGHTS = ["CALL", "PUT"] as const;
+export type OptionRightsMatchContract = Assert<Same<(typeof OPTION_RIGHTS)[number], OptionRight>>;
+
+export type ExerciseStyle = Schemas["DerivativeExerciseStyle"];
+export const EXERCISE_STYLES = ["EUROPEAN", "AMERICAN"] as const;
+export type ExerciseStylesMatchContract = Assert<Same<(typeof EXERCISE_STYLES)[number], ExerciseStyle>>;
+
+export type ContractRiskClass = Schemas["DerivativeRiskClass"];
+export const CONTRACT_RISK_CLASSES = ["MAJOR", "STANDARD", "SPECULATIVE"] as const;
+export type ContractRiskClassesMatchContract = Assert<Same<(typeof CONTRACT_RISK_CLASSES)[number], ContractRiskClass>>;
+
 /**
  * The modes a derivative intent is offered in. The derivatives service runs
  * in PAPER and SANDBOX only; any other mode is the backend's to refuse.
@@ -293,6 +305,158 @@ export function parseInstantInput(raw: string): InputParse {
     return { ok: false, value: "", error: "Write the instant in UTC, such as 2026-10-07T08:00:00Z." };
   }
   return { ok: true, value: new Date(cleaned).toISOString(), error: "" };
+}
+
+/* --------------------------------------------------------------------------
+ * Defining a contract (operator)
+ * ------------------------------------------------------------------------ */
+
+/** What an operator typed into the form that defines a contract. */
+export interface ContractDefinitionInput {
+  readonly kind: DerivativeKind;
+  readonly symbol: string;
+  /** Optional; the backend names the contract by its symbol without one. */
+  readonly name: string;
+  readonly underlyingId: string;
+  /** Empty settles the contract in the sandbox dollar. */
+  readonly settlementId: string;
+  /** Base units of the underlying asset per contract, a whole number. */
+  readonly multiplier: string;
+  readonly priceScale: string;
+  /** A price, written as a decimal no more precise than the price scale. */
+  readonly tick: string;
+  /** Contracts. */
+  readonly lot: string;
+  readonly minimum: string;
+  /** An instant in UTC; a future's and an option's. */
+  readonly expiry: string;
+  /** Whole hours; a perpetual's. */
+  readonly fundingHours: string;
+  /** A price, like the tick; an option's. */
+  readonly strike: string;
+  readonly right: OptionRight;
+  readonly style: ExerciseStyle;
+  /** Whole seconds. */
+  readonly oracleSeconds: string;
+  /** Comma-separated. */
+  readonly sources: string;
+  readonly risk: ContractRiskClass;
+}
+
+export type ContractDefinitionBody = Schemas["DerivativeContractDefinition"];
+
+export type DefinitionParse =
+  | { readonly ok: true; readonly body: ContractDefinitionBody }
+  | { readonly ok: false; readonly error: string };
+
+const UUID_INPUT = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+const SYMBOL_INPUT = /^[A-Z0-9][A-Z0-9._/-]{0,63}$/;
+
+/** A whole number from digits only, within [min, max]; never a numeric parse of free text. */
+function wholeNumber(raw: string, min: number, max: number): number | undefined {
+  const cleaned = raw.trim().replace(/,/g, "");
+  if (!/^[0-9]{1,9}$/.test(cleaned)) return undefined;
+  let value = 0;
+  for (const ch of cleaned) value = value * 10 + "0123456789".indexOf(ch);
+  return value < min || value > max ? undefined : value;
+}
+
+/** A positive whole number as an integer string without leading zeros. */
+function positiveUnits(raw: string): string | undefined {
+  const cleaned = raw.trim().replace(/,/g, "");
+  if (!/^[0-9]{1,38}$/.test(cleaned)) return undefined;
+  const value = cleaned.replace(/^0+(?=[0-9])/, "");
+  return value === "0" ? undefined : value;
+}
+
+/**
+ * A price as its integer mantissa at `scale`: "0.50" at scale 2 is "50". The
+ * decimal point is moved through the digit string; a price more precise than
+ * the scale is refused, never rounded.
+ */
+export function priceMantissa(raw: string, scale: number): string | undefined {
+  const cleaned = raw.trim().replace(/,/g, "");
+  if (!Number.isInteger(scale) || scale < 0 || scale > 18 || !DECIMAL_INPUT.test(cleaned)) return undefined;
+  const dot = cleaned.indexOf(".");
+  const whole = dot < 0 ? cleaned : cleaned.slice(0, dot);
+  const fraction = dot < 0 ? "" : cleaned.slice(dot + 1);
+  if (fraction.length > scale) return undefined;
+  const digits = `${whole}${fraction.padEnd(scale, "0")}`.replace(/^0+(?=[0-9])/, "");
+  return /^0+$/.test(digits) ? undefined : digits;
+}
+
+/**
+ * The definition the form sends, or the first thing wrong with what was typed.
+ * Only the kind's own fields are sent -- an expiry for a future and an option,
+ * a funding interval for a perpetual, a strike, right and style for an option
+ * -- so the request is exactly what the kind takes. Whether the contract can be
+ * settled exactly, and whether its symbol is free, is the backend's to decide.
+ */
+export function buildContractDefinition(input: ContractDefinitionInput): DefinitionParse {
+  const symbol = input.symbol.trim().toUpperCase();
+  if (!SYMBOL_INPUT.test(symbol)) {
+    return { ok: false, error: "A symbol is letters and digits, optionally with . _ / -, at most 64 characters." };
+  }
+  const underlying = input.underlyingId.trim().toLowerCase();
+  if (!UUID_INPUT.test(underlying)) return { ok: false, error: "Choose the underlying instrument." };
+  const settlement = input.settlementId.trim().toLowerCase();
+  if (settlement !== "" && !UUID_INPUT.test(settlement)) {
+    return { ok: false, error: "The settlement asset id is a UUID, or empty for the sandbox dollar." };
+  }
+  const multiplier = positiveUnits(input.multiplier);
+  if (multiplier === undefined) {
+    return { ok: false, error: "The contract size is a whole number of base units of the underlying, at least one." };
+  }
+  const scale = wholeNumber(input.priceScale, 0, 18);
+  if (scale === undefined) return { ok: false, error: "The price scale is a whole number from 0 to 18." };
+  const tick = priceMantissa(input.tick, scale);
+  if (tick === undefined) {
+    return { ok: false, error: `The tick is a price above zero with at most ${String(scale)} decimal places.` };
+  }
+  const lot = positiveUnits(input.lot);
+  if (lot === undefined) return { ok: false, error: "The lot size is a whole number of contracts, at least one." };
+  const minimum = positiveUnits(input.minimum);
+  if (minimum === undefined) return { ok: false, error: "The minimum is a whole number of contracts, at least one." };
+  const seconds = wholeNumber(input.oracleSeconds, 1, 86_400);
+  if (seconds === undefined) return { ok: false, error: "The mark's maximum age is a whole number of seconds, 1 to 86400." };
+  const sources = input.sources
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s !== "");
+  if (sources.length === 0) return { ok: false, error: "Name at least one oracle source." };
+
+  const name = input.name.trim();
+  const body: ContractDefinitionBody = {
+    kind: input.kind,
+    symbol,
+    underlying_instrument_id: underlying,
+    contract_multiplier: multiplier,
+    price_scale: scale,
+    tick_size: tick,
+    lot_size: lot,
+    min_quantity: minimum,
+    oracle_max_age_ms: seconds * 1_000,
+    oracle_sources: sources,
+    risk_class: input.risk,
+    ...(name === "" ? {} : { canonical_name: name }),
+    ...(settlement === "" ? {} : { settlement_asset_id: settlement }),
+  };
+  if (input.kind === "PERPETUAL") {
+    const hours = wholeNumber(input.fundingHours, 1, 168);
+    if (hours === undefined) return { ok: false, error: "The funding interval is a whole number of hours, 1 to 168." };
+    return { ok: true, body: { ...body, funding_interval_ms: hours * 3_600_000 } };
+  }
+  const expiry = parseInstantInput(input.expiry);
+  if (!expiry.ok) return { ok: false, error: `Expiry: ${expiry.error}` };
+  if (input.kind === "FUTURE") return { ok: true, body: { ...body, expiry: expiry.value } };
+  const strike = priceMantissa(input.strike, scale);
+  if (strike === undefined) {
+    return { ok: false, error: `The strike is a price above zero with at most ${String(scale)} decimal places.` };
+  }
+  return {
+    ok: true,
+    body: { ...body, expiry: expiry.value, strike_mantissa: strike, option_right: input.right, exercise_style: input.style },
+  };
 }
 
 /* --------------------------------------------------------------------------

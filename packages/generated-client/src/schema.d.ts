@@ -3339,7 +3339,51 @@ export interface paths {
             };
         };
         put?: never;
-        post?: never;
+        /**
+         * Define a future, a perpetual or an option (operator; requires step-up)
+         * @description The derivatives service defines the contract (internal/derivatives DefineContract): an instrument of the canonical model, created the one way every instrument is, whose terms the service resolves exactly as it will trade, run and settle them before anything is written. A contract it could not settle exactly -- one tick of one contract that is not a whole number of base units of the settlement asset, a strike off the tick grid -- one that would settle in anything but SIMULATED value or in a supply-controlled asset, one whose underlying instrument names no asset, and a dated one expiring before now are refused, and nothing is written. Every contract trades 24x7 on the sandbox venue, settles by payment in its settlement asset (CASH, never by delivery), is margined by its kind's model, carries no corporate actions and cannot be transferred. A symbol names one contract (CONFLICT otherwise). Without settlement_asset_id the contract settles in the sandbox dollar, provisioned if this deployment has none yet. The contract is defined ACTIVE and unmarked: nothing trades in it until an operator records a mark.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DerivativeContractDefinition"];
+                };
+            };
+            responses: {
+                /** @description Replay of a definition already made under this Idempotency-Key */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DerivativeContract"];
+                    };
+                };
+                /** @description The contract as defined (value domain SIMULATED) */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DerivativeContract"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -16692,6 +16736,36 @@ export interface components {
             terms_version: number;
             value_domain: components["schemas"]["ValueDomainSimulated"];
         };
+        /** @description What an operator chooses about a new contract; the service fixes the rest of its terms. Prices are integer mantissas at price_scale, in whole settlement units per whole unit of the underlying: tick_size and strike_mantissa (at scale 2, a tick of 50 is 0.50). contract_multiplier is base units of the underlying asset per contract; lot_size and min_quantity are contracts. expiry is required of a FUTURE and an OPTION and refused for a PERPETUAL, funding_interval_ms is a PERPETUAL's alone, and strike_mantissa, option_right and exercise_style an OPTION's alone. */
+        DerivativeContractDefinition: {
+            /** @description The instrument's name; the symbol when absent */
+            canonical_name?: string;
+            contract_multiplier: components["schemas"]["Quantity"];
+            exercise_style?: components["schemas"]["DerivativeExerciseStyle"];
+            expiry?: components["schemas"]["Timestamp"];
+            /** Format: int64 */
+            funding_interval_ms?: number;
+            kind: components["schemas"]["DerivativeKind"];
+            lot_size: components["schemas"]["Quantity"];
+            min_quantity: components["schemas"]["Quantity"];
+            option_right?: components["schemas"]["DerivativeOptionRight"];
+            /**
+             * Format: int64
+             * @description A mark older than this prices nothing
+             */
+            oracle_max_age_ms: number;
+            oracle_sources: string[];
+            price_scale: number;
+            risk_class: components["schemas"]["DerivativeRiskClass"];
+            /** @description A SIMULATED asset that no controller owns; the sandbox dollar when absent */
+            settlement_asset_id?: components["schemas"]["UUID"];
+            strike_mantissa?: components["schemas"]["Quantity"];
+            /** @description Names the contract; no other contract has it */
+            symbol: string;
+            tick_size: components["schemas"]["Quantity"];
+            /** @description The instrument whose base asset the contract is on, such as a spot pair */
+            underlying_instrument_id: components["schemas"]["UUID"];
+        };
         DerivativeContractList: {
             items: components["schemas"]["DerivativeContract"][];
             value_domain: components["schemas"]["ValueDomainSimulated"];
@@ -16706,6 +16780,11 @@ export interface components {
             /** @description Contracts to exercise; absent exercises every one held */
             quantity?: components["schemas"]["Quantity"];
         };
+        /**
+         * @description An AMERICAN option may be exercised by its holder before expiry; both are exercised automatically at expiry when in the money
+         * @enum {string}
+         */
+        DerivativeExerciseStyle: "EUROPEAN" | "AMERICAN";
         DerivativeFill: {
             account_id: components["schemas"]["UUID"];
             /** @description What the customer received (> 0) or paid (< 0) the clearing house for this fill */
@@ -16862,6 +16941,8 @@ export interface components {
             vol: components["schemas"]["DerivativeModelDecimal"];
         };
         /** @enum {string} */
+        DerivativeOptionRight: "CALL" | "PUT";
+        /** @enum {string} */
         DerivativeOverrideDecisionKind: "APPROVED" | "REJECTED";
         /** @enum {string} */
         DerivativeOverrideStatus: "PROPOSED" | "APPROVED" | "REJECTED";
@@ -16973,6 +17054,11 @@ export interface components {
             notional: components["schemas"]["Quantity"];
             scenario_loss: components["schemas"]["Quantity"];
         };
+        /**
+         * @description The contract's own risk class. Its margin rates follow the risk class of its underlying asset (policy.linear)
+         * @enum {string}
+         */
+        DerivativeRiskClass: "MAJOR" | "STANDARD" | "SPECULATIVE";
         /** @enum {string} */
         DerivativeRunKind: "VARIATION_MARGIN" | "FUNDING";
         DerivativeRunRequest: {

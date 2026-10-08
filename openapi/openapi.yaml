@@ -1545,6 +1545,38 @@ paths:
           content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeContractList" } } }
         "400": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [advanced]
+      summary: Define a future, a perpetual or an option (operator; requires step-up)
+      description: >-
+        The derivatives service defines the contract (internal/derivatives DefineContract): an instrument of
+        the canonical model, created the one way every instrument is, whose terms the service resolves
+        exactly as it will trade, run and settle them before anything is written. A contract it could not
+        settle exactly -- one tick of one contract that is not a whole number of base units of the
+        settlement asset, a strike off the tick grid -- one that would settle in anything but SIMULATED value
+        or in a supply-controlled asset, one whose underlying instrument names no asset, and a dated one
+        expiring before now are refused, and nothing is written. Every contract trades 24x7 on the sandbox
+        venue, settles by payment in its settlement asset (CASH, never by delivery), is margined by its kind's
+        model, carries no corporate actions and cannot be transferred. A symbol names one contract (CONFLICT
+        otherwise). Without settlement_asset_id the contract settles in the sandbox dollar, provisioned if this
+        deployment has none yet. The contract is
+        defined ACTIVE and unmarked: nothing trades in it until an operator records a mark.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeContractDefinition" } } }
+      responses:
+        "201":
+          description: The contract as defined (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeContract" } } }
+        "200":
+          description: Replay of a definition already made under this Idempotency-Key
+          content: { application/json: { schema: { $ref: "#/components/schemas/DerivativeContract" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
   /advanced/derivatives/contracts/{instrumentId}:
     get:
       tags: [advanced]
@@ -7867,6 +7899,50 @@ components:
       properties:
         value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
         items: { type: array, items: { $ref: "#/components/schemas/DerivativeContract" } }
+    DerivativeOptionRight:
+      type: string
+      enum: [CALL, PUT]
+      x-enum-varnames: [DerivativeOptionCall, DerivativeOptionPut]
+    DerivativeExerciseStyle:
+      type: string
+      enum: [EUROPEAN, AMERICAN]
+      x-enum-varnames: [DerivativeExerciseEuropean, DerivativeExerciseAmerican]
+      description: An AMERICAN option may be exercised by its holder before expiry; both are exercised automatically at expiry when in the money
+    DerivativeRiskClass:
+      type: string
+      enum: [MAJOR, STANDARD, SPECULATIVE]
+      x-enum-varnames: [DerivativeRiskMajor, DerivativeRiskStandard, DerivativeRiskSpeculative]
+      description: The contract's own risk class. Its margin rates follow the risk class of its underlying asset (policy.linear)
+    DerivativeContractDefinition:
+      type: object
+      description: >-
+        What an operator chooses about a new contract; the service fixes the rest of its terms. Prices are
+        integer mantissas at price_scale, in whole settlement units per whole unit of the underlying:
+        tick_size and strike_mantissa (at scale 2, a tick of 50 is 0.50). contract_multiplier is base units of
+        the underlying asset per contract; lot_size and min_quantity are contracts. expiry is required of a
+        FUTURE and an OPTION and refused for a PERPETUAL, funding_interval_ms is a PERPETUAL's alone, and
+        strike_mantissa, option_right and exercise_style an OPTION's alone.
+      required: [kind, symbol, underlying_instrument_id, contract_multiplier, price_scale, tick_size, lot_size, min_quantity,
+                 oracle_max_age_ms, oracle_sources, risk_class]
+      properties:
+        kind: { $ref: "#/components/schemas/DerivativeKind" }
+        symbol: { type: string, pattern: '^[A-Z0-9][A-Z0-9._/-]{0,63}$', description: Names the contract; no other contract has it }
+        canonical_name: { type: string, minLength: 1, maxLength: 200, description: The instrument's name; the symbol when absent }
+        underlying_instrument_id: { $ref: "#/components/schemas/UUID", description: "The instrument whose base asset the contract is on, such as a spot pair" }
+        settlement_asset_id: { $ref: "#/components/schemas/UUID", description: A SIMULATED asset that no controller owns; the sandbox dollar when absent }
+        contract_multiplier: { $ref: "#/components/schemas/Quantity" }
+        price_scale: { type: integer, minimum: 0, maximum: 18 }
+        tick_size: { $ref: "#/components/schemas/Quantity" }
+        lot_size: { $ref: "#/components/schemas/Quantity" }
+        min_quantity: { $ref: "#/components/schemas/Quantity" }
+        expiry: { $ref: "#/components/schemas/Timestamp" }
+        funding_interval_ms: { type: integer, format: int64, minimum: 1 }
+        strike_mantissa: { $ref: "#/components/schemas/Quantity" }
+        option_right: { $ref: "#/components/schemas/DerivativeOptionRight" }
+        exercise_style: { $ref: "#/components/schemas/DerivativeExerciseStyle" }
+        oracle_max_age_ms: { type: integer, format: int64, minimum: 1, description: A mark older than this prices nothing }
+        oracle_sources: { type: array, minItems: 1, items: { type: string, minLength: 1, maxLength: 100 } }
+        risk_class: { $ref: "#/components/schemas/DerivativeRiskClass" }
     DerivativeRequirement:
       type: object
       description: The margin requirement at the mark, in base units of the settlement asset (every rounding up)

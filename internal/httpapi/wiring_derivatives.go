@@ -148,23 +148,31 @@ func (a derivativesAdapter) Contract(ctx context.Context, iid instruments.Instru
 		if err != nil {
 			return err
 		}
-		if out, err = a.contractView(ctx, tx, a.lookup(tx), ins, ver); err != nil {
-			return err
-		}
-		if ins.Type != instruments.TypeFuture && ins.Type != instruments.TypeOption {
-			return nil
-		}
-		// A dated contract read on its own carries what the settlement rule
-		// says about it now, and its override proposals.
-		preview, err := a.svc.SettlementPreview(ctx, tx, iid)
-		if err != nil {
-			return err
-		}
-		out.Preview = &preview
-		out.Overrides, err = derivatives.SettlementOverrides(ctx, tx, iid)
+		out, err = a.contractDetail(ctx, tx, ins, ver)
 		return err
 	})
 	return out, err
+}
+
+// contractDetail is a contract read on its own: a dated one also carries what
+// the settlement rule says about it now, and its override proposals.
+func (a derivativesAdapter) contractDetail(ctx context.Context, tx pgx.Tx, ins instruments.Instrument, ver instruments.Version) (DerivativeContractView, error) {
+	out, err := a.contractView(ctx, tx, a.lookup(tx), ins, ver)
+	if err != nil {
+		return DerivativeContractView{}, err
+	}
+	if ins.Type != instruments.TypeFuture && ins.Type != instruments.TypeOption {
+		return out, nil
+	}
+	preview, err := a.svc.SettlementPreview(ctx, tx, ins.ID)
+	if err != nil {
+		return DerivativeContractView{}, err
+	}
+	out.Preview = &preview
+	if out.Overrides, err = derivatives.SettlementOverrides(ctx, tx, ins.ID); err != nil {
+		return DerivativeContractView{}, err
+	}
+	return out, nil
 }
 
 func (a derivativesAdapter) contractView(ctx context.Context, q db.Querier, lk *derivativeLookup, ins instruments.Instrument, ver instruments.Version) (DerivativeContractView, error) {
@@ -632,6 +640,36 @@ func derivativesCaller(ctx context.Context) (security.Principal, error) {
 }
 
 // --- the operator's commands --------------------------------------------------
+
+// DefineContract defines a contract through the service, as the calling
+// operator, in one transaction with reading it back.
+func (a derivativesAdapter) DefineContract(ctx context.Context, c DerivativeDefineCommand) (DerivativeContractView, error) {
+	actor, err := derivativesOperator(ctx)
+	if err != nil {
+		return DerivativeContractView{}, err
+	}
+	var out DerivativeContractView
+	err = a.write(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		def := c.Definition
+		def.Actor = actor
+		if c.DefaultSettlement {
+			// The platform's one sandbox dollar, provisioned on first use
+			// inside this transaction exactly as the faucet provisions it.
+			usd, err := econ.EnsureSandboxDollar(ctx, tx)
+			if err != nil {
+				return err
+			}
+			def.SettlementAssetID = usd.ID
+		}
+		ins, ver, err := a.svc.DefineContract(ctx, tx, def)
+		if err != nil {
+			return err
+		}
+		out, err = a.contractDetail(ctx, tx, ins, ver)
+		return err
+	})
+	return out, err
+}
 
 func (a derivativesAdapter) RecordMark(ctx context.Context, c DerivativeMarkCommand) (derivatives.Mark, error) {
 	var out derivatives.Mark

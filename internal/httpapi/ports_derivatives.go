@@ -57,6 +57,10 @@ type DerivativesPort interface {
 	Exercise(ctx context.Context, c DerivativeReduceCommand) (DerivativeTradeView, error)
 
 	// The operator side of the sandbox.
+	//
+	// DefineContract defines a contract through the service, as the calling
+	// operator, and answers it as Contract would read it.
+	DefineContract(ctx context.Context, c DerivativeDefineCommand) (DerivativeContractView, error)
 	RecordMark(ctx context.Context, c DerivativeMarkCommand) (derivatives.Mark, error)
 	RunVariationMargin(ctx context.Context, c DerivativeRunCommand) (DerivativeRunView, error)
 	RunFunding(ctx context.Context, c DerivativeRunCommand) (DerivativeRunView, error)
@@ -210,6 +214,14 @@ type DerivativeReduceCommand struct {
 type DerivativePriceInput struct {
 	Mantissa money.Quantity
 	Scale    int32
+}
+
+// DerivativeDefineCommand defines a contract. The definition is exactly what
+// the operator sent; the adapter names the calling operator as its actor.
+// DefaultSettlement settles the contract in the sandbox dollar.
+type DerivativeDefineCommand struct {
+	Definition        derivatives.ContractDefinition
+	DefaultSettlement bool
 }
 
 // DerivativeMarkCommand records a sandbox mark.

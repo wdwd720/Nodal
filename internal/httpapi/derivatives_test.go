@@ -76,6 +76,7 @@ type fakeDerivatives struct {
 	lastCursor   string
 	lastAnalytic derivatives.AnalyticsRequest
 	lastOpen     DerivativeOpenCommand
+	lastDefine   DerivativeDefineCommand
 	lastReduce   DerivativeReduceCommand
 	lastMark     DerivativeMarkCommand
 	lastRun      DerivativeRunCommand
@@ -216,6 +217,14 @@ func (f *fakeDerivatives) Exercise(_ context.Context, c DerivativeReduceCommand)
 	f.lastReduce = c
 	f.mu.Unlock()
 	return f.tradeAnswer()
+}
+
+func (f *fakeDerivatives) DefineContract(_ context.Context, c DerivativeDefineCommand) (DerivativeContractView, error) {
+	f.called("DefineContract")
+	f.mu.Lock()
+	f.lastDefine = c
+	f.mu.Unlock()
+	return f.contract, f.err
 }
 
 func (f *fakeDerivatives) RecordMark(_ context.Context, c DerivativeMarkCommand) (derivatives.Mark, error) {
@@ -489,6 +498,17 @@ func openBody() map[string]any {
 	}
 }
 
+// defineBody is a valid definition of a perpetual on the underlying spot
+// pair, settled in the sandbox dollar.
+func defineBody() map[string]any {
+	return map[string]any{
+		"kind": "PERPETUAL", "symbol": "SBXBTC-PERP", "underlying_instrument_id": testInstrument.String(),
+		"contract_multiplier": "1000000", "price_scale": 2, "tick_size": "50", "lot_size": "1", "min_quantity": "1",
+		"funding_interval_ms": 28_800_000, "oracle_max_age_ms": 60_000, "oracle_sources": []string{"operator"},
+		"risk_class": "SPECULATIVE",
+	}
+}
+
 // overrideProposalBody is a valid settlement override proposal at price.
 func overrideProposalBody(price string) map[string]any {
 	return map[string]any{"method": "PROPOSE_OVERRIDE", "price": price, "reason": "the feed stalled before expiry",
@@ -511,6 +531,8 @@ func derivativeMutations() []derivativeMutation {
 	instr := derivBase + "/contracts/" + testDerivInstr.String()
 	pos := derivBase + "/positions/" + testDerivPosition.String()
 	return []derivativeMutation{
+		{name: "define", path: derivBase + "/contracts", body: defineBody(), method: "DefineContract", operator: true,
+			status: http.StatusCreated, changed: func() map[string]any { b := defineBody(); b["tick_size"] = "100"; return b }()},
 		{name: "open", path: derivBase + "/positions", body: openBody(), method: "Open", status: http.StatusCreated,
 			changed: func() map[string]any { b := openBody(); b["quantity"] = "11"; return b }()},
 		{name: "close", path: pos + "/close", body: map[string]any{"mode": "PAPER"}, method: "Close", status: http.StatusOK,
@@ -993,7 +1015,7 @@ func TestDerivatives_AServiceReplayIsNotACreation(t *testing.T) {
 // clearing house) -- not to record a mark or reconcile.
 func TestDerivatives_OperatorActionsNeedOperateAndStepUpWhereValueMoves(t *testing.T) {
 	t.Parallel()
-	stepUp := map[string]bool{"variation margin": true, "funding": true, "settlement": true, "settlement proposal": true,
+	stepUp := map[string]bool{"define": true, "variation margin": true, "funding": true, "settlement": true, "settlement proposal": true,
 		"settlement approval": true, "settlement rejection": true, "clearing funding": true}
 	for _, m := range derivativeMutations() {
 		if !m.operator {
@@ -1355,4 +1377,83 @@ func TestDerivatives_ADatedContractCarriesItsSettlementPreviewAndProposals(t *te
 	require.NotNil(t, c.SettlementOverrides)
 	require.Len(t, *c.SettlementOverrides, 1)
 	assert.Equal(t, api.DerivativeOverrideProposed, (*c.SettlementOverrides)[0].Status)
+}
+
+// A definition reaches the service exactly as it was sent -- an option with
+// every field, a multiplier beyond int64, the expiry in UTC -- with no actor
+// of the client's choosing (the adapter names the session's operator) and the
+// sandbox dollar when no settlement asset is named. The answer is the contract
+// as read back, created. A malformed field never reaches the service; what the
+// fields mean is the service's, and its refusal keeps its code.
+func TestDerivatives_ADefinitionReachesTheServiceExactlyAsSent(t *testing.T) {
+	t.Parallel()
+	h, fd := newDerivativesHarness(t)
+	op := operatorPrincipal()
+	h.as(&op)
+	settle := assets.NewAssetID()
+	option := map[string]any{
+		"kind": "OPTION", "symbol": "SBXBTC-C-65000", "canonical_name": "SBX-BTC call 65,000",
+		"underlying_instrument_id": testInstrument.String(), "settlement_asset_id": settle.String(),
+		"contract_multiplier": "123456789012345678901234", "price_scale": 2, "tick_size": "50", "lot_size": "1", "min_quantity": "2",
+		"expiry": "2026-11-06T17:00:00+02:00", "strike_mantissa": "6500000", "option_right": "CALL", "exercise_style": "AMERICAN",
+		"oracle_max_age_ms": 60_000, "oracle_sources": []string{"oracle-a", "oracle-b"}, "risk_class": "MAJOR",
+	}
+	res := h.do(http.MethodPost, derivBase+"/contracts", option, "Idempotency-Key", "define-exact-0001")
+	require.Equal(t, http.StatusCreated, res.Code, "body=%s", res.Body.String())
+	assert.Equal(t, "SIMULATED", res.raw()["value_domain"])
+	assert.Equal(t, testDerivInstr.String(), res.raw()["id"], "the answer is the contract the adapter read back")
+	require.Equal(t, 1, fd.count("DefineContract"))
+
+	got := fd.lastDefine
+	assert.False(t, got.DefaultSettlement)
+	d := got.Definition
+	assert.Equal(t, instruments.TypeOption, d.Kind)
+	assert.Equal(t, "SBXBTC-C-65000", d.Symbol)
+	assert.Equal(t, "SBX-BTC call 65,000", d.CanonicalName)
+	assert.Equal(t, testInstrument, d.UnderlyingInstrumentID)
+	assert.Equal(t, settle, d.SettlementAssetID)
+	assert.Equal(t, "123456789012345678901234", d.ContractMultiplier.String(), "beyond int64, exactly")
+	assert.Equal(t, int32(2), d.PriceScale)
+	assert.Equal(t, "50", d.TickSize.String())
+	assert.Equal(t, "1", d.LotSize.String())
+	assert.Equal(t, "2", d.MinQuantity.String())
+	require.NotNil(t, d.Expiry)
+	assert.Equal(t, time.Date(2026, 11, 6, 15, 0, 0, 0, time.UTC), *d.Expiry)
+	assert.Equal(t, time.UTC, d.Expiry.Location())
+	require.NotNil(t, d.StrikeMantissa)
+	assert.Equal(t, "6500000", d.StrikeMantissa.String())
+	assert.Equal(t, instruments.Call, d.OptionRight)
+	assert.Equal(t, instruments.American, d.ExerciseStyle)
+	assert.Equal(t, int64(60_000), d.OracleMaxAgeMS)
+	assert.Equal(t, []string{"oracle-a", "oracle-b"}, d.OracleSources)
+	assert.Equal(t, assets.RiskMajor, d.RiskClass)
+	assert.Equal(t, econ.Actor{}, d.Actor, "the actor is never the client's to name")
+
+	res = h.do(http.MethodPost, derivBase+"/contracts", defineBody(), "Idempotency-Key", "define-default-01")
+	require.Equal(t, http.StatusCreated, res.Code, "body=%s", res.Body.String())
+	assert.True(t, fd.lastDefine.DefaultSettlement, "no settlement asset named: the sandbox dollar")
+	assert.True(t, fd.lastDefine.Definition.SettlementAssetID.IsZero())
+	assert.Equal(t, int64(28_800_000), fd.lastDefine.Definition.FundingIntervalMS)
+
+	for field, value := range map[string]any{
+		"kind": "SWAP", "risk_class": "UNSUPPORTED", "price_scale": 19, "tick_size": "0.5", "contract_multiplier": "1e6",
+		"lot_size": "", "min_quantity": "one", "strike_mantissa": "65000.5", "option_right": "STRADDLE",
+		"exercise_style": "BERMUDAN", "underlying_instrument_id": "6f1c2d9e-8b7a-4c3d-9e2f-1a2b3c4d5e6f",
+	} {
+		b := map[string]any{}
+		for k, v := range option {
+			b[k] = v
+		}
+		b[field] = value
+		res := h.do(http.MethodPost, derivBase+"/contracts", b, "Idempotency-Key", "define-bad-"+strings.ReplaceAll(field, "_", "-"))
+		require.Equal(t, http.StatusBadRequest, res.Code, "%s=%v body=%s", field, value, res.Body.String())
+		assert.Equal(t, errs.CodeValidationFailed, res.problem().Code, field)
+	}
+	assert.Equal(t, 2, fd.count("DefineContract"), "a malformed definition never reaches the service")
+
+	fd.err = errs.New(errs.CodeConflict, "derivatives: a contract with this symbol already exists").WithField("symbol", "SBXBTC-PERP")
+	res = h.do(http.MethodPost, derivBase+"/contracts", defineBody(), "Idempotency-Key", "define-conflict-1")
+	require.Equal(t, http.StatusConflict, res.Code, "body=%s", res.Body.String())
+	assert.Equal(t, errs.CodeConflict, res.problem().Code)
+	assert.Equal(t, "SBXBTC-PERP", res.problem().Fields["symbol"])
 }

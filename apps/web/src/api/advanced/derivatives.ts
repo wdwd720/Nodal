@@ -39,6 +39,7 @@ import {
   SETTLEMENT_KINDS,
   SETTLEMENT_METHODS,
   VALUATION_STATUSES,
+  type ContractDefinitionBody,
   type DerivativeKind,
   type DerivativeSide,
   type FlowKind,
@@ -882,6 +883,29 @@ export function useExerciseDerivativePosition(): UseMutationResult<DerivativeTra
 /* --------------------------------------------------------------------------
  * The operator's commands
  * ------------------------------------------------------------------------ */
+
+export interface DefineContractInput {
+  /** Exactly what the form built (src/lib/derivatives.ts buildContractDefinition). */
+  readonly definition: ContractDefinitionBody;
+  readonly idempotencyKey: string;
+}
+
+/** Defines a contract through the derivatives service. The answer is the contract as the backend reads it back. */
+export function useDefineDerivativeContract(): UseMutationResult<DerivativeContract, unknown, DefineContractInput> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: DefineContractInput) => {
+      const { data } = await api.POST("/advanced/derivatives/contracts", {
+        ...idempotent(input.idempotencyKey),
+        body: input.definition,
+      });
+      return checkContract(data, "/advanced/derivatives/contracts");
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: derivativesKeys.all });
+    },
+  });
+}
 
 export interface RecordMarkInput {
   readonly instrumentId: string;

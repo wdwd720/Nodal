@@ -485,6 +485,113 @@ func derivativeTradeCommand(v DerivativeTradeView, err error) (api.DerivativeTra
 
 // --- the operator's commands ------------------------------------------------
 
+// PostAdvancedDerivativesContracts defines a contract through the derivatives
+// service. The handler reads the definition exactly as sent -- every quantity
+// an integer string, every enumeration one the contract declares -- and the
+// service decides everything it means: whether the kind's fields are the
+// kind's, whether the contract could be settled exactly, whether its symbol
+// is free.
+func (s *Server) PostAdvancedDerivativesContracts(ctx context.Context, request api.PostAdvancedDerivativesContractsRequestObject) (api.PostAdvancedDerivativesContractsResponseObject, error) {
+	port := s.opts.Ports.Derivatives
+	if port == nil {
+		return nil, errNotWired(derivativesWhat)
+	}
+	if request.Body == nil {
+		return nil, validationError("body", "a request body is required")
+	}
+	cmd, err := derivativeDefinition(request.Body)
+	if err != nil {
+		return nil, err
+	}
+	res, err := runCommand(ctx, s, request.Params.IdempotencyKey, func(ctx context.Context) (api.DerivativeContract, commandMeta, error) {
+		v, derr := port.DefineContract(ctx, cmd)
+		if derr != nil {
+			return api.DerivativeContract{}, commandMeta{}, derr
+		}
+		c, cerr := toAPIDerivativeContract(v)
+		if cerr != nil {
+			return api.DerivativeContract{}, commandMeta{}, cerr
+		}
+		return c, commandMeta{Status: http.StatusCreated, ResourceType: "derivative_contract", ResourceID: v.Instrument.ID.String()}, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if res.Replayed {
+		return api.PostAdvancedDerivativesContracts200JSONResponse(res.Value), nil
+	}
+	return api.PostAdvancedDerivativesContracts201JSONResponse(res.Value), nil
+}
+
+// derivativeDefinition reads a contract definition into the service's shape.
+func derivativeDefinition(b *api.DerivativeContractDefinition) (DerivativeDefineCommand, error) {
+	if !b.Kind.Valid() {
+		return DerivativeDefineCommand{}, validationError("kind", "kind must be FUTURE, PERPETUAL or OPTION")
+	}
+	if !b.RiskClass.Valid() {
+		return DerivativeDefineCommand{}, validationError("risk_class", "risk_class must be MAJOR, STANDARD or SPECULATIVE")
+	}
+	if b.PriceScale < 0 || b.PriceScale > 18 {
+		return DerivativeDefineCommand{}, validationError("price_scale", "price_scale must be within 0..18")
+	}
+	under, err := instruments.ParseInstrumentID(b.UnderlyingInstrumentId.String())
+	if err != nil || under.IsZero() {
+		return DerivativeDefineCommand{}, validationError("underlying_instrument_id", "underlying_instrument_id must be a canonical UUID")
+	}
+	settlement, err := parseOptionalDerivativeAsset(b.SettlementAssetId)
+	if err != nil {
+		return DerivativeDefineCommand{}, validationError("settlement_asset_id", "settlement_asset_id must be a canonical UUID")
+	}
+	d := derivatives.ContractDefinition{
+		Kind: instruments.InstrumentType(b.Kind), Symbol: b.Symbol, CanonicalName: deref(b.CanonicalName),
+		UnderlyingInstrumentID: under, SettlementAssetID: settlement,
+		PriceScale:     int32(b.PriceScale), // #nosec G115 -- bounded to 0..18 above
+		OracleMaxAgeMS: b.OracleMaxAgeMs, OracleSources: append([]string{}, b.OracleSources...),
+		RiskClass: assets.RiskClass(b.RiskClass),
+	}
+	for _, f := range []struct {
+		name string
+		raw  api.Quantity
+		dst  *money.Quantity
+	}{
+		{"contract_multiplier", b.ContractMultiplier, &d.ContractMultiplier},
+		{"tick_size", b.TickSize, &d.TickSize},
+		{"lot_size", b.LotSize, &d.LotSize},
+		{"min_quantity", b.MinQuantity, &d.MinQuantity},
+	} {
+		if *f.dst, err = parseDerivativeQuantity(f.name, f.raw); err != nil {
+			return DerivativeDefineCommand{}, err
+		}
+	}
+	if b.Expiry != nil {
+		expiry := b.Expiry.UTC()
+		d.Expiry = &expiry
+	}
+	if b.FundingIntervalMs != nil {
+		d.FundingIntervalMS = *b.FundingIntervalMs
+	}
+	if b.StrikeMantissa != nil {
+		strike, err := parseDerivativeQuantity("strike_mantissa", *b.StrikeMantissa)
+		if err != nil {
+			return DerivativeDefineCommand{}, err
+		}
+		d.StrikeMantissa = &strike
+	}
+	if b.OptionRight != nil {
+		if !b.OptionRight.Valid() {
+			return DerivativeDefineCommand{}, validationError("option_right", "option_right must be CALL or PUT")
+		}
+		d.OptionRight = instruments.OptionRight(*b.OptionRight)
+	}
+	if b.ExerciseStyle != nil {
+		if !b.ExerciseStyle.Valid() {
+			return DerivativeDefineCommand{}, validationError("exercise_style", "exercise_style must be EUROPEAN or AMERICAN")
+		}
+		d.ExerciseStyle = instruments.ExerciseStyle(*b.ExerciseStyle)
+	}
+	return DerivativeDefineCommand{Definition: d, DefaultSettlement: b.SettlementAssetId == nil}, nil
+}
+
 // PostAdvancedDerivativesContractsInstrumentIdMarks records a sandbox mark.
 func (s *Server) PostAdvancedDerivativesContractsInstrumentIdMarks(ctx context.Context, request api.PostAdvancedDerivativesContractsInstrumentIdMarksRequestObject) (api.PostAdvancedDerivativesContractsInstrumentIdMarksResponseObject, error) {
 	port := s.opts.Ports.Derivatives

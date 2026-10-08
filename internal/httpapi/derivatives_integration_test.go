@@ -717,3 +717,92 @@ func TestIntegration_ADerivativeSettlesByTheRuleOrByATwoOperatorOverrideThroughH
 	assert.True(t, replay.Settlement.Replay)
 	assert.Equal(t, "6700000", replay.Settlement.PriceMantissa)
 }
+
+// TestIntegration_AnOperatorDefinesAContractThatTradesThroughHTTP: an
+// operator defines a perpetual over the API, through the derivatives service's
+// definition, on the underlying of the world's own perpetual and settled by
+// default in the sandbox dollar. It is answered, listed and read exactly as
+// defined; once marked, a customer opens a position in it. Its key replays it,
+// its symbol is taken, a customer may not define one, and a definition the
+// service could not settle exactly is refused with nothing written.
+func TestIntegration_AnOperatorDefinesAContractThatTradesThroughHTTP(t *testing.T) {
+	w := newDerivativesWorld(t)
+	res := w.get(w.operator, derivBase+"/contracts/"+w.perp.String())
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	var existing api.DerivativeContract
+	res.json(&existing)
+	require.NotNil(t, existing.Terms.UnderlyingInstrumentId)
+	underlying := existing.Terms.UnderlyingInstrumentId.String()
+
+	symbol := "DEF" + strings.ToUpper(strings.ReplaceAll(uuid.NewString(), "-", "")[:8]) + "-PERP"
+	definition := func(symbol, multiplier string) map[string]any {
+		return map[string]any{
+			"kind": "PERPETUAL", "symbol": symbol, "underlying_instrument_id": underlying, "contract_multiplier": multiplier,
+			"price_scale": 2, "tick_size": "50", "lot_size": "1", "min_quantity": "1", "funding_interval_ms": 8 * 3600 * 1000,
+			"oracle_max_age_ms": 60_000, "oracle_sources": []string{"itest-operator"}, "risk_class": "SPECULATIVE",
+		}
+	}
+
+	refused := w.post(w.custA, derivBase+"/contracts", definition(symbol, "1000000"))
+	require.Equal(t, http.StatusForbidden, refused.Code, "a customer defines no contract; body=%s", refused.Body.String())
+
+	key := "itest-define-" + uuid.NewString()
+	res = w.as(w.operator).do(http.MethodPost, derivBase+"/contracts", definition(symbol, "1000000"), "Idempotency-Key", key)
+	require.Equal(t, http.StatusCreated, res.Code, "body=%s", res.Body.String())
+	var c api.DerivativeContract
+	res.json(&c)
+	assert.Equal(t, api.SIMULATED, c.ValueDomain)
+	assert.Equal(t, api.DerivativeKindPerpetual, c.Kind)
+	assert.Equal(t, symbol, c.CanonicalName, "named by its symbol")
+	assert.Equal(t, "ACTIVE", c.Status)
+	assert.Equal(t, 1, c.TermsVersion)
+	assert.Equal(t, symbol, c.Terms.Symbol)
+	assert.Equal(t, "24x7", c.Terms.TradingCalendar)
+	assert.Equal(t, "NODAL-SANDBOX", c.Terms.VenueCode)
+	assert.Equal(t, "LINEAR", string(c.Terms.MarginModel))
+	assert.Equal(t, "CASH", string(c.Terms.SettlementStyle))
+	assert.Equal(t, econ.SandboxDollarSymbol, c.SettlementAsset.Symbol, "the sandbox dollar, by default")
+	assert.False(t, c.Marked)
+	assert.False(t, c.Settled)
+
+	again := w.as(w.operator).do(http.MethodPost, derivBase+"/contracts", definition(symbol, "1000000"), "Idempotency-Key", key)
+	require.Equal(t, http.StatusOK, again.Code, "body=%s", again.Body.String())
+	assert.JSONEq(t, res.Body.String(), again.Body.String(), "the same key is the same definition, not a second contract")
+	taken := w.post(w.operator, derivBase+"/contracts", definition(symbol, "1000000"))
+	require.Equal(t, http.StatusConflict, taken.Code, "body=%s", taken.Body.String())
+	assert.Equal(t, errs.CodeConflict, taken.problem().Code)
+
+	res = w.get(w.custA, derivBase+"/contracts?kind=PERPETUAL&limit=200")
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	var list api.DerivativeContractList
+	res.json(&list)
+	listed := 0
+	for _, item := range list.Items {
+		if item.Terms.Symbol == symbol {
+			listed++
+			assert.Equal(t, c.Id, item.Id)
+		}
+	}
+	assert.Equal(t, 1, listed, "listed once")
+
+	defined, err := instruments.ParseInstrumentID(c.Id.String())
+	require.NoError(t, err)
+	w.markOn(defined, "65000.00", "65000.00")
+	open := map[string]any{"account_id": w.a.String(), "instrument_id": c.Id.String(), "side": "LONG", "quantity": "1", "mode": "PAPER"}
+	resA := w.post(w.custA, derivBase+"/positions", open)
+	require.Equal(t, http.StatusCreated, resA.Code, "a defined contract trades; body=%s", resA.Body.String())
+	var trade api.DerivativeTradeResult
+	resA.json(&trade)
+	require.NotNil(t, trade.Position)
+	assert.Equal(t, "1", trade.Position.Quantity)
+
+	// One base unit of the underlying a contract moves 0.005 of a base unit of
+	// the sandbox dollar a tick: the service refuses it, and nothing is written.
+	inexact := "DEF" + strings.ToUpper(strings.ReplaceAll(uuid.NewString(), "-", "")[:8]) + "-PERP"
+	res = w.post(w.operator, derivBase+"/contracts", definition(inexact, "1"))
+	require.Equal(t, http.StatusBadRequest, res.Code, "body=%s", res.Body.String())
+	assert.Equal(t, errs.CodeValidationFailed, res.problem().Code)
+	var terms int
+	require.NoError(t, w.d.Pool().QueryRow(t.Context(), `SELECT count(*) FROM instrument_terms WHERE symbol = $1`, inexact).Scan(&terms))
+	assert.Zero(t, terms, "a refused definition writes nothing")
+}

@@ -26,6 +26,7 @@ import {
 import { advancedKeys } from "../api/advanced/core.ts";
 import { ContractViolation, validated } from "../api/contract.ts";
 import {
+  buildContractDefinition,
   exerciseAvailability,
   formatRateE8,
   instantOf,
@@ -37,7 +38,9 @@ import {
   parseInstantInput,
   parseReasonInput,
   parseSha256Input,
+  priceMantissa,
   refusedIntentId,
+  type ContractDefinitionInput,
 } from "./derivatives.ts";
 
 const ACCOUNT = "01a075f1-f847-7a98-adbc-5fc08c37e83f";
@@ -556,4 +559,114 @@ test("a dated contract's preview carries the reference it says it has", () => {
     () => checkContract(broken(dated, (c) => (((c["settlement_overrides"] as unknown[])[0] as Record<string, unknown>)["price_mantissa"] = "67000.00")), "/c"),
     /^\/c\.settlement_overrides\[0\]\.price_mantissa$/,
   );
+});
+
+/* --------------------------------------------------------------------------
+ * Defining a contract
+ * ------------------------------------------------------------------------ */
+
+const PERPETUAL_INPUT: ContractDefinitionInput = {
+  kind: "PERPETUAL",
+  symbol: " sbxsol-perp ",
+  name: "",
+  underlyingId: INSTRUMENT.toUpperCase(),
+  settlementId: "",
+  multiplier: "1,000,000,000",
+  priceScale: "2",
+  tick: "0.01",
+  lot: "1",
+  minimum: "001",
+  expiry: "",
+  fundingHours: "8",
+  strike: "",
+  right: "CALL",
+  style: "EUROPEAN",
+  oracleSeconds: "600",
+  sources: " e2e-operator , , sandbox ",
+  risk: "SPECULATIVE",
+};
+
+test("a price is moved to its mantissa at the price scale, never rounded", () => {
+  assert.equal(priceMantissa("0.50", 2), "50");
+  assert.equal(priceMantissa("65000", 2), "6500000");
+  assert.equal(priceMantissa("65,000.5", 2), "6500050");
+  assert.equal(priceMantissa("0.005", 3), "5");
+  assert.equal(priceMantissa("7", 0), "7");
+  assert.equal(priceMantissa("0.505", 2), undefined, "more precise than the scale is refused, not rounded");
+  assert.equal(priceMantissa("0", 2), undefined, "a price above zero");
+  assert.equal(priceMantissa("0.00", 2), undefined);
+  assert.equal(priceMantissa("1e3", 2), undefined);
+  assert.equal(priceMantissa("-1", 2), undefined);
+  assert.equal(priceMantissa("1", 19), undefined);
+});
+
+test("a perpetual's definition is exactly what the contract takes", () => {
+  const built = buildContractDefinition(PERPETUAL_INPUT);
+  assert.equal(built.ok, true);
+  if (!built.ok) return;
+  assert.deepEqual(built.body, {
+    kind: "PERPETUAL",
+    symbol: "SBXSOL-PERP",
+    underlying_instrument_id: INSTRUMENT,
+    contract_multiplier: "1000000000",
+    price_scale: 2,
+    tick_size: "1",
+    lot_size: "1",
+    min_quantity: "1",
+    oracle_max_age_ms: 600_000,
+    oracle_sources: ["e2e-operator", "sandbox"],
+    risk_class: "SPECULATIVE",
+    funding_interval_ms: 28_800_000,
+  });
+});
+
+test("a future carries its expiry, an option its expiry, strike, right and style, and neither a funding interval", () => {
+  const future = buildContractDefinition({ ...PERPETUAL_INPUT, kind: "FUTURE", expiry: "2026-12-31T16:00:00Z" });
+  assert.equal(future.ok, true);
+  if (future.ok) {
+    assert.equal(future.body.expiry, "2026-12-31T16:00:00.000Z");
+    assert.equal(future.body.funding_interval_ms, undefined);
+    assert.equal(future.body.strike_mantissa, undefined);
+  }
+  const option = buildContractDefinition({
+    ...PERPETUAL_INPUT,
+    kind: "OPTION",
+    expiry: "2026-12-31T16:00:00Z",
+    strike: "150.5",
+    right: "PUT",
+    style: "AMERICAN",
+    settlementId: SANDBOX_DOLLAR,
+    name: "SOL put 150.50",
+  });
+  assert.equal(option.ok, true);
+  if (option.ok) {
+    assert.equal(option.body.strike_mantissa, "15050");
+    assert.equal(option.body.option_right, "PUT");
+    assert.equal(option.body.exercise_style, "AMERICAN");
+    assert.equal(option.body.settlement_asset_id, SANDBOX_DOLLAR);
+    assert.equal(option.body.canonical_name, "SOL put 150.50");
+    assert.equal(option.body.funding_interval_ms, undefined);
+  }
+});
+
+test("what a definition cannot be is said before anything is sent", () => {
+  const problem = (change: Partial<ContractDefinitionInput>): string => {
+    const built = buildContractDefinition({ ...PERPETUAL_INPUT, ...change });
+    assert.equal(built.ok, false, JSON.stringify(change));
+    return built.ok ? "" : built.error;
+  };
+  assert.match(problem({ symbol: "two words" }), /symbol/);
+  assert.match(problem({ underlyingId: "" }), /underlying/);
+  assert.match(problem({ settlementId: "dollar" }), /settlement asset/);
+  assert.match(problem({ multiplier: "0" }), /contract size/);
+  assert.match(problem({ multiplier: "0.5" }), /contract size/);
+  assert.match(problem({ priceScale: "19" }), /price scale/);
+  assert.match(problem({ tick: "0.001" }), /tick/);
+  assert.match(problem({ lot: "" }), /lot size/);
+  assert.match(problem({ minimum: "0" }), /minimum/);
+  assert.match(problem({ oracleSeconds: "0" }), /maximum age/);
+  assert.match(problem({ sources: " , " }), /oracle source/);
+  assert.match(problem({ fundingHours: "0" }), /funding interval/);
+  assert.match(problem({ kind: "FUTURE", expiry: "tomorrow" }), /Expiry/);
+  assert.match(problem({ kind: "OPTION", expiry: "2026-12-31T16:00:00Z", strike: "" }), /strike/);
 });

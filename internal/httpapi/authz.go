@@ -231,7 +231,9 @@ var operationPolicies = map[string]operationPolicy{
 	// customer's own writes (ownership-only, per request). On the operator
 	// side, recording a mark and reconciling the clearing house move no
 	// value; variation margin, funding, final settlement and capitalizing the
-	// clearing house do, hence step-up.
+	// clearing house do, hence step-up. Defining a contract moves none either,
+	// but it creates what every later flow is priced, margined and settled
+	// by, so it asks for the same recent strong authentication.
 	"GetAdvancedDerivativesPolicy":                         {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
 	"GetAdvancedDerivativesContracts":                      {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
 	"GetAdvancedDerivativesContractsInstrumentId":          {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
@@ -244,6 +246,7 @@ var operationPolicies = map[string]operationPolicy{
 	"PostAdvancedDerivativesPositions":                     {AnyOf: perms(security.PermSandboxTrade), Mutating: true},
 	"PostAdvancedDerivativesPositionsPositionIdClose":      {AnyOf: perms(security.PermSandboxTrade), Mutating: true},
 	"PostAdvancedDerivativesPositionsPositionIdExercise":   {AnyOf: perms(security.PermSandboxTrade), Mutating: true},
+	"PostAdvancedDerivativesContracts":                     {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
 	"PostAdvancedDerivativesContractsInstrumentIdMarks":    {AnyOf: perms(security.PermSandboxOperate), Mutating: true},
 	"PostAdvancedDerivativesContractsInstrumentIdVariationMarginRuns": {
 		AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true,

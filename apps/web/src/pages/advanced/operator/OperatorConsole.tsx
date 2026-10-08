@@ -86,7 +86,7 @@ const OPERATOR_PAGES: ReadonlyArray<{ readonly label: string; readonly to: strin
   {
     label: "Derivatives clearing house",
     to: advancedHref("derivatives", "clearing-house"),
-    what: "The clearing house's funding and its reconciliation.",
+    what: "Defining a future, a perpetual or an option; the clearing house's funding and its reconciliation.",
   },
   {
     label: "Capabilities and gates",
