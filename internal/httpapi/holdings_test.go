@@ -109,7 +109,12 @@ func TestHoldings_AViewWhoseStatusAndFiguresDisagreeIsAFault(t *testing.T) {
 		"unvalued with an unknown reason":    func() HoldingView { h := simulated; h.UnvaluedReason = "BECAUSE"; return h },
 		"simulated with a cost basis":        func() HoldingView { h := simulated; h.CostBasisUSD = usdRef("0.00"); return h },
 		"simulated with a realized result":   func() HoldingView { h := simulated; h.RealizedUSD = usdRef("0.00"); return h },
-		"no status at all":                   func() HoldingView { h := valued; h.Valuation = ""; return h },
+		"a real asset without its basis": func() HoldingView {
+			h := simulated
+			h.UnvaluedReason = HoldingNoFreshMark
+			return h
+		},
+		"no status at all": func() HoldingView { h := valued; h.Valuation = ""; return h },
 	}
 	for name, build := range cases {
 		t.Run(name, func(t *testing.T) {

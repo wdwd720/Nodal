@@ -305,7 +305,10 @@ func toAPIHoldings(v HoldingsView) (api.HoldingsResponse, error) {
 			row.ValuationStatus = api.HoldingValued
 			row.UsdMark, row.PriceRef, row.UnrealizedPnlUsd = usdPtr(h.USDMark), strPtr(h.PriceRef), usdPtr(h.UnrealizedUSD)
 		case h.Valuation == HoldingUnvalued && !figure && api.HoldingUnvaluedReason(h.UnvaluedReason).Valid() &&
-			(h.UnvaluedReason != HoldingSimulatedValue || (h.CostBasisUSD == nil && h.RealizedUSD == nil)):
+			// Simulated value states no USD figure at all; a real asset's
+			// cost basis is stated whether or not it is valued.
+			((h.UnvaluedReason == HoldingSimulatedValue && h.CostBasisUSD == nil && h.RealizedUSD == nil) ||
+				(h.UnvaluedReason != HoldingSimulatedValue && h.CostBasisUSD != nil)):
 			reason := api.HoldingUnvaluedReason(h.UnvaluedReason)
 			row.ValuationStatus, row.UnvaluedReason = api.HoldingUnvalued, &reason
 		default:
