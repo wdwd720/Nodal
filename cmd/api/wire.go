@@ -36,6 +36,7 @@ import (
 	"github.com/nodal/controlplane/internal/config"
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
+	"github.com/nodal/controlplane/internal/delegation"
 	"github.com/nodal/controlplane/internal/derivatives"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/equities"
@@ -68,6 +69,7 @@ import (
 	"github.com/nodal/controlplane/internal/ratelimit"
 	"github.com/nodal/controlplane/internal/reconciliation"
 	"github.com/nodal/controlplane/internal/risk"
+	"github.com/nodal/controlplane/internal/sandboxchain"
 	"github.com/nodal/controlplane/internal/sandboxfund"
 	"github.com/nodal/controlplane/internal/sandboxrt"
 	"github.com/nodal/controlplane/internal/stableasset"
@@ -321,7 +323,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// The persistent simulated chain host the sandbox capabilities run on,
 	// opened once for all of them; nil when no sandbox chain is configured
 	// (see openSandboxChain).
-	sandboxChain, _, err := openSandboxChain(ctx, cfg, in.resolver, database, clk)
+	sandboxChain, sandboxSeed, err := openSandboxChain(ctx, cfg, in.resolver, database, clk)
 	if err != nil {
 		return nil, err
 	}
@@ -789,6 +791,62 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	}
 
 	// >>> advanced:delegation services
+	//
+	// Delegated agent authority (internal/delegation): scoped, expiring
+	// capabilities an account's owner grants to the account's own agents,
+	// delegated swaps signed only after the transaction inspector proves them
+	// the approved plan, and withdrawals to allow-listed destinations under the
+	// customer's policy. It runs on the sandbox chain opened above, so without
+	// one every delegation route answers UNSUPPORTED. Its keys derive from the
+	// same seed (internal/sandboxchain): the delegated wallet signer from
+	// PurposeDelegatedSigner and one co-signer per sandbox venue from the
+	// venue's name; the seed and the keys never leave the signers. No agent
+	// reaches any of it over HTTP: the agent runtime admits an agent's requests
+	// in-process. The identity rule is D-055's, never a request's.
+	var delegationDeps httpapi.DelegationDeps
+	if sandboxChain != nil {
+		var delegationRouter *legalrouter.Router
+		if delegationRouter, err = legalRouterFor(cfg.Env, in.cfg.API.LegalPolicy); err != nil {
+			return nil, err
+		}
+		if delegationRouter == nil {
+			if delegationRouter, err = legalrouter.New(legalrouter.ConservativePolicy()); err != nil {
+				return nil, fmt.Errorf("delegation legal router: %w", err)
+			}
+		}
+		var delegationSigner *delegation.DelegatedSigner
+		if delegationSigner, err = delegation.NewDelegatedSigner(sandboxSeed.Derive(sandboxchain.PurposeDelegatedSigner),
+			delegation.SignerConfig{Environment: cfg.Env, Clock: clk, Policy: delegation.DefaultSigningPolicy(),
+				Fees: delegation.HostFees(sandboxChain.Host)}); err != nil {
+			return nil, fmt.Errorf("delegated signer: %w", err)
+		}
+		delegationVenues := httpapi.DelegationSandboxVenues()
+		venueSigners := make([]*delegation.VenueSigner, 0, len(delegationVenues))
+		for _, v := range delegationVenues {
+			venueSigner := delegation.NewVenueSigner(sandboxSeed.VenueSeed(v.Name))
+			venueSigners = append(venueSigners, venueSigner)
+			delegationDeps.CoSigners = append(delegationDeps.CoSigners,
+				httpapi.DelegationCoSigner{Name: v.Name, Chain: v.Chain, Address: venueSigner.PublicKey()})
+		}
+		if delegationDeps.Service, err = delegation.New(delegation.Deps{
+			DB: database, Clock: clk, Environment: cfg.Env, Host: sandboxChain.Host,
+			Intents: econ.NewIntentStore(clk, outbox, auditWriter), Effects: econ.NewEffectStore(clk, outbox, auditWriter),
+			Authorizer: econ.NewAuthorizer(gateChecker, killChecker), Kills: killChecker, Ledger: ledgerSvc, Capital: capitalSvc,
+			Risk: risk.NewStore(), RiskPolicy: risk.DefaultAdvancedPolicy(), Router: delegationRouter, Prices: priceStore,
+			Identity: compliance.NewAccountVerification(clk), Profiles: compliance.NewRepository(auditWriter),
+			Reconciliation: reconciliation.NewRepository(clk, outbox, auditWriter), Audit: auditWriter,
+			Accounts: accountRepo, Assets: assetRepo, Signer: delegationSigner, Venues: venueSigners,
+		}); err != nil {
+			return nil, fmt.Errorf("delegation service: %w", err)
+		}
+		// One sandbox venue is registered at startup, idempotently; an operator
+		// registers the others this deployment co-signs for. A failure leaves
+		// delegated swaps refused (no venue to settle at), never the API down.
+		if _, verr := httpapi.EnsureDelegationVenue(ctx, database, delegationDeps, delegationVenues[0]); verr != nil {
+			log.Warn("delegation: the sandbox venue is not registered; delegated swaps are refused until an operator registers one",
+				"venue", delegationVenues[0].Name, "error", verr.Error())
+		}
+	}
 
 	// >>> advanced:operator services
 
@@ -852,6 +910,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		Marketplace: httpapi.MarketplaceDeps{Service: strategyMarketplace, Sandbox: strategySandbox},
 
 		// >>> advanced:delegation deps
+		Delegation: delegationDeps,
 
 		// >>> advanced:operator deps
 	}

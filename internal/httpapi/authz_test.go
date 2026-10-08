@@ -204,6 +204,10 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		"{installId}": testSessionID,
 
 		// >>> advanced:delegation path parameters
+		"{capabilityId}":  testSessionID,
+		"{destinationId}": testSessionID,
+		"{swapId}":        testSessionID,
+		"{withdrawalId}":  testSessionID,
 
 		// >>> advanced:operator path parameters
 	}
@@ -269,6 +273,12 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		"/v1/advanced/strategies/runs":     "account_id=" + testAccountID.String(),
 
 		// >>> advanced:delegation required query
+		"/v1/advanced/delegation/agents":            "account_id=" + testAccountID.String(),
+		"/v1/advanced/delegation/capabilities":      "account_id=" + testAccountID.String(),
+		"/v1/advanced/delegation/destinations":      "account_id=" + testAccountID.String(),
+		"/v1/advanced/delegation/withdrawal-policy": "account_id=" + testAccountID.String(),
+		"/v1/advanced/delegation/swaps":             "account_id=" + testAccountID.String(),
+		"/v1/advanced/delegation/withdrawals":       "account_id=" + testAccountID.String(),
 
 		// >>> advanced:operator required query
 	}

@@ -92,6 +92,10 @@ type AdvancedDeps struct {
 	Marketplace MarketplaceDeps
 
 	// >>> advanced:delegation deps
+	// Delegation holds delegated agent authority and the venue co-signers it
+	// was built with; a nil service leaves the /advanced/delegation routes
+	// UNSUPPORTED.
+	Delegation DelegationDeps
 
 	// >>> advanced:operator deps
 }
@@ -142,6 +146,7 @@ func wireAdvanced(p *Ports, d WireDeps) {
 	wireMarketplace(p, d)
 
 	// >>> advanced:delegation wire
+	wireDelegation(p, d)
 
 	// >>> advanced:operator wire
 }
