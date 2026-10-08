@@ -46,7 +46,7 @@ import {
 } from "../../../lib/marketplace.ts";
 import { formatInstant } from "../../../lib/time.ts";
 import { Codes, CursorPager, ScrollTable } from "../shared.tsx";
-import { VersionState, strategyHref, usePrepared } from "./parts.tsx";
+import { BuildLog, VersionState, strategyHref, usePrepared } from "./parts.tsx";
 
 export function ReviewQueuePage(): ReactNode {
   const [status, setStatus] = useState<StrategyStatus | undefined>(undefined);
@@ -229,7 +229,7 @@ function SimpleDecision(props: { readonly versionId: string; readonly kind: "val
     <div className="callout">
       <p>
         {props.kind === "validate"
-          ? "Validation scans the source and builds it into a sandbox artifact. The build holds the version while it runs and is bounded by the request's time limit; a deployment without a Go toolchain answers UNSUPPORTED."
+          ? "Validation claims the version, scans the source and builds it into a sandbox artifact outside any database transaction, under the builder's bounds on time, module size and memory; a build past one of them is a recorded rejection with the compiler's output kept. Another build already running answers CONFLICT, and a deployment without a Go toolchain answers UNSUPPORTED."
           : "Starting the review takes the validated version into review. Only an operator who did not create it may."}
       </p>
       <div className="form-actions">
@@ -248,6 +248,9 @@ function SimpleDecision(props: { readonly versionId: string; readonly kind: "val
             </span>
           )}
         </p>
+      )}
+      {validate.isSuccess && validate.data.validation.build_log !== undefined && validate.data.validation.outcome === "FAILED" && (
+        <BuildLog log={validate.data.validation.build_log} />
       )}
       {review.isSuccess && (
         <p role="status">
