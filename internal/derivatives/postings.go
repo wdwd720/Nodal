@@ -18,7 +18,9 @@ import (
 //	                        release:  C: Dr WALLET / Cr DERIVATIVES_MARGIN
 //	VARIATION_MARGIN, FUNDING_PAYMENT, FUTURE_SETTLEMENT, and the cash of an
 //	OPTION_SETTLEMENT or of a closing OPTION_PREMIUM
-//	                        payer:    C: Dr REALIZED_PNL / Cr WALLET, Cr DERIVATIVES_MARGIN
+//	                        payer:    C: Dr REALIZED_PNL / Cr DERIVATIVES_MARGIN (the position's own
+//	                                     margin: the share a reduction frees first, then what it keeps),
+//	                                     Cr WALLET (available funds only, under a consumed reservation)
 //	                                  F: Dr CLEARING_CASH / Cr CLEARING_RESULT
 //	                        receiver: C: Dr WALLET / Cr REALIZED_PNL
 //	                                  F: Dr CLEARING_RESULT / Cr CLEARING_CASH
@@ -35,26 +37,41 @@ import (
 // An internally matched book moves CLEARING_CASH and CLEARING_RESULT by equal
 // and opposite amounts, so both net to zero.
 
-// payment is how an obligation of the customer is met: from the wallet
-// first, then from the posted margin of the position; whatever neither covers
-// is a shortfall the clearing house absorbs (recorded on the cash flow and the
-// position, never posted as a negative balance).
+// payment is how an obligation of the customer is met, in this order: from
+// the margin a reduction itself frees (before it ever reaches the wallet),
+// from the customer's available wallet funds -- what is neither reserved nor
+// held for anything else, taken under a capital reservation that is consumed
+// -- and from the margin the position keeps. Whatever none of them covers is
+// the package's default path: a shortfall the clearing house absorbs,
+// recorded on the cash flow and the position (and reported by reconciliation
+// as the register's shortfall), never posted as a negative balance and never
+// taken from funds reserved or held for something else.
 type payment struct {
-	FromWallet money.Quantity
-	FromMargin money.Quantity
-	Shortfall  money.Quantity
+	FromRelease money.Quantity
+	FromWallet  money.Quantity
+	FromMargin  money.Quantity
+	Shortfall   money.Quantity
 }
 
 // collected is what actually moves.
-func (p payment) collected() money.Quantity { return p.FromWallet.Add(p.FromMargin) }
+func (p payment) collected() money.Quantity {
+	return p.FromRelease.Add(p.FromWallet).Add(p.FromMargin)
+}
 
-// splitPayment allocates amount (>= 0) across the wallet balance and the
-// position's margin.
-func splitPayment(amount, wallet, margin money.Quantity) payment {
-	w := amount.Min(wallet.Max(money.Quantity{}))
-	rest := amount.Sub(w)
-	m := rest.Min(margin.Max(money.Quantity{}))
-	return payment{FromWallet: w, FromMargin: m, Shortfall: rest.Sub(m)}
+// fromMarginAccount is what the payment takes from DERIVATIVES_MARGIN.
+func (p payment) fromMarginAccount() money.Quantity { return p.FromRelease.Add(p.FromMargin) }
+
+// splitPayment allocates amount (>= 0) across the margin a reduction
+// releases, the customer's available wallet funds and the margin the position
+// keeps, in that order.
+func splitPayment(amount, released, available, kept money.Quantity) payment {
+	zero := money.Quantity{}
+	r := amount.Min(released.Max(zero))
+	rest := amount.Sub(r)
+	w := rest.Min(available.Max(zero))
+	rest = rest.Sub(w)
+	m := rest.Min(kept.Max(zero))
+	return payment{FromRelease: r, FromWallet: w, FromMargin: m, Shortfall: rest.Sub(m)}
 }
 
 func entry(ref ledger.AccountRef, side ledger.Side, q money.Quantity) ledger.Entry {
@@ -105,8 +122,8 @@ func payEntries(a accounts.AccountID, ch econ.Facility, asset assets.AssetID, p 
 	if p.FromWallet.IsPositive() {
 		out = append(out, entry(cust(a, ledger.CodeWallet, asset), ledger.Credit, p.FromWallet))
 	}
-	if p.FromMargin.IsPositive() {
-		out = append(out, entry(cust(a, ledger.CodeDerivativesMargin, asset), ledger.Credit, p.FromMargin))
+	if m := p.fromMarginAccount(); m.IsPositive() {
+		out = append(out, entry(cust(a, ledger.CodeDerivativesMargin, asset), ledger.Credit, m))
 	}
 	return append(out,
 		entry(ch.Account(ledger.CodeClearingCash, asset), ledger.Debit, c),

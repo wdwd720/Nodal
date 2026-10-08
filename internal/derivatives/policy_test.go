@@ -35,6 +35,9 @@ func TestPolicyRefusesWhatCannotBeEvaluatedSafely(t *testing.T) {
 		func(p *Policy) { p.PaperSlippageBPS = 10_000 },
 		func(p *Policy) { p.VariationMarginIntervalMS = 0 },
 		func(p *Policy) { p.ExpiryGapShockBPS = -1 },
+		func(p *Policy) { p.MaxMarkLagMS = 0 },
+		func(p *Policy) { p.SettlementOverrideMaxBPS = 0 },
+		func(p *Policy) { p.SettlementOverrideMaxBPS = 10_001 },
 	}
 	for i, m := range mutate {
 		p := DefaultPolicy()

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -69,25 +70,31 @@ func interval(start time.Time, length time.Duration, now time.Time) (time.Time, 
 }
 
 // obligationLeg plans the cash leg of a run for one position: received when
-// amount > 0, collected (wallet, then the position's margin, then shortfall)
-// when amount < 0. It returns the leg, the payment and the position after it.
+// amount > 0, collected when amount < 0 -- from the customer's available
+// wallet funds (reserved now, consumed when the leg posts; never what is
+// reserved or held for anything else), then from the position's own margin,
+// and what neither covers is the shortfall the clearing house absorbs. It
+// returns the leg, the payment and the position after it.
 func (s *Service) obligationLeg(ctx context.Context, tx pgx.Tx, ch econ.Facility, spec Spec, pos Position, amount money.Quantity,
 	kind CashFlowKind, journal ledger.Kind, effectKind, key string, ref ledger.FinancialEventReference) (leg, payment, Position, error) {
 	acct := pos.AccountID
 	asset := spec.SettlementAssetID
 	after := pos
 	var pay payment
+	var col *collection
 	flowAmount := amount
 	if amount.IsNegative() {
-		wallet, err := s.ledger.Balance(ctx, tx, ledger.CustomerAccount(acct, ledger.CodeWallet, asset))
-		if err != nil {
+		due := amount.Neg()
+		var err error
+		if col, err = s.reserveCollection(ctx, tx, acct, asset, due, key, nil,
+			"derivatives: "+strings.ToLower(string(kind))+" collected"); err != nil {
 			return leg{}, payment{}, Position{}, err
 		}
 		margin := money.Quantity{}
 		if pos.Status == PositionOpen {
 			margin = pos.MarginPosted
 		}
-		pay = splitPayment(amount.Neg(), wallet, margin)
+		pay = splitPayment(due, money.Quantity{}, col.taken(), margin)
 		after.MarginPosted = pos.MarginPosted.Sub(pay.FromMargin)
 		after.Shortfall = pos.Shortfall.Add(pay.Shortfall)
 		flowAmount = pay.collected().Neg()
@@ -96,6 +103,7 @@ func (s *Service) obligationLeg(ctx context.Context, tx pgx.Tx, ch econ.Facility
 		name: string(kind), key: key, effectKind: effectKind, kind: journal, account: &acct, reference: ref,
 		entries: cashEntries(acct, ch, asset, amount, pay),
 		flow:    s.flowFor(pos, spec, kind, flowAmount, pay.Shortfall, key, ref),
+		collect: col,
 	}, pay, after, nil
 }
 
@@ -133,7 +141,7 @@ func (s *Service) RunVariationMargin(ctx context.Context, tx pgx.Tx, r RunReques
 	if err := s.serializeClearing(ctx, tx); err != nil {
 		return RunResult{}, err
 	}
-	spec, err := loadSpec(ctx, tx, s.instruments, r.InstrumentID)
+	spec, err := lockSpec(ctx, tx, s.instruments, r.InstrumentID)
 	if err != nil {
 		return RunResult{}, err
 	}
@@ -168,11 +176,13 @@ func (s *Service) RunVariationMargin(ctx context.Context, tx pgx.Tx, r RunReques
 	if spec.ExpiredAt(now) {
 		return RunResult{}, errs.New(errs.CodeValidationFailed, "derivatives: an expired future is settled by the final settlement")
 	}
-	mark, ok, err := markAt(ctx, tx, r.InstrumentID, now, spec.OracleMaxAge)
+	// The run's cutoff is the run itself: the mark fresh now among those
+	// recorded by now.
+	mark, ok, err := markAsOf(ctx, tx, r.InstrumentID, now, spec.OracleMaxAge, now)
 	if err != nil {
 		return RunResult{}, err
 	}
-	if !ok {
+	if !ok || !markPriceable(spec, mark) {
 		return RunResult{}, errs.New(errs.CodeStaleMarketData, "derivatives: no fresh mark; variation margin is never settled on a stale price").
 			WithField("now", now)
 	}
@@ -190,7 +200,7 @@ func (s *Service) RunVariationMargin(ctx context.Context, tx pgx.Tx, r RunReques
 		}
 		return RunResult{}, dbErr("claim variation margin run", err)
 	}
-	ch, err := s.ClearingHouse(ctx, tx)
+	ch, err := s.clearingHouse(ctx, tx)
 	if err != nil {
 		return RunResult{}, err
 	}
@@ -248,19 +258,22 @@ type fundingPlan struct {
 
 // RunFunding charges a perpetual's funding for one interval. The premium
 // index is the exact average of (mark − index) / index over the marks of the
-// interval, rounded half-even once to 10^-8, then clamped to the policy's
-// ±maximum. One contract's funding is V(last mark of the interval) × |rate|,
-// rounded down once; every position open at the funding time (the interval
-// end) pays or receives |quantity at that time| × that amount -- longs pay a
-// positive rate, shorts a negative one -- through the clearing house
-// (FUNDING_PAYMENT). funding_rates is UNIQUE per (instrument, interval start)
-// and funding_accruals per (position, interval start): a re-run posts nothing
+// interval -- those observed in it and recorded by its end; a mark recorded
+// later is not a sample, whatever moment it claims -- rounded half-even once
+// to 10^-8, then clamped to the policy's ±maximum. One contract's funding is
+// V(last mark of the interval) × |rate|, rounded down once; every position
+// open at the funding time (the interval end) pays or receives |quantity at
+// that time| × that amount -- longs pay a positive rate, shorts a negative one
+// -- through the clearing house (FUNDING_PAYMENT); a payer pays from its
+// available funds and its position's margin, and what neither covers is a
+// shortfall. funding_rates is UNIQUE per (instrument, interval start) and
+// funding_accruals per (position, interval start): a re-run posts nothing
 // new, and concurrent runs fund once.
 func (s *Service) RunFunding(ctx context.Context, tx pgx.Tx, r RunRequest) (RunResult, error) {
 	if err := s.serializeClearing(ctx, tx); err != nil {
 		return RunResult{}, err
 	}
-	spec, err := loadSpec(ctx, tx, s.instruments, r.InstrumentID)
+	spec, err := lockSpec(ctx, tx, s.instruments, r.InstrumentID)
 	if err != nil {
 		return RunResult{}, err
 	}
@@ -291,6 +304,11 @@ func (s *Service) RunFunding(ctx context.Context, tx pgx.Tx, r RunRequest) (RunR
 	}
 	rate, clamped := ClampRate(premium, s.policy.MaxFundingRateE8)
 	ref := samples[len(samples)-1]
+	if !markPriceable(spec, ref) {
+		return RunResult{}, errs.New(errs.CodeStaleMarketData,
+			"derivatives: the interval's last mark was recorded under terms the contract no longer has; funding is not charged on it").
+			WithField("mark_id", ref.ID.String())
+	}
 	per, err := fundingPerContract(spec, ref.MarkMantissa, rate)
 	if err != nil {
 		return RunResult{}, err
@@ -321,7 +339,7 @@ func (s *Service) RunFunding(ctx context.Context, tx pgx.Tx, r RunRequest) (RunR
 	if err != nil {
 		return RunResult{}, dbErr("claim funding rate", err)
 	}
-	ch, err := s.ClearingHouse(ctx, tx)
+	ch, err := s.clearingHouse(ctx, tx)
 	if err != nil {
 		return RunResult{}, err
 	}

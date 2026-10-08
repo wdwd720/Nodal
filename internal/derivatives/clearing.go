@@ -30,7 +30,7 @@ func (s *Service) FundClearingHouse(ctx context.Context, tx pgx.Tx, asset assets
 	if err := s.serializeClearing(ctx, tx); err != nil {
 		return nil, err
 	}
-	ch, err := s.ClearingHouse(ctx, tx)
+	ch, err := s.clearingHouse(ctx, tx)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +93,7 @@ func (s *Service) ReconcileClearing(ctx context.Context, tx pgx.Tx, asset assets
 	if err := s.serializeClearing(ctx, tx); err != nil {
 		return ClearingReport{}, err
 	}
-	ch, err := s.ClearingHouse(ctx, tx)
+	ch, err := s.clearingHouse(ctx, tx)
 	if err != nil {
 		return ClearingReport{}, err
 	}
