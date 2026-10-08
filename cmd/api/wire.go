@@ -27,6 +27,7 @@ import (
 	"github.com/nodal/controlplane/internal/auth/httpmw"
 	"github.com/nodal/controlplane/internal/auth/oidc"
 	"github.com/nodal/controlplane/internal/auth/pgstore"
+	"github.com/nodal/controlplane/internal/bridge"
 	"github.com/nodal/controlplane/internal/capital"
 	"github.com/nodal/controlplane/internal/capital/buyingpower"
 	"github.com/nodal/controlplane/internal/clock"
@@ -69,6 +70,7 @@ import (
 	"github.com/nodal/controlplane/internal/risk"
 	"github.com/nodal/controlplane/internal/sandboxfund"
 	"github.com/nodal/controlplane/internal/sandboxrt"
+	"github.com/nodal/controlplane/internal/stableasset"
 	"github.com/nodal/controlplane/internal/stream"
 	"github.com/nodal/controlplane/internal/transfers"
 	"github.com/nodal/controlplane/internal/valuation"
@@ -316,6 +318,14 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// movement at the journal rather than only in a service.
 	ledgerSvc.SetCapabilityResolver(gateCapabilityResolver{checker: gateChecker, q: database})
 
+	// The persistent simulated chain host the sandbox capabilities run on,
+	// opened once for all of them; nil when no sandbox chain is configured
+	// (see openSandboxChain).
+	sandboxChain, _, err := openSandboxChain(ctx, cfg, in.resolver, database, clk)
+	if err != nil {
+		return nil, err
+	}
+
 	// --- advanced financial capabilities (ADR-0020) ----------------------
 	//
 	// Constructed unconditionally and decided per request, like the native
@@ -559,8 +569,87 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// >>> advanced:treasury services
 
 	// >>> advanced:stable services
+	//
+	// The sandbox stable asset (internal/stableasset) runs on the sandbox chain
+	// opened above, which exists only where one is configured
+	// (CP_SANDBOX_DEVNET_NETWORK names its journal, CP_SANDBOX_DEVNET_SEED_REF
+	// resolves to the seed every platform sandbox key derives from). Without
+	// it every stable asset and bridge route answers UNSUPPORTED. The service
+	// gets the collaborators every other advanced service gets; the account
+	// facts it routes on come from the deployment's own resolvers (D-055
+	// identity, the verification Nodal establishes itself, no jurisdiction
+	// determination), never from a request.
+	var stableDeps httpapi.StableDeps
+	if sandboxChain != nil {
+		chain := *sandboxChain
+		var stableRouter *legalrouter.Router
+		if stableRouter, err = legalRouterFor(cfg.Env, in.cfg.API.LegalPolicy); err != nil {
+			return nil, err
+		}
+		if stableRouter == nil {
+			if stableRouter, err = legalrouter.New(legalrouter.ConservativePolicy()); err != nil {
+				return nil, fmt.Errorf("stable asset legal router: %w", err)
+			}
+		}
+		var stableSvc *stableasset.Service
+		if stableSvc, err = stableasset.New(stableasset.Deps{
+			DB: database, Clock: clk, Host: chain.Host,
+			Intents: econ.NewIntentStore(clk, outbox, auditWriter), Effects: econ.NewEffectStore(clk, outbox, auditWriter),
+			Authorizer: econ.NewAuthorizer(gateChecker, killChecker), Facilities: econ.NewRegistry(), Ledger: ledgerSvc,
+			Capital: capitalSvc, Risk: risk.NewStore(), RiskPolicy: risk.DefaultAdvancedPolicy(), Router: stableRouter,
+			Prices: priceStore, Kills: killChecker, Reconciliation: reconciliation.NewRepository(clk, outbox, auditWriter),
+			Audit: auditWriter, Accounts: accountRepo, Assets: assetRepo,
+			Issuer: chain.Keys.Issuer, Custody: chain.Keys.Custody, Snapshots: chain.Keys.Snapshots,
+		}); err != nil {
+			return nil, fmt.Errorf("stable assets: %w", err)
+		}
+		stableDeps = httpapi.StableDeps{
+			Service: stableSvc, Host: chain.Host, HolderAddress: chain.Keys.Custody.HolderAddress,
+			SnapshotKey: chain.Keys.Snapshots.PublicKey(), Capital: capitalSvc,
+			Identity: compliance.NewAccountVerification(clk), Verification: verificationResolver,
+		}
+	} else {
+		log.Warn("no sandbox chain is configured; the stable asset and bridge routes answer UNSUPPORTED",
+			"network_var", "CP_SANDBOX_DEVNET_NETWORK", "seed_var", "CP_SANDBOX_DEVNET_SEED_REF")
+	}
 
 	// >>> advanced:bridge services
+	//
+	// Cross-chain capital (internal/bridge) over the same sandbox chain: the
+	// custodial wallet signer is its holder signer (the bridge never holds a
+	// customer key) and its attester is the one the host's genesis pins. The
+	// holdings route reports the bridge's part of buying power under the
+	// default haircut policy, which counts nothing that is not final; no
+	// configuration chooses another. Buying power V2 itself takes no bridge
+	// reader: its loader has no slot that would not count the bridge's pending
+	// locks twice (they are capital reservations it already reads).
+	var bridgeDeps httpapi.BridgeDeps
+	if sandboxChain != nil {
+		var bridgeRouter *legalrouter.Router
+		if bridgeRouter, err = legalRouterFor(cfg.Env, in.cfg.API.LegalPolicy); err != nil {
+			return nil, err
+		}
+		if bridgeRouter == nil {
+			if bridgeRouter, err = legalrouter.New(legalrouter.ConservativePolicy()); err != nil {
+				return nil, fmt.Errorf("bridge legal router: %w", err)
+			}
+		}
+		var bridgeSvc *bridge.Service
+		if bridgeSvc, err = bridge.New(bridge.Deps{
+			DB: database, Clock: clk, Host: sandboxChain.Host,
+			Intents: econ.NewIntentStore(clk, outbox, auditWriter), Effects: econ.NewEffectStore(clk, outbox, auditWriter),
+			Authorizer: econ.NewAuthorizer(gateChecker, killChecker), Facilities: econ.NewRegistry(), Ledger: ledgerSvc,
+			Capital: capitalSvc, Risk: risk.NewStore(), RiskPolicy: risk.DefaultAdvancedPolicy(), Router: bridgeRouter,
+			Kills: killChecker, Reconciliation: reconciliation.NewRepository(clk, outbox, auditWriter), Audit: auditWriter,
+			Accounts: accountRepo, Assets: assetRepo, Holder: sandboxChain.Keys.Custody, Attester: sandboxChain.Keys.Attester,
+		}); err != nil {
+			return nil, fmt.Errorf("bridge: %w", err)
+		}
+		bridgeDeps = httpapi.BridgeDeps{
+			Service: bridgeSvc, Host: sandboxChain.Host, Haircut: bridge.DefaultHaircutPolicy(),
+			Identity: compliance.NewAccountVerification(clk), Verification: verificationResolver,
+		}
+	}
 
 	// >>> advanced:predmarket services
 	//
@@ -757,8 +846,12 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		// >>> advanced:treasury deps
 
 		// >>> advanced:stable deps
+		// Empty -- every route UNSUPPORTED -- unless a sandbox chain is
+		// configured (see the services block).
+		Stable: stableDeps,
 
 		// >>> advanced:bridge deps
+		Bridge: bridgeDeps,
 
 		// >>> advanced:predmarket deps
 		PredictionMarkets: predmarketSvc,
