@@ -810,6 +810,15 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		operatorDeps.Chains = sandboxChain.Host
 	}
 
+	// >>> advanced:portfolio services
+	//
+	// The portfolio only reads: the capital service's reservations, withdrawal
+	// holds and availability, and the reconciliation records on an account.
+	// It values holdings with the price store and maximum mark age buying
+	// power V2 is given below; every other section of it is another
+	// subsystem's own read.
+	portfolioDeps := httpapi.PortfolioDeps{Capital: capitalSvc, Reconciliation: reconciliation.NewRepository(clk, outbox, auditWriter)}
+
 	advancedDeps := httpapi.AdvancedDeps{
 		Authorizer: econ.NewAuthorizer(gateChecker, killChecker),
 		Intents:    econ.NewIntentStore(clk, outbox, auditWriter),
@@ -873,6 +882,9 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 
 		// >>> advanced:operator deps
 		Operator: operatorDeps,
+
+		// >>> advanced:portfolio deps
+		Portfolio: portfolioDeps,
 	}
 
 	// --- realtime ----------------------------------------------------------

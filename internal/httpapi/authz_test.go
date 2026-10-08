@@ -210,6 +210,8 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		// >>> advanced:delegation path parameters
 
 		// >>> advanced:operator path parameters
+
+		// >>> advanced:portfolio path parameters
 	}
 
 	requiredQuery := map[string]string{
@@ -277,6 +279,9 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 
 		// >>> advanced:operator required query
 		"/v1/advanced/ops/marks": "asset_id=" + testInstrument.String(),
+
+		// >>> advanced:portfolio required query
+		"/v1/advanced/portfolio": "account_id=" + testAccountID.String(),
 	}
 
 	var out []routeProbe

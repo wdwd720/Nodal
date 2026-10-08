@@ -98,6 +98,12 @@ type AdvancedDeps struct {
 	// sandbox reference marks and the simulated chains. Incomplete leaves those
 	// routes UNSUPPORTED.
 	Operator OperatorDeps
+
+	// >>> advanced:portfolio deps
+	// Portfolio serves /advanced/portfolio (see PortfolioDeps). Incomplete --
+	// or without the ledger of WireDeps and Effects above -- leaves it
+	// UNSUPPORTED.
+	Portfolio PortfolioDeps
 }
 
 func (d AdvancedDeps) complete() bool {
@@ -149,6 +155,9 @@ func wireAdvanced(p *Ports, d WireDeps) {
 
 	// >>> advanced:operator wire
 	wireOperator(p, d)
+
+	// >>> advanced:portfolio wire
+	wirePortfolio(p, d)
 }
 
 type advancedCoreAdapter struct {

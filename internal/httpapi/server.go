@@ -125,6 +125,12 @@ type Ports struct {
 	// marks and the simulated chains' tips. A nil port answers UNSUPPORTED.
 	Operator OperatorPort
 
+	// >>> advanced:portfolio port
+	// Portfolio serves the portfolio's own reads -- an account's balances
+	// asset by asset and what blocks new risk on it; the rest of the
+	// portfolio is the other ports' own reads. A nil port answers UNSUPPORTED.
+	Portfolio PortfolioPort
+
 	Health      HealthPort
 	Idempotency IdempotencyPort
 	// Webhooks is keyed by the provider name in the path.

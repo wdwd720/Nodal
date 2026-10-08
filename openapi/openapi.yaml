@@ -4344,6 +4344,44 @@ paths:
         "403": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
 
+  # >>> advanced:portfolio paths (insert this subsystem's paths directly below; keep the marker)
+  #
+  # The portfolio (advanced goal §26): one read of everything an account holds
+  # in the SIMULATED domain. Nothing on it comes from the request but the
+  # account id, and nothing on it is computed here that a subsystem computes:
+  # each section is that subsystem's own read, answered exactly as its own
+  # route answers it.
+  /advanced/portfolio:
+    get:
+      tags: [advanced]
+      summary: An account's simulated portfolio — balances, positions, buying power V2 and risk — in one read
+      description: >-
+        Account-scoped like every advanced read: the account's owner, or an operator holding
+        account:read_any; anyone else is FORBIDDEN, whether or not the account exists. An account that
+        does not exist is NOT_FOUND to an operator. The balances (ledger balances by code, capital
+        reservations by purpose, withdrawal holds, each asset's mark in the sandbox dollar) and the
+        risk records (unresolved reconciliation records and economic effects whose outcome is UNKNOWN)
+        are read from one database snapshot. Every other section is a subsystem's own read: buying
+        power V2 and the Risk Kernel V2 decisions as /advanced/buying-power and /advanced/risk/decisions
+        answer them, the margin account as /advanced/margin/account, OPEN derivative positions as
+        /advanced/derivatives/positions, the account's shares in each prediction market as its
+        positions route, the equity listings it holds and its PENDING settlements as the equities
+        routes, and its WORKING orders as /advanced/books/orders. Each such section states whether the
+        subsystem runs in this deployment (NOT_CONFIGURED when it does not) and, when its read refused,
+        the refusal's stable code (UNAVAILABLE); the sections are not one snapshot, so under
+        concurrent activity two of them can describe adjacent instants. Lists are bounded and say when
+        they were cut.
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The portfolio (value domain SIMULATED)
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdvancedPortfolio" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
 components:
   securitySchemes:
     sessionCookie:
@@ -10351,4 +10389,252 @@ components:
         network: { type: string }
         observed_at: { $ref: "#/components/schemas/Timestamp" }
         items: { type: array, items: { $ref: "#/components/schemas/AdvancedOpsChainTip" } }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+
+    # >>> advanced:portfolio schemas (insert this subsystem's schemas directly below; keep the marker)
+    #
+    # The portfolio. A section that is a subsystem's own read carries that
+    # read's schema unchanged, inside an envelope that says whether the
+    # subsystem runs in this deployment and whether its read answered.
+    AdvancedPortfolioSectionState:
+      type: string
+      enum: [PRESENT, NONE, NOT_CONFIGURED, UNAVAILABLE]
+      x-enum-varnames: [PortfolioSectionPresent, PortfolioSectionNone, PortfolioSectionNotConfigured, PortfolioSectionUnavailable]
+      description: >-
+        PRESENT: the subsystem's read answered and its answer is attached. NONE: the account has nothing
+        there to read (the margin section only: the account has no margin account). NOT_CONFIGURED: this
+        deployment does not run the subsystem. UNAVAILABLE: the subsystem's read refused; problem carries
+        the stable code and detail its own route answers with.
+    AdvancedPortfolioProblem:
+      type: object
+      required: [code, detail]
+      properties:
+        code: { type: string, description: The stable error code (internal/errs) }
+        detail: { type: string }
+    AdvancedPortfolioReservationPurpose:
+      type: string
+      enum: [OPEN_ORDERS, PENDING_TRANSFERS, BRIDGE_LOCKS, STRATEGY, WITHDRAWALS, OTHER]
+      x-enum-varnames: [PortfolioReservedOpenOrders, PortfolioReservedPendingTransfers, PortfolioReservedBridgeLocks,
+                        PortfolioReservedStrategy, PortfolioReservedWithdrawals, PortfolioReservedOther]
+      description: >-
+        What a capital reservation is for, read from the capability of the economic intent it serves:
+        INTERNAL_MATCHING, EQUITIES, DERIVATIVES and SPREAD_ENGINE (and a reservation for a trade intent)
+        are OPEN_ORDERS; P2P_TRANSFERS is PENDING_TRANSFERS; CROSS_CHAIN_BUYING_POWER is BRIDGE_LOCKS;
+        STRATEGY_MARKETPLACE and USER_CODE_SANDBOX are STRATEGY; AGENT_WITHDRAWALS is WITHDRAWALS; every
+        other capability, and a reservation that names no intent, is OTHER.
+    AdvancedPortfolioReservation:
+      type: object
+      description: The ACTIVE capital reservations of one asset that serve one purpose under one capability
+      required: [purpose, quantity, reservations]
+      properties:
+        purpose: { $ref: "#/components/schemas/AdvancedPortfolioReservationPurpose" }
+        capability: { type: string, description: "The capability of the economic intent they serve; absent for a trade intent, or for a reservation that names no intent" }
+        quantity: { $ref: "#/components/schemas/Quantity", description: "What they still hold back (reserved less consumed), in base units of the asset" }
+        reservations: { type: integer, description: How many ACTIVE reservations }
+    AdvancedPortfolioLedgerCode:
+      type: string
+      enum: [MARGIN_COLLATERAL, DERIVATIVES_MARGIN, UNSETTLED_RECEIVABLE, BRIDGE_IN_FLIGHT, MARGIN_LOAN, DEFICIT]
+      x-enum-varnames: [PortfolioCodeMarginCollateral, PortfolioCodeDerivativesMargin, PortfolioCodeUnsettledReceivable,
+                        PortfolioCodeBridgeInFlight, PortfolioCodeMarginLoan, PortfolioCodeDeficit]
+      description: >-
+        The ledger code a balance is held under. MARGIN_COLLATERAL and DERIVATIVES_MARGIN are posted as
+        collateral; UNSETTLED_RECEIVABLE is what an equity trade delivers on its settlement date;
+        BRIDGE_IN_FLIGHT left its simulated chain and has not been released on the other; MARGIN_LOAN
+        and DEFICIT are owed.
+    AdvancedPortfolioLedgerBalance:
+      type: object
+      required: [code, quantity]
+      properties:
+        code: { $ref: "#/components/schemas/AdvancedPortfolioLedgerCode" }
+        quantity: { $ref: "#/components/schemas/Quantity", description: "The ledger balance, in base units of the asset" }
+    AdvancedPortfolioValuationStatus:
+      type: string
+      enum: [PAR, MARKED, UNVALUED]
+      x-enum-varnames: [PortfolioValuedAtPar, PortfolioValuedAtMark, PortfolioUnvalued]
+      description: >-
+        PAR: the sandbox dollar itself, valued at face. MARKED: valued at the latest mark of the asset in
+        the sandbox dollar no older than max_mark_age_ms. UNVALUED: there is no such mark, or no sandbox
+        dollar to value in; problem says which, and no value is given.
+    AdvancedPortfolioMark:
+      type: object
+      required: [price, mantissa, scale, source, observed_at, age_ms]
+      properties:
+        price: { type: string, description: "Sandbox dollars per whole unit of the asset: mantissa × 10^-scale, written out exactly" }
+        mantissa: { $ref: "#/components/schemas/Quantity" }
+        scale: { type: integer, minimum: 0, maximum: 38 }
+        source: { type: string }
+        observed_at: { $ref: "#/components/schemas/Timestamp" }
+        age_ms: { type: integer, format: int64, description: Milliseconds from observed_at to the time of the read }
+    AdvancedPortfolioValuation:
+      type: object
+      required: [status]
+      properties:
+        status: { $ref: "#/components/schemas/AdvancedPortfolioValuationStatus" }
+        mark: { $ref: "#/components/schemas/AdvancedPortfolioMark", description: Present when MARKED }
+        value: { $ref: "#/components/schemas/Quantity", description: "total at the mark (or at par) in base units of the sandbox dollar (quote_decimals), rounded down as buying power V2 values a holding; absent when UNVALUED" }
+        owed_value: { $ref: "#/components/schemas/Quantity", description: "What is owed in the asset at the same mark, rounded up as buying power V2 values a liability; present when something is owed and the asset is valued" }
+        problem: { $ref: "#/components/schemas/AdvancedPortfolioProblem", description: Why the asset is UNVALUED }
+    AdvancedPortfolioBalance:
+      type: object
+      description: >-
+        One SIMULATED asset the account holds, on its chain, in base units of the asset (decimals). wallet
+        is the WALLET ledger balance; reserved is what capital reservations hold back of it, broken down by
+        purpose in reservations (which sum to it); withdrawal_holds is what holds keep from being reserved
+        or withdrawn; available is wallet less both, floored at zero (the capital service's own figure).
+        held_elsewhere is posted as collateral, waiting for settlement or in flight between chains, and
+        owed is borrowed (only non-zero balances are listed in either). total is wallet plus
+        held_elsewhere.
+      required: [asset_id, symbol, name, chain, decimals, wallet, reserved, reservations, withdrawal_holds, available,
+                 held_elsewhere, owed, total, valuation, value_domain]
+      properties:
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        name: { type: string }
+        chain: { type: string, description: "nodal-sandbox, or a simulated public chain (sbx-<name>): the same unit on two chains is two assets" }
+        decimals: { type: integer, minimum: 0, maximum: 18 }
+        wallet: { $ref: "#/components/schemas/Quantity" }
+        reserved: { $ref: "#/components/schemas/Quantity" }
+        reservations: { type: array, items: { $ref: "#/components/schemas/AdvancedPortfolioReservation" } }
+        withdrawal_holds: { $ref: "#/components/schemas/Quantity" }
+        available: { $ref: "#/components/schemas/Quantity" }
+        held_elsewhere: { type: array, items: { $ref: "#/components/schemas/AdvancedPortfolioLedgerBalance" } }
+        owed: { type: array, items: { $ref: "#/components/schemas/AdvancedPortfolioLedgerBalance" } }
+        total: { $ref: "#/components/schemas/Quantity" }
+        valuation: { $ref: "#/components/schemas/AdvancedPortfolioValuation" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedPortfolioBuyingPower:
+      type: object
+      required: [state, value_domain]
+      properties:
+        state: { $ref: "#/components/schemas/AdvancedPortfolioSectionState" }
+        problem: { $ref: "#/components/schemas/AdvancedPortfolioProblem" }
+        buying_power: { $ref: "#/components/schemas/BuyingPowerV2", description: "PRESENT: exactly what /advanced/buying-power answers" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedPortfolioMargin:
+      type: object
+      required: [state, value_domain]
+      properties:
+        state: { $ref: "#/components/schemas/AdvancedPortfolioSectionState" }
+        problem: { $ref: "#/components/schemas/AdvancedPortfolioProblem" }
+        account: { $ref: "#/components/schemas/MarginAccountDetail", description: "PRESENT: exactly what /advanced/margin/account answers. NONE: the account has no margin account" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedPortfolioDerivatives:
+      type: object
+      required: [state, value_domain]
+      properties:
+        state: { $ref: "#/components/schemas/AdvancedPortfolioSectionState" }
+        problem: { $ref: "#/components/schemas/AdvancedPortfolioProblem" }
+        positions: { $ref: "#/components/schemas/DerivativePositionPage", description: "PRESENT: the OPEN positions with the book's valuation, exactly as /advanced/derivatives/positions?status=OPEN answers them (at most 50; next_cursor says whether there are more)" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedPortfolioPredictionHolding:
+      type: object
+      required: [market, positions]
+      properties:
+        market: { $ref: "#/components/schemas/PredictionMarket" }
+        positions: { $ref: "#/components/schemas/PredictionPositionList", description: "As /advanced/prediction-markets/{marketId}/positions answers it, held payout included" }
+    AdvancedPortfolioPredictionMarkets:
+      type: object
+      required: [state, markets, truncated, value_domain]
+      properties:
+        state: { $ref: "#/components/schemas/AdvancedPortfolioSectionState" }
+        problem: { $ref: "#/components/schemas/AdvancedPortfolioProblem" }
+        markets:
+          type: array
+          description: "PRESENT: every market in which the account holds outcome shares or is owed a held payout it has not claimed, in market id order; at most 50"
+          items: { $ref: "#/components/schemas/AdvancedPortfolioPredictionHolding" }
+        truncated: { type: boolean, description: There are more such markets than are listed }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedPortfolioEquityHolding:
+      type: object
+      required: [listing, settled, unsettled]
+      properties:
+        listing: { $ref: "#/components/schemas/AdvancedEquityListing", description: As /advanced/equities/listings answers it }
+        settled: { $ref: "#/components/schemas/Quantity", description: "The WALLET balance of the listing's share asset (from the balances read)" }
+        unsettled: { $ref: "#/components/schemas/Quantity", description: "Shares bought and not yet delivered: the share asset's UNSETTLED_RECEIVABLE" }
+    AdvancedPortfolioEquities:
+      type: object
+      required: [state, holdings, listings_truncated, value_domain]
+      properties:
+        state: { $ref: "#/components/schemas/AdvancedPortfolioSectionState" }
+        problem: { $ref: "#/components/schemas/AdvancedPortfolioProblem" }
+        holdings:
+          type: array
+          description: "PRESENT: each listing, among the ones /advanced/equities/listings returns at most (200), whose share asset the account holds settled or unsettled"
+          items: { $ref: "#/components/schemas/AdvancedPortfolioEquityHolding" }
+        listings_truncated: { type: boolean, description: "The listings read returned its maximum, so a holding of a listing beyond it appears among the balances only" }
+        pending_settlements: { $ref: "#/components/schemas/AdvancedEquitySettlementPage", description: "PRESENT: the PENDING settlements, exactly as /advanced/equities/settlements?state=PENDING answers them (at most 50)" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedPortfolioOrderBooks:
+      type: object
+      required: [state, value_domain]
+      properties:
+        state: { $ref: "#/components/schemas/AdvancedPortfolioSectionState" }
+        problem: { $ref: "#/components/schemas/AdvancedPortfolioProblem" }
+        orders: { $ref: "#/components/schemas/AdvancedBookOrderPage", description: "PRESENT: the WORKING orders on the internal books, exactly as /advanced/books/orders answers them (at most 50)" }
+        value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
+    AdvancedPortfolioPositions:
+      type: object
+      required: [margin, derivatives, prediction_markets, equities, order_books]
+      properties:
+        margin: { $ref: "#/components/schemas/AdvancedPortfolioMargin" }
+        derivatives: { $ref: "#/components/schemas/AdvancedPortfolioDerivatives" }
+        prediction_markets: { $ref: "#/components/schemas/AdvancedPortfolioPredictionMarkets" }
+        equities: { $ref: "#/components/schemas/AdvancedPortfolioEquities" }
+        order_books: { $ref: "#/components/schemas/AdvancedPortfolioOrderBooks" }
+    AdvancedPortfolioRiskDecisions:
+      type: object
+      required: [state, items]
+      properties:
+        state: { $ref: "#/components/schemas/AdvancedPortfolioSectionState" }
+        problem: { $ref: "#/components/schemas/AdvancedPortfolioProblem" }
+        items: { type: array, description: "PRESENT: the newest 20, exactly as /advanced/risk/decisions answers them", items: { $ref: "#/components/schemas/AdvancedRiskDecision" } }
+    AdvancedPortfolioReconciliationRecord:
+      type: object
+      required: [id, kind, status, material, blocks_new_risk, scope_type, opened_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        kind: { type: string }
+        status: { type: string, description: "OPEN, MISMATCH, INVESTIGATING or ESCALATED" }
+        material: { type: boolean }
+        blocks_new_risk: { type: boolean }
+        scope_type: { type: string, description: "What the record reconciles (an economic effect, a wallet balance, ...)" }
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        opened_at: { $ref: "#/components/schemas/Timestamp" }
+    AdvancedPortfolioRisk:
+      type: object
+      required: [account_status, blocks_new_risk, decisions, reconciliation, reconciliation_truncated, unknown_effects,
+                 unknown_effects_truncated]
+      properties:
+        account_status: { type: string, description: "The account's status (ACTIVE, FROZEN, ...)" }
+        blocks_new_risk: { type: boolean, description: "Reconciliation's own answer: an unresolved record on the account blocks new risk until it is resolved" }
+        decisions: { $ref: "#/components/schemas/AdvancedPortfolioRiskDecisions" }
+        reconciliation:
+          type: array
+          description: Unresolved reconciliation records on the account, oldest first; at most 50
+          items: { $ref: "#/components/schemas/AdvancedPortfolioReconciliationRecord" }
+        reconciliation_truncated: { type: boolean }
+        unknown_effects:
+          type: array
+          description: "Economic effects on the account whose outcome is UNKNOWN: never retried, each waits for reconciliation; oldest first, at most 50"
+          items: { $ref: "#/components/schemas/EconomicEffect" }
+        unknown_effects_truncated: { type: boolean }
+    AdvancedPortfolio:
+      type: object
+      required: [account_id, as_of, quote_asset_id, quote_symbol, quote_decimals, quote_provisioned, max_mark_age_ms, balances,
+                 buying_power, positions, risk, value_domain]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        as_of: { $ref: "#/components/schemas/Timestamp", description: When the balances and the risk records were read }
+        quote_asset_id: { $ref: "#/components/schemas/UUID", description: The sandbox dollar every value is stated in }
+        quote_symbol: { type: string }
+        quote_decimals: { type: integer, minimum: 0, maximum: 18 }
+        quote_provisioned: { type: boolean, description: "Whether this deployment has provisioned the sandbox dollar; until it has, nothing can be valued" }
+        max_mark_age_ms: { type: integer, format: int64, description: "How old a mark may be and still value an asset: the bound buying power V2 uses" }
+        balances:
+          type: array
+          description: Every SIMULATED asset the account holds, by symbol, then chain
+          items: { $ref: "#/components/schemas/AdvancedPortfolioBalance" }
+        buying_power: { $ref: "#/components/schemas/AdvancedPortfolioBuyingPower" }
+        positions: { $ref: "#/components/schemas/AdvancedPortfolioPositions" }
+        risk: { $ref: "#/components/schemas/AdvancedPortfolioRisk" }
         value_domain: { $ref: "#/components/schemas/ValueDomainSimulated" }
