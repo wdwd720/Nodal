@@ -174,7 +174,7 @@ Relay lag is the number that says whether the rest of the platform is looking at
 
 | Alarm | Sev | Signal | What it means when it fires |
 |---|---|---|---|
-| `rds-connections-high` | 2 | `DatabaseConnections` >= 60% of the `cp_app` CONNECTION LIMIT | The binding constraint is the role's limit, not the instance's `max_connections`. The ceiling is `CP_DATABASE_MAX_CONNS` x task count, so a service scaling out, or a pool leak, gets here first. |
+| `rds-connections-high` | 2 | `DatabaseConnections` >= 60% of the `cp_app` CONNECTION LIMIT | The binding constraint is the role's limit, not the instance's `max_connections`. The ceiling is `CP_DATABASE_MAX_CONNS` x task count, plus, for `api` and `advanced-worker`, the strategy sandbox budget's own pool: `(CP_DATABASE_MAX_CONNS + 4)` x task count for those two (`sandboxrt.MaxBudgetConns`; a budget connection is held only for one short reservation or charge, never while code runs, and closes after a minute idle). A service scaling out, or a pool leak, gets here first. |
 | `rds-connections-critical` | 1 | >= 85% of the same limit | New tasks cannot open a pool and the migrate job cannot run — which presents as a deploy failure, not a database one. Recovery is to scale the noisy service in, not to raise the limit under pressure. |
 | `rds-free-storage-low` | 1 | free storage below threshold | Writes will stop. |
 | `rds-cpu-high`, `rds-freeable-memory-low`, `rds-replica-lag-*`, `redis-*`, `ecs-*-cpu-high`, `ecs-*-memory-high` | 2 | infrastructure | Ordinary saturation signals. |
