@@ -126,7 +126,7 @@ jobs:
         # Rebuild is a cache hit; dist/images.json + dist/images.txt now carry image@sha256 refs.
         run: go run ./scripts/images -tag "$GITHUB_SHA" -registry "$IMAGE_PREFIX" -platform linux/amd64 -push
 
-      - uses: sigstore/cosign-installer@v4.1.2
+      - uses: sigstore/cosign-installer@v4.1.3
       - name: Sign images (keyless, GitHub OIDC)
         run: |
           set -euo pipefail
